@@ -52,6 +52,7 @@ class _RemoteServiceManagerState extends State<RemoteServiceManager> {
     try {
       await widget.sshService.system.controlService(unit, act);
     } catch (e) {
+      if (!mounted) return;
       showActionError(context, '$act $unit', e);
     }
     _loadServices();
