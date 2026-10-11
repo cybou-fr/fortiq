@@ -56,7 +56,9 @@ echo "CPU:\$cpu|MEM:\$mem|UP:\$up|DISK:\$disk"
 
   /// Lists top processes using `ps`
   Future<List<Map<String, dynamic>>> fetchProcesses() async {
-    final out = await _ssh.execute('ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu | head -n 30');
+    // user:32: plain "user" is cut to 8 characters ("systemd+"). Every process,
+    // busiest first: the window filters, it does not see only a top-30 slice.
+    final out = await _ssh.execute('ps -eo pid,user:32,%cpu,%mem,comm --sort=-%cpu');
     final lines = LineSplitter.split(out);
     final list = <Map<String, dynamic>>[];
 
@@ -86,25 +88,19 @@ echo "CPU:\$cpu|MEM:\$mem|UP:\$up|DISK:\$disk"
 
   /// Lists active systemd services
   Future<List<Map<String, dynamic>>> fetchServices() async {
-    final out = await _ssh.execute('systemctl list-units --type=service --no-legend --no-pager | head -n 35');
-    final lines = LineSplitter.split(out);
-    final list = <Map<String, dynamic>>[];
-
-    for (final line in lines) {
-      final trimmed = line.trim();
-      if (trimmed.isEmpty) continue;
-      final parts = trimmed.split(RegExp(r'\s+'));
-      if (parts.length >= 5) {
-        list.add({
-          'unit': parts[0],
-          'load': parts[1],
-          'active': parts[2],
-          'sub': parts[3],
-          'description': parts.sublist(4).join(' '),
-        });
-      }
-    }
-    return list;
+    // --plain: no "●" marker in front of failed units, which shifted the columns;
+    // --all: stopped units are services too. A stopped service that nothing
+    // needs is not loaded at all, so it only appears in the unit-file list.
+    final out = await _ssh.execute(
+      'systemctl list-units --type=service --all --no-legend --no-pager --plain; '
+      'echo $_unitFilesMarker; '
+      'systemctl list-unit-files --type=service --no-legend --no-pager --plain',
+    );
+    final split = out.split(_unitFilesMarker);
+    return mergeServices(
+      parseServices(split.first),
+      parseUnitFiles(split.length > 1 ? split[1] : ''),
+    );
   }
 
   /// Controls a service: start, stop, restart
@@ -120,48 +116,106 @@ echo "CPU:\$cpu|MEM:\$mem|UP:\$up|DISK:\$disk"
     String logType = 'journal',
     int linesCount = 80,
   }) async {
-    String cmd;
+    // An ordinary user sees only their own messages in the journal (and cannot
+    // read auth.log or dmesg), so use sudo when it works without a password.
+    const sudo = r'S=; [ "$(id -u)" = 0 ] || { sudo -n true 2>/dev/null && S="sudo -n"; }; ';
+    final String cmd;
     switch (logType) {
       case 'auth':
-        cmd = 'tail -n $linesCount /var/log/auth.log 2>/dev/null || journalctl -u ssh -n $linesCount --no-pager 2>/dev/null || echo "No auth logs available"';
-        break;
+        cmd = '$sudo\$S tail -n $linesCount /var/log/auth.log 2>/dev/null || '
+            '\$S journalctl -u ssh -n $linesCount --no-pager 2>/dev/null || '
+            'echo "No auth logs available"';
       case 'syslog':
-        cmd = 'tail -n $linesCount /var/log/syslog 2>/dev/null || journalctl -n $linesCount --no-pager 2>/dev/null || echo "No syslog available"';
-        break;
+        cmd = '$sudo\$S tail -n $linesCount /var/log/syslog 2>/dev/null || '
+            '\$S journalctl -n $linesCount --no-pager 2>/dev/null || '
+            'echo "No syslog available"';
       case 'dmesg':
-        cmd = 'dmesg -T 2>/dev/null | tail -n $linesCount || echo "dmesg restricted or unavailable"';
-        break;
-      case 'journal':
+        cmd = '$sudo\$S dmesg -T 2>/dev/null | tail -n $linesCount || '
+            'echo "dmesg restricted or unavailable"';
       default:
-        cmd = 'journalctl -n $linesCount --no-pager 2>/dev/null || echo "journalctl unavailable"';
-        break;
+        cmd = '$sudo\$S journalctl -n $linesCount --no-pager 2>/dev/null || '
+            'echo "journalctl unavailable"';
     }
 
-    try {
-      final out = await _ssh.execute(cmd);
-      final lines = LineSplitter.split(out);
-      final list = <Map<String, dynamic>>[];
-
-      for (final line in lines) {
-        final trimmed = line.trim();
-        if (trimmed.isEmpty) continue;
-
-        String level = 'INFO';
-        final lower = trimmed.toLowerCase();
-        if (lower.contains('error') || lower.contains('fail') || lower.contains('fatal') || lower.contains('crit')) {
-          level = 'ERROR';
-        } else if (lower.contains('warn') || lower.contains('warning')) {
-          level = 'WARN';
-        }
-
-        list.add({
-          'text': trimmed,
-          'level': level,
-        });
-      }
-      return list;
-    } catch (_) {
-      return [];
-    }
+    // A failed connection is an error, not an empty log.
+    final out = await _ssh.execute(cmd);
+    return parseLogLines(out);
   }
+}
+
+/// Parses `systemctl list-units --type=service --all --no-legend --plain`.
+List<Map<String, dynamic>> parseServices(String output) {
+  final list = <Map<String, dynamic>>[];
+  for (final line in const LineSplitter().convert(output)) {
+    final trimmed = line.trim();
+    if (trimmed.isEmpty) continue;
+    final parts = trimmed.split(RegExp(r'\s+'));
+    if (parts.length < 4) continue;
+    list.add({
+      'unit': parts[0],
+      'load': parts[1],
+      'active': parts[2],
+      'sub': parts[3],
+      'description': parts.length > 4 ? parts.sublist(4).join(' ') : '',
+    });
+  }
+  list.sort((a, b) => (a['unit'] as String).compareTo(b['unit'] as String));
+  return list;
+}
+
+const _unitFilesMarker = '===FORTIQ-UNIT-FILES===';
+
+/// Splits `systemctl list-unit-files --type=service --plain` into unit -> state
+/// (enabled, disabled, static, masked, ...).
+Map<String, String> parseUnitFiles(String output) {
+  final map = <String, String>{};
+  for (final line in const LineSplitter().convert(output)) {
+    final p = line.trim().split(RegExp(r'\s+'));
+    if (p.length >= 2) map[p[0]] = p[1];
+  }
+  return map;
+}
+
+/// Loaded units plus the installed units that are not loaded (stopped and
+/// unneeded services). Template units (`name@.service`) cannot be started and
+/// are left out. Every entry gets `enabled`: the unit-file state, if known.
+List<Map<String, dynamic>> mergeServices(
+  List<Map<String, dynamic>> loaded,
+  Map<String, String> unitFiles,
+) {
+  final result = [
+    for (final s in loaded) {...s, 'enabled': unitFiles[s['unit']] ?? ''},
+  ];
+  final known = {for (final s in loaded) s['unit'] as String};
+  unitFiles.forEach((unit, state) {
+    if (known.contains(unit) || unit.endsWith('@.service')) return;
+    result.add({
+      'unit': unit,
+      'load': 'not-loaded',
+      'active': 'inactive',
+      'sub': 'dead',
+      'description': '',
+      'enabled': state,
+    });
+  });
+  result.sort((a, b) => (a['unit'] as String).compareTo(b['unit'] as String));
+  return result;
+}
+
+/// Turns log text into lines with an approximate level.
+List<Map<String, dynamic>> parseLogLines(String output) {
+  final list = <Map<String, dynamic>>[];
+  for (final line in const LineSplitter().convert(output)) {
+    final trimmed = line.trim();
+    if (trimmed.isEmpty) continue;
+    final lower = trimmed.toLowerCase();
+    var level = 'INFO';
+    if (lower.contains('error') || lower.contains('fail') || lower.contains('fatal') || lower.contains('crit')) {
+      level = 'ERROR';
+    } else if (lower.contains('warn')) {
+      level = 'WARN';
+    }
+    list.add({'text': trimmed, 'level': level});
+  }
+  return list;
 }
