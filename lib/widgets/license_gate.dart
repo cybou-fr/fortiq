@@ -225,6 +225,14 @@ class _LicenseActivationState extends State<_LicenseActivation> {
                     : const Icon(Icons.verified_user_outlined),
                 label: Text(service.busy ? 'Checking license…' : 'Activate FORTIQ'),
               ),
+              const SizedBox(height: 6),
+              TextButton.icon(
+                onPressed: () => _openExternal(
+                  Uri.parse('https://app.lemonsqueezy.com/my-orders'),
+                ),
+                icon: const Icon(Icons.receipt_long_outlined),
+                label: const Text('Find my order and license key'),
+              ),
               if (service.hasSavedKey) ...[
                 const SizedBox(height: 8),
                 OutlinedButton(
@@ -328,10 +336,9 @@ class _LicenseDetails extends StatelessWidget {
                   child: const Text('Recheck'),
                 ),
                 OutlinedButton(
-                  onPressed: service.busy ? null : () async {
-                    final url = FortiqLicenseConfig.portalUrl;
-                    if (url != null) await _openExternal(url);
-                  },
+                  onPressed: service.busy || FortiqLicenseConfig.portalUrl == null
+                      ? null
+                      : () => _openExternal(FortiqLicenseConfig.portalUrl!),
                   child: const Text('Manage subscription'),
                 ),
                 TextButton(
