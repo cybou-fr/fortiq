@@ -436,6 +436,43 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
     }
   }
 
+  Future<void> _uploadFile() async {
+    if (_isLoading || !widget.sshService.isConnected) return;
+    final directory = _currentPath;
+    final client = widget.sshService.rawClient;
+    if (client == null) return;
+    final local = await openFile();
+    if (local == null || !mounted) return;
+    final name = p.basename(local.path);
+    if (name.isEmpty || name == '.' || name == '..') return;
+    if (!widget.sshService.isConnected ||
+        widget.sshService.rawClient != client || _currentPath != directory) {
+      showActionError(context, 'Upload', 'SSH session or directory changed.');
+      return;
+    }
+    final remote = p.posix.join(directory, name);
+    final task = await _tasks.runTransfer(
+      'Upload $name',
+      (progress) => const SftpTransferService().upload(
+        client: client,
+        localPath: local.path,
+        remotePath: remote,
+        onProgress: progress,
+        sessionCurrent: () => widget.sshService.isConnected &&
+            widget.sshService.rawClient == client,
+      ),
+      isSessionCurrent: () => widget.sshService.isConnected &&
+          widget.sshService.rawClient == client,
+    );
+    if (!mounted) return;
+    if (task.state == DesktopTaskState.completed &&
+        _currentPath == directory) {
+      await _loadDirectory(directory);
+    } else if (task.state == DesktopTaskState.failed) {
+      showActionError(context, 'Upload', task.message ?? 'Upload failed');
+    }
+  }
+
   Future<void> _deleteItem(LinuxFileInfo item) async {
     final directory = _currentPath;
     final client = widget.sshService.rawClient;
@@ -597,6 +634,12 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.upload_file,
+                        size: 18, color: Colors.white70),
+                    tooltip: 'Upload file via SFTP',
+                    onPressed: _isLoading ? null : _uploadFile,
+                  ),
                   IconButton(
                     icon: const Icon(
                       Icons.create_new_folder,
