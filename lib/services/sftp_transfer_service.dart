@@ -39,8 +39,9 @@ class SftpTransferService {
       final total = attrs.size;
       final sink = partial.openWrite(mode: FileMode.writeOnly);
       Object? failure;
+      var receivedBytes = -1;
       try {
-        await sftp.download(
+        receivedBytes = await sftp.download(
           remotePath,
           sink,
           onProgress: (received) {
@@ -66,7 +67,8 @@ class SftpTransferService {
       }
       cancellation?.throwIfRequested();
       if (!sessionCurrent()) throw StateError('SSH session changed.');
-      if (total != null && await partial.length() != total) {
+      if (await partial.length() != receivedBytes ||
+          (total != null && receivedBytes != total)) {
         throw StateError('Incomplete transfer. Partial file retained.');
       }
       if (await target.exists()) {
@@ -99,6 +101,7 @@ class SftpTransferService {
     if (!sessionCurrent()) throw StateError('SSH session changed.');
     final sftp = await client.sftp();
     final partial = '$remotePath.fortiq-upload-${DateTime.now().microsecondsSinceEpoch}';
+    var createdPartial = false;
     try {
       try {
         await sftp.stat(remotePath);
@@ -108,8 +111,11 @@ class SftpTransferService {
       }
       final handle = await sftp.open(
         partial,
-        mode: SftpFileOpenMode.create | SftpFileOpenMode.write,
+        mode: SftpFileOpenMode.create |
+            SftpFileOpenMode.write |
+            SftpFileOpenMode.exclusive,
       );
+      createdPartial = true;
       try {
         Stream<Uint8List> chunks() async* {
           await for (final data in source.openRead()) {
@@ -150,6 +156,18 @@ class SftpTransferService {
         throw StateError('Could not publish upload without overwriting; '
             'verify the temporary remote file.');
       }
+    } on TransferCancelled {
+      // Only delete this invocation's staging file, after the writer handle
+      // has closed and only while the original authenticated session is live.
+      // Cleanup failure must not hide the cancellation.
+      if (createdPartial && sessionCurrent()) {
+        try {
+          await sftp.remove(partial);
+        } catch (_) {
+          // A staging file may remain; report this through task metadata later.
+        }
+      }
+      rethrow;
     } finally {
       await sftp.close();
     }
