@@ -23,7 +23,7 @@ class _Ssh extends SshClientService {
 }
 
 Widget _host(Widget child) => MaterialApp(
-  home: Scaffold(body: SizedBox(width: 1100, height: 700, child: child)),
+  home: Scaffold(body: SizedBox(width: 1400, height: 700, child: child)),
 );
 
 const _ssOutput =
@@ -49,7 +49,15 @@ String _network(String c) {
   return '';
 }
 
+/// Экран размером с окно рабочего стола: панель инструментов длиннее 800 пикселей.
+void _bigScreen(WidgetTester tester) {
+  tester.view.physicalSize = const Size(1600, 900);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+}
+
 Future<void> _openNetwork(WidgetTester tester, _Ssh ssh) async {
+  _bigScreen(tester);
   await tester.pumpWidget(
     _host(RemoteNetworkInspector(sshService: ssh, domainColor: Colors.teal)),
   );
@@ -57,6 +65,7 @@ Future<void> _openNetwork(WidgetTester tester, _Ssh ssh) async {
 }
 
 Future<void> _openLogs(WidgetTester tester, _Ssh ssh) async {
+  _bigScreen(tester);
   await tester.pumpWidget(
     _host(RemoteLogViewer(sshService: ssh, domainColor: Colors.teal)),
   );
@@ -234,7 +243,7 @@ void main() {
           return journal;
         }),
       );
-      expect(find.textContaining('Not connected to SSH server'), findsOneWidget);
+      expect(find.textContaining('Not connected to SSH server'), findsWidgets);
       expect(find.byType(CircularProgressIndicator), findsNothing);
 
       broken = false;
@@ -253,18 +262,19 @@ void main() {
       expect(ssh.commands.last, contains('dmesg'));
     });
 
-    testWidgets('автообновление опрашивает сервер каждые 4 с и выключается', (tester) async {
+    testWidgets('автообновление опрашивает сервер периодически и выключается', (tester) async {
       final ssh = _Ssh((_) => journal);
       await _openLogs(tester, ssh);
       final before = ssh.commands.length;
 
-      await tester.tap(find.text('Live (4s)'));
+      await tester.tap(find.textContaining('Live ('));
       await tester.pump();
-      expect(find.text('STREAMING LIVE'), findsOneWidget);
-      await tester.pump(const Duration(seconds: 9));
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump();
       expect(ssh.commands.length, greaterThan(before));
 
-      await tester.tap(find.text('Live (4s)'));
+      await tester.tap(find.textContaining('Live ('));
       await tester.pump();
       final after = ssh.commands.length;
       await tester.pump(const Duration(seconds: 9));

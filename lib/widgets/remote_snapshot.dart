@@ -1,5 +1,7 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../services/ssh_service.dart';
 
 /// A snapshot belongs to one server and one completed SSH request.
@@ -7,7 +9,8 @@ class RemoteSnapshotController<T> extends ChangeNotifier {
   final SshClientService ssh;
   final Future<T> Function() load;
   late final String source;
-  String get _source => '${ssh.currentUsername}@${ssh.currentHost}:${ssh.currentPort}';
+  String get _source =>
+      '${ssh.currentUsername}@${ssh.currentHost}:${ssh.currentPort}';
   bool get available => ssh.isConnected && source == _source;
   T? data;
   DateTime? updatedAt;
@@ -50,7 +53,10 @@ class RemoteSnapshotController<T> extends ChangeNotifier {
     _generation++;
     loading = false;
     error = null;
-    if (clear) { data = null; updatedAt = null; }
+    if (clear) {
+      data = null;
+      updatedAt = null;
+    }
     notifyListeners();
   }
 
@@ -63,7 +69,10 @@ class RemoteSnapshotController<T> extends ChangeNotifier {
     notifyListeners();
     try {
       final result = await load();
-      if (!_disposed && generation == _generation && available && client == ssh.rawClient) {
+      if (!_disposed &&
+          generation == _generation &&
+          available &&
+          client == ssh.rawClient) {
         data = result;
         updatedAt = DateTime.now();
       }
@@ -89,24 +98,71 @@ class RemoteSnapshotController<T> extends ChangeNotifier {
 
 class RemoteSnapshotStatus extends StatelessWidget {
   final RemoteSnapshotController<dynamic> snapshot;
-  const RemoteSnapshotStatus({super.key, required this.snapshot});
+  final bool showLiveToggle;
+  const RemoteSnapshotStatus({
+    super.key,
+    required this.snapshot,
+    this.showLiveToggle = true,
+  });
   @override
   Widget build(BuildContext context) {
     final time = snapshot.updatedAt;
-    final label = time == null ? 'Not loaded' :
-        'Updated ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}:${time.second.toString().padLeft(2, '0')}';
-    final notice = !snapshot.available ? 'SSH unavailable. Showing the last loaded data.' : snapshot.error;
-    return Column(mainAxisSize: MainAxisSize.min, children: [
-      if (notice != null) Container(width: double.infinity, color: const Color(0xFF432E25),
-        padding: const EdgeInsets.all(8), child: SelectableText(notice,
-          style: const TextStyle(fontSize: 11, color: Colors.amberAccent))),
-      if (snapshot.loading) const LinearProgressIndicator(minHeight: 2),
-      Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), child: Row(children: [
-        Expanded(child: Text(label, style: const TextStyle(fontSize: 10, color: Colors.white54))),
-        TextButton.icon(onPressed: () => snapshot.setLive(!snapshot.live),
-          icon: Icon(snapshot.live ? Icons.pause : Icons.sync, size: 14),
-          label: Text(snapshot.live ? 'Pause updates' : 'Live · 5s', style: const TextStyle(fontSize: 11))),
-      ])),
-    ]);
+    final label = time == null
+        ? 'Not loaded'
+        : 'Updated ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}:${time.second.toString().padLeft(2, '0')}';
+    final notice = !snapshot.available
+        ? snapshot.data == null
+              ? 'SSH unavailable. Reconnect to load data.'
+              : 'SSH unavailable. Showing the last loaded data.'
+        : snapshot.error;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (notice != null)
+          Container(
+            width: double.infinity,
+            color: const Color(0xFF432E25),
+            padding: const EdgeInsets.all(8),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 72),
+              child: SingleChildScrollView(
+                child: SelectableText(
+                  notice,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.amberAccent,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        if (snapshot.loading) const LinearProgressIndicator(minHeight: 2),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(fontSize: 10, color: Colors.white54),
+                ),
+              ),
+              if (showLiveToggle)
+                TextButton.icon(
+                  onPressed: () => snapshot.setLive(!snapshot.live),
+                  icon: Icon(
+                    snapshot.live ? Icons.pause : Icons.sync,
+                    size: 14,
+                  ),
+                  label: Text(
+                    snapshot.live ? 'Pause updates' : 'Live · 5s',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }

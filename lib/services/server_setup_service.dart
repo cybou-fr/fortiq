@@ -189,6 +189,9 @@ String fail2banScript(String? clientIp) {
       'ignoreip = 127.0.0.1/8 ::1${safeIp != null ? ' $safeIp' : ''}',
     ]),
     'systemctl enable --now fail2ban',
+    // Сразу после установки служба уже «запущена», но сокет сервера ещё не
+    // готов: без ожидания reload падает с «Could not find server».
+    'for i in \$(seq 1 30); do fail2ban-client ping >/dev/null 2>&1 && break; sleep 1; done',
     'fail2ban-client reload',
   ].join('\n');
 }
@@ -608,8 +611,17 @@ class ServerSetupService extends ChangeNotifier {
       case SetupStepId.firewall:
         await refreshLists();
         await _aptInstall(['ufw']);
-        final ports = <int>{...st.publicTcpPorts, st.sshPort ?? port}.toList()..sort();
-        final udp = st.publicUdpPorts;
+        // Порты читаем заново: на сервере без iproute2 первая проверка не умела
+        // их видеть (нет ss), и файрвол отрезал бы уже работающие сервисы.
+        var tcp = st.publicTcpPorts;
+        var udp = st.publicUdpPorts;
+        try {
+          tcp = parsePublicTcpPorts(await ssh.execute('ss -H -tln 2>/dev/null'));
+          udp = parsePublicUdpPorts(await ssh.execute('ss -H -uln 2>/dev/null'));
+        } catch (_) {
+          // Не вышло прочитать — остаются данные первой проверки.
+        }
+        final ports = <int>{...tcp, st.sshPort ?? port}.toList()..sort();
         _log('Open: TCP ${ports.join(', ')}${udp.isEmpty ? '' : '; UDP ${udp.join(', ')}'}');
         await _sh(firewallScript(ports, udp));
         _log('Checking that a new login still works…');

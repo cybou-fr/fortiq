@@ -1,209 +1,298 @@
 import 'package:flutter/material.dart';
+
 import '../services/ssh_service.dart';
+import 'remote_snapshot.dart';
 import 'ui_errors.dart';
 
 class RemoteServiceManager extends StatefulWidget {
   final SshClientService sshService;
   final Color domainColor;
-
   const RemoteServiceManager({
     super.key,
     required this.sshService,
     required this.domainColor,
   });
-
   @override
   State<RemoteServiceManager> createState() => _RemoteServiceManagerState();
 }
 
 class _RemoteServiceManagerState extends State<RemoteServiceManager> {
-
-  // Async loads may finish after the window was closed.
-  @override
-  void setState(VoidCallback fn) {
-    if (mounted) super.setState(fn);
-  }
-  List<Map<String, dynamic>> _services = [];
-  bool _loading = false;
-  String _filter = '';
+  late final _snapshot = RemoteSnapshotController(
+    widget.sshService,
+    load: widget.sshService.system.fetchServices,
+  );
+  String _filter = '', _stateFilter = 'all';
+  final Set<String> _pending = {};
 
   @override
   void initState() {
     super.initState();
-    _loadServices();
+    _snapshot.addListener(_changed);
+    _snapshot.refresh();
   }
 
-  Future<void> _loadServices() async {
-    setState(() => _loading = true);
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _snapshot.removeListener(_changed);
+    _snapshot.dispose();
+    super.dispose();
+  }
+
+  Future<void> _action(String unit, String action) async {
+    if (!_snapshot.available || _pending.contains(unit)) return;
+    final client = widget.sshService.rawClient;
+    _pending.add(unit);
     try {
-      final list = await widget.sshService.system.fetchServices();
-      setState(() {
-        _services = list;
-        _loading = false;
-      });
-    } catch (_) {
-      setState(() => _loading = false);
+      if (action == 'stop' || action == 'restart') {
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('${action == 'stop' ? 'Stop' : 'Restart'} $unit?'),
+            content: const Text(
+              'Connections and tasks using this service may be interrupted.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(action == 'stop' ? 'Stop' : 'Restart'),
+              ),
+            ],
+          ),
+        );
+        if (!mounted || confirm != true) return;
+      }
+      if (!_snapshot.available || client != widget.sshService.rawClient) {
+        if (mounted) {
+          showActionError(
+            context,
+            action,
+            'SSH session changed. Refresh before retrying.',
+          );
+        }
+        return;
+      }
+      setState(() {});
+      await widget.sshService.system.controlService(unit, action);
+      if (mounted) {
+        _snapshot.invalidate();
+        await _snapshot.refresh();
+      }
+    } catch (error) {
+      if (mounted) showActionError(context, '$action $unit', error);
+    } finally {
+      _pending.remove(unit);
+      if (mounted) setState(() {});
     }
   }
 
-  Future<void> _action(String unit, String act) async {
+  Future<void> _details(String unit) async {
+    if (!_snapshot.available) return;
+    final client = widget.sshService.rawClient;
     try {
-      await widget.sshService.system.controlService(unit, act);
-    } catch (e) {
-      showActionError(context, '$act $unit', e);
+      final details = await widget.sshService.system.fetchServiceDetails(unit);
+      if (!mounted ||
+          !_snapshot.available ||
+          client != widget.sshService.rawClient) {
+        return;
+      }
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(unit),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final entry in details.entries)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: SelectableText(
+                        '${entry.key}: ${entry.value.isEmpty ? '—' : entry.value}',
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (mounted) showActionError(context, 'Service details', error);
     }
-    _loadServices();
   }
 
   @override
   Widget build(BuildContext context) {
-    final filtered = _services.where((s) {
-      final unit = (s['unit'] as String).toLowerCase();
-      final desc = (s['description'] as String).toLowerCase();
-      return unit.contains(_filter.toLowerCase()) || desc.contains(_filter.toLowerCase());
+    final services = (_snapshot.data ?? <Map<String, dynamic>>[]).where((s) {
+      final matches = '${s['unit']} ${s['description']}'.toLowerCase().contains(
+        _filter.toLowerCase(),
+      );
+      final state = switch (_stateFilter) {
+        'active' => s['active'] == 'active',
+        'inactive' => s['active'] == 'inactive',
+        'failed' => s['active'] == 'failed',
+        'enabled' =>
+          s['enabled'] == 'enabled' || s['enabled'] == 'enabled-runtime',
+        _ => true,
+      };
+      return matches && state;
     }).toList();
-
     return Column(
       children: [
-        // Action bar
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: const BoxDecoration(
-            color: Color(0xFF181922),
-            border: Border(bottom: BorderSide(color: Color(0xFF262837))),
-          ),
+        Padding(
+          padding: const EdgeInsets.all(8),
           child: Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.refresh, size: 18, color: Colors.white70),
-                tooltip: 'Refresh (systemctl)',
-                onPressed: _loadServices,
+                tooltip: 'Refresh services',
+                onPressed: _snapshot.available && !_snapshot.loading
+                    ? _snapshot.refresh
+                    : null,
+                icon: const Icon(
+                  Icons.refresh,
+                  size: 18,
+                  color: Colors.white70,
+                ),
               ),
-              const SizedBox(width: 8),
               Expanded(
-                child: Container(
-                  height: 32,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF111218),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: const Color(0xFF2C2E40)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.search, size: 14, color: Colors.white38),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: TextField(
-                          style: const TextStyle(color: Colors.white, fontSize: 12),
-                          decoration: const InputDecoration(
-                            border: InputBorder.none,
-                            hintText: 'Filter systemd units...',
-                            hintStyle: TextStyle(color: Colors.white38, fontSize: 12),
-                            isDense: true,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          onChanged: (v) => setState(() => _filter = v),
-                        ),
-                      ),
-                    ],
+                child: TextField(
+                  onChanged: (value) => setState(() => _filter = value),
+                  style: const TextStyle(fontSize: 12, color: Colors.white),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    hintText: 'Find a service',
+                    hintStyle: TextStyle(color: Colors.white38),
                   ),
                 ),
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'Filter service state',
+                icon: const Icon(
+                  Icons.filter_list,
+                  size: 18,
+                  color: Colors.white70,
+                ),
+                onSelected: (value) => setState(() => _stateFilter = value),
+                itemBuilder: (_) => [
+                  for (final entry in {
+                    'all': 'All services',
+                    'active': 'Active',
+                    'inactive': 'Inactive',
+                    'failed': 'Failed',
+                    'enabled': 'Enabled at boot',
+                  }.entries)
+                    CheckedPopupMenuItem(
+                      value: entry.key,
+                      checked: _stateFilter == entry.key,
+                      child: Text(entry.value),
+                    ),
+                ],
               ),
             ],
           ),
         ),
-
-        // List
+        RemoteSnapshotStatus(snapshot: _snapshot),
         Expanded(
-          child: _loading
-              ? Center(child: CircularProgressIndicator(color: widget.domainColor))
+          child: services.isEmpty
+              ? const Center(
+                  child: Text(
+                    'No matching services',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                )
               : ListView.builder(
-                  itemCount: filtered.length,
+                  itemCount: services.length,
                   itemBuilder: (context, index) {
-                    final s = filtered[index];
-                    final unit = s['unit'] as String;
-                    final active = s['active'] as String;
-                    final sub = s['sub'] as String;
-                    final desc = s['description'] as String;
-                    final isRunning = active == 'active';
-
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: const BoxDecoration(
-                        border: Border(bottom: BorderSide(color: Color(0xFF1A1B24))),
+                    final service = services[index];
+                    final unit = service['unit'] as String;
+                    final active = service['active'] as String;
+                    final enabled = service['enabled'] as String? ?? '';
+                    final color = active == 'active'
+                        ? Colors.greenAccent
+                        : active == 'failed'
+                        ? Colors.redAccent
+                        : Colors.white38;
+                    return ListTile(
+                      dense: true,
+                      onTap: _snapshot.available ? () => _details(unit) : null,
+                      leading: Icon(Icons.circle, size: 10, color: color),
+                      title: Text(
+                        unit,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
                       ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: isRunning ? const Color(0xFF10B981) : Colors.redAccent,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  unit,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
+                      subtitle: Text(
+                        '${service['description']}\n$active · ${service['sub']}${enabled.isEmpty ? '' : ' · $enabled'}',
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: color, fontSize: 11),
+                      ),
+                      trailing: _pending.contains(unit)
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : PopupMenuButton<String>(
+                              tooltip: 'Service actions',
+                              enabled:
+                                  _snapshot.available && !_snapshot.loading,
+                              icon: const Icon(
+                                Icons.more_vert,
+                                color: Colors.white60,
+                                size: 18,
+                              ),
+                              onSelected: (action) => action == 'details'
+                                  ? _details(unit)
+                                  : _action(unit, action),
+                              itemBuilder: (_) => [
+                                const PopupMenuItem(
+                                  value: 'details',
+                                  child: Text('Details'),
+                                ),
+                                PopupMenuItem(
+                                  value: active == 'active' ? 'stop' : 'start',
+                                  child: Text(
+                                    active == 'active' ? 'Stop' : 'Start',
                                   ),
                                 ),
-                                if (desc.isNotEmpty)
-                                  Text(
-                                    desc,
-                                    style: const TextStyle(color: Colors.white38, fontSize: 11),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                                const PopupMenuItem(
+                                  value: 'restart',
+                                  child: Text('Restart'),
+                                ),
                               ],
                             ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: isRunning ? Colors.green.withValues(alpha: 0.15) : Colors.red.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: isRunning ? Colors.green.withValues(alpha: 0.5) : Colors.red.withValues(alpha: 0.5),
-                              ),
-                            ),
-                            child: Text(
-                              sub,
-                              style: TextStyle(
-                                color: isRunning ? Colors.greenAccent : Colors.redAccent,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          IconButton(
-                            icon: const Icon(Icons.refresh, size: 16, color: Colors.white70),
-                            tooltip: 'Restart (systemctl restart)',
-                            onPressed: () => _action(unit, 'restart'),
-                          ),
-                          IconButton(
-                            icon: Icon(
-                              isRunning ? Icons.stop : Icons.play_arrow,
-                              size: 16,
-                              color: isRunning ? Colors.orangeAccent : Colors.greenAccent,
-                            ),
-                            tooltip: isRunning ? 'Stop' : 'Start',
-                            onPressed: () => _action(unit, isRunning ? 'stop' : 'start'),
-                          ),
-                        ],
-                      ),
                     );
                   },
                 ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: Text(
+            '${services.length} / ${_snapshot.data?.length ?? 0} services · $_stateFilter',
+            style: const TextStyle(fontSize: 10, color: Colors.white38),
+          ),
         ),
       ],
     );

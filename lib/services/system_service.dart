@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'shell.dart';
 
 /// Processes, systemd services, metrics and logs.
@@ -58,7 +59,9 @@ echo "CPU:\$cpu|MEM:\$mem|UP:\$up|DISK:\$disk"
   Future<List<Map<String, dynamic>>> fetchProcesses() async {
     // user:32: plain "user" is cut to 8 characters ("systemd+"). Every process,
     // busiest first: the window filters, it does not see only a top-30 slice.
-    final out = await _ssh.execute('ps -eo pid,user:32,%cpu,%mem,comm --sort=-%cpu');
+    final out = await _ssh.execute(
+      'LC_ALL=C ps -eo pid,user:32,%cpu,%mem,comm --sort=-%cpu',
+    );
     final lines = LineSplitter.split(out);
     final list = <Map<String, dynamic>>[];
 
@@ -81,9 +84,18 @@ echo "CPU:\$cpu|MEM:\$mem|UP:\$up|DISK:\$disk"
 
   /// Kills a process by PID
   Future<void> killProcess(int pid, {bool force = true}) async {
+    if (pid <= 1) {
+      throw ArgumentError.value(
+        pid,
+        'pid',
+        'Select an individual process with PID greater than 1',
+      );
+    }
     final flag = force ? '-9' : '-15';
     // Own processes need no privileges; fall back to sudo for other users' ones.
-    await _ssh.execute('kill $flag $pid 2>/dev/null || sudo -n kill $flag $pid');
+    await _ssh.execute(
+      'kill $flag $pid 2>/dev/null || sudo -n kill $flag $pid',
+    );
   }
 
   /// Lists active systemd services
@@ -92,9 +104,9 @@ echo "CPU:\$cpu|MEM:\$mem|UP:\$up|DISK:\$disk"
     // --all: stopped units are services too. A stopped service that nothing
     // needs is not loaded at all, so it only appears in the unit-file list.
     final out = await _ssh.execute(
-      'systemctl list-units --type=service --all --no-legend --no-pager --plain; '
-      'echo $_unitFilesMarker; '
-      'systemctl list-unit-files --type=service --no-legend --no-pager --plain',
+      'LC_ALL=C systemctl list-units --type=service --all --no-legend --no-pager --plain && '
+      'echo $_unitFilesMarker && '
+      'LC_ALL=C systemctl list-unit-files --type=service --no-legend --no-pager --plain',
     );
     final split = out.split(_unitFilesMarker);
     return mergeServices(
@@ -105,10 +117,34 @@ echo "CPU:\$cpu|MEM:\$mem|UP:\$up|DISK:\$disk"
 
   /// Controls a service: start, stop, restart
   Future<void> controlService(String unit, String action) async {
-    if (!RegExp(r'^[a-z-]+$').hasMatch(action)) {
+    if (!{
+      'start',
+      'stop',
+      'restart',
+      'reload',
+      'enable',
+      'disable',
+      'reset-failed',
+    }.contains(action)) {
       throw ArgumentError('Invalid service action: $action');
     }
-    await _ssh.execute(asRoot('systemctl $action ${shQuote(unit)}'));
+    await _ssh.execute(asRoot('systemctl $action -- ${shQuote(unit)}'));
+  }
+
+  Future<Map<String, String>> fetchServiceDetails(String unit) async {
+    const properties =
+        'Id,Description,LoadState,ActiveState,SubState,UnitFileState,MainPID,Result,MemoryCurrent,ActiveEnterTimestamp,FragmentPath';
+    final output = await _ssh.execute(
+      'LC_ALL=C systemctl show --no-pager --property=$properties -- ${shQuote(unit)}',
+    );
+    final result = <String, String>{};
+    for (final line in const LineSplitter().convert(output)) {
+      final separator = line.indexOf('=');
+      if (separator > 0) {
+        result[line.substring(0, separator)] = line.substring(separator + 1);
+      }
+    }
+    return result;
   }
 
   /// Fetches system logs by type (journal, auth, syslog, dmesg)
@@ -116,25 +152,30 @@ echo "CPU:\$cpu|MEM:\$mem|UP:\$up|DISK:\$disk"
     String logType = 'journal',
     int linesCount = 80,
   }) async {
+    if (linesCount < 1 || linesCount > 5000) {
+      throw ArgumentError.value(linesCount, 'linesCount');
+    }
     // An ordinary user sees only their own messages in the journal (and cannot
     // read auth.log or dmesg), so use sudo when it works without a password.
-    const sudo = r'S=; [ "$(id -u)" = 0 ] || { sudo -n true 2>/dev/null && S="sudo -n"; }; ';
+    const sudo =
+        r'S=; [ "$(id -u)" = 0 ] || { sudo -n true 2>/dev/null && S="sudo -n"; }; ';
     final String cmd;
     switch (logType) {
       case 'auth':
-        cmd = '$sudo\$S tail -n $linesCount /var/log/auth.log 2>/dev/null || '
-            '\$S journalctl -u ssh -n $linesCount --no-pager 2>/dev/null || '
-            'echo "No auth logs available"';
+        cmd =
+            '$sudo\$S tail -n $linesCount /var/log/auth.log 2>/dev/null || '
+            '\$S journalctl -u ssh -n $linesCount --no-pager';
       case 'syslog':
-        cmd = '$sudo\$S tail -n $linesCount /var/log/syslog 2>/dev/null || '
-            '\$S journalctl -n $linesCount --no-pager 2>/dev/null || '
-            'echo "No syslog available"';
+        cmd =
+            '$sudo\$S tail -n $linesCount /var/log/syslog 2>/dev/null || '
+            '\$S journalctl -n $linesCount --no-pager';
       case 'dmesg':
-        cmd = '$sudo\$S dmesg -T 2>/dev/null | tail -n $linesCount || '
-            'echo "dmesg restricted or unavailable"';
+        cmd =
+            '$sudo'
+            r'out=$($S dmesg -T) || exit $?; '
+            'printf \'%s\\n\' "\$out" | tail -n $linesCount';
       default:
-        cmd = '$sudo\$S journalctl -n $linesCount --no-pager 2>/dev/null || '
-            'echo "journalctl unavailable"';
+        cmd = '$sudo\$S journalctl -n $linesCount --no-pager';
     }
 
     // A failed connection is an error, not an empty log.
@@ -210,7 +251,10 @@ List<Map<String, dynamic>> parseLogLines(String output) {
     if (trimmed.isEmpty) continue;
     final lower = trimmed.toLowerCase();
     var level = 'INFO';
-    if (lower.contains('error') || lower.contains('fail') || lower.contains('fatal') || lower.contains('crit')) {
+    if (lower.contains('error') ||
+        lower.contains('fail') ||
+        lower.contains('fatal') ||
+        lower.contains('crit')) {
       level = 'ERROR';
     } else if (lower.contains('warn')) {
       level = 'WARN';

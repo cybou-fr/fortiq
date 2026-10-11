@@ -19,6 +19,7 @@ import 'log_viewer.dart';
 import 'mailbox_viewer.dart';
 import 'mail_window.dart';
 import 'media_viewer.dart';
+import 'disks_window.dart';
 
 enum FortiqAppType {
   fileExplorer,
@@ -34,6 +35,7 @@ enum FortiqAppType {
   mailbox,
   mail,
   mediaViewer,
+  disks,
 }
 
 class InternalWindow {
@@ -220,6 +222,10 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
       case FortiqAppType.mediaViewer:
         title = 'Media Viewer: ${filePath?.split('/').last ?? "image"}';
         size = const Size(760, 520);
+        break;
+      case FortiqAppType.disks:
+        title = 'Disks';
+        size = const Size(920, 620);
         break;
     }
 
@@ -871,7 +877,7 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
       case FortiqAppType.fileExplorer:
         return RemoteFileExplorer(
           sshService: widget.sshService,
-          initialPath: '/',
+          initialPath: win.filePath ?? '/',
           domainColor: widget.domainColor,
           onPathChanged: (path) {
             if (mounted && _windows.contains(win)) {
@@ -964,6 +970,16 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
           filePath: win.filePath ?? '',
           domainColor: widget.domainColor,
         );
+      case FortiqAppType.disks:
+        return RemoteDisksWindow(
+          sshService: widget.sshService,
+          domainColor: widget.domainColor,
+          onOpenDirectory: (path) => _openWindow(
+            FortiqAppType.fileExplorer,
+            filePath: path,
+            newInstance: true,
+          ),
+        );
     }
   }
 
@@ -994,6 +1010,7 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
           mainAxisSize: MainAxisSize.min,
           children: [
             _dockItem(Icons.folder_open, 'Files', FortiqAppType.fileExplorer),
+            _dockItem(Icons.storage, 'Disks', FortiqAppType.disks),
             _dockItem(Icons.search, 'Search Hub', FortiqAppType.spotlight),
             _dockItem(Icons.public, 'Browser', FortiqAppType.browser),
             _dockItem(Icons.mail_outline, 'Mailbox', FortiqAppType.mailbox),
@@ -1147,6 +1164,8 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
         return Icons.email_outlined;
       case FortiqAppType.mediaViewer:
         return Icons.image;
+      case FortiqAppType.disks:
+        return Icons.storage;
     }
   }
 }

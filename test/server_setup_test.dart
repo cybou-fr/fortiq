@@ -60,7 +60,15 @@ UFW=active
 const _updates =
     'Listing...\nopenssl/stable-security 3.0.15 amd64 [upgradable from: 3.0.14]';
 
+/// Строки сокетов из ответа проверки, без метки TCPLISTEN/UDPLISTEN.
+String _socketLines(String probe, String prefix) => probe
+    .split('\n')
+    .where((l) => l.startsWith(prefix))
+    .map((l) => l.substring(prefix.length))
+    .join('\n');
+
 /// A server answering the read-only checks with the given probe outputs.
+
 String Function(String) server({
   String probe = _freshProbe,
   String rootProbe = _freshRootProbe,
@@ -70,6 +78,9 @@ String Function(String) server({
       if (cmd.contains('PKG_MISSING')) return probe;
       if (cmd.contains('/usr/sbin/sshd -T')) return rootProbe;
       if (cmd.contains('apt list --upgradable')) return updates;
+      // Повторное чтение портов перед файрволом: те же сокеты, что в первой проверке.
+      if (cmd.startsWith('ss -H -tln')) return _socketLines(probe, 'TCPLISTEN ');
+      if (cmd.startsWith('ss -H -uln')) return _socketLines(probe, 'UDPLISTEN ');
       return '';
     };
 
