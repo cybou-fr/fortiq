@@ -226,6 +226,26 @@ class CliTest(unittest.TestCase):
         self.assertEqual(value["reason"], "invalid_input")
         self.assertEqual(self.count(), 0)
 
+    def test_benchmark_is_explicit_and_reports_actual_wall_time_and_memory(self):
+        self.assertEqual(self.count(), 0)
+        r, result = self.run_ai("benchmark", "--json")
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(result["schema"], "fortiq-ai-benchmark/v1")
+        self.assertEqual(result["status"], "ok")
+        self.assertTrue(result["cpu_only"])
+        self.assertGreaterEqual(result["duration_ms"], 0)
+        self.assertGreater(result["peak_rss_kb"], 0)
+        self.assertEqual(self.count(), 1)
+        self.assertEqual(list(self.cache_dir.glob("*.json")), [])
+
+    def test_benchmark_unavailable_on_underprovisioned_vps(self):
+        env = self.env.copy()
+        env["AI_MIN_TOTAL_MB"] = "999999"
+        r, result = self.run_ai("benchmark", "--json", env=env)
+        self.assertEqual(r.returncode, 2)
+        self.assertEqual(result["reason"], "vps_too_small")
+        self.assertEqual(self.count(), 0)
+
     def test_setup_never_installs_automatically(self):
         r, value = self.run_ai("setup", "--check", "--json")
         self.assertEqual(r.returncode, 0)
