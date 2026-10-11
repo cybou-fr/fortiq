@@ -68,6 +68,19 @@ class FileService {
     await _ssh.execute('rm $flag -- ${shQuote(path)}');
   }
 
+  /// Renames a remote entry without overwriting an existing destination.
+  /// A failed/unknown SSH result must be surfaced rather than retried.
+  Future<void> rename(String source, String destination) async {
+    if (source.isEmpty || destination.isEmpty || source == destination ||
+        source.contains('\\x00') || destination.contains('\\x00')) {
+      throw ArgumentError('Invalid rename paths');
+    }
+    await _ssh.execute(
+      'mv -n -- ${shQuote(source)} ${shQuote(destination)} && '
+      'test ! -e ${shQuote(source)}',
+    );
+  }
+
   /// Reads file content using `cat`
   Future<String> readFile(String path) async {
     return await _ssh.execute('cat -- ${shQuote(path)}');
