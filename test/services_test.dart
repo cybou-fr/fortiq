@@ -22,6 +22,16 @@ void main() {
       expect(files.last.size, 120);
     });
 
+    test('file save refuses an unknown SSH completion status', () async {
+      final shell = FakeShell((_) => '')
+        ..inputResult = (_, _) => const InputResult(exitCode: null);
+      await expectLater(
+        FileService(shell).writeFile('/tmp/config', 'changed'),
+        throwsA(isA<SshCommandException>()),
+      );
+      expect(shell.inputs.single.input, isNotEmpty);
+    });
+
     test('quotes paths with shell metacharacters on every operation', () async {
       final shell = FakeShell((_) => '');
       final files = FileService(shell);
