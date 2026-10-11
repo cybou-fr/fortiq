@@ -29,7 +29,7 @@ class SftpTransferService {
     final sftp = await client.sftp();
     try {
       final attrs = await sftp.stat(remotePath);
-      if (!attrs.isRegularFile) throw StateError('Select a regular file.');
+      if (!attrs.isFile) throw StateError('Select a regular file.');
       if (!sessionCurrent()) throw StateError('SSH session changed.');
       final total = attrs.size;
       final sink = partial.openWrite(mode: FileMode.writeOnly);
