@@ -18,6 +18,12 @@ class RemoteSpotlightSearch extends StatefulWidget {
 }
 
 class _RemoteSpotlightSearchState extends State<RemoteSpotlightSearch> {
+
+  // Async loads may finish after the window was closed.
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) super.setState(fn);
+  }
   final TextEditingController _queryController = TextEditingController();
   final FocusNode _inputFocus = FocusNode();
   List<Map<String, dynamic>> _results = [];

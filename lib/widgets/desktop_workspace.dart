@@ -38,6 +38,7 @@ class InternalWindow {
   bool isMinimized;
   bool isMaximized;
   String? filePath;
+  bool isDirty = false;
 
   InternalWindow({
     required this.id,
@@ -84,8 +85,11 @@ class _HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
   @override
   void initState() {
     super.initState();
-    // Launch File Explorer by default
-    _openWindow(FortiqAppType.fileExplorer);
+    // Launch File Explorer by default. Deferred: _openWindow reads MediaQuery,
+    // which is not allowed from initState.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _openWindow(FortiqAppType.fileExplorer);
+    });
 
     _refreshMetrics();
     _metricsTimer = Timer.periodic(const Duration(seconds: 4), (_) => _refreshMetrics());
@@ -208,7 +212,31 @@ class _HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
     });
   }
 
-  void _closeWindow(String id) {
+  Future<void> _closeWindow(String id) async {
+    final win = _windows.where((w) => w.id == id).firstOrNull;
+    if (win == null) return;
+    if (win.isDirty) {
+      final discard = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF1E1F29),
+          title: const Text('Unsaved changes', style: TextStyle(color: Colors.white, fontSize: 16)),
+          content: Text(
+            '"${win.title}" has unsaved changes. Close it and lose them?',
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep open')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Discard', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+      if (discard != true || !mounted) return;
+    }
     setState(() {
       _windows.removeWhere((w) => w.id == id);
       if (_activeWindowId == id) {
@@ -244,10 +272,7 @@ class _HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
             top: 30,
             bottom: 64, // Margin for Dock
             child: Stack(
-              children: _windows.map((win) {
-                if (win.isMinimized) return const SizedBox.shrink();
-                return _buildInternalWindow(win);
-              }).toList(),
+              children: _windows.map(_buildInternalWindow).toList(),
             ),
           ),
 
@@ -330,12 +355,17 @@ class _HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
   Widget _buildInternalWindow(InternalWindow win) {
     final isActive = _activeWindowId == win.id;
 
+    // Stable key keeps each window's state when the stacking order changes;
+    // Offstage hides minimized windows without destroying them.
     return Positioned(
+      key: ValueKey(win.id),
       left: win.isMaximized ? 0 : win.position.dx,
       top: win.isMaximized ? 0 : win.position.dy,
       width: win.isMaximized ? MediaQuery.of(context).size.width : win.size.width,
       height: win.isMaximized ? (MediaQuery.of(context).size.height - 94) : win.size.height,
-      child: Listener(
+      child: Offstage(
+        offstage: win.isMinimized,
+        child: Listener(
         onPointerDown: (_) {
           if (_activeWindowId != win.id) {
             _bringToFront(win.id);
@@ -403,23 +433,26 @@ class _HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
                         ),
                         InkWell(
                           onTap: () => setState(() => win.isMinimized = true),
+                          borderRadius: BorderRadius.circular(4),
                           child: const Padding(
-                            padding: EdgeInsets.all(4),
-                            child: Icon(Icons.remove, size: 13, color: Colors.white60),
+                            padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                            child: Icon(Icons.remove, size: 15, color: Colors.white60),
                           ),
                         ),
                         InkWell(
                           onTap: () => setState(() => win.isMaximized = !win.isMaximized),
+                          borderRadius: BorderRadius.circular(4),
                           child: const Padding(
-                            padding: EdgeInsets.all(4),
-                            child: Icon(Icons.crop_square, size: 13, color: Colors.white60),
+                            padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                            child: Icon(Icons.crop_square, size: 15, color: Colors.white60),
                           ),
                         ),
                         InkWell(
                           onTap: () => _closeWindow(win.id),
+                          borderRadius: BorderRadius.circular(4),
                           child: const Padding(
-                            padding: EdgeInsets.all(4),
-                            child: Icon(Icons.close, size: 13, color: Colors.redAccent),
+                            padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                            child: Icon(Icons.close, size: 15, color: Colors.redAccent),
                           ),
                         ),
                       ],
@@ -434,6 +467,7 @@ class _HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
               ],
             ),
           ),
+        ),
         ),
       ),
     );
@@ -482,6 +516,7 @@ class _HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
           sshService: widget.sshService,
           filePath: win.filePath ?? '/etc/hosts',
           domainColor: widget.domainColor,
+          onDirtyChanged: (dirty) => win.isDirty = dirty,
         );
       case FortiqAppType.networkInspector:
         return RemoteNetworkInspector(
@@ -498,6 +533,7 @@ class _HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
           sshService: widget.sshService,
           initialFilePath: win.filePath,
           domainColor: widget.domainColor,
+          onDirtyChanged: (dirty) => win.isDirty = dirty,
         );
       case FortiqAppType.spotlight:
         return RemoteSpotlightSearch(

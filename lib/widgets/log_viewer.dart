@@ -17,6 +17,12 @@ class RemoteLogViewer extends StatefulWidget {
 }
 
 class _RemoteLogViewerState extends State<RemoteLogViewer> {
+
+  // Async loads may finish after the window was closed.
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) super.setState(fn);
+  }
   String _selectedLogType = 'journal'; // 'journal', 'auth', 'syslog', 'dmesg'
   String _selectedSeverity = 'ALL'; // 'ALL', 'ERROR', 'WARN', 'INFO'
   int _linesCount = 100;

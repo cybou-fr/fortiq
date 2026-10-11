@@ -62,11 +62,11 @@ class _FortiqHomeScreenState extends State<FortiqHomeScreen> {
   String? _connectError;
 
   // Connection settings
-  final _hostController = TextEditingController(text: 'vps-d0669a91.vps.ovh.net');
+  final _hostController = TextEditingController();
   final _portController = TextEditingController(text: '22');
-  final _userController = TextEditingController(text: 'debian');
+  final _userController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _labelController = TextEditingController(text: 'DEBIAN-VPS');
+  final _labelController = TextEditingController(text: 'MY-SERVER');
   final _keyPathController = TextEditingController();
   bool _useKeyAuth = true;
 
@@ -87,7 +87,25 @@ class _FortiqHomeScreenState extends State<FortiqHomeScreen> {
   @override
   void initState() {
     super.initState();
+    _sshService.addListener(_onConnectionChanged);
     _loadSavedProfiles();
+  }
+
+  @override
+  void dispose() {
+    _sshService.removeListener(_onConnectionChanged);
+    _sshService.disconnect();
+    super.dispose();
+  }
+
+  void _onConnectionChanged() {
+    if (!mounted) return;
+    setState(() {
+      final reason = _sshService.lastDisconnectReason;
+      if (!_sshService.isConnected && reason != null) {
+        _connectError = 'Connection lost: $reason';
+      }
+    });
   }
 
   Future<void> _loadSavedProfiles() async {
@@ -110,6 +128,8 @@ class _FortiqHomeScreenState extends State<FortiqHomeScreen> {
 
     if (_profiles.isNotEmpty) {
       _selectProfile(_profiles.first, fallbackKey: defaultKey);
+    } else if (defaultKey != null) {
+      setState(() => _keyPathController.text = defaultKey!);
     }
   }
 
@@ -154,6 +174,60 @@ class _FortiqHomeScreenState extends State<FortiqHomeScreen> {
     await ProfileService.saveProfiles(_profiles);
   }
 
+  String _hostKeyMessage(HostKeyInfo info) {
+    final nl = '\n';
+    final b = StringBuffer()
+      ..write('${info.host}:${info.port}$nl$nl')
+      ..write('Key type: ${info.type}$nl')
+      ..write('Fingerprint:$nl${info.fingerprint}$nl');
+    if (info.changed) {
+      b.write('${nl}Previously trusted:$nl${info.previous}$nl$nl'
+          'Someone may be intercepting the connection, or the server was reinstalled. '
+          'Continue only if you know why the key changed.');
+    } else {
+      b.write('${nl}First connection to this server. '
+          'Compare the fingerprint with the one on your server if you can.');
+    }
+    return b.toString();
+  }
+
+  Future<bool> _confirmHostKey(HostKeyInfo info) async {
+    if (!mounted) return false;
+    final changed = info.changed;
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1F29),
+        title: Text(
+          changed ? 'WARNING: server key has changed' : 'Trust this server?',
+          style: TextStyle(color: changed ? Colors.redAccent : Colors.white, fontSize: 16),
+        ),
+        content: SelectableText(
+          _hostKeyMessage(info),
+          style: const TextStyle(color: Colors.white70, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: changed ? Colors.red : null,
+            ),
+            child: Text(
+              changed ? 'Trust new key' : 'Trust and connect',
+              style: const TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
   Future<void> _handleConnect() async {
     setState(() {
       _connecting = true;
@@ -177,6 +251,7 @@ class _FortiqHomeScreenState extends State<FortiqHomeScreen> {
         username: _userController.text.trim(),
         password: _passwordController.text.isNotEmpty ? _passwordController.text : null,
         privateKey: privateKeyContent,
+        onHostKey: _confirmHostKey,
       );
       _sshService.currentKeyPath = _useKeyAuth ? _keyPathController.text.trim() : null;
       setState(() {

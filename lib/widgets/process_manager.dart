@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/ssh_service.dart';
+import 'ui_errors.dart';
 
 class RemoteProcessManager extends StatefulWidget {
   final SshClientService sshService;
@@ -16,6 +17,12 @@ class RemoteProcessManager extends StatefulWidget {
 }
 
 class _RemoteProcessManagerState extends State<RemoteProcessManager> {
+
+  // Async loads may finish after the window was closed.
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) super.setState(fn);
+  }
   List<Map<String, dynamic>> _processes = [];
   bool _loading = false;
   String _filter = '';
@@ -58,7 +65,11 @@ class _RemoteProcessManagerState extends State<RemoteProcessManager> {
     );
 
     if (confirm == true) {
-      await widget.sshService.killProcess(pid, force: true);
+      try {
+        await widget.sshService.killProcess(pid, force: true);
+      } catch (e) {
+        showActionError(context, 'Kill process $pid', e);
+      }
       _loadProcesses();
     }
   }

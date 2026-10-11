@@ -21,6 +21,12 @@ class RemoteTerminalView extends StatefulWidget {
 }
 
 class _RemoteTerminalViewState extends State<RemoteTerminalView> {
+
+  // Async loads may finish after the window was closed.
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) super.setState(fn);
+  }
   late final Terminal _terminal;
   late final TerminalController _terminalController;
   final FocusNode _terminalFocusNode = FocusNode();
@@ -171,40 +177,104 @@ class _RemoteTerminalViewState extends State<RemoteTerminalView> {
         onTap: () => _terminalFocusNode.requestFocus(),
         child: Container(
           color: const Color(0xFF0C0D14),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-          child: TerminalView(
-            _terminal,
-            controller: _terminalController,
-            autofocus: false,
-            backgroundOpacity: 0.0,
-            textStyle: const TerminalStyle(
-              fontSize: 13,
-              fontFamily: 'Consolas, monospace',
-            ),
-            theme: TerminalTheme(
-              cursor: widget.domainColor,
-              selection: widget.domainColor.withValues(alpha: 0.3),
-              foreground: const Color(0xFFE2E8F0),
-              background: const Color(0xFF0C0D14),
-              black: const Color(0xFF1E1E2E),
-              red: const Color(0xFFF38BA8),
-              green: const Color(0xFFA6E3A1),
-              yellow: const Color(0xFFF9E2AF),
-              blue: const Color(0xFF89B4FA),
-              magenta: const Color(0xFFCBA6F7),
-              cyan: const Color(0xFF89DCEB),
-              white: const Color(0xFFBAC2DE),
-              brightBlack: const Color(0xFF585B70),
-              brightRed: const Color(0xFFF38BA8),
-              brightGreen: const Color(0xFFA6E3A1),
-              brightYellow: const Color(0xFFF9E2AF),
-              brightBlue: const Color(0xFF89B4FA),
-              brightMagenta: const Color(0xFFCBA6F7),
-              brightCyan: const Color(0xFF89DCEB),
-              brightWhite: const Color(0xFFA6ADC8),
-              searchHitBackground: const Color(0xFFF9E2AF),
-              searchHitBackgroundCurrent: const Color(0xFFFAB387),
-              searchHitForeground: const Color(0xFF11111B),
+          child: Column(
+            children: [
+              // Mobile Virtual Accessory Keys Bar
+              Container(
+                height: 32,
+                color: const Color(0xFF141520),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: Row(
+                    children: [
+                      _buildVirtualKey('ESC', '\x1b'),
+                      _buildVirtualKey('TAB', '\t'),
+                      _buildVirtualKey('CTRL+C', '\x03'),
+                      _buildVirtualKey('CTRL+D', '\x04'),
+                      _buildVirtualKey('CTRL+Z', '\x1a'),
+                      _buildVirtualKey('CTRL+L', '\x0c'),
+                      _buildVirtualKey('▲', '\x1b[A'),
+                      _buildVirtualKey('▼', '\x1b[B'),
+                      _buildVirtualKey('◀', '\x1b[D'),
+                      _buildVirtualKey('▶', '\x1b[C'),
+                      _buildVirtualKey('HOME', '\x1b[H'),
+                      _buildVirtualKey('END', '\x1b[F'),
+                    ],
+                  ),
+                ),
+              ),
+              // Main Terminal View
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  child: TerminalView(
+                    _terminal,
+                    controller: _terminalController,
+                    autofocus: false,
+                    backgroundOpacity: 0.0,
+                    textStyle: const TerminalStyle(
+                      fontSize: 13,
+                      fontFamily: 'Consolas, monospace',
+                    ),
+                    theme: TerminalTheme(
+                      cursor: widget.domainColor,
+                      selection: widget.domainColor.withValues(alpha: 0.3),
+                      foreground: const Color(0xFFE2E8F0),
+                      background: const Color(0xFF0C0D14),
+                      black: const Color(0xFF1E1E2E),
+                      red: const Color(0xFFF38BA8),
+                      green: const Color(0xFFA6E3A1),
+                      yellow: const Color(0xFFF9E2AF),
+                      blue: const Color(0xFF89B4FA),
+                      magenta: const Color(0xFFCBA6F7),
+                      cyan: const Color(0xFF89DCEB),
+                      white: const Color(0xFFBAC2DE),
+                      brightBlack: const Color(0xFF585B70),
+                      brightRed: const Color(0xFFF38BA8),
+                      brightGreen: const Color(0xFFA6E3A1),
+                      brightYellow: const Color(0xFFF9E2AF),
+                      brightBlue: const Color(0xFF89B4FA),
+                      brightMagenta: const Color(0xFFCBA6F7),
+                      brightCyan: const Color(0xFF89DCEB),
+                      brightWhite: const Color(0xFFA6ADC8),
+                      searchHitBackground: const Color(0xFFF9E2AF),
+                      searchHitBackgroundCurrent: const Color(0xFFFAB387),
+                      searchHitForeground: const Color(0xFF11111B),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVirtualKey(String label, String sequence) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+      child: Material(
+        color: const Color(0xFF222436),
+        borderRadius: BorderRadius.circular(4),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(4),
+          onTap: () {
+            _session?.stdin.add(utf8.encode(sequence));
+            _terminalFocusNode.requestFocus();
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontFamily: 'Consolas',
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: widget.domainColor,
+              ),
             ),
           ),
         ),

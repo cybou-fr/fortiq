@@ -2,11 +2,43 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:dartssh2/dartssh2.dart';
 import 'known_hosts_service.dart';
 
 /// Quotes [value] so the remote shell treats it as one literal word.
-String shQuote(String value) => "'${value.replaceAll("'", r"'''")}'";
+String shQuote(String value) => "'${value.replaceAll("'", r"'\''")}'";
+
+/// Wraps [command] so it runs as root: directly for root, else via passwordless sudo.
+String asRoot(String command) =>
+    'if [ "\$(id -u)" = 0 ]; then $command; else sudo -n $command; fi';
+
+/// Remote script for [SshClientService.writeFile]: `$1` = target, `$2` = byte count.
+///
+/// An existing writable file is replaced atomically (temp file in the same
+/// directory, same mode/owner, renamed only after the full content arrived),
+/// so a dropped connection never leaves a truncated file. A cut-off upload ends
+/// the same way as a finished one (EOF on stdin), hence the size check.
+/// New files and files in unwritable directories are written directly.
+const _atomicWriteScript = r'''
+t=$(readlink -f -- "$1") || t=$1
+d=$(dirname -- "$t")
+if [ -f "$t" ] && [ -w "$t" ] && [ -w "$d" ]; then
+  tmp=$(mktemp "$d/.fortiq-save.XXXXXX") || exit 1
+  if cat > "$tmp" \
+     && [ "$(wc -c < "$tmp")" -eq "$2" ] \
+     && chmod --reference="$t" "$tmp" \
+     && { chown --reference="$t" "$tmp" 2>/dev/null || true; } \
+     && mv -f -- "$tmp" "$t"; then
+    exit 0
+  fi
+  rm -f -- "$tmp"
+  echo "Upload incomplete, file left unchanged" >&2
+  exit 1
+fi
+cat > "$t" || exit 1
+[ "$(wc -c < "$t")" -eq "$2" ] || { echo "Upload incomplete" >&2; exit 1; }
+''';
 
 /// A remote command finished with a non-zero exit code or was killed.
 class SshCommandException implements Exception {
@@ -78,9 +110,12 @@ class LinuxFileInfo {
   }
 }
 
-class SshClientService {
+class SshClientService extends ChangeNotifier {
   SSHClient? _client;
   bool _isConnected = false;
+
+  /// Why the last session ended unexpectedly (null after a normal disconnect).
+  String? lastDisconnectReason;
 
   String? currentHost;
   int? currentPort;
@@ -195,6 +230,25 @@ class SshClientService {
       rethrow;
     }
     _isConnected = true;
+    lastDisconnectReason = null;
+    notifyListeners();
+
+    // Notice drops (network loss, keepalive timeout, server closing).
+    final client = _client!;
+    unawaited(client.done.then(
+      (_) => _handleClosed(client, 'Connection closed by the server'),
+      onError: (Object e) => _handleClosed(client, e.toString()),
+    ));
+  }
+
+  void _handleClosed(SSHClient client, String reason) {
+    // Ignore if we closed it ourselves or already moved on to another client.
+    if (!identical(client, _client)) return;
+    lastDisconnectReason = reason;
+    stopSocksTunnel();
+    _client = null;
+    _isConnected = false;
+    notifyListeners();
   }
 
   /// Trust on first use: unknown keys and changed keys need user approval.
@@ -225,7 +279,10 @@ class SshClientService {
     stopSocksTunnel();
     _client?.close();
     _client = null;
+    final wasConnected = _isConnected;
     _isConnected = false;
+    lastDisconnectReason = null;
+    if (wasConnected) notifyListeners();
   }
 
   Future<String> execute(String command) async {
@@ -330,10 +387,11 @@ class SshClientService {
       throw Exception('Not connected to SSH server');
     }
     // Content goes through stdin: command arguments are limited to ~128 KB.
-    final command = 'cat > ${shQuote(path)}';
+    final bytes = Uint8List.fromList(utf8.encode(content));
+    final command = 'sh -c ${shQuote(_atomicWriteScript)} sh ${shQuote(path)} ${bytes.length}';
     final session = await client.execute(command);
     final stderrFuture = utf8.decodeStream(session.stderr);
-    session.stdin.add(Uint8List.fromList(utf8.encode(content)));
+    session.stdin.add(bytes);
     await session.stdin.close();
     await session.done;
     final err = await stderrFuture;
@@ -385,13 +443,8 @@ echo "CPU:\$cpu|MEM:\$mem|UP:\$up|DISK:\$disk"
         'disk': disk,
       };
     } catch (_) {
-      return {
-        'cpu': 0.0,
-        'totalMem': 1,
-        'usedMem': 0,
-        'uptime': 'unknown',
-        'disk': '--',
-      };
+      // Do not invent zero metrics: callers keep the last real values.
+      rethrow;
     }
   }
 
@@ -421,7 +474,8 @@ echo "CPU:\$cpu|MEM:\$mem|UP:\$up|DISK:\$disk"
   /// Kills a process by PID
   Future<void> killProcess(int pid, {bool force = true}) async {
     final flag = force ? '-9' : '-15';
-    await execute('kill $flag $pid');
+    // Own processes need no privileges; fall back to sudo for other users' ones.
+    await execute('kill $flag $pid 2>/dev/null || sudo -n kill $flag $pid');
   }
 
   /// Lists active systemd services
@@ -452,7 +506,7 @@ echo "CPU:\$cpu|MEM:\$mem|UP:\$up|DISK:\$disk"
     if (!RegExp(r'^[a-z-]+$').hasMatch(action)) {
       throw ArgumentError('Invalid service action: $action');
     }
-    await execute('systemctl $action ${shQuote(unit)}');
+    await execute(asRoot('systemctl $action ${shQuote(unit)}'));
   }
 
   /// Fetches listening ports using `ss -tulpn` or fallback to `netstat -tulpn`
@@ -494,16 +548,31 @@ echo "CPU:\$cpu|MEM:\$mem|UP:\$up|DISK:\$disk"
   /// Fetches UFW status and rules
   Future<Map<String, dynamic>> fetchUfwStatus() async {
     try {
-      final out = await execute('which ufw >/dev/null && ufw status numbered || echo "NOT_INSTALLED"');
+      // ufw lives in /usr/sbin, which is not in PATH for non-root SSH commands.
+      final out = await execute(
+        'if [ ! -x /usr/sbin/ufw ]; then echo NOT_INSTALLED; '
+        'elif [ "\$(id -u)" = 0 ]; then ufw status numbered; '
+        'else sudo -n ufw status numbered 2>&1 || echo NEEDS_SUDO; fi',
+      );
       if (out.contains('NOT_INSTALLED')) {
         return {'installed': false, 'active': false, 'rules': []};
+      }
+      if (out.contains('NEEDS_SUDO')) {
+        return {
+          'installed': true,
+          'active': false,
+          'rules': [],
+          'error': 'UFW needs root. Passwordless sudo is not available for this user '
+              '(`sudo -n ufw status` failed). Connect as root or allow sudo without a password.',
+        };
       }
       final isActive = out.contains('Status: active');
       final lines = LineSplitter.split(out);
       final rules = <Map<String, dynamic>>[];
 
       for (final line in lines) {
-        final match = RegExp(r'\[\s*(\d+)\]\s+(.*?)\s+(ALLOW|DENY|REJECT|LIMIT)\s+(.*)').firstMatch(line);
+        final match = RegExp(r'\[\s*(\d+)\]\s+(.*?)\s+(ALLOW|DENY|REJECT|LIMIT)(?:\s+(?:IN|OUT|FWD))?\s+(.*)')
+            .firstMatch(line);
         if (match != null) {
           rules.add({
             'num': int.tryParse(match.group(1) ?? '0') ?? 0,
@@ -514,8 +583,8 @@ echo "CPU:\$cpu|MEM:\$mem|UP:\$up|DISK:\$disk"
         }
       }
       return {'installed': true, 'active': isActive, 'rules': rules};
-    } catch (_) {
-      return {'installed': false, 'active': false, 'rules': []};
+    } catch (e) {
+      return {'installed': true, 'active': false, 'rules': [], 'error': e.toString()};
     }
   }
 
@@ -524,12 +593,12 @@ echo "CPU:\$cpu|MEM:\$mem|UP:\$up|DISK:\$disk"
     if (!RegExp(r'^[a-z]+$').hasMatch(action)) {
       throw ArgumentError('Invalid ufw action: $action');
     }
-    await execute('ufw $action ${shQuote(port)}');
+    await execute(asRoot('/usr/sbin/ufw $action ${shQuote(port)}'));
   }
 
   /// Deletes a UFW rule by number
   Future<void> deleteUfwRule(int ruleNum) async {
-    await execute('echo "y" | ufw delete $ruleNum');
+    await execute(asRoot('/usr/sbin/ufw --force delete $ruleNum'));
   }
 
   /// Fetches network interfaces using `ip -o addr`
@@ -671,7 +740,7 @@ echo "CPU:\$cpu|MEM:\$mem|UP:\$up|DISK:\$disk"
   Future<List<Map<String, dynamic>>> fetchSystemMail({String mailboxUser = 'debian'}) async {
     // Shell command to search and cat mailbox files
     final script = '''
-user="$mailboxUser"
+user=${shQuote(mailboxUser)}
 paths=(
   "/var/mail/\$user"
   "/var/spool/mail/\$user"
@@ -772,25 +841,25 @@ fi
     required String subject,
     required String body,
   }) async {
-    final cleanTo = to.replaceAll('"', '\\"');
-    final cleanSubject = subject.replaceAll('"', '\\"');
     final base64Body = base64Encode(utf8.encode(body));
 
     // Try sendmail or mail, fallback to direct append to user mbox
     final script = '''
+to=${shQuote(to)}
+subject=${shQuote(subject)}
 body=\$(echo "$base64Body" | base64 -d)
 if command -v mail >/dev/null 2>&1; then
-  echo "\$body" | mail -s "$cleanSubject" "$cleanTo"
+  echo "\$body" | mail -s "\$subject" "\$to"
 elif command -v sendmail >/dev/null 2>&1; then
-  printf "To: %s\\nSubject: %s\\n\\n%s\\n" "$cleanTo" "$cleanSubject" "\$body" | sendmail -t
+  printf "To: %s\\nSubject: %s\\n\\n%s\\n" "\$to" "\$subject" "\$body" | sendmail -t
 else
   # Fallback: append formatted mbox email to /tmp/sample_mbox or /var/mail/\$to
   date_str=\$(date -R)
-  target="/var/mail/$cleanTo"
+  target="/var/mail/\$to"
   if [ ! -w "\$target" ] && [ -w /tmp/sample_mbox ]; then
     target="/tmp/sample_mbox"
   fi
-  printf "\\nFrom MAILER-DAEMON %s\\nDate: %s\\nFrom: fortis-desktop@localhost\\nTo: %s\\nSubject: %s\\n\\n%s\\n" "\$(date)" "\$date_str" "$cleanTo" "$cleanSubject" "\$body" >> "\$target" 2>/dev/null || echo "failed"
+  printf "\\nFrom MAILER-DAEMON %s\\nDate: %s\\nFrom: fortis-desktop@localhost\\nTo: %s\\nSubject: %s\\n\\n%s\\n" "\$(date)" "\$date_str" "\$to" "\$subject" "\$body" >> "\$target" 2>/dev/null || echo "failed"
 fi
 ''';
 

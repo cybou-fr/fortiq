@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/ssh_service.dart';
+import 'ui_errors.dart';
 
 class RemoteNetworkInspector extends StatefulWidget {
   final SshClientService sshService;
@@ -16,6 +17,12 @@ class RemoteNetworkInspector extends StatefulWidget {
 }
 
 class _RemoteNetworkInspectorState extends State<RemoteNetworkInspector> {
+
+  // Async loads may finish after the window was closed.
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) super.setState(fn);
+  }
   int _currentTab = 0; // 0: Ports, 1: UFW, 2: Interfaces
   bool _loading = false;
 
@@ -65,12 +72,20 @@ class _RemoteNetworkInspectorState extends State<RemoteNetworkInspector> {
     if (port.isEmpty) return;
 
     _portController.clear();
-    await widget.sshService.addUfwRule(port, _ruleAction);
+    try {
+      await widget.sshService.addUfwRule(port, _ruleAction);
+    } catch (e) {
+      showActionError(context, 'Add firewall rule', e);
+    }
     _refreshAll();
   }
 
   Future<void> _deleteRule(int ruleNum) async {
-    await widget.sshService.deleteUfwRule(ruleNum);
+    try {
+      await widget.sshService.deleteUfwRule(ruleNum);
+    } catch (e) {
+      showActionError(context, 'Delete firewall rule', e);
+    }
     _refreshAll();
   }
 
@@ -238,6 +253,25 @@ class _RemoteNetworkInspectorState extends State<RemoteNetworkInspector> {
     final installed = _ufwData['installed'] as bool;
     final active = _ufwData['active'] as bool;
     final rules = (_ufwData['rules'] as List<Map<String, dynamic>>?) ?? [];
+    final error = _ufwData['error'] as String?;
+
+    if (error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.lock_outline, size: 40, color: Colors.orangeAccent),
+              const SizedBox(height: 10),
+              Text(error, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+              const SizedBox(height: 12),
+              OutlinedButton(onPressed: _refreshAll, child: const Text('Retry')),
+            ],
+          ),
+        ),
+      );
+    }
 
     if (!installed) {
       return Center(
@@ -250,7 +284,11 @@ class _RemoteNetworkInspectorState extends State<RemoteNetworkInspector> {
             const SizedBox(height: 12),
             ElevatedButton(
               onPressed: () async {
-                await widget.sshService.execute('apt update && apt install -y ufw');
+                try {
+                  await widget.sshService.execute(asRoot('apt-get update && apt-get install -y ufw'));
+                } catch (e) {
+                  showActionError(context, 'Install ufw', e);
+                }
                 _refreshAll();
               },
               style: ElevatedButton.styleFrom(backgroundColor: widget.domainColor),

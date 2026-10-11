@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/ssh_service.dart';
+import 'ui_errors.dart';
 
 class RemoteServiceManager extends StatefulWidget {
   final SshClientService sshService;
@@ -16,6 +17,12 @@ class RemoteServiceManager extends StatefulWidget {
 }
 
 class _RemoteServiceManagerState extends State<RemoteServiceManager> {
+
+  // Async loads may finish after the window was closed.
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) super.setState(fn);
+  }
   List<Map<String, dynamic>> _services = [];
   bool _loading = false;
   String _filter = '';
@@ -40,7 +47,11 @@ class _RemoteServiceManagerState extends State<RemoteServiceManager> {
   }
 
   Future<void> _action(String unit, String act) async {
-    await widget.sshService.controlService(unit, act);
+    try {
+      await widget.sshService.controlService(unit, act);
+    } catch (e) {
+      showActionError(context, '$act $unit', e);
+    }
     _loadServices();
   }
 

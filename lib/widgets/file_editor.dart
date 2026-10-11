@@ -7,6 +7,7 @@ class RemoteFileEditor extends StatefulWidget {
   final String filePath;
   final Color domainColor;
   final VoidCallback? onSaved;
+  final ValueChanged<bool>? onDirtyChanged;
 
   const RemoteFileEditor({
     super.key,
@@ -14,6 +15,7 @@ class RemoteFileEditor extends StatefulWidget {
     required this.filePath,
     required this.domainColor,
     this.onSaved,
+    this.onDirtyChanged,
   });
 
   @override
@@ -21,6 +23,12 @@ class RemoteFileEditor extends StatefulWidget {
 }
 
 class _RemoteFileEditorState extends State<RemoteFileEditor> {
+
+  // Async loads may finish after the window was closed.
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) super.setState(fn);
+  }
   final TextEditingController _contentController = TextEditingController();
   bool _loading = true;
   bool _saving = false;
@@ -51,6 +59,7 @@ class _RemoteFileEditorState extends State<RemoteFileEditor> {
     }
     if (!_isDirty) {
       setState(() => _isDirty = true);
+      widget.onDirtyChanged?.call(true);
     }
   }
 
@@ -68,6 +77,7 @@ class _RemoteFileEditorState extends State<RemoteFileEditor> {
         _loading = false;
         _isDirty = false;
       });
+      widget.onDirtyChanged?.call(false);
     } catch (e) {
       setState(() {
         _loading = false;
@@ -84,6 +94,7 @@ class _RemoteFileEditorState extends State<RemoteFileEditor> {
         _saving = false;
         _isDirty = false;
       });
+      widget.onDirtyChanged?.call(false);
       widget.onSaved?.call();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

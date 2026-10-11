@@ -17,6 +17,12 @@ class RemoteBrowserWindow extends StatefulWidget {
 }
 
 class _RemoteBrowserWindowState extends State<RemoteBrowserWindow> {
+
+  // Async loads may finish after the window was closed.
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) super.setState(fn);
+  }
   final WebviewController _controller = WebviewController();
   final TextEditingController _urlController = TextEditingController(text: 'https://duckduckgo.com');
   bool _ready = false;

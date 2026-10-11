@@ -16,6 +16,12 @@ class RemoteMailboxViewer extends StatefulWidget {
 }
 
 class _RemoteMailboxViewerState extends State<RemoteMailboxViewer> {
+
+  // Async loads may finish after the window was closed.
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) super.setState(fn);
+  }
   bool _isLoading = true;
   List<Map<String, dynamic>> _messages = [];
   Map<String, dynamic>? _selectedMessage;

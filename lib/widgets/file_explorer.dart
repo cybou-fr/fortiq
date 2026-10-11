@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/ssh_service.dart';
+import 'ui_errors.dart';
 
 class RemoteFileExplorer extends StatefulWidget {
   final SshClientService sshService;
@@ -20,6 +21,12 @@ class RemoteFileExplorer extends StatefulWidget {
 }
 
 class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
+
+  // Async loads may finish after the window was closed.
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) super.setState(fn);
+  }
   late String _currentPath;
   List<LinuxFileInfo> _files = [];
   bool _isLoading = false;
@@ -165,7 +172,11 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
 
     if (name != null && name.isNotEmpty) {
       final newDirPath = _currentPath == '/' ? '/$name' : '$_currentPath/$name';
-      await widget.sshService.createDirectory(newDirPath);
+      try {
+        await widget.sshService.createDirectory(newDirPath);
+      } catch (e) {
+        showActionError(context, 'Create folder', e);
+      }
       _loadDirectory(_currentPath);
     }
   }
@@ -193,7 +204,11 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
 
     if (confirm == true) {
       final fullPath = _currentPath == '/' ? '/${item.name}' : '$_currentPath/${item.name}';
-      await widget.sshService.remove(fullPath, recursive: item.isDirectory);
+      try {
+        await widget.sshService.remove(fullPath, recursive: item.isDirectory);
+      } catch (e) {
+        showActionError(context, 'Delete ${item.name}', e);
+      }
       _loadDirectory(_currentPath);
     }
   }

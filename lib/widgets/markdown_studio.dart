@@ -7,12 +7,14 @@ class RemoteMarkdownStudio extends StatefulWidget {
   final SshClientService sshService;
   final String? initialFilePath;
   final Color domainColor;
+  final ValueChanged<bool>? onDirtyChanged;
 
   const RemoteMarkdownStudio({
     super.key,
     required this.sshService,
     this.initialFilePath,
     required this.domainColor,
+    this.onDirtyChanged,
   });
 
   @override
@@ -20,6 +22,12 @@ class RemoteMarkdownStudio extends StatefulWidget {
 }
 
 class _RemoteMarkdownStudioState extends State<RemoteMarkdownStudio> {
+
+  // Async loads may finish after the window was closed.
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) super.setState(fn);
+  }
   final TextEditingController _pathController = TextEditingController();
   final TextEditingController _contentController = TextEditingController();
   bool _loading = false;
@@ -65,7 +73,10 @@ uptime -p
     }
 
     _contentController.addListener(() {
-      if (!_isDirty) setState(() => _isDirty = true);
+      if (!_isDirty) {
+        setState(() => _isDirty = true);
+        widget.onDirtyChanged?.call(true);
+      }
     });
   }
 
@@ -85,6 +96,7 @@ uptime -p
         _loading = false;
         _isDirty = false;
       });
+      widget.onDirtyChanged?.call(false);
     } catch (e) {
       setState(() {
         _loading = false;
@@ -104,6 +116,7 @@ uptime -p
         _saving = false;
         _isDirty = false;
       });
+      widget.onDirtyChanged?.call(false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

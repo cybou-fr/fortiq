@@ -19,6 +19,12 @@ class RemoteMediaViewer extends StatefulWidget {
 }
 
 class _RemoteMediaViewerState extends State<RemoteMediaViewer> {
+
+  // Async loads may finish after the window was closed.
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) super.setState(fn);
+  }
   bool _isLoading = true;
   String? _error;
   Uint8List? _imageData;

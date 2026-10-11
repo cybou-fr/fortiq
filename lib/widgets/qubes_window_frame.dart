@@ -163,8 +163,9 @@ class QubesWindowFrame extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 class _WindowBtn extends StatelessWidget {
