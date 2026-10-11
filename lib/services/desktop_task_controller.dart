@@ -70,6 +70,12 @@ class DesktopTaskController extends ChangeNotifier {
     try {
       await operation((bytes, total) {
         if (task.state != DesktopTaskState.running) return;
+        // Reject stale/out-of-order progress and invalid totals.
+        if (bytes < 0 || bytes < task.bytesTransferred ||
+            (total != null && (total < 0 || bytes > total)) ||
+            (task.totalBytes != null && total != task.totalBytes)) {
+          return;
+        }
         task.bytesTransferred = bytes;
         task.totalBytes = total;
         _notify();
