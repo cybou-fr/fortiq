@@ -66,4 +66,86 @@ void main() {
     tasks.dispose();
   });
 
+  test('stale or impossible progress updates are ignored', () async {
+    final tasks = DesktopTaskController();
+    final task = await tasks.runTransfer('Upload', (progress) async {
+      progress(512, 1024);
+      progress(128, 1024);
+      progress(2048, 1024);
+      progress(-1, 1024);
+      progress(700, 2048);
+    });
+    expect(task.state, DesktopTaskState.completed);
+    expect(task.bytesTransferred, 512);
+    expect(task.totalBytes, 1024);
+    expect(task.progress, 0.5);
+    tasks.dispose();
+  });
+
+  test('cooperative cancellation retains a cancelled transfer task', () async {
+    final tasks = DesktopTaskController();
+    final token = TransferCancellation();
+    final gate = Completer<void>();
+    final pending = tasks.runTransfer('Upload', (progress) async {
+      progress(10, 100);
+      await gate.future;
+      token.throwIfRequested();
+    }, cancellation: token);
+    expect(tasks.runningCount, 1);
+    expect(tasks.cancelTransfer(tasks.tasks.single.id), isTrue);
+    expect(token.isRequested, isTrue);
+    gate.complete();
+    final task = await pending;
+    expect(task.state, DesktopTaskState.cancelled);
+    expect(task.bytesTransferred, 10);
+    expect(tasks.cancelTransfer(task.id), isFalse);
+    tasks.dispose();
+  });
+
+  test('download cancellation request marks task cancelled after cooperation', () async {
+    final tasks = DesktopTaskController();
+    final token = TransferCancellation();
+    final gate = Completer<void>();
+    final pending = tasks.runTransfer('Download', (progress) async {
+      progress(64, 1024);
+      await gate.future;
+      token.throwIfRequested();
+    }, cancellation: token);
+    expect(tasks.cancelTransfer(tasks.tasks.single.id), isTrue);
+    gate.complete();
+    final task = await pending;
+    expect(task.state, DesktopTaskState.cancelled);
+    expect(task.progress, 0.0625);
+    expect(tasks.runningCount, 0);
+    tasks.dispose();
+  });
+
+  test('late cancellation does not rewrite a completed transfer', () async {
+    final tasks = DesktopTaskController();
+    final token = TransferCancellation();
+    final task = await tasks.runTransfer('Download', (progress) async {
+      progress(12, 12);
+    }, cancellation: token);
+    expect(tasks.cancelTransfer(task.id), isFalse);
+    expect(task.state, DesktopTaskState.completed);
+    tasks.dispose();
+  });
+
+  test('SSH loss during cancellation remains unknown, not cancelled', () async {
+    final tasks = DesktopTaskController();
+    final token = TransferCancellation();
+    final gate = Completer<void>();
+    var sessionCurrent = true;
+    final pending = tasks.runTransfer('Download', (_) async {
+      await gate.future;
+      token.throwIfRequested();
+    }, cancellation: token, isSessionCurrent: () => sessionCurrent);
+    tasks.cancelTransfer(tasks.tasks.single.id);
+    sessionCurrent = false;
+    gate.complete();
+    final task = await pending;
+    expect(task.state, DesktopTaskState.unknown);
+    tasks.dispose();
+  });
+
 }

@@ -1009,9 +1009,39 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
                             DesktopTaskState.completed => Icons.check_circle_outline,
                             DesktopTaskState.failed => Icons.error_outline,
                             DesktopTaskState.unknown => Icons.help_outline,
+                            DesktopTaskState.cancelled => Icons.cancel_outlined,
                           }),
                           title: Text(task.label),
-                          subtitle: Text(task.message ?? task.state.name),
+                          trailing: task.state == DesktopTaskState.running &&
+                                  task.cancellation != null
+                              ? IconButton(
+                                  tooltip: 'Request upload cancellation',
+                                  icon: const Icon(Icons.cancel_outlined),
+                                  onPressed: task.cancellation!.isRequested
+                                      ? null
+                                      : () => _desktopTasks.cancelTransfer(task.id),
+                                )
+                              : null,
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(task.message ?? task.state.name),
+                              if (task.totalBytes != null) ...[
+                                const SizedBox(height: 4),
+                                LinearProgressIndicator(
+                                  value: task.progress,
+                                  minHeight: 4,
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  '${task.bytesTransferred} / ${task.totalBytes} bytes',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              ] else if (task.bytesTransferred > 0)
+                                Text('${task.bytesTransferred} bytes transferred',
+                                    style: const TextStyle(fontSize: 11)),
+                            ],
+                          ),
                         ),
                     ],
                   ),

@@ -418,6 +418,7 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
       showActionError(context, 'Download', 'SSH session changed.');
       return;
     }
+    final cancellation = TransferCancellation();
     final task = await _tasks.runTransfer(
       'Download ${item.name}',
       (progress) => const SftpTransferService().download(
@@ -425,14 +426,56 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
         remotePath: source,
         localPath: destination.path,
         onProgress: progress,
+        cancellation: cancellation,
         sessionCurrent: () => widget.sshService.isConnected &&
             widget.sshService.rawClient == client,
       ),
+      cancellation: cancellation,
       isSessionCurrent: () => widget.sshService.isConnected &&
           widget.sshService.rawClient == client,
     );
     if (mounted && task.state == DesktopTaskState.failed) {
       showActionError(context, 'Download', task.message ?? 'Transfer failed');
+    }
+  }
+
+  Future<void> _uploadFile() async {
+    if (_isLoading || !widget.sshService.isConnected) return;
+    final directory = _currentPath;
+    final client = widget.sshService.rawClient;
+    if (client == null) return;
+    final local = await openFile();
+    if (local == null || !mounted) return;
+    final name = p.basename(local.path);
+    if (name.isEmpty || name == '.' || name == '..') return;
+    if (!widget.sshService.isConnected ||
+        widget.sshService.rawClient != client || _currentPath != directory) {
+      showActionError(context, 'Upload', 'SSH session or directory changed.');
+      return;
+    }
+    final remote = p.posix.join(directory, name);
+    final cancellation = TransferCancellation();
+    final task = await _tasks.runTransfer(
+      'Upload $name',
+      (progress) => const SftpTransferService().upload(
+        client: client,
+        localPath: local.path,
+        remotePath: remote,
+        onProgress: progress,
+        cancellation: cancellation,
+        sessionCurrent: () => widget.sshService.isConnected &&
+            widget.sshService.rawClient == client,
+      ),
+      cancellation: cancellation,
+      isSessionCurrent: () => widget.sshService.isConnected &&
+          widget.sshService.rawClient == client,
+    );
+    if (!mounted) return;
+    if (task.state == DesktopTaskState.completed &&
+        _currentPath == directory) {
+      await _loadDirectory(directory);
+    } else if (task.state == DesktopTaskState.failed) {
+      showActionError(context, 'Upload', task.message ?? 'Upload failed');
     }
   }
 
@@ -597,6 +640,12 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.upload_file,
+                        size: 18, color: Colors.white70),
+                    tooltip: 'Upload file via SFTP',
+                    onPressed: _isLoading ? null : _uploadFile,
+                  ),
                   IconButton(
                     icon: const Icon(
                       Icons.create_new_folder,
@@ -831,13 +880,34 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
                         dense: true,
                         title: Text(task.label,
                             style: const TextStyle(fontSize: 12)),
-                        subtitle: Text(task.message ??
-                            (task.totalBytes == null
-                                ? '${task.state.name} · ${task.bytesTransferred} bytes'
-                                : '${task.state.name} · ${task.bytesTransferred}/${task.totalBytes} bytes'),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 11)),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(task.message ?? task.state.name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 11)),
+                            if (task.totalBytes != null) ...[
+                              const SizedBox(height: 4),
+                              LinearProgressIndicator(
+                                  value: task.progress, minHeight: 3),
+                              Text('${task.bytesTransferred} / ${task.totalBytes} bytes',
+                                  style: const TextStyle(fontSize: 10)),
+                            ] else if (task.bytesTransferred > 0)
+                              Text('${task.bytesTransferred} bytes',
+                                  style: const TextStyle(fontSize: 10)),
+                          ],
+                        ),
+                        trailing: task.state == DesktopTaskState.running &&
+                                task.cancellation != null
+                            ? IconButton(
+                                tooltip: 'Request upload cancellation',
+                                icon: const Icon(Icons.cancel_outlined, size: 18),
+                                onPressed: task.cancellation!.isRequested
+                                    ? null
+                                    : () => _tasks.cancelTransfer(task.id),
+                              )
+                            : null,
                         leading: Icon(
                           task.state == DesktopTaskState.completed
                               ? Icons.check_circle_outline
