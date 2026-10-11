@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -29,7 +28,7 @@ class FortiqLicenseConfig {
   static Uri? get portalUrl {
     final slug = storeSlug.trim();
     if (!RegExp(r'^[a-zA-Z0-9-]+$').hasMatch(slug)) return null;
-    return Uri.parse('https://' + slug + '.lemonsqueezy.com/billing');
+    return Uri.https('$slug.lemonsqueezy.com', '/billing');
   }
 
   static Uri? checkoutUrl(LicenseOffer offer) {
@@ -115,11 +114,13 @@ class LemonSqueezyLicenseApi implements LicenseApi {
       _post('activate', {'license_key': key, 'instance_name': instanceName});
 
   @override
-  Future<Map<String, dynamic>> validate(String key, {String? instanceId}) =>
-      _post('validate', {
-        'license_key': key,
-        if (instanceId != null) 'instance_id': instanceId,
-      });
+  Future<Map<String, dynamic>> validate(String key, {String? instanceId}) {
+    final fields = <String, String>{'license_key': key};
+    if (instanceId != null) {
+      fields['instance_id'] = instanceId;
+    }
+    return _post('validate', fields);
+  }
 
   @override
   Future<Map<String, dynamic>> deactivate(String key, String instanceId) =>
@@ -164,7 +165,9 @@ class WindowsDpapiLicenseStore implements LicenseStore {
       final key = data['key'];
       final instanceId = data['instanceId'];
       if (key is! String || key.isEmpty || instanceId is! String ||
-          instanceId.isEmpty) throw const FormatException('Invalid secret');
+          instanceId.isEmpty) {
+        throw const FormatException('Invalid secret');
+      }
       return StoredFortiqLicense(key, instanceId);
     } catch (_) {
       throw const LicenseFailure('Saved license cannot be decrypted. Enter your license again.');
