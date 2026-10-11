@@ -22,6 +22,7 @@ ACTIVE_DOCS = (
     "docs/LICENSING.md",
     "docs/LICENSING_SETUP.md",
     "docs/website/README.md",
+    "docs/AI_CLI.md",
 )
 CONTRACT = ROOT / "docs/SSH_FRONTEND_CONTRACT.md"
 
@@ -89,6 +90,24 @@ if CONTRACT.is_file():
            "Custom server CLIs/transport must not be default work")
     expect("Lemon Squeezy" in contract_text,
            "Missing separate licensing-control-plane exception")
+
+# AI is optional: Ollama is an existing Linux runtime, not a direct
+# client-side LLM, and its loopback server is not an exposed FORTIQ API.
+ai_file = ROOT / "docs/AI_CLI.md"
+if ai_file.is_file():
+    ai_text = ai_file.read_text(encoding="utf-8")
+    for required in (
+        "Ollama",
+        "127.0.0.1:11434",
+        "OLLAMA_NO_CLOUD=1",
+        "`ai`",
+        "CPU-only",
+        "только после явного",
+    ):
+        expect(required in ai_text,
+               f"AI_CLI.md: missing Linux-only Ollama contract: {required}")
+else:
+    errors.append("Missing optional AI CLI contract")
 
 for relative in ACTIVE_DOCS:
     file = ROOT / relative
