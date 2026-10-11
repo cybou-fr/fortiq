@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/ssh_service.dart';
+import '../services/server_setup_service.dart';
+import 'server_status.dart';
 import 'file_explorer.dart';
 import 'process_manager.dart';
 import 'service_manager.dart';
@@ -40,6 +42,9 @@ class InternalWindow {
   String? filePath;
   bool isDirty = false;
 
+  /// tmux session of a terminal window (survives lost connections).
+  String? sessionName;
+
   InternalWindow({
     required this.id,
     required this.appType,
@@ -65,12 +70,16 @@ class HeadlessDesktopWorkspace extends StatefulWidget {
   });
 
   @override
-  State<HeadlessDesktopWorkspace> createState() => _HeadlessDesktopWorkspaceState();
+  State<HeadlessDesktopWorkspace> createState() => HeadlessDesktopWorkspaceState();
 }
 
-class _HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
+class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
+  /// True if any open window (editor, notes) holds edits not yet saved.
+  bool get hasUnsavedChanges => _windows.any((w) => w.isDirty);
+
   final List<InternalWindow> _windows = [];
   String? _activeWindowId;
+  late final ServerSetupService _setup = ServerSetupService(widget.sshService);
   Timer? _metricsTimer;
 
   // System stats in Top Bar
@@ -91,12 +100,16 @@ class _HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
       if (mounted) _openWindow(FortiqAppType.fileExplorer);
     });
 
+    // Check what the server has, install what Fortiq needs, look for updates.
+    unawaited(_setup.run());
+
     _refreshMetrics();
     _metricsTimer = Timer.periodic(const Duration(seconds: 4), (_) => _refreshMetrics());
   }
 
   @override
   void dispose() {
+    _setup.dispose();
     _metricsTimer?.cancel();
     super.dispose();
   }
@@ -194,11 +207,23 @@ class _HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
       isMaximized: isCompact, // Auto-maximize on compact/mobile screens
       filePath: filePath,
     );
+    if (type == FortiqAppType.terminal) win.sessionName = _freeSessionName();
 
     setState(() {
       _windows.add(win);
       _activeWindowId = id;
     });
+  }
+
+  /// Lowest `fortiq-N` not used by an open terminal. Stable names let a new run
+  /// of the app re-attach to terminals that were left running on the server.
+  String _freeSessionName() {
+    final used = _windows.map((w) => w.sessionName).whereType<String>().toSet();
+    var n = 1;
+    while (used.contains('fortiq-$n')) {
+      n++;
+    }
+    return 'fortiq-$n';
   }
 
   void _bringToFront(String id) {
@@ -243,6 +268,10 @@ class _HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
         _activeWindowId = _windows.isNotEmpty ? _windows.last.id : null;
       }
     });
+    // Closing the window is an explicit end of that shell; just disconnecting
+    // or quitting leaves it running for the next time.
+    final session = win.sessionName;
+    if (session != null) unawaited(widget.sshService.killTmuxSession(session));
   }
 
   @override
@@ -265,6 +294,14 @@ class _HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
             right: 0,
             height: 30,
             child: _buildTopPanel(),
+          ),
+
+          // Shown while the connection is being restored.
+          Positioned(
+            top: 30,
+            left: 0,
+            right: 0,
+            child: _ReconnectBanner(service: widget.sshService),
           ),
 
           // Internal Windows Layer
@@ -335,6 +372,8 @@ class _HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
                 style: const TextStyle(color: Colors.white38, fontSize: 11),
               ),
             ],
+            const SizedBox(width: 12),
+            ServerStatusChip(setup: _setup),
           ],
         ),
       ),
@@ -510,6 +549,7 @@ class _HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
         return RemoteTerminalView(
           sshService: widget.sshService,
           domainColor: widget.domainColor,
+          sessionName: win.sessionName ?? 'fortiq-1',
         );
       case FortiqAppType.editor:
         return RemoteFileEditor(
@@ -683,4 +723,59 @@ class _GridBackgroundPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// "Connection lost, reconnecting" strip with a countdown and manual controls.
+class _ReconnectBanner extends StatelessWidget {
+  final SshClientService service;
+
+  const _ReconnectBanner({required this.service});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: service,
+      builder: (context, _) {
+        if (!service.isReconnecting) return const SizedBox.shrink();
+        return Material(
+          color: const Color(0xFF3A2A12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.amberAccent),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: StreamBuilder<int>(
+                    stream: Stream.periodic(const Duration(seconds: 1), (i) => i),
+                    builder: (context, _) {
+                      final next = service.nextRetryAt;
+                      final secs = next == null
+                          ? null
+                          : next.difference(DateTime.now()).inSeconds.clamp(0, 999);
+                      final status = secs == null
+                          ? 'connecting…'
+                          : 'next attempt in ${secs}s';
+                      return Text(
+                        'Connection lost (${service.lastDisconnectReason ?? 'unknown'}). '
+                        'Reconnecting, attempt ${service.reconnectAttempt + 1}: $status',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.amberAccent, fontSize: 11),
+                      );
+                    },
+                  ),
+                ),
+                TextButton(onPressed: service.retryNow, child: const Text('Retry now')),
+                TextButton(onPressed: service.disconnect, child: const Text('Disconnect')),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }

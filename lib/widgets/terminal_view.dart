@@ -5,15 +5,21 @@ import 'package:flutter/services.dart';
 import 'package:xterm/xterm.dart';
 import 'package:dartssh2/dartssh2.dart';
 import '../services/ssh_service.dart';
+import 'ui_errors.dart';
 
 class RemoteTerminalView extends StatefulWidget {
   final SshClientService sshService;
   final Color domainColor;
 
+  /// tmux session behind this terminal. The same name always leads back to the
+  /// same shell, also after a lost connection or an app restart.
+  final String sessionName;
+
   const RemoteTerminalView({
     super.key,
     required this.sshService,
     required this.domainColor,
+    this.sessionName = 'fortiq-1',
   });
 
   @override
@@ -34,6 +40,11 @@ class _RemoteTerminalViewState extends State<RemoteTerminalView> {
   StreamSubscription? _stdoutSub;
   StreamSubscription? _stderrSub;
   bool _ready = false;
+  bool _attaching = false;
+  bool _usingTmux = false;
+  bool _tmuxMissing = false;
+  bool _installingTmux = false;
+  bool _sessionEnded = false; // the shell itself exited (e.g. `exit`)
   String? _error;
 
   @override
@@ -44,49 +55,197 @@ class _RemoteTerminalViewState extends State<RemoteTerminalView> {
     );
     _terminalController = TerminalController();
 
-    _initPtyShell();
+    // Input and resize always go to whichever session is current, so they keep
+    // working after the terminal is re-attached on a new connection.
+    _terminal.onOutput = (data) {
+      _session?.stdin.add(utf8.encode(data));
+    };
+    _terminal.onResize = (width, height, pixelWidth, pixelHeight) {
+      _session?.resizeTerminal(width, height, pixelWidth, pixelHeight);
+    };
+
+    widget.sshService.addListener(_onConnectionChanged);
+    _attach();
   }
 
-  Future<void> _initPtyShell() async {
+  void _onConnectionChanged() {
+    if (!mounted) return;
+    setState(() {}); // refresh the "reconnecting" overlay
+    if (widget.sshService.isConnected && _session == null && !_sessionEnded) {
+      _attach();
+    }
+  }
+
+  /// Opens the shell: inside tmux when available, so that it survives a lost
+  /// connection, otherwise a plain shell.
+  Future<void> _attach() async {
+    final service = widget.sshService;
+    if (_attaching || !service.isConnected) return;
+    _attaching = true;
     try {
-      final session = await widget.sshService.startShell(
-        ptyWidth: 100,
-        ptyHeight: 30,
-      );
+      final tmux = await service.hasTmux();
+      final cols = _terminal.viewWidth > 0 ? _terminal.viewWidth : 100;
+      final rows = _terminal.viewHeight > 0 ? _terminal.viewHeight : 30;
+      final session = tmux
+          ? await service.attachTmux(widget.sessionName, ptyWidth: cols, ptyHeight: rows)
+          : await service.startShell(ptyWidth: cols, ptyHeight: rows);
+      if (!mounted) {
+        // The window was closed while the shell was being opened.
+        session.close();
+        return;
+      }
+      await _stdoutSub?.cancel();
+      await _stderrSub?.cancel();
       _session = session;
 
-      // When xterm generates input, send it directly to SSH stdin
-      _terminal.onOutput = (data) {
-        final bytes = utf8.encode(data);
-        _session?.stdin.add(bytes);
-      };
+      // Streaming decoders: a multi-byte character (Cyrillic, emoji) may be
+      // split across two packets, so each stream keeps its own decoder state.
+      const decoder = Utf8Decoder(allowMalformed: true);
+      _stdoutSub = session.stdout.cast<List<int>>().transform(decoder).listen(_terminal.write);
+      _stderrSub = session.stderr.cast<List<int>>().transform(decoder).listen(_terminal.write);
+      unawaited(session.done.then((_) => _onSessionDone(session)));
 
-      // Handle terminal resize events
-      _terminal.onResize = (width, height, pixelWidth, pixelHeight) {
-        _session?.resizeTerminal(width, height, pixelWidth, pixelHeight);
-      };
-
-      // Listen for remote stdout
-      _stdoutSub = _session?.stdout.listen((bytes) {
-        _terminal.write(utf8.decode(bytes, allowMalformed: true));
+      setState(() {
+        _ready = true;
+        _usingTmux = tmux;
+        _tmuxMissing = !tmux;
+        _error = null;
       });
-
-      // Listen for remote stderr
-      _stderrSub = _session?.stderr.listen((bytes) {
-        _terminal.write(utf8.decode(bytes, allowMalformed: true));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _terminalFocusNode.requestFocus();
       });
-
-      if (mounted) {
-        setState(() => _ready = true);
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _terminalFocusNode.requestFocus();
+    } catch (e) {
+      if (!mounted) return;
+      if (!_ready) {
+        setState(() => _error = e.toString());
+      } else {
+        // Re-attaching after a reconnect failed; try again shortly.
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted && _session == null && !_sessionEnded) _attach();
         });
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _error = e.toString());
-      }
+    } finally {
+      _attaching = false;
     }
+  }
+
+  Future<void> _onSessionDone(SSHSession session) async {
+    if (!mounted || !identical(session, _session)) return;
+    // A closing connection ends its channels a moment before the service
+    // notices it; wait a little to tell "shell exited" from "connection lost".
+    await Future.delayed(const Duration(milliseconds: 700));
+    if (!mounted || !identical(session, _session)) return;
+    _session = null;
+    if (widget.sshService.isConnected) {
+      _terminal.write('\r\n[session ended]\r\n');
+      setState(() => _sessionEnded = true);
+    }
+    // Otherwise the connection was lost: _onConnectionChanged re-attaches once
+    // the service has reconnected.
+  }
+
+  void _startNewSession() {
+    setState(() => _sessionEnded = false);
+    _attach();
+  }
+
+  Future<void> _installTmux() async {
+    setState(() => _installingTmux = true);
+    try {
+      await widget.sshService.installTmux();
+      // Restart the shell inside tmux.
+      final old = _session;
+      _session = null;
+      old?.close();
+      if (mounted) {
+        _terminal.write('\r\n[restarting inside tmux]\r\n');
+        setState(() => _tmuxMissing = false);
+        await _attach();
+      }
+    } catch (e) {
+      if (mounted) showActionError(context, 'Install tmux', e);
+    } finally {
+      if (mounted) setState(() => _installingTmux = false);
+    }
+  }
+
+  /// Status layers around the terminal: tmux hint, reconnect overlay and the
+  /// "session ended" prompt.
+  Widget _withStatus(Widget terminal) {
+    final connected = widget.sshService.isConnected;
+    return Column(
+      children: [
+        if (_tmuxMissing && connected)
+          Container(
+            width: double.infinity,
+            color: const Color(0xFF2A2415),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline, size: 14, color: Colors.amberAccent),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'tmux is not installed: this shell is lost if the connection drops.',
+                    style: TextStyle(color: Colors.amberAccent, fontSize: 11),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _installingTmux ? null : _installTmux,
+                  child: Text(_installingTmux ? 'Installing…' : 'Install tmux'),
+                ),
+              ],
+            ),
+          ),
+        Expanded(
+          child: Stack(
+            children: [
+              terminal,
+              if (!connected)
+                Positioned.fill(
+                  child: ColoredBox(
+                    color: const Color(0xCC0C0D14),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Connection lost, reconnecting…',
+                            style: TextStyle(color: Colors.white, fontSize: 13),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _usingTmux
+                                ? 'Your shell keeps running on the server and will be re-attached.'
+                                : 'tmux is not installed: the running shell cannot be restored.',
+                            style: const TextStyle(color: Colors.white54, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              if (_sessionEnded && connected)
+                Positioned(
+                  right: 12,
+                  bottom: 12,
+                  child: ElevatedButton.icon(
+                    onPressed: _startNewSession,
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('Start new session'),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   KeyEventResult _handleRawKey(FocusNode node, KeyEvent event) {
@@ -144,6 +303,7 @@ class _RemoteTerminalViewState extends State<RemoteTerminalView> {
 
   @override
   void dispose() {
+    widget.sshService.removeListener(_onConnectionChanged);
     _terminalFocusNode.dispose();
     _stdoutSub?.cancel();
     _stderrSub?.cancel();
@@ -168,7 +328,7 @@ class _RemoteTerminalViewState extends State<RemoteTerminalView> {
       );
     }
 
-    return Focus(
+    final terminal = Focus(
       focusNode: _terminalFocusNode,
       autofocus: true,
       onKeyEvent: _handleRawKey,
@@ -251,6 +411,7 @@ class _RemoteTerminalViewState extends State<RemoteTerminalView> {
         ),
       ),
     );
+    return _withStatus(terminal);
   }
 
   Widget _buildVirtualKey(String label, String sequence) {

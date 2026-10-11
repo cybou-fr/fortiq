@@ -91,6 +91,7 @@ uptime -p
 
     try {
       final content = await widget.sshService.readFile(path);
+      if (!mounted) return; // window closed while loading: controller is gone
       _contentController.text = content;
       setState(() {
         _loading = false;
@@ -109,18 +110,25 @@ uptime -p
     final path = _pathController.text.trim();
     if (path.isEmpty) return;
 
+    if (_saving) return;
     setState(() => _saving = true);
+    // Only the text that was actually sent counts as saved (typing continues
+    // while the upload runs).
+    final sent = _contentController.text;
     try {
-      await widget.sshService.writeFile(path, _contentController.text);
+      final atomic = await widget.sshService.writeFile(path, sent);
+      final unchangedSinceSend = mounted && _contentController.text == sent;
       setState(() {
         _saving = false;
-        _isDirty = false;
+        if (unchangedSinceSend) _isDirty = false;
       });
-      widget.onDirtyChanged?.call(false);
+      if (unchangedSinceSend) widget.onDirtyChanged?.call(false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Saved to $path'),
+            content: Text(atomic
+                ? 'Saved to $path'
+                : 'Saved in place (directory is read-only, not atomic): $path'),
             backgroundColor: widget.domainColor,
             duration: const Duration(seconds: 2),
           ),

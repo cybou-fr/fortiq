@@ -63,6 +63,32 @@ class _RemoteFileEditorState extends State<RemoteFileEditor> {
     }
   }
 
+  Future<void> _reload() async {
+    if (_isDirty) {
+      final discard = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF1E1F29),
+          title: const Text('Discard changes?', style: TextStyle(color: Colors.white, fontSize: 16)),
+          content: const Text(
+            'Reloading replaces your unsaved edits with the file from the server.',
+            style: TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Reload', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+      if (discard != true) return;
+    }
+    await _loadFile();
+  }
+
   Future<void> _loadFile() async {
     setState(() {
       _loading = true;
@@ -71,6 +97,7 @@ class _RemoteFileEditorState extends State<RemoteFileEditor> {
 
     try {
       final content = await widget.sshService.readFile(widget.filePath);
+      if (!mounted) return; // window closed while loading: controller is gone
       _contentController.text = content;
       _lineCount = content.split('\n').length;
       setState(() {
@@ -87,19 +114,26 @@ class _RemoteFileEditorState extends State<RemoteFileEditor> {
   }
 
   Future<void> _saveFile() async {
+    if (_saving) return;
     setState(() => _saving = true);
+    // The user may keep typing while the upload runs: only the text that was
+    // actually sent counts as saved.
+    final sent = _contentController.text;
     try {
-      await widget.sshService.writeFile(widget.filePath, _contentController.text);
+      final atomic = await widget.sshService.writeFile(widget.filePath, sent);
+      final unchangedSinceSend = mounted && _contentController.text == sent;
       setState(() {
         _saving = false;
-        _isDirty = false;
+        if (unchangedSinceSend) _isDirty = false;
       });
-      widget.onDirtyChanged?.call(false);
+      if (unchangedSinceSend) widget.onDirtyChanged?.call(false);
       widget.onSaved?.call();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Saved: ${widget.filePath}'),
+            content: Text(atomic
+                ? 'Saved: ${widget.filePath}'
+                : 'Saved in place (directory is read-only, not atomic): ${widget.filePath}'),
             backgroundColor: widget.domainColor,
             duration: const Duration(seconds: 2),
           ),
@@ -187,7 +221,7 @@ class _RemoteFileEditorState extends State<RemoteFileEditor> {
                   IconButton(
                     icon: const Icon(Icons.refresh, size: 16, color: Colors.white60),
                     tooltip: 'Reload',
-                    onPressed: _loadFile,
+                    onPressed: _reload,
                   ),
                 ],
               ),

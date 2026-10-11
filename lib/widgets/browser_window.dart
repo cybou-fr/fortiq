@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:webview_windows/webview_windows.dart';
 import '../services/ssh_service.dart';
 
@@ -27,19 +28,42 @@ class _RemoteBrowserWindowState extends State<RemoteBrowserWindow> {
   final TextEditingController _urlController = TextEditingController(text: 'https://duckduckgo.com');
   bool _ready = false;
   bool _loading = false;
-  bool _tunnelActive = false;
   String _pageTitle = 'Browser';
+  String? _error;
 
   @override
   void initState() {
     super.initState();
+    widget.sshService.addListener(_onTunnelChanged);
     _initBrowser();
   }
 
+  void _onTunnelChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// All web traffic, including DNS lookups and localhost, goes through the
+  /// SSH tunnel. The proxy is the only route: if it is down, pages fail to
+  /// load instead of silently connecting directly.
+  static String _proxyArguments(int port) => [
+        '--proxy-server=socks5://127.0.0.1:$port',
+        '--proxy-bypass-list=<-loopback>', // localhost means the server's localhost
+        '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
+      ].join(' ');
+
   Future<void> _initBrowser() async {
     try {
-      // Start SOCKS5 SSH Tunnel on 127.0.0.1:1080
-      final tunnelStarted = await widget.sshService.startSocksTunnel(localPort: 1080);
+      final port = await widget.sshService.startSocksTunnel();
+
+      // The WebView2 environment exists once per process; the proxy port is
+      // fixed for the whole run, so a repeated call is harmless.
+      try {
+        await WebviewController.initializeEnvironment(
+          additionalArguments: _proxyArguments(port),
+        );
+      } on PlatformException catch (e) {
+        if (e.code != 'environment_already_initialized') rethrow;
+      }
 
       await _controller.initialize();
 
@@ -59,21 +83,10 @@ class _RemoteBrowserWindowState extends State<RemoteBrowserWindow> {
 
       await _controller.loadUrl(_urlController.text);
 
-      if (mounted) {
-        setState(() {
-          _ready = true;
-          _tunnelActive = tunnelStarted;
-        });
-      }
-    } catch (_) {
-      // Fallback: initialize webview without tunnel if port busy
-      if (!_ready) {
-        try {
-          await _controller.initialize();
-          await _controller.loadUrl(_urlController.text);
-          if (mounted) setState(() => _ready = true);
-        } catch (_) {}
-      }
+      if (mounted) setState(() => _ready = true);
+    } catch (e) {
+      // No fallback to a direct connection.
+      if (mounted) setState(() => _error = 'Cannot start the tunnel browser: $e');
     }
   }
 
@@ -93,6 +106,7 @@ class _RemoteBrowserWindowState extends State<RemoteBrowserWindow> {
 
   @override
   void dispose() {
+    widget.sshService.removeListener(_onTunnelChanged);
     _urlController.dispose();
     _controller.dispose();
     super.dispose();
@@ -171,10 +185,10 @@ class _RemoteBrowserWindowState extends State<RemoteBrowserWindow> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: _tunnelActive ? Colors.green.withValues(alpha: 0.15) : Colors.orange.withValues(alpha: 0.15),
+                  color: widget.sshService.isTunnelActive ? Colors.green.withValues(alpha: 0.15) : Colors.red.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: _tunnelActive ? Colors.green.withValues(alpha: 0.4) : Colors.orange.withValues(alpha: 0.4),
+                    color: widget.sshService.isTunnelActive ? Colors.green.withValues(alpha: 0.4) : Colors.red.withValues(alpha: 0.4),
                   ),
                 ),
                 child: Row(
@@ -185,14 +199,14 @@ class _RemoteBrowserWindowState extends State<RemoteBrowserWindow> {
                       height: 6,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: _tunnelActive ? Colors.greenAccent : Colors.orangeAccent,
+                        color: widget.sshService.isTunnelActive ? Colors.greenAccent : Colors.redAccent,
                       ),
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      _tunnelActive ? 'VPS TUNNEL' : 'DIRECT',
+                      widget.sshService.isTunnelActive ? 'VPS TUNNEL' : 'TUNNEL DOWN',
                       style: TextStyle(
-                        color: _tunnelActive ? Colors.greenAccent : Colors.orangeAccent,
+                        color: widget.sshService.isTunnelActive ? Colors.greenAccent : Colors.redAccent,
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
                       ),
@@ -206,9 +220,16 @@ class _RemoteBrowserWindowState extends State<RemoteBrowserWindow> {
 
         // Webview Content
         Expanded(
-          child: !_ready
-              ? Center(child: CircularProgressIndicator(color: widget.domainColor))
-              : Webview(_controller),
+          child: _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.redAccent)),
+                  ),
+                )
+              : !_ready
+                  ? Center(child: CircularProgressIndicator(color: widget.domainColor))
+                  : Webview(_controller),
         ),
       ],
     );

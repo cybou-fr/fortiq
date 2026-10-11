@@ -58,6 +58,7 @@ class FortiqHomeScreen extends StatefulWidget {
 
 class _FortiqHomeScreenState extends State<FortiqHomeScreen> {
   final SshClientService _sshService = SshClientService();
+  final _workspaceKey = GlobalKey<HeadlessDesktopWorkspaceState>();
   bool _connecting = false;
   String? _connectError;
 
@@ -98,11 +99,38 @@ class _FortiqHomeScreenState extends State<FortiqHomeScreen> {
     super.dispose();
   }
 
+  Future<void> _confirmDisconnect() async {
+    if (_workspaceKey.currentState?.hasUnsavedChanges ?? false) {
+      final leave = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF1E1F29),
+          title: const Text('Unsaved changes', style: TextStyle(color: Colors.white, fontSize: 16)),
+          content: const Text(
+            'Some open files have unsaved changes. Disconnecting closes every window and loses them.',
+            style: TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Stay connected')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Disconnect', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+      if (leave != true || !mounted) return;
+    }
+    _sshService.disconnect();
+    setState(() {});
+  }
+
   void _onConnectionChanged() {
     if (!mounted) return;
     setState(() {
       final reason = _sshService.lastDisconnectReason;
-      if (!_sshService.isConnected && reason != null) {
+      if (!_sshService.isSessionActive && reason != null) {
         _connectError = 'Connection lost: $reason';
       }
     });
@@ -253,7 +281,6 @@ class _FortiqHomeScreenState extends State<FortiqHomeScreen> {
         privateKey: privateKeyContent,
         onHostKey: _confirmHostKey,
       );
-      _sshService.currentKeyPath = _useKeyAuth ? _keyPathController.text.trim() : null;
       setState(() {
         _connecting = false;
       });
@@ -268,25 +295,23 @@ class _FortiqHomeScreenState extends State<FortiqHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return QubesWindowFrame(
-      title: _sshService.isConnected
+      title: _sshService.isSessionActive
           ? 'Linux Desktop — ${_hostController.text}'
           : 'Fortiq Desktop — Connect to Linux',
       hostLabel: _labelController.text.isEmpty ? 'LINUX' : _labelController.text,
       domainColor: _domainColor,
-      actions: _sshService.isConnected
+      actions: _sshService.isSessionActive
           ? [
               IconButton(
                 icon: const Icon(Icons.power_settings_new, size: 16, color: Colors.redAccent),
                 tooltip: 'Disconnect',
-                onPressed: () {
-                  _sshService.disconnect();
-                  setState(() {});
-                },
+                onPressed: _confirmDisconnect,
               ),
             ]
           : null,
-      child: _sshService.isConnected
+      child: _sshService.isSessionActive
           ? HeadlessDesktopWorkspace(
+              key: _workspaceKey,
               sshService: _sshService,
               domainColor: _domainColor,
               hostLabel: _labelController.text.isEmpty ? 'LINUX' : _labelController.text,

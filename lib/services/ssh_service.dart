@@ -10,8 +10,13 @@ import 'known_hosts_service.dart';
 String shQuote(String value) => "'${value.replaceAll("'", r"'\''")}'";
 
 /// Wraps [command] so it runs as root: directly for root, else via passwordless sudo.
-String asRoot(String command) =>
-    'if [ "\$(id -u)" = 0 ]; then $command; else sudo -n $command; fi';
+///
+/// The whole [command] (including `&&` chains) runs inside one `sh -c`, so
+/// every part of it gets the privileges, not just the first word.
+String asRoot(String command) {
+  final q = shQuote(command);
+  return 'if [ "\$(id -u)" = 0 ]; then sh -c $q; else sudo -n sh -c $q; fi';
+}
 
 /// Remote script for [SshClientService.writeFile]: `$1` = target, `$2` = byte count.
 ///
@@ -19,10 +24,15 @@ String asRoot(String command) =>
 /// directory, same mode/owner, renamed only after the full content arrived),
 /// so a dropped connection never leaves a truncated file. A cut-off upload ends
 /// the same way as a finished one (EOF on stdin), hence the size check.
-/// New files and files in unwritable directories are written directly.
+/// New files and files in unwritable directories are written directly; when an
+/// existing file had to be written that way the script reports
+/// [_nonAtomicMarker] on stderr so the UI can warn about it.
+const _nonAtomicMarker = 'FORTIQ_NONATOMIC';
 const _atomicWriteScript = r'''
 t=$(readlink -f -- "$1") || t=$1
 d=$(dirname -- "$t")
+existed=0
+[ -f "$t" ] && existed=1
 if [ -f "$t" ] && [ -w "$t" ] && [ -w "$d" ]; then
   tmp=$(mktemp "$d/.fortiq-save.XXXXXX") || exit 1
   if cat > "$tmp" \
@@ -38,7 +48,20 @@ if [ -f "$t" ] && [ -w "$t" ] && [ -w "$d" ]; then
 fi
 cat > "$t" || exit 1
 [ "$(wc -c < "$t")" -eq "$2" ] || { echo "Upload incomplete" >&2; exit 1; }
+[ "$existed" = 1 ] && echo FORTIQ_NONATOMIC >&2
+exit 0
 ''';
+
+/// Shell command that attaches to the tmux session [name], creating it if
+/// needed. Options are scoped to this session so the user's other tmux sessions
+/// and their own configuration are left alone.
+String tmuxAttachCommand(String name) {
+  final n = shQuote(name);
+  final sep = shQuote(';'); // tmux's own command separator, as a plain argument
+  return 'tmux -u new-session -A -s $n'
+      ' $sep set-option -t $n status off'
+      ' $sep set-option -t $n mouse on';
+}
 
 /// A remote command finished with a non-zero exit code or was killed.
 class SshCommandException implements Exception {
@@ -110,9 +133,27 @@ class LinuxFileInfo {
   }
 }
 
+enum SshConnectionState { disconnected, connecting, connected, reconnecting }
+
+class _ConnectionParams {
+  final String host;
+  final int port;
+  final String username;
+  final String? password;
+  final String? privateKey;
+
+  const _ConnectionParams({
+    required this.host,
+    required this.port,
+    required this.username,
+    this.password,
+    this.privateKey,
+  });
+}
+
 class SshClientService extends ChangeNotifier {
   SSHClient? _client;
-  bool _isConnected = false;
+  SshConnectionState _state = SshConnectionState.disconnected;
 
   /// Why the last session ended unexpectedly (null after a normal disconnect).
   String? lastDisconnectReason;
@@ -120,51 +161,87 @@ class SshClientService extends ChangeNotifier {
   String? currentHost;
   int? currentPort;
   String? currentUsername;
-  String? currentKeyPath;
-  Process? _socksProcess;
-  bool _isTunnelActive = false;
 
+  // Kept in memory only, to reconnect without asking again.
+  _ConnectionParams? _params;
+  // Bumped by every explicit connect/disconnect so a reconnect attempt that was
+  // already in flight can tell that it has been cancelled.
+  int _epoch = 0;
+  int reconnectAttempt = 0;
+  DateTime? nextRetryAt;
+  Timer? _retryTimer;
+  Timer? _livenessTimer;
+  int _missedPings = 0;
+  bool _tunnelWanted = false;
+
+  SSHDynamicForward? _socksForward;
+  Future<void>? _tunnelClosing;
+  static int? _browserProxyPort;
+
+  static const _retryDelays = [1, 2, 4, 8, 15, 30]; // seconds, last one repeats
+
+  SshConnectionState get state => _state;
+  bool get _isConnected => _state == SshConnectionState.connected;
   bool get isConnected => _isConnected;
+  bool get isReconnecting => _state == SshConnectionState.reconnecting;
+
+  /// A session exists: either live, or being restored after a connection loss.
+  bool get isSessionActive => isConnected || isReconnecting;
   SSHClient? get rawClient => _client;
-  bool get isTunnelActive => _isTunnelActive;
 
-  /// Starts an OpenSSH background SOCKS5 proxy tunnel on 127.0.0.1:1080
-  Future<bool> startSocksTunnel({int localPort = 1080}) async {
-    if (currentHost == null || currentUsername == null) return false;
-    stopSocksTunnel();
+  /// True only while the SOCKS listener is really up on a live SSH session.
+  bool get isTunnelActive =>
+      _isConnected && _socksForward != null && !_socksForward!.isClosed;
 
-    try {
-      final args = <String>[
-        '-N', // Do not execute a remote command
-        '-D', '127.0.0.1:$localPort', // Dynamic SOCKS5 forwarding
-        '-p', '${currentPort ?? 22}',
-      ];
-
-      if (currentKeyPath != null && currentKeyPath!.isNotEmpty) {
-        args.addAll(['-i', currentKeyPath!]);
-      }
-
-      // Avoid strict host check prompt interfering
-      args.addAll([
-        '-o', 'StrictHostKeyChecking=no',
-        '-o', 'UserKnownHostsFile=/dev/null',
-        '-o', 'ExitOnForwardFailure=yes',
-        '$currentUsername@$currentHost',
-      ]);
-
-      _socksProcess = await Process.start('ssh', args);
-      _isTunnelActive = true;
-      return true;
-    } catch (_) {
-      _isTunnelActive = false;
-      return false;
-    }
+  /// Fixed loopback port for the browser proxy.
+  ///
+  /// The WebView2 environment is created once per process with the proxy
+  /// address baked into its arguments, so the port must stay the same for every
+  /// SSH session until the app exits.
+  static Future<int> browserProxyPort() async {
+    final known = _browserProxyPort;
+    if (known != null) return known;
+    final probe = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final port = probe.port;
+    await probe.close();
+    return _browserProxyPort = port;
   }
 
+  /// Starts a SOCKS5 proxy on 127.0.0.1 that sends every connection (including
+  /// DNS lookups) through the authenticated SSH session, like `ssh -D`, without
+  /// spawning an external `ssh` process. Returns the local port.
+  ///
+  /// Once requested, the tunnel is restored automatically after a reconnect.
+  Future<int> startSocksTunnel() async {
+    final client = _client;
+    if (client == null || !_isConnected) {
+      throw Exception('Not connected to SSH server');
+    }
+    _tunnelWanted = true;
+    final existing = _socksForward;
+    if (existing != null && !existing.isClosed) return existing.port;
+
+    await _tunnelClosing; // the previous listener must release the port first
+    _socksForward = await client.forwardDynamic(
+      bindHost: '127.0.0.1',
+      bindPort: await browserProxyPort(),
+      options: const SSHDynamicForwardOptions(maxConnections: 512),
+    );
+    notifyListeners();
+    return _socksForward!.port;
+  }
+
+  /// Closes the proxy listener. While it is down the browser has no route at
+  /// all, so nothing can leak around the tunnel.
   void stopSocksTunnel() {
-    _socksProcess?.kill();
-    _socksProcess = null;
-    _isTunnelActive = false;
+    _tunnelWanted = false;
+    _closeTunnel();
+  }
+
+  void _closeTunnel() {
+    final forward = _socksForward;
+    _socksForward = null;
+    if (forward != null) _tunnelClosing = forward.close();
   }
 
   Future<SSHSession> startShell({
@@ -195,60 +272,186 @@ class SshClientService extends ChangeNotifier {
     Future<bool> Function(HostKeyInfo info)? onHostKey,
   }) async {
     disconnect();
-    final socket = await SSHSocket.connect(host, port, timeout: const Duration(seconds: 10));
+    final epoch = _epoch;
+    final params = _ConnectionParams(
+      host: host,
+      port: port,
+      username: username,
+      password: password,
+      privateKey: privateKey,
+    );
+    _state = SshConnectionState.connecting;
+    notifyListeners();
+    try {
+      await _open(params, epoch, onHostKey);
+    } catch (_) {
+      if (epoch == _epoch) {
+        _state = SshConnectionState.disconnected;
+        notifyListeners();
+      }
+      rethrow;
+    }
+    _params = params; // from now on a lost connection is restored automatically
+  }
+
+  /// Opens and authenticates one SSH connection and makes it the current one.
+  Future<void> _open(
+    _ConnectionParams p,
+    int epoch,
+    Future<bool> Function(HostKeyInfo info)? onHostKey,
+  ) async {
+    final socket = await SSHSocket.connect(
+      p.host,
+      p.port,
+      timeout: const Duration(seconds: 10),
+    );
 
     List<SSHKeyPair>? identities;
-    if (privateKey != null && privateKey.trim().isNotEmpty) {
-      if (SSHKeyPair.isEncryptedPem(privateKey)) {
+    final key = p.privateKey;
+    if (key != null && key.trim().isNotEmpty) {
+      if (SSHKeyPair.isEncryptedPem(key)) {
+        socket.destroy();
         throw Exception('Encrypted private keys (with passphrase) are not supported yet');
       }
       try {
-        identities = SSHKeyPair.fromPem(privateKey);
+        identities = SSHKeyPair.fromPem(key);
       } catch (_) {
+        socket.destroy();
         throw Exception('Cannot parse the private key file');
       }
     }
 
-    _client = SSHClient(
+    final password = p.password;
+    final client = SSHClient(
       socket,
-      username: username,
+      username: p.username,
       onPasswordRequest: password != null ? () => password : null,
       identities: identities,
       onVerifyHostKey: (type, fingerprint) =>
-          _verifyHostKey(host, port, type, utf8.decode(fingerprint), onHostKey),
+          _verifyHostKey(p.host, p.port, type, utf8.decode(fingerprint), onHostKey),
     );
 
-    currentHost = host;
-    currentPort = port;
-    currentUsername = username;
-    currentKeyPath = privateKey != null && privateKey.trim().isNotEmpty ? null : null; // key content vs path
-
     try {
-      await _client!.authenticated;
+      await client.authenticated;
     } catch (_) {
-      disconnect();
+      client.close();
       rethrow;
     }
-    _isConnected = true;
+
+    if (epoch != _epoch) {
+      // Cancelled (Disconnect pressed) while we were connecting.
+      client.close();
+      throw StateError('Connection attempt cancelled');
+    }
+
+    _client = client;
+    currentHost = p.host;
+    currentPort = p.port;
+    currentUsername = p.username;
+    _state = SshConnectionState.connected;
     lastDisconnectReason = null;
+    reconnectAttempt = 0;
+    nextRetryAt = null;
+    _startLiveness(client);
     notifyListeners();
 
-    // Notice drops (network loss, keepalive timeout, server closing).
-    final client = _client!;
+    // Notice drops (network loss, server closing).
     unawaited(client.done.then(
       (_) => _handleClosed(client, 'Connection closed by the server'),
       onError: (Object e) => _handleClosed(client, e.toString()),
     ));
   }
 
+  /// A dead network often leaves the TCP connection half-open: nothing tells us
+  /// it is gone. Ping regularly and treat missing answers as a lost connection.
+  void _startLiveness(SSHClient client) {
+    _livenessTimer?.cancel();
+    _missedPings = 0;
+    _livenessTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+      if (!identical(client, _client)) return;
+      try {
+        await client.ping().timeout(const Duration(seconds: 8));
+        _missedPings = 0;
+      } catch (_) {
+        _missedPings++;
+        if (_missedPings >= 2 && identical(client, _client)) {
+          _handleClosed(client, 'Connection lost (server not responding)');
+          client.close();
+        }
+      }
+    });
+  }
+
   void _handleClosed(SSHClient client, String reason) {
     // Ignore if we closed it ourselves or already moved on to another client.
     if (!identical(client, _client)) return;
-    lastDisconnectReason = reason;
-    stopSocksTunnel();
     _client = null;
-    _isConnected = false;
+    _livenessTimer?.cancel();
+    _closeTunnel(); // _tunnelWanted stays set: it is restored after reconnect
+    lastDisconnectReason = reason;
+
+    if (_params == null) {
+      _state = SshConnectionState.disconnected;
+      notifyListeners();
+      return;
+    }
+    _state = SshConnectionState.reconnecting;
+    reconnectAttempt = 0;
+    _scheduleRetry();
+  }
+
+  void _scheduleRetry() {
+    final idx = reconnectAttempt < _retryDelays.length
+        ? reconnectAttempt
+        : _retryDelays.length - 1;
+    final delay = Duration(seconds: _retryDelays[idx]);
+    nextRetryAt = DateTime.now().add(delay);
+    _retryTimer?.cancel();
+    _retryTimer = Timer(delay, _tryReconnect);
     notifyListeners();
+  }
+
+  /// Skips the waiting time and reconnects right now.
+  void retryNow() {
+    if (!isReconnecting) return;
+    _retryTimer?.cancel();
+    unawaited(_tryReconnect());
+  }
+
+  Future<void> _tryReconnect() async {
+    final params = _params;
+    if (_state != SshConnectionState.reconnecting || params == null) return;
+    final epoch = _epoch;
+    reconnectAttempt++;
+    nextRetryAt = null;
+    notifyListeners();
+
+    try {
+      // No host-key prompt here: a key that no longer matches must stop the
+      // reconnect instead of being trusted automatically.
+      await _open(params, epoch, null);
+    } catch (e) {
+      if (epoch != _epoch || _state != SshConnectionState.reconnecting) return;
+      if (e is SSHAuthError || e is SSHHostkeyError) {
+        lastDisconnectReason = e is SSHHostkeyError
+            ? 'Reconnect stopped: the server key changed or is not trusted'
+            : 'Reconnect stopped: authentication failed';
+        _params = null;
+        _state = SshConnectionState.disconnected;
+        notifyListeners();
+        return;
+      }
+      _scheduleRetry();
+      return;
+    }
+
+    if (_tunnelWanted) {
+      try {
+        await startSocksTunnel();
+      } catch (_) {
+        // The browser window shows "TUNNEL DOWN" until it is started again.
+      }
+    }
   }
 
   /// Trust on first use: unknown keys and changed keys need user approval.
@@ -275,14 +478,88 @@ class SshClientService extends ChangeNotifier {
     return accepted;
   }
 
+  /// Ends the session for good: cancels any reconnect and forgets credentials.
   void disconnect() {
-    stopSocksTunnel();
+    _epoch++;
+    _retryTimer?.cancel();
+    _livenessTimer?.cancel();
+    _params = null;
+    _tunnelWanted = false;
+    _closeTunnel();
     _client?.close();
     _client = null;
-    final wasConnected = _isConnected;
-    _isConnected = false;
+    reconnectAttempt = 0;
+    nextRetryAt = null;
     lastDisconnectReason = null;
-    if (wasConnected) notifyListeners();
+    final changed = _state != SshConnectionState.disconnected;
+    _state = SshConnectionState.disconnected;
+    if (changed) notifyListeners();
+  }
+
+  // ---- tmux: terminals that survive a lost connection ----
+
+  /// Terminal sessions are named `fortiq-<n>`; tmux keeps them on the server.
+  Future<bool> hasTmux() async {
+    try {
+      await execute('command -v tmux >/dev/null 2>&1');
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> installTmux() async {
+    await execute(asRoot('apt-get update && apt-get install -y tmux'));
+  }
+
+  /// Opens (or re-attaches to) the tmux session [name] on a fresh PTY.
+  Future<SSHSession> attachTmux(
+    String name, {
+    int ptyWidth = 100,
+    int ptyHeight = 30,
+  }) async {
+    final client = _client;
+    if (client == null || !_isConnected) {
+      throw Exception('Not connected');
+    }
+    final command = tmuxAttachCommand(name);
+    return client.execute(
+      command,
+      pty: SSHPtyConfig(width: ptyWidth, height: ptyHeight),
+    );
+  }
+
+  /// Ends a terminal session for good (used when its window is closed).
+  Future<void> killTmuxSession(String name) async {
+    try {
+      await execute('tmux kill-session -t ${shQuote(name)} 2>/dev/null || true');
+    } catch (_) {
+      // Not connected or no tmux: nothing to clean up.
+    }
+  }
+
+  /// Runs [command] and reports every output line (stdout and stderr) as it
+  /// arrives, for long jobs such as `apt-get`. Returns the exit code.
+  Future<int> runStreaming(String command, void Function(String line) onLine) async {
+    final client = _client;
+    if (client == null || !_isConnected) {
+      throw Exception('Not connected to SSH server');
+    }
+    final session = await client.execute(command);
+
+    Future<void> pump(Stream<Uint8List> source) {
+      final finished = Completer<void>();
+      source
+          .cast<List<int>>()
+          .transform(const Utf8Decoder(allowMalformed: true))
+          .transform(const LineSplitter())
+          .listen(onLine, onDone: finished.complete, onError: (_) => finished.complete());
+      return finished.future;
+    }
+
+    await Future.wait([pump(session.stdout), pump(session.stderr)]);
+    await session.done;
+    return session.exitCode ?? -1;
   }
 
   Future<String> execute(String command) async {
@@ -381,7 +658,10 @@ class SshClientService extends ChangeNotifier {
   }
 
   /// Writes file content
-  Future<void> writeFile(String path, String content) async {
+  ///
+  /// Returns false when the file could only be overwritten in place (its
+  /// directory is not writable), which a dropped connection could truncate.
+  Future<bool> writeFile(String path, String content) async {
     final client = _client;
     if (client == null || !_isConnected) {
       throw Exception('Not connected to SSH server');
@@ -399,6 +679,7 @@ class SshClientService extends ChangeNotifier {
     if ((code != null && code != 0) || session.exitSignal != null) {
       throw SshCommandException(command, code, err);
     }
+    return !err.contains(_nonAtomicMarker);
   }
 
   /// Fetches system metrics (CPU, RAM, Uptime, Disk)
