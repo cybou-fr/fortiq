@@ -2,7 +2,7 @@
 
 **Product:** FORTIQ — Distributed Desktop Software.
 **Decision:** Lemon Squeezy is the checkout, subscription and software-license provider.
-**Status:** specification for R0; no billing or licensing integration is implemented in the currently audited application.
+**Status:** Windows desktop purchase/activation UI, Lemon Squeezy License API client, Windows DPAPI persistence and unit tests are implemented in `main`. Store products, live checkout URLs, end-to-end payments and release approval remain outstanding. See [LICENSING_SETUP.md](LICENSING_SETUP.md).
 
 ## 1. Exactly two offers
 
