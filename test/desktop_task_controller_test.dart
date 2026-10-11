@@ -49,4 +49,21 @@ void main() {
     expect(tasks.tasks.single, same(task));
     tasks.dispose();
   });
+  test('transfer progress tracks cumulative bytes without guessing speed', () async {
+    final tasks = DesktopTaskController();
+    final pending = Completer<void>();
+    final result = tasks.runTransfer('Download', (progress) async {
+      progress(256, 1024);
+      await pending.future;
+      progress(1024, 1024);
+    });
+    expect(tasks.tasks.single.bytesTransferred, 256);
+    expect(tasks.tasks.single.progress, 0.25);
+    pending.complete();
+    final task = await result;
+    expect(task.state, DesktopTaskState.completed);
+    expect(task.progress, 1.0);
+    tasks.dispose();
+  });
+
 }
