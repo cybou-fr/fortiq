@@ -130,6 +130,72 @@ class CliTest(unittest.TestCase):
         self.assertEqual(sorted(answer["cached"] for _, answer in replies),
                          [False, True])
 
+    def test_digest_metadata_is_reused_and_invalidated(self):
+        self.run_ai("ask", "--stdin", "--cache", message="abc")
+        manifests = list(self.cache_dir.glob(".modelhash-*"))
+        self.assertEqual(len(manifests), 1)
+        first = json.loads(manifests[0].read_text())
+        self.run_ai("ask", "--stdin", "--cache", message="abc")
+        second = json.loads(manifests[0].read_text())
+        self.assertEqual(first, second)
+        self.assertEqual(self.count(), 1)
+        self.model.write_bytes(b"GGUF fixture changed despite cache")
+        self.run_ai("ask", "--stdin", "--cache", message="abc")
+        third = json.loads(manifests[0].read_text())
+        self.assertNotEqual(first["sha256"], third["sha256"])
+        self.assertEqual(self.count(), 2)
+
+    def test_excessive_llama_stdout_is_stopped_without_caching(self):
+        self.llama.write_text(
+            "#!/usr/bin/env python3\\n"
+            "import sys\\n"
+            "sys.stdout.write('A' * 1000000)\\n"
+            "sys.stdout.flush()\\n"
+        )
+        r, answer = self.run_ai("ask", "--stdin", "--cache", message="boom")
+        self.assertEqual(r.returncode, 2)
+        self.assertEqual(answer["reason"], "output_too_large")
+        self.assertEqual(list(self.cache_dir.glob("*.json")), [])
+
+    def test_cancelled_parent_kills_model_child(self):
+        import signal
+        import time
+        pidfile = Path(self.temp.name) / "child.pid"
+        self.llama.write_text(
+            "#!/usr/bin/env python3\\n"
+            "import os, time\\n"
+            f"open({str(pidfile)!r}, 'w').write(str(os.getpid()))\\n"
+            "time.sleep(20)\\n"
+        )
+        process = subprocess.Popen(
+            [sys.executable, str(CLI), "ask", "--stdin", "--json"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, env=self.env, text=True,
+        )
+        try:
+            process.stdin.write("hello")
+            process.stdin.close()
+            until = time.monotonic() + 5
+            while not pidfile.exists() and time.monotonic() < until:
+                time.sleep(0.05)
+            self.assertTrue(pidfile.exists(), "mock inference was not started")
+            child_pid = int(pidfile.read_text())
+            os.kill(process.pid, signal.SIGKILL)
+            process.wait(timeout=5)
+            # PR_SET_PDEATHSIG must stop the separate inference process.
+            until = time.monotonic() + 5
+            while time.monotonic() < until:
+                procstat = Path(f"/proc/{child_pid}/stat")
+                if not procstat.exists() or procstat.read_text().split(") ")[1].startswith("Z"):
+                    break  # Reaped or zombie awaiting init's wait().
+                time.sleep(0.05)
+            else:
+                self.fail("llama CPU process survived the parent SSH CLI being killed")
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=5)
+
     def test_sensitive_explain_needs_explicit_consent(self):
         r, value = self.run_ai("explain", "--stdin", "--cache", message="SECRET_PLACEHOLDER")
         self.assertNotEqual(r.returncode, 0)
