@@ -116,6 +116,18 @@ class IntegrationServer {
     return stdout;
   }
 
+  /// Removes packages so that a test can start from "this is not installed".
+  Future<void> purge(List<String> packages) => root(
+        'export DEBIAN_FRONTEND=noninteractive; '
+        'apt-get purge -y -qq ${packages.join(' ')} >/dev/null 2>&1; '
+        'apt-get autoremove -y -qq >/dev/null 2>&1; exit 0',
+      );
+
+  Future<void> install(List<String> packages) => root(
+        'export DEBIAN_FRONTEND=noninteractive; '
+        'apt-get install -y -qq ${packages.join(' ')} >/dev/null 2>&1',
+      );
+
   /// The public half of the test key, as the server knows it.
   Future<String> get publicKey async => (await root('cat /root/fortiq-test.pub')).trim();
 
@@ -147,15 +159,26 @@ exit 0
     Future<bool> Function(HostKeyInfo info)? onHostKey,
     String? privateKey,
   }) async {
-    final ssh = SshClientService();
-    await ssh.connect(
-      host: host,
-      port: port,
-      username: user,
-      privateKey: privateKey ?? keyPem,
-      onHostKey: onHostKey ?? (_) async => true,
-    );
-    return ssh;
+    // WSL forwards 127.0.0.1:2222 into the VM through a relay that now and then
+    // resets a connection right after a heavy transfer. That is a problem of
+    // the test machine, not of Fortiq, so network-level failures are retried;
+    // a refused login or key never is.
+    for (var attempt = 1;; attempt++) {
+      final ssh = SshClientService();
+      try {
+        await ssh.connect(
+          host: host,
+          port: port,
+          username: user,
+          privateKey: privateKey ?? keyPem,
+          onHostKey: onHostKey ?? (_) async => true,
+        );
+        return ssh;
+      } on SocketException {
+        if (attempt >= 4) rethrow;
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+    }
   }
 
   /// Kills every SSH session of [user] on the server, as a network failure
