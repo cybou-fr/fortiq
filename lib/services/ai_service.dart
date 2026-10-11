@@ -12,10 +12,52 @@ class AiAdvice {
   const AiAdvice(this.text, {required this.cached, required this.ageSeconds});
 }
 
+class AiStatus {
+  final bool available;
+  final String? reason;
+  final int totalMemoryMb;
+  final int availableMemoryMb;
+
+  const AiStatus({
+    required this.available,
+    required this.reason,
+    required this.totalMemoryMb,
+    required this.availableMemoryMb,
+  });
+}
+
 class AiService {
   final RemoteShell _ssh;
 
   AiService(this._ssh);
+
+  /// Read-only capability detection. Never downloads a GGUF or starts
+  /// inference; weak VPS hosts remain fully functional without server AI.
+  Future<AiStatus> status() async {
+    if (!_ssh.isConnected) throw StateError('Reconnect SSH first.');
+    final result = await _ssh.execute(
+      r'export PATH="$HOME/.local/bin:$PATH"; ai status --json',
+    );
+    final dynamic decoded;
+    try {
+      decoded = jsonDecode(result);
+    } on FormatException {
+      throw const FormatException('Linux AI returned invalid status JSON.');
+    }
+    if (decoded is! Map ||
+        decoded['schema'] != 'fortiq-ai-status/v1' ||
+        decoded['available'] is! bool ||
+        decoded['memory_total_mb'] is! int ||
+        decoded['memory_available_mb'] is! int) {
+      throw const FormatException('Unexpected Linux AI status response.');
+    }
+    return AiStatus(
+      available: decoded['available'] as bool,
+      reason: decoded['reason'] as String?,
+      totalMemoryMb: decoded['memory_total_mb'] as int,
+      availableMemoryMb: decoded['memory_available_mb'] as int,
+    );
+  }
 
   /// No fallback to an HTTP API or a local model when SSH is absent.
   Future<AiAdvice> explain(
