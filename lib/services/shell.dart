@@ -36,7 +36,8 @@ class InputResult {
 
   const InputResult({this.exitCode, this.killedBySignal = false, this.stderr = '', this.stdout = ''});
 
-  bool get ok => !killedBySignal && (exitCode == null || exitCode == 0);
+  // A missing remote exit status (SSH disconnect/race) is UNKNOWN, never success.
+  bool get ok => !killedBySignal && exitCode == 0;
 }
 
 /// Quotes [value] so the remote shell treats it as one literal word.
