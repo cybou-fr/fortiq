@@ -1,0 +1,35 @@
+name: FORTIQ Windows licensing
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "lib/services/license_service.dart"
+      - "lib/widgets/license_gate.dart"
+      - "lib/main.dart"
+      - "windows/runner/**"
+      - "test/license_service_test.dart"
+      - "pubspec.yaml"
+      - ".github/workflows/flutter-windows-licensing.yml"
+  workflow_dispatch:
+
+jobs:
+  license-check:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+      - name: Flutter stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Analyze licensing code
+        run: flutter analyze lib/services/license_service.dart lib/widgets/license_gate.dart test/license_service_test.dart
+      - name: Test licensing behavior
+        run: flutter test test/license_service_test.dart
+      - name: Build Windows debug
+        run: flutter build windows --debug
