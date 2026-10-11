@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/ssh_service.dart';
 import 'ui_errors.dart';
+import 'ai_advice_dialog.dart';
+import '../services/ai_service.dart';
 
 class RemoteServiceManager extends StatefulWidget {
   final SshClientService sshService;
@@ -185,6 +187,18 @@ class _RemoteServiceManagerState extends State<RemoteServiceManager> {
                             ),
                           ),
                           const SizedBox(width: 12),
+                          IconButton(
+                            icon: const Icon(Icons.auto_awesome, size: 16, color: Colors.white70),
+                            tooltip: 'Explain service with server AI (read-only)',
+                            onPressed: () {
+                              showAiAdviceDialog(
+                                context: context,
+                                ssh: widget.sshService,
+                                title: 'Explain $unit',
+                                loadContext: () => AiService(widget.sshService).serviceEvidence(unit),
+                              );
+                            },
+                          ),
                           IconButton(
                             icon: const Icon(Icons.refresh, size: 16, color: Colors.white70),
                             tooltip: 'Restart (systemctl restart)',
