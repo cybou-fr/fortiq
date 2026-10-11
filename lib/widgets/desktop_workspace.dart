@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../services/ssh_service.dart';
 import '../services/server_setup_service.dart';
 import '../services/desktop_task_controller.dart';
+import '../services/desktop_file_router.dart';
 import 'server_status.dart';
 import 'file_explorer.dart';
 import 'process_manager.dart';
@@ -888,21 +889,7 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
               setState(() => win.title = 'Files: $path');
             }
           },
-          onOpenFile: (path) {
-            final ext = path.toLowerCase();
-            if (ext.endsWith('.png') ||
-                ext.endsWith('.jpg') ||
-                ext.endsWith('.jpeg') ||
-                ext.endsWith('.gif') ||
-                ext.endsWith('.webp') ||
-                ext.endsWith('.bmp')) {
-              _openWindow(FortiqAppType.mediaViewer, filePath: path);
-            } else if (ext.endsWith('.md')) {
-              _openWindow(FortiqAppType.docsStudio, filePath: path);
-            } else {
-              _openWindow(FortiqAppType.editor, filePath: path);
-            }
-          },
+          onOpenFile: _openDesktopFile,
         );
       case FortiqAppType.processManager:
         return RemoteProcessManager(
@@ -985,6 +972,41 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
           ),
         );
     }
+  }
+
+  void _openDesktopFile(String path) {
+    switch (classifyDesktopFile(path)) {
+      case DesktopFileKind.image:
+        _openWindow(FortiqAppType.mediaViewer, filePath: path);
+      case DesktopFileKind.markdown:
+        _openWindow(FortiqAppType.docsStudio, filePath: path);
+      case DesktopFileKind.text:
+        _openWindow(FortiqAppType.editor, filePath: path);
+      case DesktopFileKind.pdf:
+        _showUnsupportedFile(path,
+            'PDF preview is not yet available in FORTIQ. '
+            'Use Download via SFTP in Files to open it locally.');
+      case DesktopFileKind.unsupported:
+        _showUnsupportedFile(path,
+            'No viewer is registered for this file type. '
+            'Use Download via SFTP in Files to open it locally.');
+    }
+  }
+
+  void _showUnsupportedFile(String path, String message) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(path.split('/').last),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showDesktopTasks() {
