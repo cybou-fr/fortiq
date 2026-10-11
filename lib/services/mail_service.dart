@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'shell.dart';
 
 /// The server's local system mailbox.
@@ -106,39 +107,43 @@ fi
     }
   }
 
-  /// Sends a local system mail using mail/sendmail/append to mbox
+  /// Asks the Linux MTA to accept a system message over SSH stdin.
+  /// A zero exit code confirms submission to the command, NOT delivery.
+  /// Missing tools never fall back to writing arbitrary mbox content.
   Future<bool> sendSystemMail({
     required String to,
     required String subject,
     required String body,
   }) async {
-    final base64Body = base64Encode(utf8.encode(body));
-
-    // Try sendmail or mail, fallback to direct append to user mbox
-    final script = '''
-to=${shQuote(to)}
-subject=${shQuote(subject)}
-body=\$(echo "$base64Body" | base64 -d)
-if command -v mail >/dev/null 2>&1; then
-  echo "\$body" | mail -s "\$subject" "\$to"
-elif command -v sendmail >/dev/null 2>&1; then
-  printf "To: %s\\nSubject: %s\\n\\n%s\\n" "\$to" "\$subject" "\$body" | sendmail -t
-else
-  # Fallback: append formatted mbox email to /tmp/sample_mbox or /var/mail/\$to
-  date_str=\$(date -R)
-  target="/var/mail/\$to"
-  if [ ! -w "\$target" ] && [ -w /tmp/sample_mbox ]; then
-    target="/tmp/sample_mbox"
-  fi
-  printf "\\nFrom MAILER-DAEMON %s\\nDate: %s\\nFrom: fortis-desktop@localhost\\nTo: %s\\nSubject: %s\\n\\n%s\\n" "\$(date)" "\$date_str" "\$to" "\$subject" "\$body" >> "\$target" 2>/dev/null || echo "failed"
-fi
-''';
-
-    try {
-      final res = await _ssh.execute(script);
-      return !res.contains('failed');
-    } catch (_) {
+    final recipient = to.trim();
+    if (recipient.isEmpty ||
+        recipient.length > 254 ||
+        !RegExp(r'^[A-Za-z0-9_+.-]+(?:@[A-Za-z0-9.-]+)?$').hasMatch(recipient) ||
+        subject.isEmpty || subject.length > 998 ||
+        subject.contains('\r') || subject.contains('\n')) {
       return false;
     }
+    final command = '''
+to=${shQuote(recipient)}
+subject=${shQuote(subject)}
+if command -v sendmail >/dev/null 2>&1; then
+  { printf 'To: %s\\nSubject: %s\\n\\n' "\$to" "\$subject"; cat; } | sendmail -i -t
+elif command -v mail >/dev/null 2>&1; then
+  mail -s "\$subject" "\$to"
+else
+  printf 'No mail or sendmail command available on Linux.\\n' >&2
+  exit 127
+fi
+''';
+    final result = await _ssh.executeWithInput(
+      command,
+      Uint8List.fromList(utf8.encode(body)),
+    );
+    if (result.exitCode == null || result.killedBySignal) {
+      throw StateError(
+        'System mail result unknown: verify the mail queue before retrying.',
+      );
+    }
+    return result.exitCode == 0;
   }
 }
