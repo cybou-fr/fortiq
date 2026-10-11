@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+
 import '../services/ssh_service.dart';
 import '../services/server_setup_service.dart';
 import 'server_status.dart';
@@ -73,7 +75,8 @@ class HeadlessDesktopWorkspace extends StatefulWidget {
   });
 
   @override
-  State<HeadlessDesktopWorkspace> createState() => HeadlessDesktopWorkspaceState();
+  State<HeadlessDesktopWorkspace> createState() =>
+      HeadlessDesktopWorkspaceState();
 }
 
 class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
@@ -114,7 +117,10 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
     unawaited(_startServerSetup());
 
     _refreshMetrics();
-    _metricsTimer = Timer.periodic(const Duration(seconds: 4), (_) => _refreshMetrics());
+    _metricsTimer = Timer.periodic(
+      const Duration(seconds: 4),
+      (_) => _refreshMetrics(),
+    );
   }
 
   @override
@@ -134,12 +140,21 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
     } catch (_) {}
   }
 
-  void _openWindow(FortiqAppType type, {String? filePath, bool newInstance = false}) {
+  void _openWindow(
+    FortiqAppType type, {
+    String? filePath,
+    bool newInstance = false,
+  }) {
     if (!newInstance) {
-      final fileWindow = type == FortiqAppType.editor ||
-          type == FortiqAppType.docsStudio || type == FortiqAppType.mediaViewer;
-      final existing = _windows.where((w) => w.appType == type &&
-          (!fileWindow || w.filePath == filePath)).lastOrNull;
+      final fileWindow =
+          type == FortiqAppType.editor ||
+          type == FortiqAppType.docsStudio ||
+          type == FortiqAppType.mediaViewer;
+      final existing = _windows
+          .where(
+            (w) => w.appType == type && (!fileWindow || w.filePath == filePath),
+          )
+          .lastOrNull;
       if (existing != null) {
         _activateWindow(existing);
         return;
@@ -183,7 +198,7 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
         size = const Size(820, 540);
         break;
       case FortiqAppType.docsStudio:
-        title = 'Docs & Markdown Studio';
+        title = filePath == null ? 'Docs & Markdown Studio' : 'Docs: $filePath';
         size = const Size(840, 520);
         break;
       case FortiqAppType.spotlight:
@@ -274,12 +289,21 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
   }
 
   Rect _windowRect(InternalWindow win) {
-    final width = win.size.width.clamp(math.min(360.0, _windowAreaSize.width), _windowAreaSize.width).toDouble();
-    final height = win.size.height.clamp(math.min(240.0, _windowAreaSize.height), _windowAreaSize.height).toDouble();
+    final width = win.size.width
+        .clamp(math.min(360.0, _windowAreaSize.width), _windowAreaSize.width)
+        .toDouble();
+    final height = win.size.height
+        .clamp(math.min(240.0, _windowAreaSize.height), _windowAreaSize.height)
+        .toDouble();
     return Rect.fromLTWH(
-      win.position.dx.clamp(0.0, math.max(0.0, _windowAreaSize.width - width)).toDouble(),
-      win.position.dy.clamp(0.0, math.max(0.0, _windowAreaSize.height - height)).toDouble(),
-      width, height,
+      win.position.dx
+          .clamp(0.0, math.max(0.0, _windowAreaSize.width - width))
+          .toDouble(),
+      win.position.dy
+          .clamp(0.0, math.max(0.0, _windowAreaSize.height - height))
+          .toDouble(),
+      width,
+      height,
     );
   }
 
@@ -288,8 +312,12 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
     setState(() {
       win.size = rect.size;
       win.position = Offset(
-        (rect.left + delta.dx).clamp(0.0, math.max(0.0, _windowAreaSize.width - rect.width)).toDouble(),
-        (rect.top + delta.dy).clamp(0.0, math.max(0.0, _windowAreaSize.height - rect.height)).toDouble(),
+        (rect.left + delta.dx)
+            .clamp(0.0, math.max(0.0, _windowAreaSize.width - rect.width))
+            .toDouble(),
+        (rect.top + delta.dy)
+            .clamp(0.0, math.max(0.0, _windowAreaSize.height - rect.height))
+            .toDouble(),
       );
     });
   }
@@ -298,11 +326,26 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
     final rect = _windowRect(win);
     final minWidth = math.min(360.0, _windowAreaSize.width);
     final minHeight = math.min(240.0, _windowAreaSize.height);
-    var left = rect.left, top = rect.top, right = rect.right, bottom = rect.bottom;
-    if (edge.x < 0) left = (left + delta.dx).clamp(0.0, right - minWidth).toDouble();
-    if (edge.x > 0) right = (right + delta.dx).clamp(left + minWidth, _windowAreaSize.width).toDouble();
-    if (edge.y < 0) top = (top + delta.dy).clamp(0.0, bottom - minHeight).toDouble();
-    if (edge.y > 0) bottom = (bottom + delta.dy).clamp(top + minHeight, _windowAreaSize.height).toDouble();
+    var left = rect.left,
+        top = rect.top,
+        right = rect.right,
+        bottom = rect.bottom;
+    if (edge.x < 0) {
+      left = (left + delta.dx).clamp(0.0, right - minWidth).toDouble();
+    }
+    if (edge.x > 0) {
+      right = (right + delta.dx)
+          .clamp(left + minWidth, _windowAreaSize.width)
+          .toDouble();
+    }
+    if (edge.y < 0) {
+      top = (top + delta.dy).clamp(0.0, bottom - minHeight).toDouble();
+    }
+    if (edge.y > 0) {
+      bottom = (bottom + delta.dy)
+          .clamp(top + minHeight, _windowAreaSize.height)
+          .toDouble();
+    }
     setState(() {
       win.position = Offset(left, top);
       win.size = Size(right - left, bottom - top);
@@ -329,38 +372,52 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
     if (win == null) return;
     if (!_closingWindows.add(id)) return;
     try {
-    if (win.isDirty) {
-      final discard = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: const Color(0xFF1E1F29),
-          title: const Text('Unsaved changes', style: TextStyle(color: Colors.white, fontSize: 16)),
-          content: Text(
-            '"${win.title}" has unsaved changes. Close it and lose them?',
-            style: const TextStyle(color: Colors.white70, fontSize: 13),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep open')),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('Discard', style: TextStyle(color: Colors.white)),
+      if (win.isDirty) {
+        final discard = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: const Color(0xFF1E1F29),
+            title: const Text(
+              'Unsaved changes',
+              style: TextStyle(color: Colors.white, fontSize: 16),
             ),
-          ],
-        ),
-      );
-      if (discard != true || !mounted) return;
-    }
-    setState(() {
-      _windows.removeWhere((w) => w.id == id);
-      if (_activeWindowId == id) {
-        _activeWindowId = _windows.where((w) => !w.isMinimized).lastOrNull?.id;
+            content: Text(
+              '"${win.title}" has unsaved changes. Close it and lose them?',
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Keep open'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                child: const Text(
+                  'Discard',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        );
+        if (discard != true || !mounted) return;
       }
-    });
-    // Closing the window is an explicit end of that shell; just disconnecting
-    // or quitting leaves it running for the next time.
-    final session = win.sessionName;
-    if (session != null) unawaited(widget.sshService.terminal.killTmuxSession(session));
+      setState(() {
+        _windows.removeWhere((w) => w.id == id);
+        if (_activeWindowId == id) {
+          _activeWindowId = _windows
+              .where((w) => !w.isMinimized)
+              .lastOrNull
+              ?.id;
+        }
+      });
+      // Closing the window is an explicit end of that shell; just disconnecting
+      // or quitting leaves it running for the next time.
+      final session = win.sessionName;
+      if (session != null) {
+        unawaited(widget.sshService.terminal.killTmuxSession(session));
+      }
     } finally {
       _closingWindows.remove(id);
     }
@@ -368,58 +425,63 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      _windowAreaSize = Size(constraints.maxWidth, math.max(0.0, constraints.maxHeight - 94));
-      return Container(
-      color: const Color(0xFF0F1017),
-      child: Stack(
-        children: [
-          // Desktop Wallpaper / Background Grid
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _GridBackgroundPainter(color: widget.domainColor.withValues(alpha: 0.03)),
-            ),
-          ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _windowAreaSize = Size(
+          constraints.maxWidth,
+          math.max(0.0, constraints.maxHeight - 94),
+        );
+        return Container(
+          color: const Color(0xFF0F1017),
+          child: Stack(
+            children: [
+              // Desktop Wallpaper / Background Grid
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _GridBackgroundPainter(
+                    color: widget.domainColor.withValues(alpha: 0.03),
+                  ),
+                ),
+              ),
 
-          // Top Status Bar (macOS / Linux Panel Style)
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 30,
-            child: _buildTopPanel(),
-          ),
+              // Top Status Bar (macOS / Linux Panel Style)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 30,
+                child: _buildTopPanel(),
+              ),
 
-          // Shown while the connection is being restored.
-          Positioned(
-            top: 30,
-            left: 0,
-            right: 0,
-            child: _ReconnectBanner(service: widget.sshService),
-          ),
+              // Internal Windows Layer
+              Positioned.fill(
+                top: 30,
+                bottom: 64, // Margin for Dock
+                child: Stack(
+                  children: _windows.map(_buildInternalWindow).toList(),
+                ),
+              ),
 
-          // Internal Windows Layer
-          Positioned.fill(
-            top: 30,
-            bottom: 64, // Margin for Dock
-            child: Stack(
-              children: _windows.map(_buildInternalWindow).toList(),
-            ),
-          ),
+              // Keep reconnect controls above maximized windows.
+              Positioned(
+                top: 30,
+                left: 0,
+                right: 0,
+                child: _ReconnectBanner(service: widget.sshService),
+              ),
 
-          // Desktop Dock (bottom centered)
-          Positioned(
-            bottom: 12,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: _buildDock(),
-            ),
+              // Desktop Dock (bottom centered)
+              Positioned(
+                bottom: 12,
+                left: 0,
+                right: 0,
+                child: Center(child: _buildDock()),
+              ),
+            ],
           ),
-        ],
-      ),
-      );
-    });
+        );
+      },
+    );
   }
 
   Widget _buildTopPanel() {
@@ -446,15 +508,30 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
               tooltip: 'Open windows',
               padding: EdgeInsets.zero,
               icon: const Icon(Icons.window, size: 15, color: Colors.white70),
-              onSelected: (id) => _activateWindow(_windows.firstWhere((w) => w.id == id)),
+              onSelected: (id) =>
+                  _activateWindow(_windows.firstWhere((w) => w.id == id)),
               itemBuilder: (_) => [
-                if (_windows.isEmpty) const PopupMenuItem(enabled: false, child: Text('No open windows')),
-                for (final win in _windows.reversed) PopupMenuItem(value: win.id,
-                  child: Row(children: [
-                    Icon(_getIconForType(win.appType), size: 16),
-                    const SizedBox(width: 8),
-                    Flexible(child: Text('${win.title}${win.isDirty ? ' •' : ''}${win.isMinimized ? ' (minimized)' : ''}', overflow: TextOverflow.ellipsis)),
-                  ])),
+                if (_windows.isEmpty)
+                  const PopupMenuItem(
+                    enabled: false,
+                    child: Text('No open windows'),
+                  ),
+                for (final win in _windows.reversed)
+                  PopupMenuItem(
+                    value: win.id,
+                    child: Row(
+                      children: [
+                        Icon(_getIconForType(win.appType), size: 16),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            '${win.title}${win.isDirty ? ' •' : ''}${win.isMinimized ? ' (minimized)' : ''}',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
             const SizedBox(width: 8),
@@ -470,7 +547,10 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
             const SizedBox(width: 14),
             _metricPill(Icons.speed, 'CPU ${cpu.toStringAsFixed(1)}%'),
             const SizedBox(width: 12),
-            _metricPill(Icons.memory, 'RAM $memPercent% ($usedMem/${totalMem}MB)'),
+            _metricPill(
+              Icons.memory,
+              'RAM $memPercent% ($usedMem/${totalMem}MB)',
+            ),
             if (disk.isNotEmpty) ...[
               const SizedBox(width: 12),
               _metricPill(Icons.storage, 'Disk $disk'),
@@ -503,120 +583,284 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
 
   Widget _buildInternalWindow(InternalWindow win) {
     final isActive = _activeWindowId == win.id;
+    final maximized = win.isMaximized || _windowAreaSize.width < 768;
+    final rect = maximized ? Offset.zero & _windowAreaSize : _windowRect(win);
 
     // Stable key keeps each window's state when the stacking order changes;
     // Offstage hides minimized windows without destroying them.
     return Positioned(
       key: ValueKey(win.id),
-      left: win.isMaximized ? 0 : win.position.dx,
-      top: win.isMaximized ? 0 : win.position.dy,
-      width: win.isMaximized ? MediaQuery.of(context).size.width : win.size.width,
-      height: win.isMaximized ? (MediaQuery.of(context).size.height - 94) : win.size.height,
-      child: Offstage(
-        offstage: win.isMinimized,
-        child: Listener(
-        onPointerDown: (_) {
-          if (_activeWindowId != win.id) {
-            _bringToFront(win.id);
-          }
-        },
-        child: Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF14151F),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: isActive ? widget.domainColor.withValues(alpha: 0.8) : const Color(0xFF2C2E42),
-              width: isActive ? 1.5 : 1.0,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.5),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(7),
-            child: Column(
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
+      child: ExcludeFocus(
+        excluding: win.isMinimized,
+        child: Offstage(
+          offstage: win.isMinimized,
+          child: Listener(
+            onPointerDown: (_) {
+              if (_activeWindowId != win.id) {
+                _bringToFront(win.id);
+              }
+            },
+            child: Stack(
+              fit: StackFit.expand,
               children: [
-                // Inner Window Titlebar
-                GestureDetector(
-                  onPanUpdate: win.isMaximized
-                      ? null
-                      : (details) {
-                          setState(() {
-                            win.position += details.delta;
-                          });
-                        },
-                  onDoubleTap: () {
-                    setState(() {
-                      win.isMaximized = !win.isMaximized;
-                    });
-                  },
-                  child: Container(
-                    height: 32,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    decoration: BoxDecoration(
-                      color: isActive ? const Color(0xFF1E202E) : const Color(0xFF171822),
-                      border: Border(bottom: BorderSide(color: const Color(0xFF26283B))),
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF14151F),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isActive
+                          ? widget.domainColor.withValues(alpha: 0.8)
+                          : const Color(0xFF2C2E42),
+                      width: isActive ? 1.5 : 1.0,
                     ),
-                    child: Row(
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        blurRadius: 18,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(7),
+                    child: Column(
                       children: [
-                        Icon(
-                          _getIconForType(win.appType),
-                          size: 14,
-                          color: isActive ? widget.domainColor : Colors.white38,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            win.title,
-                            style: TextStyle(
-                              color: isActive ? Colors.white : Colors.white60,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
+                        // Inner Window Titlebar
+                        GestureDetector(
+                          onPanUpdate: maximized
+                              ? null
+                              : (details) {
+                                  _moveWindow(win, details.delta);
+                                },
+                          onDoubleTap: () {
+                            _arrangeWindow(win, 'maximize');
+                          },
+                          child: Container(
+                            height: 32,
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            decoration: BoxDecoration(
+                              color: isActive
+                                  ? const Color(0xFF1E202E)
+                                  : const Color(0xFF171822),
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: const Color(0xFF26283B),
+                                ),
+                              ),
                             ),
-                            overflow: TextOverflow.ellipsis,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _getIconForType(win.appType),
+                                  size: 14,
+                                  color: isActive
+                                      ? widget.domainColor
+                                      : Colors.white38,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    '${win.title}${win.isDirty ? ' •' : ''}',
+                                    style: TextStyle(
+                                      color: isActive
+                                          ? Colors.white
+                                          : Colors.white60,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                PopupMenuButton<String>(
+                                  tooltip: 'Window actions',
+                                  padding: EdgeInsets.zero,
+                                  icon: const Icon(
+                                    Icons.more_horiz,
+                                    size: 16,
+                                    color: Colors.white60,
+                                  ),
+                                  onSelected: (action) {
+                                    if (action == 'minimize') {
+                                      _minimizeWindow(win);
+                                    } else if (action == 'close') {
+                                      _closeWindow(win.id);
+                                    } else {
+                                      _arrangeWindow(win, action);
+                                    }
+                                  },
+                                  itemBuilder: (_) => [
+                                    PopupMenuItem(
+                                      value: 'maximize',
+                                      child: Text(
+                                        win.isMaximized
+                                            ? 'Restore size'
+                                            : 'Maximize',
+                                      ),
+                                    ),
+                                    if (_windowAreaSize.width >= 768) ...[
+                                      const PopupMenuItem(
+                                        value: 'left',
+                                        child: Text('Tile left'),
+                                      ),
+                                      const PopupMenuItem(
+                                        value: 'right',
+                                        child: Text('Tile right'),
+                                      ),
+                                    ],
+                                    const PopupMenuItem(
+                                      value: 'minimize',
+                                      child: Text('Minimize'),
+                                    ),
+                                    const PopupMenuItem(
+                                      value: 'close',
+                                      child: Text('Close'),
+                                    ),
+                                  ],
+                                ),
+                                Tooltip(
+                                  message: 'Minimize',
+                                  child: InkWell(
+                                    onTap: () => _minimizeWindow(win),
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: const Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 4,
+                                      ),
+                                      child: Icon(
+                                        Icons.remove,
+                                        size: 15,
+                                        color: Colors.white60,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Tooltip(
+                                  message: win.isMaximized
+                                      ? 'Restore size'
+                                      : 'Maximize',
+                                  child: InkWell(
+                                    onTap: () =>
+                                        _arrangeWindow(win, 'maximize'),
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 4,
+                                      ),
+                                      child: Icon(
+                                        win.isMaximized
+                                            ? Icons.filter_none
+                                            : Icons.crop_square,
+                                        size: 15,
+                                        color: Colors.white60,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Tooltip(
+                                  message: 'Close',
+                                  child: InkWell(
+                                    onTap: () => _closeWindow(win.id),
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: const Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 4,
+                                      ),
+                                      child: Icon(
+                                        Icons.close,
+                                        size: 15,
+                                        color: Colors.redAccent,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                        InkWell(
-                          onTap: () => setState(() => win.isMinimized = true),
-                          borderRadius: BorderRadius.circular(4),
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                            child: Icon(Icons.remove, size: 15, color: Colors.white60),
-                          ),
-                        ),
-                        InkWell(
-                          onTap: () => setState(() => win.isMaximized = !win.isMaximized),
-                          borderRadius: BorderRadius.circular(4),
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                            child: Icon(Icons.crop_square, size: 15, color: Colors.white60),
-                          ),
-                        ),
-                        InkWell(
-                          onTap: () => _closeWindow(win.id),
-                          borderRadius: BorderRadius.circular(4),
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                            child: Icon(Icons.close, size: 15, color: Colors.redAccent),
-                          ),
-                        ),
+
+                        // Window Inner Body
+                        Expanded(child: _buildAppContent(win)),
                       ],
                     ),
                   ),
                 ),
-
-                // Window Inner Body
-                Expanded(
-                  child: _buildAppContent(win),
-                ),
+                if (!maximized) ...[
+                  for (final edge in [
+                    Alignment.topLeft,
+                    Alignment.topCenter,
+                    Alignment.topRight,
+                    Alignment.centerLeft,
+                    Alignment.centerRight,
+                    Alignment.bottomLeft,
+                    Alignment.bottomCenter,
+                    Alignment.bottomRight,
+                  ])
+                    _resizeHandle(win, edge),
+                ],
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _resizeHandle(InternalWindow win, Alignment edge) {
+    final corner = edge.x != 0 && edge.y != 0;
+    final cursor = edge.x == 0
+        ? SystemMouseCursors.resizeUpDown
+        : edge.y == 0
+        ? SystemMouseCursors.resizeLeftRight
+        : edge.x == edge.y
+        ? SystemMouseCursors.resizeUpLeftDownRight
+        : SystemMouseCursors.resizeUpRightDownLeft;
+    return Positioned(
+      left: edge.x < 0
+          ? 0
+          : edge.x == 0
+          ? 12
+          : null,
+      right: edge.x > 0
+          ? 0
+          : edge.x == 0
+          ? 12
+          : null,
+      top: edge.y < 0
+          ? 0
+          : edge.y == 0
+          ? 12
+          : null,
+      bottom: edge.y > 0
+          ? 0
+          : edge.y == 0
+          ? 12
+          : null,
+      width: edge.x == 0
+          ? null
+          : corner
+          ? 12
+          : 5,
+      height: edge.y == 0
+          ? null
+          : corner
+          ? 12
+          : 5,
+      child: MouseRegion(
+        cursor: cursor,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanStart: (_) => _activateWindow(win),
+          onPanUpdate: (details) => _resizeWindow(win, details.delta, edge),
+          child: edge == Alignment.bottomRight
+              ? const Icon(Icons.drag_handle, size: 10, color: Colors.white38)
+              : const SizedBox.expand(),
         ),
       ),
     );
@@ -629,6 +873,11 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
           sshService: widget.sshService,
           initialPath: '/',
           domainColor: widget.domainColor,
+          onPathChanged: (path) {
+            if (mounted && _windows.contains(win)) {
+              setState(() => win.title = 'Files: $path');
+            }
+          },
           onOpenFile: (path) {
             final ext = path.toLowerCase();
             if (ext.endsWith('.png') ||
@@ -666,7 +915,7 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
           sshService: widget.sshService,
           filePath: win.filePath ?? '/etc/hosts',
           domainColor: widget.domainColor,
-          onDirtyChanged: (dirty) => win.isDirty = dirty,
+          onDirtyChanged: (dirty) => _setWindowDirty(win, dirty),
         );
       case FortiqAppType.networkInspector:
         return RemoteNetworkInspector(
@@ -683,13 +932,14 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
           sshService: widget.sshService,
           initialFilePath: win.filePath,
           domainColor: widget.domainColor,
-          onDirtyChanged: (dirty) => win.isDirty = dirty,
+          onDirtyChanged: (dirty) => _setWindowDirty(win, dirty),
         );
       case FortiqAppType.spotlight:
         return RemoteSpotlightSearch(
           sshService: widget.sshService,
           domainColor: widget.domainColor,
-          onOpenFile: (path) => _openWindow(FortiqAppType.editor, filePath: path),
+          onOpenFile: (path) =>
+              _openWindow(FortiqAppType.editor, filePath: path),
         );
       case FortiqAppType.logViewer:
         return RemoteLogViewer(
@@ -705,7 +955,7 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
         return RemoteMailWindow(
           sshService: widget.sshService,
           domainColor: widget.domainColor,
-          onDirtyChanged: (dirty) => win.isDirty = dirty,
+          onDirtyChanged: (dirty) => _setWindowDirty(win, dirty),
           onOpenTerminal: () => _openWindow(FortiqAppType.terminal),
         );
       case FortiqAppType.mediaViewer:
@@ -725,7 +975,10 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
       decoration: BoxDecoration(
         color: const Color(0xFF1B1C28).withValues(alpha: 0.96),
         borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: widget.domainColor.withValues(alpha: 0.35), width: 1.5),
+        border: Border.all(
+          color: widget.domainColor.withValues(alpha: 0.35),
+          width: 1.5,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.45),
@@ -745,13 +998,29 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
             _dockItem(Icons.public, 'Browser', FortiqAppType.browser),
             _dockItem(Icons.mail_outline, 'Mailbox', FortiqAppType.mailbox),
             _dockItem(Icons.email_outlined, 'Mail', FortiqAppType.mail),
-            _dockItem(Icons.menu_book, 'Docs & Notes', FortiqAppType.docsStudio),
-            _dockItem(Icons.receipt_long, 'System Logs', FortiqAppType.logViewer),
-            _dockItem(Icons.bar_chart, 'Processes', FortiqAppType.processManager),
+            _dockItem(
+              Icons.menu_book,
+              'Docs & Notes',
+              FortiqAppType.docsStudio,
+            ),
+            _dockItem(
+              Icons.receipt_long,
+              'System Logs',
+              FortiqAppType.logViewer,
+            ),
+            _dockItem(
+              Icons.bar_chart,
+              'Processes',
+              FortiqAppType.processManager,
+            ),
             _dockItem(Icons.settings, 'Services', FortiqAppType.serviceManager),
             _dockItem(Icons.computer, 'Terminal', FortiqAppType.terminal),
             _dockItem(Icons.edit_note, 'Editor', FortiqAppType.editor),
-            _dockItem(Icons.shield, 'Firewall & Ports', FortiqAppType.networkInspector),
+            _dockItem(
+              Icons.shield,
+              'Firewall & Ports',
+              FortiqAppType.networkInspector,
+            ),
           ],
         ),
       ),
@@ -759,35 +1028,95 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
   }
 
   Widget _dockItem(IconData icon, String tooltip, FortiqAppType type) {
-    final isOpen = _windows.any((w) => w.appType == type && !w.isMinimized);
+    final windows = _windows.where((w) => w.appType == type).toList();
+    final isOpen = windows.isNotEmpty;
+    final isVisible = windows.any((w) => !w.isMinimized);
 
     return Tooltip(
       message: tooltip,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(22),
-        onTap: () => _openWindow(type),
-        child: Container(
-          width: 48,
-          height: 44,
-          margin: const EdgeInsets.symmetric(horizontal: 2),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 21, color: isOpen ? widget.domainColor : Colors.white70),
-              const SizedBox(height: 3),
-              Container(
-                width: 4,
-                height: 4,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isOpen ? widget.domainColor : Colors.transparent,
+      child: GestureDetector(
+        onSecondaryTapDown: (details) =>
+            _showAppWindows(type, details.globalPosition),
+        onLongPressStart: (details) =>
+            _showAppWindows(type, details.globalPosition),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(22),
+          onTap: () => _openWindow(type),
+          child: Container(
+            width: 48,
+            height: 44,
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 21,
+                  color: isOpen ? widget.domainColor : Colors.white70,
                 ),
-              ),
-            ],
+                const SizedBox(height: 3),
+                Container(
+                  width: 4,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isVisible
+                        ? widget.domainColor
+                        : isOpen
+                        ? Colors.white38
+                        : Colors.transparent,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _showAppWindows(FortiqAppType type, Offset position) async {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final local = overlay.globalToLocal(position);
+    final canCreate =
+        type == FortiqAppType.terminal ||
+        type == FortiqAppType.fileExplorer ||
+        type == FortiqAppType.browser ||
+        type == FortiqAppType.docsStudio;
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        Rect.fromLTWH(local.dx, local.dy, 0, 0),
+        Offset.zero & overlay.size,
+      ),
+      items: [
+        PopupMenuItem(
+          value: canCreate ? 'new' : 'open',
+          child: Text(canCreate ? 'New window' : 'Open'),
+        ),
+        for (final win
+            in _windows.where((w) => w.appType == type).toList().reversed)
+          PopupMenuItem(
+            value: win.id,
+            child: Text(
+              '${win.title}${win.isDirty ? ' •' : ''}${win.isMinimized ? ' (minimized)' : ''}',
+            ),
+          ),
+      ],
+    );
+    if (!mounted || result == null) return;
+    if (result == 'new' || result == 'open') {
+      _openWindow(type, newInstance: result == 'new');
+    } else {
+      final win = _windows.where((w) => w.id == result).firstOrNull;
+      if (win != null) _activateWindow(win);
+    }
+  }
+
+  void _setWindowDirty(InternalWindow win, bool dirty) {
+    if (mounted && _windows.contains(win) && win.isDirty != dirty) {
+      setState(() => win.isDirty = dirty);
+    }
   }
 
   IconData _getIconForType(FortiqAppType type) {
@@ -866,17 +1195,24 @@ class _ReconnectBanner extends StatelessWidget {
                 const SizedBox(
                   width: 12,
                   height: 12,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.amberAccent),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.amberAccent,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: StreamBuilder<int>(
-                    stream: Stream.periodic(const Duration(seconds: 1), (i) => i),
+                    stream: Stream.periodic(
+                      const Duration(seconds: 1),
+                      (i) => i,
+                    ),
                     builder: (context, _) {
                       final next = service.nextRetryAt;
-                      final secs = next == null
-                          ? null
-                          : next.difference(DateTime.now()).inSeconds.clamp(0, 999);
+                      final secs = next
+                          ?.difference(DateTime.now())
+                          .inSeconds
+                          .clamp(0, 999);
                       final status = secs == null
                           ? 'connecting…'
                           : 'next attempt in ${secs}s';
@@ -884,13 +1220,22 @@ class _ReconnectBanner extends StatelessWidget {
                         'Connection lost (${service.lastDisconnectReason ?? 'unknown'}). '
                         'Reconnecting, attempt ${service.reconnectAttempt + 1}: $status',
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.amberAccent, fontSize: 11),
+                        style: const TextStyle(
+                          color: Colors.amberAccent,
+                          fontSize: 11,
+                        ),
                       );
                     },
                   ),
                 ),
-                TextButton(onPressed: service.retryNow, child: const Text('Retry now')),
-                TextButton(onPressed: service.disconnect, child: const Text('Disconnect')),
+                TextButton(
+                  onPressed: service.retryNow,
+                  child: const Text('Retry now'),
+                ),
+                TextButton(
+                  onPressed: service.disconnect,
+                  child: const Text('Disconnect'),
+                ),
               ],
             ),
           ),
