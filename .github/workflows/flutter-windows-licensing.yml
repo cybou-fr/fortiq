@@ -10,6 +10,8 @@ on:
       - "windows/runner/**"
       - "test/license_service_test.dart"
       - "test/ai_service_test.dart"
+      - "test/shell_quote_test.dart"
+      - "test/services_test.dart"
       - "lib/services/ai_service.dart"
       - "lib/services/ssh_service.dart"
       - "lib/services/shell.dart"
@@ -41,6 +43,6 @@ jobs:
       - name: Analyze Linux AI GUI integration
         run: flutter analyze lib/services/ai_service.dart lib/services/ssh_service.dart lib/services/shell.dart lib/widgets/ai_advice_dialog.dart lib/widgets/log_viewer.dart lib/widgets/service_manager.dart test/ai_service_test.dart
       - name: Test Linux AI adapter and licensing
-        run: flutter test test/ai_service_test.dart
+        run: flutter test test/ai_service_test.dart test/ai_advice_dialog_test.dart test/shell_quote_test.dart test/services_test.dart
       - name: Build Windows debug
         run: flutter build windows --debug
