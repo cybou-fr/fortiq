@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
 import 'shell.dart';
+import 'desktop_task_controller.dart';
 
 /// Explicit export from a remote Linux file to a user-chosen local path.
 /// Uses the authenticated SSH transport; no extra service, port or API.
@@ -68,6 +69,7 @@ class SftpTransferService {
     required String remotePath,
     required void Function(int bytes, int? totalBytes) onProgress,
     required bool Function() sessionCurrent,
+    TransferCancellation? cancellation,
   }) async {
     if (localPath.isEmpty || remotePath.isEmpty ||
         remotePath.contains('\x00')) {
@@ -90,14 +92,23 @@ class SftpTransferService {
         mode: SftpFileOpenMode.create | SftpFileOpenMode.write,
       );
       try {
+        Stream<Uint8List> chunks() async* {
+          await for (final data in source.openRead()) {
+            cancellation?.throwIfRequested();
+            if (!sessionCurrent()) throw StateError('SSH session changed.');
+            yield Uint8List.fromList(data);
+          }
+        }
+        cancellation?.throwIfRequested();
         final writer = handle.write(
-          source.openRead().map((data) => Uint8List.fromList(data)),
+          chunks(),
           onProgress: (sent) => onProgress(sent, length),
         );
         await writer.done;
       } finally {
         await handle.close();
       }
+      cancellation?.throwIfRequested();
       if (!sessionCurrent()) throw StateError('SSH session changed.');
       final attrs = await sftp.stat(partial);
       if (attrs.size != length) {
@@ -109,6 +120,7 @@ class SftpTransferService {
       } on SftpStatusError catch (error) {
         if (error.code != SftpStatusCode.noSuchFile) rethrow;
       }
+      cancellation?.throwIfRequested();
       // Atomic no-clobber publish on the same Linux filesystem: hard-link
       // creation fails if the target appeared after our last check.
       final publish = await client.runWithResult(
