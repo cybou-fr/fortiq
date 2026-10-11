@@ -13,6 +13,7 @@ class RemoteFileExplorer extends StatefulWidget {
   final Color domainColor;
   final void Function(String filePath)? onOpenFile;
   final ValueChanged<String>? onPathChanged;
+  final DesktopTaskController? taskController;
 
   const RemoteFileExplorer({
     super.key,
@@ -21,6 +22,7 @@ class RemoteFileExplorer extends StatefulWidget {
     required this.domainColor,
     this.onOpenFile,
     this.onPathChanged,
+    this.taskController,
   });
 
   @override
@@ -37,7 +39,8 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
   late String _currentPath;
   List<LinuxFileInfo> _files = [];
   bool _isLoading = false;
-  final DesktopTaskController _tasks = DesktopTaskController();
+  late final DesktopTaskController _tasks =
+      widget.taskController ?? DesktopTaskController();
   String? _error;
   final TextEditingController _pathController = TextEditingController();
   final List<String> _history = [];
@@ -59,7 +62,7 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
   void dispose() {
     _loadSerial++;
     _pathController.dispose();
-    _tasks.dispose();
+    if (widget.taskController == null) _tasks.dispose();
     super.dispose();
   }
 
