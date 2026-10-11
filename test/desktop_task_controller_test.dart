@@ -82,4 +82,24 @@ void main() {
     tasks.dispose();
   });
 
+  test('cooperative cancellation retains a cancelled transfer task', () async {
+    final tasks = DesktopTaskController();
+    final token = TransferCancellation();
+    final gate = Completer<void>();
+    final pending = tasks.runTransfer('Upload', (progress) async {
+      progress(10, 100);
+      await gate.future;
+      token.throwIfRequested();
+    }, cancellation: token);
+    expect(tasks.runningCount, 1);
+    expect(tasks.cancelTransfer(tasks.tasks.single.id), isTrue);
+    expect(token.isRequested, isTrue);
+    gate.complete();
+    final task = await pending;
+    expect(task.state, DesktopTaskState.cancelled);
+    expect(task.bytesTransferred, 10);
+    expect(tasks.cancelTransfer(task.id), isFalse);
+    tasks.dispose();
+  });
+
 }
