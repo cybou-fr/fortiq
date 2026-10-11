@@ -338,6 +338,61 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
     }
   }
 
+  Future<void> _copyItem(LinuxFileInfo item) async {
+    if (_isLoading || !widget.sshService.isConnected) return;
+    final directory = _currentPath;
+    final client = widget.sshService.rawClient;
+    final source = directory == '/' ? '/${item.name}' : '$directory/${item.name}';
+    final controller = TextEditingController(text: '$source.copy');
+    final destination = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Copy ${item.name}'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Destination path on Linux'),
+          onSubmitted: (value) => Navigator.pop(dialogContext, value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text),
+            child: const Text('Copy'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || destination == null) return;
+    final target = p.posix.normalize(destination);
+    if (!p.posix.isAbsolute(destination) || destination.isEmpty ||
+        target == source || destination.contains('\x00')) {
+      showActionError(context, 'Copy', 'Enter a different absolute Linux path.');
+      return;
+    }
+    if (!widget.sshService.isConnected ||
+        widget.sshService.rawClient != client || _currentPath != directory) {
+      showActionError(context, 'Copy', 'SSH session or directory changed.');
+      return;
+    }
+    setState(() => _isLoading = true);
+    try {
+      await widget.sshService.files.copy(source, target);
+      if (mounted && widget.sshService.rawClient == client &&
+          _currentPath == directory) {
+        await _loadDirectory(directory);
+      }
+    } catch (error) {
+      if (mounted) showActionError(context, 'Copy', error);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _deleteItem(LinuxFileInfo item) async {
     final directory = _currentPath;
     final client = widget.sshService.rawClient;
@@ -675,6 +730,12 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
                                     ),
                                   ),
                                 ],
+                                IconButton(
+                                  icon: const Icon(Icons.copy_outlined,
+                                      size: 16, color: Colors.white60),
+                                  tooltip: 'Copy on Linux',
+                                  onPressed: _isLoading ? null : () => _copyItem(file),
+                                ),
                                 IconButton(
                                   icon: const Icon(Icons.drive_file_rename_outline,
                                       size: 16, color: Colors.white60),
