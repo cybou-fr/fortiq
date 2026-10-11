@@ -17,6 +17,7 @@ class SftpTransferService {
     required String localPath,
     required void Function(int bytes, int? totalBytes) onProgress,
     required bool Function() sessionCurrent,
+    TransferCancellation? cancellation,
   }) async {
     if (remotePath.isEmpty || localPath.isEmpty || remotePath.contains('\x00')) {
       throw ArgumentError('Invalid transfer paths');
@@ -33,6 +34,7 @@ class SftpTransferService {
     try {
       final attrs = await sftp.stat(remotePath);
       if (!attrs.isFile) throw StateError('Select a regular file.');
+      cancellation?.throwIfRequested();
       if (!sessionCurrent()) throw StateError('SSH session changed.');
       final total = attrs.size;
       final sink = partial.openWrite(mode: FileMode.writeOnly);
@@ -40,13 +42,17 @@ class SftpTransferService {
         await sftp.download(
           remotePath,
           sink,
-          onProgress: (received) => onProgress(received, total),
+          onProgress: (received) {
+            cancellation?.throwIfRequested();
+            onProgress(received, total);
+          },
           closeDestination: false,
         );
         await sink.flush();
       } finally {
         await sink.close();
       }
+      cancellation?.throwIfRequested();
       if (!sessionCurrent()) throw StateError('SSH session changed.');
       if (total != null && await partial.length() != total) {
         throw StateError('Incomplete transfer. Partial file retained.');
@@ -54,6 +60,7 @@ class SftpTransferService {
       if (await target.exists()) {
         throw StateError('Destination appeared during download. Partial file retained.');
       }
+      cancellation?.throwIfRequested();
       await partial.rename(localPath);
     } finally {
       await sftp.close();
