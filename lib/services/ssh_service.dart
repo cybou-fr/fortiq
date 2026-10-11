@@ -530,14 +530,21 @@ class SshClientService extends ChangeNotifier implements RemoteShell {
       throw Exception('Not connected to SSH server');
     }
     final session = await client.execute(command);
+    // Both streams must be drained while stdin is being uploaded. Otherwise a
+    // command that writes enough stdout (notably AI JSON) can block the SSH
+    // channel and prevent the remote process from finishing.
+    final stdoutFuture = utf8.decodeStream(session.stdout);
     final stderrFuture = utf8.decodeStream(session.stderr);
     session.stdin.add(input);
     await session.stdin.close();
     await session.done;
+    final output = await stdoutFuture;
+    final errors = await stderrFuture;
     return InputResult(
       exitCode: session.exitCode,
       killedBySignal: session.exitSignal != null,
-      stderr: await stderrFuture,
+      stdout: output,
+      stderr: errors,
     );
   }
 
