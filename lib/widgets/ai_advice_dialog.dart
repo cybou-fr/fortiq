@@ -39,6 +39,7 @@ class _AiAdviceDialog extends StatefulWidget {
 class _AiAdviceDialogState extends State<_AiAdviceDialog> {
   bool _busy = false;
   bool _cache = false;
+  bool _unavailable = false;
   AiAdvice? _advice;
   String? _error;
 
@@ -57,6 +58,20 @@ class _AiAdviceDialogState extends State<_AiAdviceDialog> {
       _advice = null;
     });
     try {
+      // Check server resources before fetching potentially sensitive logs.
+      // Neither status() nor this dialog starts a CPU model or installs it.
+      final status = await AiService(widget.ssh).status();
+      if (!identical(source, widget.ssh.rawClient)) {
+        throw StateError('SSH session changed. AI request was not sent.');
+      }
+      if (!status.available) {
+        _unavailable = true;
+        throw StateError(
+          'AI disabled on this Linux server: ${status.reason ?? 'unknown'} '
+          '(${status.availableMemoryMb} MB available). '
+          'Other FORTIQ tools are unaffected.',
+        );
+      }
       final contextText = await widget.loadContext();
       if (!identical(source, widget.ssh.rawClient)) {
         throw StateError('SSH session changed. AI request was not sent.');
@@ -143,7 +158,7 @@ class _AiAdviceDialogState extends State<_AiAdviceDialog> {
         child: const Text('Close'),
       ),
       FilledButton.icon(
-        onPressed: _busy ? null : _run,
+        onPressed: _busy || _unavailable ? null : _run,
         icon: const Icon(Icons.auto_awesome, size: 16),
         label: Text(_advice == null ? 'Explain' : 'Explain again'),
       ),
