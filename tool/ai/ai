@@ -136,15 +136,67 @@ def cache_root(create: bool) -> Path:
     return root
 
 
-def model_digest(model: Path) -> str:
+def model_digest(model: Path, root: Path) -> str:
+    """Hash each unchanged GGUF once, not on every cache hit.
+
+    Private metadata is invalidated by inode, device, size, mtime and ctime.
+    This is an optimization, not a signed model integrity attestation.
+    """
+    stat = model.stat()
+    identity = {
+        "path": str(model.resolve()), "dev": stat.st_dev, "ino": stat.st_ino,
+        "size": stat.st_size, "mtime_ns": stat.st_mtime_ns,
+        "ctime_ns": stat.st_ctime_ns,
+    }
+    token = hashlib.sha256(identity["path"].encode("utf-8")).hexdigest()
+    meta = root / (".modelhash-" + token)
+    try:
+        if meta.is_file() and not meta.is_symlink() and meta.stat().st_size < 4096:
+            saved = json.loads(meta.read_text(encoding="utf-8"))
+            if saved.get("identity") == identity and isinstance(saved.get("sha256"), str):
+                digest = saved["sha256"]
+                if len(digest) == 64 and all(x in "0123456789abcdef" for x in digest):
+                    return digest
+    except (OSError, ValueError, TypeError):
+        pass
     h = hashlib.sha256()
     with model.open("rb") as handle:
         for part in iter(lambda: handle.read(1024 * 1024), b""):
             h.update(part)
-    return h.hexdigest()
+        # If the GGUF changed during hashing, never key a response against a
+        # potentially mixed/partially updated model file.
+        current = model.stat()
+        if (current.st_ino != stat.st_ino or current.st_dev != stat.st_dev
+                or current.st_size != stat.st_size
+                or current.st_mtime_ns != stat.st_mtime_ns
+                or current.st_ctime_ns != stat.st_ctime_ns):
+            raise AiError("model_changed", "GGUF changed during digest calculation")
+    digest = h.hexdigest()
+    # Cache metadata is only an optimization: permission/disk failures must
+    # not disable inference, and the next request can hash again safely.
+    fd = None
+    temp = None
+    try:
+        fd, temp = tempfile.mkstemp(prefix=".modeltmp-", dir=root)
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            fd = None
+            json.dump({"identity": identity, "sha256": digest}, output)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temp, meta)
+    except OSError:
+        pass
+    finally:
+        if fd is not None:
+            os.close(fd)
+        if temp is not None and os.path.exists(temp):
+            os.unlink(temp)
+    return digest
 
 
-def key_for(kind: str, question: str, model: Path, context_id: str, settings: dict) -> str:
+def key_for(kind: str, question: str, model: Path, context_id: str,
+            settings: dict, root: Path) -> str:
     payload = {
         "format": SCHEMA,
         "prompt_version": PROMPT_VERSION,
@@ -152,7 +204,7 @@ def key_for(kind: str, question: str, model: Path, context_id: str, settings: di
         "kind": kind,
         "question": question,
         "context_id": context_id,
-        "model_sha256": model_digest(model),
+        "model_sha256": model_digest(model, root),
         "settings": settings,
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
@@ -351,8 +403,8 @@ def query(kind: str, args: argparse.Namespace) -> int:
         "predict": env_int("AI_TOKENS", 128, 8, 512),
         "timeout": env_int("AI_TIMEOUT", 90, 1, 900),
     }
-    root = cache_root(False)
-    key = key_for(kind, question, model, args.context_id, settings) if cache_enabled else None
+    root = cache_root(cache_enabled)
+    key = key_for(kind, question, model, args.context_id, settings, root) if cache_enabled else None
     ttl = CACHE_TTL[kind]
     if key:
         answer = cached(root, key, ttl)
@@ -386,9 +438,10 @@ def cache_command(args: argparse.Namespace) -> int:
                      "bytes": sum(p.stat().st_size for p in entries)})
     if args.cache_action == "clear":
         if root.is_dir() and not root.is_symlink():
-            for p in root.glob("*.json"):
-                if p.is_file() and not p.is_symlink():
-                    p.unlink()
+            for pattern in ("*.json", ".modelhash-*"):
+                for p in root.glob(pattern):
+                    if p.is_file() and not p.is_symlink():
+                        p.unlink()
         return emit({"schema": "fortiq-ai-cache/v1", "cleared": True})
     raise AiError("invalid_command", "Unsupported cache action")
 
