@@ -8,6 +8,11 @@ class DesktopTask {
   final DateTime startedAt;
   DesktopTaskState state;
   String? message;
+  int bytesTransferred = 0;
+  int? totalBytes;
+  double? get progress => totalBytes != null && totalBytes! > 0
+      ? (bytesTransferred / totalBytes!).clamp(0.0, 1.0)
+      : null;
 
   DesktopTask(this.id, this.label)
       : startedAt = DateTime.now(),
@@ -48,6 +53,39 @@ class DesktopTaskController extends ChangeNotifier {
           : DesktopTaskState.failed;
       task.message = task.state == DesktopTaskState.unknown
           ? 'SSH session changed. Verify the remote result manually.'
+          : error.toString();
+    }
+    _notify();
+    return task;
+  }
+
+  Future<DesktopTask> runTransfer(
+    String label,
+    Future<void> Function(void Function(int bytes, int? total) progress) operation, {
+    bool Function()? isSessionCurrent,
+  }) async {
+    final task = DesktopTask(++_nextId, label);
+    _tasks.insert(0, task);
+    _notify();
+    try {
+      await operation((bytes, total) {
+        if (task.state != DesktopTaskState.running) return;
+        task.bytesTransferred = bytes;
+        task.totalBytes = total;
+        _notify();
+      });
+      task.state = isSessionCurrent != null && !isSessionCurrent()
+          ? DesktopTaskState.unknown
+          : DesktopTaskState.completed;
+      if (task.state == DesktopTaskState.unknown) {
+        task.message = 'SSH session changed. Verify the transfer manually.';
+      }
+    } catch (error) {
+      task.state = isSessionCurrent != null && !isSessionCurrent()
+          ? DesktopTaskState.unknown
+          : DesktopTaskState.failed;
+      task.message = task.state == DesktopTaskState.unknown
+          ? 'SSH session changed. Verify the transfer manually.'
           : error.toString();
     }
     _notify();
