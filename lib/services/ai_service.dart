@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'shell.dart';
+import 'service_diagnostic_tools.dart';
 
 /// Server-owned optional llama.cpp adviser. FORTIQ only passes selected text
 /// through SSH to the Linux `ai` CLI and renders its response.
@@ -111,26 +112,9 @@ class AiService {
     );
   }
 
-  /// Read-only Linux evidence for a selected systemd unit. This is data, not
-  /// an instruction for the model; all operations remain ordinary SSH CLI.
+  /// Structured read-only evidence; service tools work without AI.
   Future<String> serviceEvidence(String unit) async {
-    if (!_ssh.isConnected) throw StateError('Reconnect SSH first.');
-    if (unit.isEmpty || unit.length > 200 ||
-        !RegExp(r'^[A-Za-z0-9_.@:-]+$').hasMatch(unit)) {
-      throw ArgumentError('Invalid systemd unit.');
-    }
-    // systemctl status returns non-zero for failed units; capture the status
-    // as evidence without treating an inactive service as a transport failure.
-    final command =
-        'systemctl --no-pager --full status ${shQuote(unit)} 2>&1; '
-        'echo "=== JOURNAL ==="; '
-        'journalctl --no-pager -n 25 -u ${shQuote(unit)} 2>&1';
-    final result = await _ssh.execute(command);
-    // Keep enough space for the task heading and at most 8192 UTF-8 bytes
-    // when passed to the CLI; truncate on valid Unicode boundaries.
-    final text = 'Service: $unit\n$result';
-    final bytes = utf8.encode(text);
-    if (bytes.length <= 7900) return text;
-    return utf8.decode(bytes.sublist(0, 7900), allowMalformed: true);
+    final report = await ServiceDiagnosticTools(_ssh).investigate(unit);
+    return report.toPlainText();
   }
 }
