@@ -31,8 +31,10 @@ class InputResult {
   final int? exitCode;
   final bool killedBySignal;
   final String stderr;
+  /// Remote stdout, captured concurrently with stderr to avoid SSH pipe stalls.
+  final String stdout;
 
-  const InputResult({this.exitCode, this.killedBySignal = false, this.stderr = ''});
+  const InputResult({this.exitCode, this.killedBySignal = false, this.stderr = '', this.stdout = ''});
 
   bool get ok => !killedBySignal && (exitCode == null || exitCode == 0);
 }
