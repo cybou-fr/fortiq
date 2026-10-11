@@ -66,4 +66,20 @@ void main() {
     tasks.dispose();
   });
 
+  test('stale or impossible progress updates are ignored', () async {
+    final tasks = DesktopTaskController();
+    final task = await tasks.runTransfer('Upload', (progress) async {
+      progress(512, 1024);
+      progress(128, 1024);
+      progress(2048, 1024);
+      progress(-1, 1024);
+      progress(700, 2048);
+    });
+    expect(task.state, DesktopTaskState.completed);
+    expect(task.bytesTransferred, 512);
+    expect(task.totalBytes, 1024);
+    expect(task.progress, 0.5);
+    tasks.dispose();
+  });
+
 }
