@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'mono.dart';
 import 'package:flutter/services.dart';
 import '../services/ssh_service.dart';
 
@@ -184,7 +185,7 @@ class _RemoteFileEditorState extends State<RemoteFileEditor> {
                               color: Colors.white,
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              fontFamily: 'Consolas, monospace',
+                              fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -253,7 +254,7 @@ class _RemoteFileEditorState extends State<RemoteFileEditor> {
                                       textAlign: TextAlign.right,
                                       style: TextStyle(
                                         color: Colors.white.withValues(alpha: 0.25),
-                                        fontFamily: 'Consolas, monospace',
+                                        fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback,
                                         fontSize: 12,
                                         height: 1.4,
                                       ),
@@ -273,7 +274,7 @@ class _RemoteFileEditorState extends State<RemoteFileEditor> {
                                     expands: true,
                                     style: const TextStyle(
                                       color: Color(0xFFE2E8F0),
-                                      fontFamily: 'Consolas, monospace',
+                                      fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback,
                                       fontSize: 12.5,
                                       height: 1.4,
                                     ),

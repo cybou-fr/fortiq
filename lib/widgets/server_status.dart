@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../services/server_setup_service.dart';
+import 'mono.dart';
 
-/// Small status indicator for the top panel: shows whether the server has
-/// everything Fortiq needs and is up to date. Tap for details and actions.
+/// Small indicator for the top panel: is the server set up, up to date and
+/// protected? Tap to see the steps and the log.
 class ServerStatusChip extends StatelessWidget {
   final ServerSetupService setup;
 
@@ -14,50 +14,66 @@ class ServerStatusChip extends StatelessWidget {
     return ListenableBuilder(
       listenable: setup,
       builder: (context, _) {
-        final st = setup.status;
         late final IconData icon;
         late final Color color;
         late final String text;
+        var spinner = false;
 
-        if (setup.busy) {
+        final failed = setup.steps.where((s) => s.state == StepStatus.failed).length;
+        final unknown = setup.steps.where((s) => s.state == StepStatus.unknown).length;
+        final todo = setup.steps.where((s) => s.willRun && s.state == StepStatus.pending).length;
+
+        if (setup.phase == SetupPhase.inspecting) {
+          spinner = true;
           icon = Icons.sync;
           color = Colors.lightBlueAccent;
-          text = setup.busyMessage;
+          text = 'Checking the server…';
+        } else if (setup.phase == SetupPhase.running) {
+          spinner = true;
+          icon = Icons.sync;
+          color = Colors.lightBlueAccent;
+          text = 'Setting up the server…';
         } else if (setup.error != null) {
           icon = Icons.error_outline;
           color = Colors.redAccent;
           text = 'Setup error';
-        } else if (st == null) {
+        } else if (setup.status == null) {
           return const SizedBox.shrink();
-        } else if (st.missing.isNotEmpty) {
+        } else if (failed > 0 || unknown > 0) {
           icon = Icons.warning_amber;
           color = Colors.redAccent;
-          text = 'Missing: ${st.missing.map((r) => r.package).join(', ')}';
-        } else if (st.upgradable.isNotEmpty) {
-          icon = Icons.system_update_alt;
+          text = unknown > 0 ? 'Setup: result unknown' : 'Setup: $failed failed';
+        } else if (!setup.status!.isSupportedOs) {
+          icon = Icons.info_outline;
+          color = Colors.white54;
+          text = 'Not Debian/Ubuntu';
+        } else if (!setup.status!.canElevate) {
+          icon = Icons.lock_outline;
+          color = Colors.orangeAccent;
+          text = 'No root/sudo: not set up';
+        } else if (todo > 0) {
+          icon = Icons.pending_actions;
           color = Colors.amberAccent;
-          text = st.securityUpdates > 0
-              ? '${st.upgradable.length} updates (${st.securityUpdates} security)'
-              : '${st.upgradable.length} updates';
-        } else if (st.rebootRequired) {
+          text = '$todo to do';
+        } else if (setup.status!.rebootRequired) {
           icon = Icons.restart_alt;
           color = Colors.amberAccent;
           text = 'Reboot required';
         } else {
-          icon = Icons.check_circle_outline;
+          icon = Icons.verified_user_outlined;
           color = Colors.greenAccent;
-          text = 'Server up to date';
+          text = 'Server ready';
         }
 
         return InkWell(
           borderRadius: BorderRadius.circular(10),
-          onTap: () => showServerStatusDialog(context, setup),
+          onTap: () => showServerSetupDialog(context, setup),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (setup.busy)
+                if (spinner)
                   SizedBox(
                     width: 11,
                     height: 11,
@@ -76,186 +92,229 @@ class ServerStatusChip extends StatelessWidget {
   }
 }
 
-Future<void> showServerStatusDialog(BuildContext context, ServerSetupService setup) {
+/// The setup dialog: the steps, their state and the live log. With
+/// [runOnOpen] it starts doing what the check found as soon as it appears.
+Future<void> showServerSetupDialog(
+  BuildContext context,
+  ServerSetupService setup, {
+  bool runOnOpen = false,
+}) {
   return showDialog<void>(
     context: context,
-    builder: (context) => _ServerStatusDialog(setup: setup),
+    // Not while it is working: leaving would hide what is being changed.
+    barrierDismissible: false,
+    builder: (context) => _SetupDialog(setup: setup, runOnOpen: runOnOpen),
   );
 }
 
-class _ServerStatusDialog extends StatelessWidget {
+class _SetupDialog extends StatefulWidget {
   final ServerSetupService setup;
+  final bool runOnOpen;
 
-  const _ServerStatusDialog({required this.setup});
+  const _SetupDialog({required this.setup, required this.runOnOpen});
+
+  @override
+  State<_SetupDialog> createState() => _SetupDialogState();
+}
+
+class _SetupDialogState extends State<_SetupDialog> {
+  @override
+  void initState() {
+    super.initState();
+    if (widget.runOnOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !widget.setup.busy) widget.setup.run();
+      });
+    }
+  }
+
+  static Widget _stateIcon(SetupStep s) {
+    switch (s.state) {
+      case StepStatus.running:
+        return const SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.lightBlueAccent),
+        );
+      case StepStatus.done:
+        return const Icon(Icons.check_circle, size: 16, color: Colors.greenAccent);
+      case StepStatus.upToDate:
+        return const Icon(Icons.check_circle_outline, size: 16, color: Colors.white38);
+      case StepStatus.failed:
+        return const Icon(Icons.cancel, size: 16, color: Colors.redAccent);
+      case StepStatus.unknown:
+        return const Icon(Icons.help, size: 16, color: Colors.redAccent);
+      case StepStatus.skipped:
+        return const Icon(Icons.remove_circle_outline, size: 16, color: Colors.white38);
+      case StepStatus.pending:
+        return Icon(
+          s.willRun ? Icons.radio_button_unchecked : Icons.remove_circle_outline,
+          size: 16,
+          color: s.willRun ? Colors.amberAccent : Colors.white38,
+        );
+    }
+  }
+
+  static String _stateText(SetupStep s) {
+    if (s.unavailable != null) return s.unavailable!;
+    if (s.note != null) return s.note!;
+    switch (s.state) {
+      case StepStatus.upToDate:
+        return 'Already in place.';
+      case StepStatus.pending:
+        return s.needed ? s.what : 'Already in place.';
+      default:
+        return s.what;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final setup = widget.setup;
     return ListenableBuilder(
       listenable: setup,
       builder: (context, _) {
         final st = setup.status;
-        final missingNames = st?.missing.map((r) => r.package).toSet() ?? <String>{};
-        const mono = TextStyle(fontFamily: 'Consolas', fontSize: 11, color: Colors.white70);
+        const mono = TextStyle(
+          fontFamily: kMonoFont,
+          fontFamilyFallback: kMonoFontFallback,
+          fontSize: 11,
+          color: Colors.white70,
+        );
+        final done = setup.steps.where((s) => s.state == StepStatus.done).length;
+        final failed = setup.steps.where((s) => s.state == StepStatus.failed).length;
+        final unknown = setup.steps.where((s) => s.state == StepStatus.unknown).length;
 
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1E1F29),
-          title: const Text('Server setup', style: TextStyle(color: Colors.white, fontSize: 16)),
-          content: SizedBox(
-            width: 520,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (st == null)
-                    const Text('Not checked yet.', style: TextStyle(color: Colors.white70))
-                  else ...[
-                    Text(
-                      '${st.os}  ·  ${st.isRoot ? 'root' : st.hasSudo ? 'sudo without password' : 'no root access'}',
-                      style: const TextStyle(color: Colors.white54, fontSize: 12),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text('Required packages',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                    const SizedBox(height: 4),
-                    for (final r in kRequiredPackages)
+        return PopScope(
+          canPop: !setup.busy,
+          child: AlertDialog(
+            backgroundColor: const Color(0xFF1E1F29),
+            title: Text(
+              setup.phase == SetupPhase.running
+                  ? 'Setting up ${setup.host}'
+                  : 'Server setup: ${setup.host}',
+              style: const TextStyle(color: Colors.white, fontSize: 16),
+            ),
+            content: SizedBox(
+              width: 560,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (st != null)
+                      Text(
+                        '${st.os}  ·  ${st.isRoot ? 'root' : st.hasSudo ? 'sudo without password' : 'no root access'}'
+                        '${st.upgradable.isNotEmpty ? '  ·  ${st.upgradable.length} updates' : ''}'
+                        '${st.securityUpdates > 0 ? ' (${st.securityUpdates} security)' : ''}',
+                        style: const TextStyle(color: Colors.white54, fontSize: 12),
+                      ),
+                    const SizedBox(height: 10),
+                    for (final s in setup.steps)
                       Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 1),
+                        padding: const EdgeInsets.symmetric(vertical: 4),
                         child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(
-                              missingNames.contains(r.package) ? Icons.cancel : Icons.check_circle,
-                              size: 14,
-                              color: missingNames.contains(r.package) ? Colors.redAccent : Colors.greenAccent,
+                            Padding(
+                              padding: const EdgeInsets.only(top: 1),
+                              child: _stateIcon(s),
                             ),
-                            const SizedBox(width: 8),
-                            Text(r.package, style: const TextStyle(color: Colors.white, fontSize: 12)),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 10),
                             Expanded(
-                              child: Text(r.purpose,
-                                  style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    s.title,
+                                    style: TextStyle(
+                                      color: s.unavailable != null ? Colors.white38 : Colors.white,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    _stateText(s),
+                                    style: TextStyle(
+                                      color: s.state == StepStatus.failed || s.state == StepStatus.unknown
+                                          ? Colors.redAccent
+                                          : Colors.white54,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    const SizedBox(height: 12),
-                    Text(
-                      st.upgradable.isEmpty
-                          ? 'System updates: none available'
-                          : 'System updates: ${st.upgradable.length} available'
-                              '${st.securityUpdates > 0 ? ' (${st.securityUpdates} security)' : ''}',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                    ),
-                    if (st.upgradable.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          st.upgradable.take(20).join(', ') + (st.upgradable.length > 20 ? ', …' : ''),
-                          style: const TextStyle(color: Colors.white54, fontSize: 11),
-                        ),
-                      ),
-                    if (st.rebootRequired)
+                    if (st != null && st.rebootRequired)
                       const Padding(
                         padding: EdgeInsets.only(top: 6),
                         child: Text('A reboot is required to finish earlier updates.',
                             style: TextStyle(color: Colors.amberAccent, fontSize: 12)),
                       ),
-                    if (!st.canElevate) ...[
-                      const SizedBox(height: 12),
-                      const Text(
-                        'This user cannot install packages (no root, no passwordless sudo). '
-                        'Ask an administrator to run:',
-                        style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
+                    if (setup.phase == SetupPhase.finished)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          failed + unknown > 0
+                              ? 'Finished with problems: $done done, ${failed + unknown} not completed. See the log.'
+                              : done > 0
+                                  ? 'Finished: $done steps done.'
+                                  : 'Finished: nothing needed doing.',
+                          style: TextStyle(
+                            color: failed + unknown > 0 ? Colors.redAccent : Colors.greenAccent,
+                            fontSize: 12,
+                          ),
+                        ),
                       ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: SelectableText(
-                              'sudo apt-get install -y ${kRequiredPackages.map((r) => r.package).join(' ')}',
-                              style: mono,
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: 'Copy',
-                            icon: const Icon(Icons.copy, size: 14, color: Colors.white54),
-                            onPressed: () => Clipboard.setData(ClipboardData(
-                              text:
-                                  'sudo apt-get install -y ${kRequiredPackages.map((r) => r.package).join(' ')}',
-                            )),
-                          ),
-                        ],
+                    if (setup.error != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(setup.error!,
+                            style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+                      ),
+                    if (setup.log.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        height: 190,
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(8),
+                        color: const Color(0xFF0C0D14),
+                        child: SingleChildScrollView(
+                          reverse: true,
+                          child: SelectableText(setup.log.join('\n'), style: mono),
+                        ),
                       ),
                     ],
-                    const SizedBox(height: 8),
-                    CheckboxListTile(
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      controlAffinity: ListTileControlAffinity.leading,
-                      value: setup.autoUpdate,
-                      onChanged: setup.busy || !st.canElevate
-                          ? null
-                          : (v) => setup.setAutoUpdate(v ?? false),
-                      title: const Text('Install system updates automatically on connect',
-                          style: TextStyle(color: Colors.white70, fontSize: 12)),
-                      subtitle: const Text(
-                        'Runs apt-get upgrade: no prompts, services are not restarted, edited config files are kept. '
-                        'Packages Fortiq needs are always installed and updated.',
-                        style: TextStyle(color: Colors.white38, fontSize: 11),
-                      ),
-                    ),
                   ],
-                  if (setup.busy) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2)),
-                        const SizedBox(width: 8),
-                        Text(setup.busyMessage, style: const TextStyle(color: Colors.lightBlueAccent, fontSize: 12)),
-                      ],
-                    ),
-                  ],
-                  if (setup.error != null) ...[
-                    const SizedBox(height: 8),
-                    Text(setup.error!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
-                  ],
-                  if (setup.log.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Container(
-                      height: 150,
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(8),
-                      color: const Color(0xFF0C0D14),
-                      child: SingleChildScrollView(
-                        reverse: true,
-                        child: SelectableText(setup.log.join('\n'), style: mono),
-                      ),
-                    ),
-                  ],
-                ],
+                ),
               ),
             ),
+            actions: [
+              if (setup.phase == SetupPhase.running)
+                TextButton(
+                  onPressed: setup.requestStop,
+                  child: const Text('Stop after this step'),
+                )
+              else ...[
+                TextButton(
+                  onPressed: setup.busy ? null : setup.inspect,
+                  child: const Text('Check again'),
+                ),
+                if (setup.hasWork)
+                  ElevatedButton(
+                    onPressed: setup.run,
+                    child: const Text('Run setup now'),
+                  ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close'),
+                ),
+              ],
+            ],
           ),
-          actions: [
-            if (st != null && st.missing.isNotEmpty && st.canElevate)
-              ElevatedButton(
-                onPressed: setup.busy ? null : setup.installMissing,
-                child: const Text('Install missing'),
-              ),
-            if (st != null && st.upgradable.isNotEmpty && st.canElevate)
-              ElevatedButton(
-                onPressed: setup.busy ? null : setup.installUpdates,
-                child: const Text('Install updates'),
-              ),
-            TextButton(
-              onPressed: setup.busy ? null : setup.run,
-              child: const Text('Check again'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
-            ),
-          ],
         );
       },
     );

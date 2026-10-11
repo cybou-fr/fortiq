@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'mono.dart';
 import '../services/ssh_service.dart';
 
 class RemoteMailboxViewer extends StatefulWidget {
@@ -427,7 +428,7 @@ class _RemoteMailboxViewerState extends State<RemoteMailboxViewer> {
                   child: Text(
                     body.isEmpty ? '(Empty message body)' : body,
                     style: const TextStyle(
-                      fontFamily: 'Consolas',
+                      fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback,
                       fontSize: 12,
                       height: 1.5,
                       color: Color(0xFFDCDFE4),
@@ -507,7 +508,7 @@ class _RemoteMailboxViewerState extends State<RemoteMailboxViewer> {
               controller: _bodyController,
               maxLines: null,
               expands: true,
-              style: const TextStyle(color: Colors.white, fontFamily: 'Consolas', fontSize: 12),
+              style: const TextStyle(color: Colors.white, fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback, fontSize: 12),
               textAlignVertical: TextAlignVertical.top,
               decoration: InputDecoration(
                 hintText: 'Enter mail content or script alert message...',

@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'mono.dart';
 import '../services/ssh_service.dart';
 
 class RemoteMediaViewer extends StatefulWidget {
@@ -152,7 +153,7 @@ class _RemoteMediaViewerState extends State<RemoteMediaViewer> {
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: Text(
                         '${(_scale * 100).toInt()}%',
-                        style: const TextStyle(fontSize: 11, color: Colors.white70, fontFamily: 'Consolas'),
+                        style: const TextStyle(fontSize: 11, color: Colors.white70, fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback),
                       ),
                     ),
                   ),

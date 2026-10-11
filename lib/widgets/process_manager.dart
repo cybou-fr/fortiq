@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'mono.dart';
 import '../services/ssh_service.dart';
 import 'ui_errors.dart';
 
@@ -172,7 +173,7 @@ class _RemoteProcessManagerState extends State<RemoteProcessManager> {
                         children: [
                           SizedBox(
                             width: 60,
-                            child: Text('$pid', style: const TextStyle(color: Colors.white60, fontSize: 11, fontFamily: 'Consolas, monospace')),
+                            child: Text('$pid', style: const TextStyle(color: Colors.white60, fontSize: 11, fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback)),
                           ),
                           SizedBox(
                             width: 80,

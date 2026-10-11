@@ -72,6 +72,8 @@ class QubesWindowFrame extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(horizontal: 10),
                           child: Row(
                             children: [
+                              Image.asset('assets/branding/fortiq_mark.png', height: 20, filterQuality: FilterQuality.medium),
+                              const SizedBox(width: 10),
                               // Qubes Domain Pill Badge
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

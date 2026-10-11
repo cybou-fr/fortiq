@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'mono.dart';
 import '../services/ssh_service.dart';
 
 class RemoteLogViewer extends StatefulWidget {
@@ -374,7 +375,7 @@ class _RemoteLogViewerState extends State<RemoteLogViewer> {
                                     child: Text(
                                       text,
                                       style: TextStyle(
-                                        fontFamily: 'Consolas',
+                                        fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback,
                                         fontSize: 11,
                                         height: 1.4,
                                         color: level == 'ERROR'
@@ -410,7 +411,7 @@ class _RemoteLogViewerState extends State<RemoteLogViewer> {
                 const SizedBox(width: 8),
                 Text(
                   '${_selectedLogType.toUpperCase()} • Showing ${filteredLogs.length} of ${_logs.length} lines',
-                  style: const TextStyle(fontSize: 11, color: Colors.white54, fontFamily: 'Consolas'),
+                  style: const TextStyle(fontSize: 11, color: Colors.white54, fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback),
                 ),
                 const Spacer(),
                 if (_autoRefresh)

@@ -79,7 +79,11 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
 
   final List<InternalWindow> _windows = [];
   String? _activeWindowId;
-  late final ServerSetupService _setup = ServerSetupService(widget.sshService);
+  late final ServerSetupService _setup = ServerSetupService(
+    widget.sshService,
+    host: widget.sshService.currentHost ?? '',
+    port: widget.sshService.currentPort ?? 22,
+  );
   Timer? _metricsTimer;
 
   // System stats in Top Bar
@@ -101,7 +105,7 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
     });
 
     // Check what the server has, install what Fortiq needs, look for updates.
-    unawaited(_setup.run());
+    unawaited(_startServerSetup());
 
     _refreshMetrics();
     _metricsTimer = Timer.periodic(const Duration(seconds: 4), (_) => _refreshMetrics());
@@ -224,6 +228,15 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
       n++;
     }
     return 'fortiq-$n';
+  }
+
+  /// On connect: look at the server, and if there is something to do (updates,
+  /// missing packages, hardening) open the setup dialog, which does it in front
+  /// of the user with a live log.
+  Future<void> _startServerSetup() async {
+    await _setup.inspect();
+    if (!mounted || !_setup.hasWork) return;
+    await showServerSetupDialog(context, _setup, runOnOpen: true);
   }
 
   void _bringToFront(String id) {

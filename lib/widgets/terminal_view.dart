@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'mono.dart';
 import 'package:flutter/services.dart';
 import 'package:xterm/xterm.dart';
 import 'package:dartssh2/dartssh2.dart';
@@ -27,6 +29,9 @@ class RemoteTerminalView extends StatefulWidget {
 }
 
 class _RemoteTerminalViewState extends State<RemoteTerminalView> {
+  /// Touch devices type through the on-screen keyboard (IME), which only
+  /// TerminalView itself understands; on desktop keys are sent from here.
+  static final bool _isMobile = Platform.isAndroid || Platform.isIOS;
 
   // Async loads may finish after the window was closed.
   @override
@@ -129,16 +134,22 @@ class _RemoteTerminalViewState extends State<RemoteTerminalView> {
     }
   }
 
-  Future<void> _onSessionDone(SSHSession session) async {
-    if (!mounted || !identical(session, _session)) return;
-    // A closing connection ends its channels a moment before the service
-    // notices it; wait a little to tell "shell exited" from "connection lost".
-    await Future.delayed(const Duration(milliseconds: 700));
+  void _onSessionDone(SSHSession session) {
     if (!mounted || !identical(session, _session)) return;
     _session = null;
-    if (widget.sshService.isConnected) {
+
+    // A shell that ends by itself (`exit`, tmux session closed or detached)
+    // reports an exit status or signal before its channel closes. A dropped
+    // connection never does. That tells the two apart without guessing from
+    // timing, however quickly or slowly the service notices the lost link.
+    final endedByItself = session.exitCode != null || session.exitSignal != null;
+    if (endedByItself) {
       _terminal.write('\r\n[session ended]\r\n');
       setState(() => _sessionEnded = true);
+    } else if (widget.sshService.isConnected) {
+      // The channel closed without a status while the connection is alive:
+      // open the shell again.
+      _attach();
     }
     // Otherwise the connection was lost: _onConnectionChanged re-attaches once
     // the service has reconnected.
@@ -330,11 +341,11 @@ class _RemoteTerminalViewState extends State<RemoteTerminalView> {
 
     final terminal = Focus(
       focusNode: _terminalFocusNode,
-      autofocus: true,
-      onKeyEvent: _handleRawKey,
+      autofocus: !_isMobile,
+      onKeyEvent: _isMobile ? null : _handleRawKey,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => _terminalFocusNode.requestFocus(),
+        onTap: _isMobile ? null : () => _terminalFocusNode.requestFocus(),
         child: Container(
           color: const Color(0xFF0C0D14),
           child: Column(
@@ -372,11 +383,11 @@ class _RemoteTerminalViewState extends State<RemoteTerminalView> {
                   child: TerminalView(
                     _terminal,
                     controller: _terminalController,
-                    autofocus: false,
+                    autofocus: _isMobile,
                     backgroundOpacity: 0.0,
                     textStyle: const TerminalStyle(
                       fontSize: 13,
-                      fontFamily: 'Consolas, monospace',
+                      fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback,
                     ),
                     theme: TerminalTheme(
                       cursor: widget.domainColor,
@@ -431,7 +442,7 @@ class _RemoteTerminalViewState extends State<RemoteTerminalView> {
             child: Text(
               label,
               style: TextStyle(
-                fontFamily: 'Consolas',
+                fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback,
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
                 color: widget.domainColor,

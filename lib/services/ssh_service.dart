@@ -188,9 +188,9 @@ class SshClientService extends ChangeNotifier implements RemoteShell {
   }
 
   /// Opens and authenticates one SSH connection and makes it the current one.
-  Future<void> _open(
+  /// Connects the socket and builds the client for [p] (not yet authenticated).
+  Future<SSHClient> _newClient(
     _ConnectionParams p,
-    int epoch,
     Future<bool> Function(HostKeyInfo info)? onHostKey,
   ) async {
     final socket = await SSHSocket.connect(
@@ -215,14 +215,46 @@ class SshClientService extends ChangeNotifier implements RemoteShell {
     }
 
     final password = p.password;
-    final client = SSHClient(
+    return SSHClient(
       socket,
       username: p.username,
       onPasswordRequest: password != null ? () => password : null,
       identities: identities,
+      // Without limits a server that accepts the TCP connection but never
+      // answers would keep the connect (or every reconnect) hanging forever.
+      handshakeTimeout: const Duration(seconds: 15),
+      authTimeout: const Duration(seconds: 30),
       onVerifyHostKey: (type, fingerprint) =>
           _verifyHostKey(p.host, p.port, type, utf8.decode(fingerprint), onHostKey),
     );
+  }
+
+  @override
+  bool get usedKeyAuth => _params?.privateKey?.trim().isNotEmpty ?? false;
+
+  @override
+  Future<bool> canLoginAgain() async {
+    final p = _params;
+    if (p == null) return false;
+    SSHClient? probe;
+    try {
+      // A key that no longer matches fails here instead of being trusted.
+      probe = await _newClient(p, null);
+      await probe.authenticated.timeout(const Duration(seconds: 30));
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      probe?.close();
+    }
+  }
+
+  Future<void> _open(
+    _ConnectionParams p,
+    int epoch,
+    Future<bool> Function(HostKeyInfo info)? onHostKey,
+  ) async {
+    final client = await _newClient(p, onHostKey);
 
     try {
       await client.authenticated;
@@ -306,12 +338,26 @@ class SshClientService extends ChangeNotifier implements RemoteShell {
 
   /// Skips the waiting time and reconnects right now.
   void retryNow() {
-    if (!isReconnecting) return;
+    if (!isReconnecting || _attemptInFlight) return;
     _retryTimer?.cancel();
     unawaited(_tryReconnect());
   }
 
+  bool _attemptInFlight = false;
+
+  /// One reconnect attempt at a time: the timer and "Retry now" must never
+  /// produce two authenticated clients, one of which would be left unmanaged.
   Future<void> _tryReconnect() async {
+    if (_attemptInFlight) return;
+    _attemptInFlight = true;
+    try {
+      await _reconnectOnce();
+    } finally {
+      _attemptInFlight = false;
+    }
+  }
+
+  Future<void> _reconnectOnce() async {
     final params = _params;
     if (_state != SshConnectionState.reconnecting || params == null) return;
     final epoch = _epoch;

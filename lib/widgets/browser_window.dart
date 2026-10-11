@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:webview_windows/webview_windows.dart';
@@ -52,6 +53,15 @@ class _RemoteBrowserWindowState extends State<RemoteBrowserWindow> {
       ].join(' ');
 
   Future<void> _initBrowser() async {
+    // webview_windows exists only on Windows. Until an Android/iOS engine with
+    // verified proxy support is added, the browser stays off there: showing a
+    // page without the tunnel would defeat its purpose.
+    if (!Platform.isWindows) {
+      setState(() => _error =
+          'The tunnel browser is not available on this platform yet. '
+          'It needs a WebView whose traffic can be forced through the SSH tunnel.');
+      return;
+    }
     try {
       final port = await widget.sshService.startSocksTunnel();
 

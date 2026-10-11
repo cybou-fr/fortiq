@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#101019">
+  <meta name="description" content="Fortiq — ваш Linux в привычных окнах. Работайте с файлами, документами, сайтами и сервером в одном рабочем пространстве.">
+  <title>Fortiq — Linux в привычных окнах</title>
+  <link rel="icon" type="image/png" href="assets/fortiq-icon.png">
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Перейти к содержимому</a>
+  <header class="header wrap">
+    <a class="brand" href="#" aria-label="Fortiq — главная"><img src="assets/fortiq-logo.png" alt="fortiq" width="150" height="50"></a>
+    <nav aria-label="Основная навигация"><a href="#workspace">Рабочий стол</a><a href="#tools">Инструменты</a><a href="#scenarios">Для ваших задач</a></nav>
+    <a class="button button-small" href="#start">Для Windows <span aria-hidden="true">↗</span></a>
+  </header>
+  <main id="main">
+    <section class="hero wrap" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="dot"></span> Удалённый Linux. Знакомое пространство.</p>
+        <h1 id="hero-title">Ваш Linux.<br>Ваша работа.<br><em>Всё в одном месте.</em></h1>
+        <p class="lead">Открывайте файлы, редактируйте документы и управляйте сервером в привычных окнах. Fortiq объединяет ваши рабочие материалы и инструменты Linux на одном рабочем столе.</p>
+        <div class="hero-actions"><a class="button primary" href="#tools">Возможности Fortiq <span aria-hidden="true">↗</span></a><a class="text-link" href="#start">Как начать работу <span aria-hidden="true">↓</span></a></div>
+        <p class="hero-note"><span class="dot"></span> Для Windows · Debian / Ubuntu · Подключение по SSH</p>
+      </div>
+      <div class="hero-art" id="workspace">
+        <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+        <div class="desktop-preview" aria-label="Иллюстрация интерфейса Fortiq">
+          <div class="desktop-top"><span class="domain">● MY-LINUX</span><span>Fortiq Desktop</span><span class="desktop-time">SSH / WORKSPACE</span></div>
+          <div class="desktop-body">
+            <div class="window files-window">
+              <div class="window-title"><span>▱ &nbsp; Files</span><span class="window-controls">− &nbsp; □ &nbsp; ×</span></div>
+              <div class="file-toolbar"><span>← &nbsp; ↑</span><span>/home/user/projects</span></div>
+              <div class="file-layout"><div class="file-sidebar"><b>Каталоги</b><span class="selected">⌂ &nbsp; Домашняя папка</span><span>▱ &nbsp; Документы</span><span>↓ &nbsp; Загрузки</span></div><div class="file-grid"><span><i>▰</i>projects</span><span><i>▰</i>documents</span><span><i>▰</i>reports</span><span><i class="doc">▤</i>notes.md</span><span><i class="doc">▤</i>config.yml</span><span><i class="doc">▤</i>brief.md</span></div></div>
+            </div>
+            <div class="window terminal-window"><div class="window-title"><span>›_ &nbsp; Terminal</span><span class="window-controls">− &nbsp; □ &nbsp; ×</span></div><div class="terminal-content"><p><span>user@linux</span> <b>~</b> $ uptime -p</p><p class="muted">up 2 days, 4 hours</p><p><span>user@linux</span> <b>~</b> $ <i class="cursor"></i></p></div></div>
+            <div class="preview-dock" aria-hidden="true"><span>▱</span><span>⌕</span><span>◎</span><span>✉</span><span>▤</span><span class="active">›_</span><span>⚙</span></div>
+          </div>
+        </div>
+        <p class="preview-caption"><span>01 / РАБОЧЕЕ ПРОСТРАНСТВО</span> Иллюстрация интерфейса, не снимок приложения</p>
+      </div>
+    </section>
+    <div class="principles wrap"><span>12 встроенных инструментов</span><span>Привычные окна</span><span>Ваш сервер по SSH</span><span>Без отдельного агента</span></div>
+    <section class="purpose wrap" aria-labelledby="purpose-title">
+      <p class="eyebrow">01 / ОДНА СРЕДА, РАЗНЫЕ ЗАДАЧИ</p>
+      <div class="section-heading"><h2 id="purpose-title">От рабочих файлов<br><span>до состояния сервера.</span></h2><p>Файл проекта, инструкция, внутренний сайт и служба Linux — части вашей работы. Держите их рядом и выбирайте нужный инструмент, оставаясь в одном пространстве.</p></div>
+      <div class="purpose-grid"><article><span class="feature-number">01</span><h3>Рабочие материалы под рукой</h3><p>Найдите документ на сервере, внесите правки, откройте изображение или внутренний портал. Файлы, редактор, заметки и браузер доступны с одного рабочего стола.</p><a href="#tools" class="text-link">Рабочие инструменты <span aria-hidden="true">↗</span></a></article><article><span class="feature-number">02</span><h3>Система перед глазами</h3><p>Узнайте, что нагружает сервер, проверьте службу и найдите сообщение в журнале. А когда нужна команда — откройте терминал рядом с остальными окнами.</p><a href="#tools" class="text-link">Системные инструменты <span aria-hidden="true">↗</span></a></article></div>
+    </section>
+    <section class="tools-section" id="tools" aria-labelledby="tools-title"><div class="wrap">
+      <p class="eyebrow">02 / ИНСТРУМЕНТЫ FORTIQ</p><div class="section-heading"><h2 id="tools-title">Нужный инструмент.<br>Уже под рукой.</h2><p>Для документов, внутренних сервисов и управления Linux. Выберите свои задачи и посмотрите, что можно делать в Fortiq.</p></div>
+      <div class="filter-bar" role="group" aria-label="Категории инструментов"><button type="button" class="filter active" data-filter="all" aria-pressed="true">Все инструменты</button><button type="button" class="filter" data-filter="work" aria-pressed="false">Работа</button><button type="button" class="filter" data-filter="system" aria-pressed="false">Администрирование</button><span class="tools-count" aria-live="polite">12 инструментов</span></div>
+      <div class="tools-grid">
+        <article class="tool" data-category="work system"><span class="tool-symbol">▱</span><h3>Файлы</h3><p>Найдите нужный файл на сервере, откройте его или наведите порядок в каталогах.</p></article>
+        <article class="tool" data-category="work system"><span class="tool-symbol">▤</span><h3>Редактор</h3><p>Редактируйте тексты и конфигурации. Контроль несохранённых правок поможет не забыть о сохранении.</p></article>
+        <article class="tool" data-category="work system"><span class="tool-symbol">M↓</span><h3>Документы и заметки</h3><p>Ведите заметки и инструкции в Markdown, сразу видя, как будет выглядеть документ.</p></article>
+        <article class="tool" data-category="work system"><span class="tool-symbol">✉</span><h3>Системная почта</h3><p>Читайте локальные почтовые ящики Linux — сообщения сервера рядом с другими инструментами.</p></article>
+        <article class="tool" data-category="work system"><span class="tool-symbol">◎</span><h3>Браузер</h3><p>Открывайте сайты и внутренние веб-сервисы через SSH-прокси выбранного сервера.</p></article>
+        <article class="tool" data-category="work"><span class="tool-symbol">▧</span><h3>Изображения</h3><p>Рассмотрите изображение на сервере: увеличьте детали и поверните его для удобного просмотра.</p></article>
+        <article class="tool" data-category="work system"><span class="tool-symbol">⌕</span><h3>Поиск</h3><p>Найдите документ по имени или фрагменту текста, когда не помните, в какой папке он лежит.</p></article>
+        <article class="tool" data-category="system"><span class="tool-symbol">›_</span><h3>Терминал</h3><p>Работайте с командами и скриптами. При наличии tmux возвращайтесь к сессии после обрыва связи.</p></article>
+        <article class="tool" data-category="system"><span class="tool-symbol">▥</span><h3>Процессы</h3><p>Посмотрите, какие процессы используют CPU и память, и завершите выбранный процесс с подтверждением.</p></article>
+        <article class="tool" data-category="system"><span class="tool-symbol">⚙</span><h3>Службы</h3><p>Проверьте состояние службы systemd, запустите, остановите или перезапустите её.</p></article>
+        <article class="tool" data-category="system"><span class="tool-symbol">≋</span><h3>Сеть и firewall</h3><p>Посмотрите интерфейсы и открытые TCP-порты, проверьте и измените правила UFW.</p></article>
+        <article class="tool" data-category="system"><span class="tool-symbol">≡</span><h3>Системные логи</h3><p>Ищите диагностические сообщения в журналах Linux с помощью текстовых фильтров.</p></article>
+      </div>
+      <p class="section-note">Системная почта — локальные ящики Linux, не личный IMAP/SMTP-аккаунт. Доступ к системным действиям зависит от прав пользователя на сервере.</p>
+    </div></section>
+    <section class="connection wrap" aria-labelledby="connection-title"><div><p class="eyebrow">03 / КАК ЭТО РАБОТАЕТ</p><h2 id="connection-title">Ваш сервер.<br><span>Знакомый SSH-доступ.</span></h2><p>Fortiq работает на вашем компьютере и подключается к Linux по SSH. Используйте свой сервер и свою учётную запись: отдельный серверный агент не требуется. При первом подключении вы подтверждаете ключ сервера.</p><a class="text-link" href="#start">Как начать работу <span aria-hidden="true">↗</span></a></div><div class="connection-visual"><div class="endpoint"><img src="assets/fortiq-icon.png" alt="" width="64" height="64"><b>Ваш компьютер</b><span>Окна и встроенные инструменты</span></div><div class="connection-line"><span>SSH</span><i></i></div><div class="endpoint server-endpoint"><span class="server-icon" aria-hidden="true">▤</span><b>Ваш Linux</b><span>Ваши файлы, сайты и службы</span></div></div></section>
+    <section class="scenarios wrap" id="scenarios" aria-labelledby="scenarios-title">
+      <p class="eyebrow">04 / ДЛЯ ВАШИХ ЗАДАЧ</p>
+      <div class="section-heading"><h2 id="scenarios-title">Откройте сервер.<br><span>Сделайте свою работу.</span></h2><p>Начните с задачи, ради которой вы открыли сервер. Нужные инструменты находятся на одном рабочем столе.</p></div>
+      <div class="scenario-grid">
+        <article><span class="feature-number">01 / ДОКУМЕНТЫ</span><h3>Внести правки<br>и продолжить работу</h3><p>Найдите файл, откройте его в редакторе и сохраните изменения. Для заметок и инструкций используйте Markdown с предпросмотром.</p><span class="scenario-tools">Файлы · Поиск · Редактор · Заметки</span></article>
+        <article><span class="feature-number">02 / СЕРВИСЫ</span><h3>Разобраться,<br>почему служба не работает</h3><p>Посмотрите статус службы, найдите сообщения в журнале и проверьте конфигурацию. Выполните нужную команду в терминале или перезапустите службу.</p><span class="scenario-tools">Службы · Логи · Редактор · Терминал</span></article>
+        <article><span class="feature-number">03 / ВНУТРЕННИЕ РЕСУРСЫ</span><h3>Держать портал<br>и рабочие файлы рядом</h3><p>Откройте внутренний веб-сервис через SSH-прокси. Оставьте рядом документы, заметки и системные инструменты, нужные для вашей задачи.</p><span class="scenario-tools">Браузер · Файлы · Заметки</span></article>
+      </div>
+    </section>
+    <section class="start wrap" id="start" aria-labelledby="start-title">
+      <div><p class="eyebrow">05 / FORTIQ ДЛЯ WINDOWS</p><h2 id="start-title">Ваш Linux.<br>На вашем компьютере.</h2><p>Один клиент для рабочих файлов, документов и управления сервером. Установите Fortiq, подключите ваш Linux и выберите инструмент для своей задачи.</p><p class="availability">Ваш компьютер: Windows 10/11 x64.<br>Ваш сервер: Debian или Ubuntu с SSH-доступом.</p></div>
+      <div class="start-steps"><ol><li><span>01</span><div><b>Установите приложение</b><p>Fortiq устанавливается на ваш Windows-компьютер.</p></div></li><li><span>02</span><div><b>Подключите ваш Linux</b><p>Укажите сервер и учётную запись, подтвердите ключ сервера.</p></div></li><li><span>03</span><div><b>Начните работу</b><p>Открывайте файлы, документы и системные инструменты в одном пространстве.</p></div></li></ol></div>
+    </section>
+  </main>
+  <footer class="footer wrap"><a class="brand" href="#" aria-label="Fortiq — наверх"><img src="assets/fortiq-logo.png" alt="fortiq" width="150" height="50"></a><p>Linux в привычных окнах.<br><span>Работа. Данные. Управление.</span></p><div><a href="#tools">Возможности</a><a href="#scenarios">Для ваших задач</a><a href="#start">Fortiq для Windows</a></div></footer>
+</body>
+</html>

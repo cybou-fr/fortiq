@@ -6,6 +6,14 @@ abstract interface class RemoteShell {
   bool get isConnected;
   SSHClient? get rawClient;
 
+  /// The session was opened with a private key (not a password).
+  bool get usedKeyAuth;
+
+  /// Opens a second, independent connection with the same credentials and
+  /// closes it again. Used to prove that a change to SSH or the firewall has
+  /// not locked us out, while the first session is still there to undo it.
+  Future<bool> canLoginAgain();
+
   /// Runs [command]; throws [SshCommandException] on a non-zero exit code.
   Future<String> execute(String command);
 

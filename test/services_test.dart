@@ -1,36 +1,9 @@
-import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fortiq/services/file_service.dart';
 import 'package:fortiq/services/network_service.dart';
 import 'package:fortiq/services/shell.dart';
+import 'fake_shell.dart';
 import 'package:fortiq/services/system_service.dart';
-
-/// A server that answers commands from a function and records what was run.
-class FakeShell implements RemoteShell {
-  final String Function(String command) answer;
-  final List<String> commands = [];
-
-  FakeShell(this.answer);
-
-  @override
-  bool isConnected = true;
-
-  @override
-  SSHClient? get rawClient => null;
-
-  @override
-  Future<String> execute(String command) async {
-    commands.add(command);
-    return answer(command);
-  }
-
-  @override
-  Future<int> runStreaming(String command, void Function(String line) onLine) async {
-    commands.add(command);
-    answer(command).split('\n').forEach(onLine);
-    return 0;
-  }
-}
 
 void main() {
   group('FileService', () {

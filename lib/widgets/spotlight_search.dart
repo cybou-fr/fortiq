@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'mono.dart';
 import '../services/ssh_service.dart';
 
 class RemoteSpotlightSearch extends StatefulWidget {
@@ -130,7 +131,7 @@ class _RemoteSpotlightSearchState extends State<RemoteSpotlightSearch> {
                   ..._quickRoots.map((r) => Padding(
                         padding: const EdgeInsets.only(right: 4.0),
                         child: ChoiceChip(
-                          label: Text(r, style: const TextStyle(fontSize: 10, fontFamily: 'Consolas, monospace')),
+                          label: Text(r, style: const TextStyle(fontSize: 10, fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback)),
                           selected: _searchRoot == r,
                           selectedColor: widget.domainColor.withValues(alpha: 0.25),
                           visualDensity: VisualDensity.compact,
@@ -242,7 +243,7 @@ class _RemoteSpotlightSearchState extends State<RemoteSpotlightSearch> {
                                       const Spacer(),
                                       Text(
                                         parentDir,
-                                        style: const TextStyle(color: Colors.white24, fontSize: 11, fontFamily: 'Consolas, monospace'),
+                                        style: const TextStyle(color: Colors.white24, fontSize: 11, fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback),
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ],
@@ -254,7 +255,7 @@ class _RemoteSpotlightSearchState extends State<RemoteSpotlightSearch> {
                                       style: const TextStyle(
                                         color: Color(0xFF94A3B8),
                                         fontSize: 11,
-                                        fontFamily: 'Consolas, monospace',
+                                        fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback,
                                       ),
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,

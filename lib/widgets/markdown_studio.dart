@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'mono.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import '../services/ssh_service.dart';
@@ -190,7 +191,7 @@ uptime -p
                           Expanded(
                             child: TextField(
                               controller: _pathController,
-                              style: const TextStyle(color: Colors.white, fontSize: 12, fontFamily: 'Consolas, monospace'),
+                              style: const TextStyle(color: Colors.white, fontSize: 12, fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback),
                               decoration: const InputDecoration(
                                 border: InputBorder.none,
                                 isDense: true,
@@ -260,7 +261,7 @@ uptime -p
                               expands: true,
                               style: const TextStyle(
                                 color: Color(0xFFE2E8F0),
-                                fontFamily: 'Consolas, monospace',
+                                fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback,
                                 fontSize: 13,
                                 height: 1.5,
                               ),
@@ -295,7 +296,7 @@ uptime -p
                                   code: TextStyle(
                                     backgroundColor: const Color(0xFF1E202E),
                                     color: widget.domainColor,
-                                    fontFamily: 'Consolas, monospace',
+                                    fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback,
                                     fontSize: 12,
                                   ),
                                   codeblockDecoration: BoxDecoration(

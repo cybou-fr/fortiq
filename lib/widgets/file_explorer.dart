@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'mono.dart';
 import '../models/linux_models.dart';
 import '../services/ssh_service.dart';
 import 'ui_errors.dart';
@@ -126,7 +127,7 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
                             snapshot.data ?? '',
                             style: const TextStyle(
                               color: Color(0xFFCBD5E1),
-                              fontFamily: 'Consolas, monospace',
+                              fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback,
                               fontSize: 12,
                             ),
                           ),
@@ -342,7 +343,7 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
                                     file.permissions,
                                     style: const TextStyle(
                                       color: Colors.white38,
-                                      fontFamily: 'Consolas, monospace',
+                                      fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback,
                                       fontSize: 11,
                                     ),
                                   ),

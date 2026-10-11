@@ -9,6 +9,9 @@ class ServerProfile {
   String username;
   bool useKeyAuth;
   String? keyPath;
+
+  /// A key imported into the app (see PrivateKeyStore) is used instead of keyPath.
+  bool hasStoredKey;
   Color domainColor;
 
   ServerProfile({
@@ -19,6 +22,7 @@ class ServerProfile {
     required this.username,
     this.useKeyAuth = true,
     this.keyPath,
+    this.hasStoredKey = false,
     this.domainColor = const Color(0xFFEF4444),
   });
 
@@ -30,6 +34,7 @@ class ServerProfile {
         'username': username,
         'useKeyAuth': useKeyAuth,
         'keyPath': keyPath,
+        'hasStoredKey': hasStoredKey,
         'domainColor': domainColor.value,
       };
 
@@ -41,6 +46,7 @@ class ServerProfile {
         username: json['username'] as String,
         useKeyAuth: (json['useKeyAuth'] as bool?) ?? true,
         keyPath: json['keyPath'] as String?,
+        hasStoredKey: (json['hasStoredKey'] as bool?) ?? false,
         domainColor: Color((json['domainColor'] as int?) ?? 0xFF8B5CF6),
       );
 }

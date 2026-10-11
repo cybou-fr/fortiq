@@ -1,11 +1,14 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:file_selector/file_selector.dart';
+import 'services/private_key_store.dart';
 import 'services/ssh_service.dart';
 import 'services/profile_service.dart';
 import 'models/server_profile.dart';
 import 'widgets/qubes_window_frame.dart';
 import 'widgets/desktop_workspace.dart';
+import 'widgets/mono.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -69,6 +72,7 @@ class _FortiqHomeScreenState extends State<FortiqHomeScreen> {
   final _passwordController = TextEditingController();
   final _labelController = TextEditingController(text: 'MY-SERVER');
   final _keyPathController = TextEditingController();
+  String? _importedKey; // key imported into the app, used instead of the path
   bool _useKeyAuth = true;
 
   // Selected Qubes Domain Color
@@ -163,6 +167,12 @@ class _FortiqHomeScreenState extends State<FortiqHomeScreen> {
 
   void _selectProfile(ServerProfile p, {String? fallbackKey}) {
     setState(() {
+      _importedKey = null;
+      if (p.hasStoredKey) {
+        PrivateKeyStore.load(p.id).then((key) {
+          if (mounted && _selectedProfile?.id == p.id) setState(() => _importedKey = key);
+        });
+      }
       _selectedProfile = p;
       _labelController.text = p.name;
       _hostController.text = p.host;
@@ -178,9 +188,68 @@ class _FortiqHomeScreenState extends State<FortiqHomeScreen> {
     });
   }
 
+  /// Imported key: choose a file (works with the Android file picker too).
+  Future<void> _importKeyFromFile() async {
+    try {
+      final file = await openFile();
+      if (file == null) return;
+      final content = await file.readAsString();
+      _acceptImportedKey(content);
+    } catch (e) {
+      setState(() => _connectError = 'Cannot read the key file: $e');
+    }
+  }
+
+  Future<void> _pasteKey() async {
+    final controller = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1F29),
+        title: const Text('Paste private key', style: TextStyle(color: Colors.white, fontSize: 16)),
+        content: SizedBox(
+          width: 460,
+          child: TextField(
+            controller: controller,
+            maxLines: 10,
+            style: const TextStyle(color: Colors.white, fontSize: 12, fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback),
+            decoration: const InputDecoration(
+              hintText: '-----BEGIN OPENSSH PRIVATE KEY-----',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('Use key')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (text != null && text.trim().isNotEmpty) _acceptImportedKey(text);
+  }
+
+  void _acceptImportedKey(String content) {
+    if (!content.contains('PRIVATE KEY')) {
+      setState(() => _connectError = 'That does not look like a private key file');
+      return;
+    }
+    setState(() {
+      _importedKey = content.endsWith('\n') ? content : '$content\n';
+      _connectError = null;
+    });
+  }
+
   Future<void> _saveCurrentProfile() async {
+    final profileId = _selectedProfile?.id ?? DateTime.now().millisecondsSinceEpoch.toString();
+    if (_importedKey != null) {
+      await PrivateKeyStore.save(profileId, _importedKey!);
+    } else if (_selectedProfile?.hasStoredKey ?? false) {
+      await PrivateKeyStore.delete(profileId);
+    }
     final current = ServerProfile(
-      id: _selectedProfile?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      id: profileId,
+      hasStoredKey: _importedKey != null,
       name: _labelController.text.trim().isEmpty ? 'MY-SERVER' : _labelController.text.trim(),
       host: _hostController.text.trim(),
       port: int.tryParse(_portController.text.trim()) ?? 22,
@@ -264,7 +333,9 @@ class _FortiqHomeScreenState extends State<FortiqHomeScreen> {
 
     try {
       String? privateKeyContent;
-      if (_useKeyAuth && _keyPathController.text.trim().isNotEmpty) {
+      if (_useKeyAuth && _importedKey != null) {
+        privateKeyContent = _importedKey;
+      } else if (_useKeyAuth && _keyPathController.text.trim().isNotEmpty) {
         final keyFile = File(_keyPathController.text.trim());
         if (keyFile.existsSync()) {
           privateKeyContent = await keyFile.readAsString();
@@ -296,8 +367,8 @@ class _FortiqHomeScreenState extends State<FortiqHomeScreen> {
   Widget build(BuildContext context) {
     return QubesWindowFrame(
       title: _sshService.isSessionActive
-          ? 'Linux Desktop — ${_hostController.text}'
-          : 'Fortiq Desktop — Connect to Linux',
+          ? 'Fortiq — ${_hostController.text}'
+          : 'Fortiq — Connect to a server',
       hostLabel: _labelController.text.isEmpty ? 'LINUX' : _labelController.text,
       domainColor: _domainColor,
       actions: _sshService.isSessionActive
@@ -344,17 +415,17 @@ class _FortiqHomeScreenState extends State<FortiqHomeScreen> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.terminal, color: _domainColor, size: 28),
+                  Image.asset('assets/branding/fortiq_mark.png', height: 34, filterQuality: FilterQuality.medium),
                   const SizedBox(width: 10),
                   const Text(
-                    'Fortiq — Headless Linux Desktop',
+                    'Fortiq',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
                   ),
                 ],
               ),
               const SizedBox(height: 6),
               const Text(
-                'Connect to remote Debian/Ubuntu or local WSL via SSH. All GUI apps run locally on Windows using native Linux CLI under the hood.',
+                'Your Debian or Ubuntu server as a desktop: terminal, files, editor, logs and more, in native windows over one SSH connection.',
                 style: TextStyle(fontSize: 12, color: Colors.white60),
               ),
               const SizedBox(height: 20),
@@ -410,7 +481,7 @@ class _FortiqHomeScreenState extends State<FortiqHomeScreen> {
               const SizedBox(height: 16),
 
               // Domain Label and Color picker (Qubes OS Style)
-              const Text('Qubes Domain Tag & Window Accent Color:', style: TextStyle(color: Colors.white70, fontSize: 12)),
+              const Text('Server name and window color (just your own label):', style: TextStyle(color: Colors.white70, fontSize: 12)),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -521,20 +592,69 @@ class _FortiqHomeScreenState extends State<FortiqHomeScreen> {
               ),
               const SizedBox(height: 12),
 
-              if (_useKeyAuth)
-                TextField(
-                  controller: _keyPathController,
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  decoration: InputDecoration(
-                    labelText: 'Private Key Path',
-                    labelStyle: const TextStyle(color: Colors.white60),
-                    hintText: 'C:\\Users\\...\\.ssh\\id_ed25519',
-                    prefixIcon: const Icon(Icons.key, size: 16, color: Colors.white60),
-                    filled: true,
-                    fillColor: const Color(0xFF12131A),
-                    isDense: true,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+              if (_useKeyAuth && _importedKey != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF12131A),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: _domainColor.withValues(alpha: 0.5)),
                   ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.key, size: 16, color: _domainColor),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Private key imported. It is kept in this app\'s private storage '
+                          'once you save the profile.',
+                          style: TextStyle(color: Colors.white70, fontSize: 12),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => setState(() => _importedKey = null),
+                        child: const Text('Remove'),
+                      ),
+                    ],
+                  ),
+                )
+              else if (_useKeyAuth)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: _keyPathController,
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      decoration: InputDecoration(
+                        labelText: 'Private Key Path',
+                        labelStyle: const TextStyle(color: Colors.white60),
+                        hintText: Platform.isWindows
+                            ? r'C:\Users\...\.ssh\id_ed25519'
+                            : '~/.ssh/id_ed25519',
+                        prefixIcon: const Icon(Icons.key, size: 16, color: Colors.white60),
+                        filled: true,
+                        fillColor: const Color(0xFF12131A),
+                        isDense: true,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _importKeyFromFile,
+                          icon: const Icon(Icons.file_open, size: 16),
+                          label: const Text('Import key file…'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: _pasteKey,
+                          icon: const Icon(Icons.paste, size: 16),
+                          label: const Text('Paste key…'),
+                        ),
+                      ],
+                    ),
+                  ],
                 )
               else
                 TextField(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'mono.dart';
 import '../services/ssh_service.dart';
 import 'ui_errors.dart';
 
@@ -229,13 +230,13 @@ class _RemoteNetworkInspectorState extends State<RemoteNetworkInspector> {
                             width: 170,
                             child: Text(
                               addr,
-                              style: const TextStyle(color: Colors.white, fontSize: 12, fontFamily: 'Consolas, monospace'),
+                              style: const TextStyle(color: Colors.white, fontSize: 12, fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback),
                             ),
                           ),
                           Expanded(
                             child: Text(
                               proc,
-                              style: const TextStyle(color: Colors.white60, fontSize: 11, fontFamily: 'Consolas, monospace'),
+                              style: const TextStyle(color: Colors.white60, fontSize: 11, fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -497,7 +498,7 @@ class _RemoteNetworkInspectorState extends State<RemoteNetworkInspector> {
                           Expanded(
                             child: SelectableText(
                               ip,
-                              style: const TextStyle(color: Colors.white70, fontSize: 12, fontFamily: 'Consolas, monospace'),
+                              style: const TextStyle(color: Colors.white70, fontSize: 12, fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback),
                             ),
                           ),
                         ],
