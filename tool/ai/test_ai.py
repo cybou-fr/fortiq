@@ -72,6 +72,17 @@ class CliTest(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertEqual(value["reason"], "model_missing")
 
+    def test_invalid_gguf_header_never_enables_cpu_inference(self):
+        self.model.write_bytes(b"NOT-A-GGUF")
+        r, status = self.run_ai("status", "--json")
+        self.assertEqual(r.returncode, 0)
+        self.assertFalse(status["available"])
+        self.assertEqual(status["reason"], "invalid_model_header")
+        r, answer = self.run_ai("ask", "--stdin", "--json", message="diagnose")
+        self.assertEqual(r.returncode, 2)
+        self.assertEqual(answer["reason"], "invalid_model_header")
+        self.assertEqual(self.count(), 0)
+
     def test_status_does_not_load_model_or_create_cache(self):
         r, value = self.run_ai("status", "--json")
         self.assertEqual(r.returncode, 0)
