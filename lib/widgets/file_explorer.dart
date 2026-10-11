@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
+import 'package:file_selector/file_selector.dart';
 
 import 'mono.dart';
 import '../models/linux_models.dart';
 import '../services/ssh_service.dart';
+import '../services/desktop_task_controller.dart';
+import '../services/sftp_transfer_service.dart';
 import 'ui_errors.dart';
 
 class RemoteFileExplorer extends StatefulWidget {
@@ -12,6 +15,7 @@ class RemoteFileExplorer extends StatefulWidget {
   final Color domainColor;
   final void Function(String filePath)? onOpenFile;
   final ValueChanged<String>? onPathChanged;
+  final DesktopTaskController? taskController;
 
   const RemoteFileExplorer({
     super.key,
@@ -20,6 +24,7 @@ class RemoteFileExplorer extends StatefulWidget {
     required this.domainColor,
     this.onOpenFile,
     this.onPathChanged,
+    this.taskController,
   });
 
   @override
@@ -36,6 +41,8 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
   late String _currentPath;
   List<LinuxFileInfo> _files = [];
   bool _isLoading = false;
+  late final DesktopTaskController _tasks =
+      widget.taskController ?? DesktopTaskController();
   String? _error;
   final TextEditingController _pathController = TextEditingController();
   final List<String> _history = [];
@@ -57,6 +64,7 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
   void dispose() {
     _loadSerial++;
     _pathController.dispose();
+    if (widget.taskController == null) _tasks.dispose();
     super.dispose();
   }
 
@@ -379,17 +387,52 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
       showActionError(context, 'Copy', 'SSH session or directory changed.');
       return;
     }
-    setState(() => _isLoading = true);
-    try {
-      await widget.sshService.files.copy(source, target);
-      if (mounted && widget.sshService.rawClient == client &&
-          _currentPath == directory) {
-        await _loadDirectory(directory);
-      }
-    } catch (error) {
-      if (mounted) showActionError(context, 'Copy', error);
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+    // Operation can continue while the user browses other directories.
+    // It is not cancelled when its window is closed: SSH may still complete.
+    final task = await _tasks.run(
+      'Copy ${item.name}',
+      () => widget.sshService.files.copy(source, target),
+      isSessionCurrent: () =>
+          widget.sshService.isConnected &&
+          widget.sshService.rawClient == client,
+    );
+    if (!mounted) return;
+    if (task.state == DesktopTaskState.completed &&
+        _currentPath == directory) {
+      await _loadDirectory(directory);
+    } else if (task.state == DesktopTaskState.failed) {
+      showActionError(context, 'Copy', task.message ?? 'Copy failed');
+    }
+  }
+
+  Future<void> _downloadItem(LinuxFileInfo item) async {
+    if (item.isDirectory || _isLoading || !widget.sshService.isConnected) return;
+    final source = _currentPath == '/'
+        ? '/${item.name}' : '$_currentPath/${item.name}';
+    final client = widget.sshService.rawClient;
+    if (client == null) return;
+    final destination = await getSaveLocation(suggestedName: item.name);
+    if (destination == null || !mounted) return;
+    if (!widget.sshService.isConnected ||
+        widget.sshService.rawClient != client) {
+      showActionError(context, 'Download', 'SSH session changed.');
+      return;
+    }
+    final task = await _tasks.runTransfer(
+      'Download ${item.name}',
+      (progress) => const SftpTransferService().download(
+        client: client,
+        remotePath: source,
+        localPath: destination.path,
+        onProgress: progress,
+        sessionCurrent: () => widget.sshService.isConnected &&
+            widget.sshService.rawClient == client,
+      ),
+      isSessionCurrent: () => widget.sshService.isConnected &&
+          widget.sshService.rawClient == client,
+    );
+    if (mounted && task.state == DesktopTaskState.failed) {
+      showActionError(context, 'Download', task.message ?? 'Transfer failed');
     }
   }
 
@@ -730,6 +773,13 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
                                     ),
                                   ),
                                 ],
+                                if (!file.isDirectory)
+                                  IconButton(
+                                    icon: const Icon(Icons.download_outlined,
+                                        size: 16, color: Colors.white60),
+                                    tooltip: 'Download via SFTP',
+                                    onPressed: _isLoading ? null : () => _downloadItem(file),
+                                  ),
                                 IconButton(
                                   icon: const Icon(Icons.copy_outlined,
                                       size: 16, color: Colors.white60),
@@ -757,6 +807,51 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
                         );
                       },
                     ),
+            ),
+
+            AnimatedBuilder(
+              animation: _tasks,
+              builder: (context, _) {
+                if (_tasks.tasks.isEmpty) return const SizedBox.shrink();
+                return ExpansionTile(
+                  initiallyExpanded: true,
+                  title: Text('File tasks · ${_tasks.runningCount} running',
+                      style: const TextStyle(fontSize: 12)),
+                  trailing: _tasks.runningCount > 0
+                      ? const SizedBox(width: 15, height: 15,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : IconButton(
+                          tooltip: 'Clear finished tasks',
+                          icon: const Icon(Icons.clear_all, size: 18),
+                          onPressed: _tasks.clearFinished,
+                        ),
+                  children: [
+                    for (final task in _tasks.tasks.take(5))
+                      ListTile(
+                        dense: true,
+                        title: Text(task.label,
+                            style: const TextStyle(fontSize: 12)),
+                        subtitle: Text(task.message ??
+                            (task.totalBytes == null
+                                ? '${task.state.name} · ${task.bytesTransferred} bytes'
+                                : '${task.state.name} · ${task.bytesTransferred}/${task.totalBytes} bytes'),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 11)),
+                        leading: Icon(
+                          task.state == DesktopTaskState.completed
+                              ? Icons.check_circle_outline
+                              : task.state == DesktopTaskState.failed
+                                  ? Icons.error_outline
+                                  : task.state == DesktopTaskState.unknown
+                                      ? Icons.help_outline
+                                      : Icons.hourglass_top,
+                          size: 17,
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
 
             // Status bar
