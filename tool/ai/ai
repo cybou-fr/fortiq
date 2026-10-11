@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import selectors
+import resource
 from pathlib import Path
 import shutil
 import signal
@@ -430,6 +431,44 @@ def query(kind: str, args: argparse.Namespace) -> int:
         return emit(answer)
 
 
+def benchmark() -> int:
+    """Explicit on-demand cold-start measurement; never auto-run at login."""
+    state = system_state()
+    if not state["available"]:
+        raise AiError(state["reason"], "Cannot benchmark: " + state["reason"])
+    settings = {
+        "threads": env_int("AI_THREADS", 2, 1, 16),
+        "ctx": env_int("AI_CTX", 1024, 256, 8192),
+        "predict": 64,
+        "timeout": env_int("AI_TIMEOUT", 90, 1, 900),
+    }
+    # No cache. One short fixed prompt; no user logs or secrets involved.
+    # Wall-clock includes cold GGUF load; max RSS is the subprocess peak on
+    # Linux (ru_maxrss is KiB), not a prediction of other workloads.
+    with inference_lock(cache_root(True)):
+        started = time.monotonic()
+        response = infer(
+            runtime_path(), model_path(),
+            "Explain in two sentences why a Linux service can fail to start.",
+            "ask", settings,
+        )
+        elapsed = time.monotonic() - started
+        usage = resource.getrusage(resource.RUSAGE_CHILDREN)
+    return emit({
+        "schema": "fortiq-ai-benchmark/v1",
+        "status": "ok",
+        "runtime": "llama.cpp",
+        "cpu_only": True,
+        "duration_ms": int(elapsed * 1000),
+        "peak_rss_kb": usage.ru_maxrss,
+        "response_bytes": len(response.encode("utf-8")),
+        "threads": settings["threads"],
+        "ctx_size": settings["ctx"],
+        "predict_limit": settings["predict"],
+        "note": "Cold-start wall time; not measured tokens/s or a universal VPS rating.",
+    })
+
+
 def cache_command(args: argparse.Namespace) -> int:
     root = cache_root(False)
     if args.cache_action == "status":
@@ -454,6 +493,8 @@ def main() -> int:
     setup = sub.add_parser("setup")
     setup.add_argument("--check", action="store_true")
     setup.add_argument("--json", action="store_true")
+    bm = sub.add_parser("benchmark")
+    bm.add_argument("--json", action="store_true")
     cache = sub.add_parser("cache")
     cache.add_argument("cache_action", choices=("status", "clear"))
     cache.add_argument("--json", action="store_true")
@@ -470,6 +511,8 @@ def main() -> int:
             return emit(system_state())
         if args.command == "setup":
             raise AiError("not_implemented", "Automatic installer is not available. Configure a verified llama.cpp and GGUF manually.")
+        if args.command == "benchmark":
+            return benchmark()
         if args.command == "cache":
             return cache_command(args)
         return query(args.command, args)
