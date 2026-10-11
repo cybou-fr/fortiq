@@ -874,13 +874,24 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
                         dense: true,
                         title: Text(task.label,
                             style: const TextStyle(fontSize: 12)),
-                        subtitle: Text(task.message ??
-                            (task.totalBytes == null
-                                ? '${task.state.name} · ${task.bytesTransferred} bytes'
-                                : '${task.state.name} · ${task.bytesTransferred}/${task.totalBytes} bytes'),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 11)),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(task.message ?? task.state.name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 11)),
+                            if (task.totalBytes != null) ...[
+                              const SizedBox(height: 4),
+                              LinearProgressIndicator(
+                                  value: task.progress, minHeight: 3),
+                              Text('${task.bytesTransferred} / ${task.totalBytes} bytes',
+                                  style: const TextStyle(fontSize: 10)),
+                            ] else if (task.bytesTransferred > 0)
+                              Text('${task.bytesTransferred} bytes',
+                                  style: const TextStyle(fontSize: 10)),
+                          ],
+                        ),
                         leading: Icon(
                           task.state == DesktopTaskState.completed
                               ? Icons.check_circle_outline
