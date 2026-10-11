@@ -31,6 +31,7 @@ class _RemoteMailWindowState extends State<RemoteMailWindow> {
   Object? _client;
   int _generation = 0;
   bool _busy = false;
+  bool _sending = false;
   String? _error;
   String? _version;
   List<MailAccount> _accounts = [];
@@ -69,7 +70,13 @@ class _RemoteMailWindowState extends State<RemoteMailWindow> {
     if (_client != widget.sshService.rawClient || !_online) {
       _client = widget.sshService.rawClient;
       _generation++;
-      setState(() => _busy = false);
+      setState(() {
+        _busy = false;
+        if (_sending) {
+          _error = 'Sending was not confirmed. Check the Sent folder before retrying; your draft was kept.';
+          _sending = false;
+        }
+      });
     } else {
       setState(() {});
     }
@@ -103,7 +110,13 @@ class _RemoteMailWindowState extends State<RemoteMailWindow> {
 
   Future<void> _initialize() => _perform(
     () async {
+      final client = widget.sshService.rawClient;
       final version = await _mail.inspect();
+      if (!_online || widget.sshService.rawClient != client) {
+        throw StateError(
+          'The SSH session changed while loading accounts. Refresh Mail.',
+        );
+      }
       final accounts = await _mail.accounts();
       return (version, accounts);
     },
@@ -205,21 +218,29 @@ class _RemoteMailWindowState extends State<RemoteMailWindow> {
       setState(() => _error = 'Enter a recipient.');
       return;
     }
-    await _perform(() => _mail.send(_draftAccount!, draft), (_) {
-      _draft = null;
-      _draftAccount = null;
-      _to.clear();
-      _subject.clear();
-      _content.clear();
-      widget.onDirtyChanged?.call(false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Message sent. A copy was saved by the server mail client.',
+    final generation = _generation + 1;
+    await _perform(
+      () {
+        _sending = true;
+        return _mail.send(_draftAccount!, draft);
+      },
+      (_) {
+        _draft = null;
+        _draftAccount = null;
+        _to.clear();
+        _subject.clear();
+        _content.clear();
+        widget.onDirtyChanged?.call(false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Message sent. A copy was saved by the server mail client.',
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
+    if (mounted && _generation == generation) _sending = false;
   }
 
   Future<void> _discard() async {
@@ -361,6 +382,11 @@ class _RemoteMailWindowState extends State<RemoteMailWindow> {
                     setState(() {
                       _account = value;
                       _folder = null;
+                      _folders = [];
+                      _messages = [];
+                      _selected = null;
+                      _body = '';
+                      _page = 1;
                     });
                     _loadFolders();
                   }
@@ -402,7 +428,7 @@ class _RemoteMailWindowState extends State<RemoteMailWindow> {
       );
 
   Widget _mailbox() {
-    if (_accounts.isEmpty)
+    if (_accounts.isEmpty) {
       return Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -433,6 +459,7 @@ class _RemoteMailWindowState extends State<RemoteMailWindow> {
           ),
         ),
       );
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 650;
@@ -550,13 +577,14 @@ class _RemoteMailWindowState extends State<RemoteMailWindow> {
 
   Widget _reader({bool compact = false}) {
     final message = _selected;
-    if (message == null)
+    if (message == null) {
       return const Center(
         child: Text(
           'Select a message',
           style: TextStyle(color: Colors.white54),
         ),
       );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

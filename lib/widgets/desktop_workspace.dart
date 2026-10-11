@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../services/ssh_service.dart';
 import '../services/server_setup_service.dart';
@@ -87,6 +88,9 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
     port: widget.sshService.currentPort ?? 22,
   );
   Timer? _metricsTimer;
+  Size _windowAreaSize = Size.zero;
+  int _nextWindowId = 0;
+  final Set<String> _closingWindows = {};
 
   // System stats in Top Bar
   Map<String, dynamic> _metrics = {
@@ -130,20 +134,19 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
     } catch (_) {}
   }
 
-  void _openWindow(FortiqAppType type, {String? filePath}) {
-    if (type != FortiqAppType.editor) {
-      final existing = _windows.where((w) => w.appType == type).firstOrNull;
+  void _openWindow(FortiqAppType type, {String? filePath, bool newInstance = false}) {
+    if (!newInstance) {
+      final fileWindow = type == FortiqAppType.editor ||
+          type == FortiqAppType.docsStudio || type == FortiqAppType.mediaViewer;
+      final existing = _windows.where((w) => w.appType == type &&
+          (!fileWindow || w.filePath == filePath)).lastOrNull;
       if (existing != null) {
-        setState(() {
-          existing.isMinimized = false;
-          _activeWindowId = existing.id;
-          _bringToFront(existing.id);
-        });
+        _activateWindow(existing);
         return;
       }
     }
 
-    final id = DateTime.now().millisecondsSinceEpoch.toString();
+    final id = 'window-${_nextWindowId++}';
     final count = _windows.length;
     final offset = Offset(40.0 + (count * 30), 40.0 + (count * 30));
 
@@ -205,7 +208,7 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
         break;
     }
 
-    final screenWidth = MediaQuery.of(context).size.width;
+    final screenWidth = _windowAreaSize.width;
     final isCompact = screenWidth < 768;
 
     final win = InternalWindow(
@@ -256,9 +259,76 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
     });
   }
 
+  void _activateWindow(InternalWindow win) {
+    win.isMinimized = false;
+    _bringToFront(win.id);
+  }
+
+  void _minimizeWindow(InternalWindow win) {
+    setState(() {
+      win.isMinimized = true;
+      if (_activeWindowId == win.id) {
+        _activeWindowId = _windows.where((w) => !w.isMinimized).lastOrNull?.id;
+      }
+    });
+  }
+
+  Rect _windowRect(InternalWindow win) {
+    final width = win.size.width.clamp(math.min(360.0, _windowAreaSize.width), _windowAreaSize.width).toDouble();
+    final height = win.size.height.clamp(math.min(240.0, _windowAreaSize.height), _windowAreaSize.height).toDouble();
+    return Rect.fromLTWH(
+      win.position.dx.clamp(0.0, math.max(0.0, _windowAreaSize.width - width)).toDouble(),
+      win.position.dy.clamp(0.0, math.max(0.0, _windowAreaSize.height - height)).toDouble(),
+      width, height,
+    );
+  }
+
+  void _moveWindow(InternalWindow win, Offset delta) {
+    final rect = _windowRect(win);
+    setState(() {
+      win.size = rect.size;
+      win.position = Offset(
+        (rect.left + delta.dx).clamp(0.0, math.max(0.0, _windowAreaSize.width - rect.width)).toDouble(),
+        (rect.top + delta.dy).clamp(0.0, math.max(0.0, _windowAreaSize.height - rect.height)).toDouble(),
+      );
+    });
+  }
+
+  void _resizeWindow(InternalWindow win, Offset delta, Alignment edge) {
+    final rect = _windowRect(win);
+    final minWidth = math.min(360.0, _windowAreaSize.width);
+    final minHeight = math.min(240.0, _windowAreaSize.height);
+    var left = rect.left, top = rect.top, right = rect.right, bottom = rect.bottom;
+    if (edge.x < 0) left = (left + delta.dx).clamp(0.0, right - minWidth).toDouble();
+    if (edge.x > 0) right = (right + delta.dx).clamp(left + minWidth, _windowAreaSize.width).toDouble();
+    if (edge.y < 0) top = (top + delta.dy).clamp(0.0, bottom - minHeight).toDouble();
+    if (edge.y > 0) bottom = (bottom + delta.dy).clamp(top + minHeight, _windowAreaSize.height).toDouble();
+    setState(() {
+      win.position = Offset(left, top);
+      win.size = Size(right - left, bottom - top);
+    });
+  }
+
+  void _arrangeWindow(InternalWindow win, String action) {
+    setState(() {
+      win.isMinimized = false;
+      if (action == 'maximize') {
+        win.isMaximized = !win.isMaximized;
+      } else {
+        win.isMaximized = false;
+        final width = _windowAreaSize.width / 2;
+        win.position = Offset(action == 'right' ? width : 0, 0);
+        win.size = Size(width, _windowAreaSize.height);
+      }
+    });
+    _bringToFront(win.id);
+  }
+
   Future<void> _closeWindow(String id) async {
     final win = _windows.where((w) => w.id == id).firstOrNull;
     if (win == null) return;
+    if (!_closingWindows.add(id)) return;
+    try {
     if (win.isDirty) {
       final discard = await showDialog<bool>(
         context: context,
@@ -284,18 +354,23 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
     setState(() {
       _windows.removeWhere((w) => w.id == id);
       if (_activeWindowId == id) {
-        _activeWindowId = _windows.isNotEmpty ? _windows.last.id : null;
+        _activeWindowId = _windows.where((w) => !w.isMinimized).lastOrNull?.id;
       }
     });
     // Closing the window is an explicit end of that shell; just disconnecting
     // or quitting leaves it running for the next time.
     final session = win.sessionName;
     if (session != null) unawaited(widget.sshService.terminal.killTmuxSession(session));
+    } finally {
+      _closingWindows.remove(id);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return LayoutBuilder(builder: (context, constraints) {
+      _windowAreaSize = Size(constraints.maxWidth, math.max(0.0, constraints.maxHeight - 94));
+      return Container(
       color: const Color(0xFF0F1017),
       child: Stack(
         children: [
@@ -343,7 +418,8 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
           ),
         ],
       ),
-    );
+      );
+    });
   }
 
   Widget _buildTopPanel() {
@@ -366,6 +442,21 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
         child: Row(
           children: [
             Icon(Icons.desktop_windows, size: 14, color: widget.domainColor),
+            PopupMenuButton<String>(
+              tooltip: 'Open windows',
+              padding: EdgeInsets.zero,
+              icon: const Icon(Icons.window, size: 15, color: Colors.white70),
+              onSelected: (id) => _activateWindow(_windows.firstWhere((w) => w.id == id)),
+              itemBuilder: (_) => [
+                if (_windows.isEmpty) const PopupMenuItem(enabled: false, child: Text('No open windows')),
+                for (final win in _windows.reversed) PopupMenuItem(value: win.id,
+                  child: Row(children: [
+                    Icon(_getIconForType(win.appType), size: 16),
+                    const SizedBox(width: 8),
+                    Flexible(child: Text('${win.title}${win.isDirty ? ' •' : ''}${win.isMinimized ? ' (minimized)' : ''}', overflow: TextOverflow.ellipsis)),
+                  ])),
+              ],
+            ),
             const SizedBox(width: 8),
             Text(
               widget.hostLabel,

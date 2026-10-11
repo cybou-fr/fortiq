@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:intl/intl.dart';
+
 import 'shell.dart';
 
 class MailAccount {
@@ -142,8 +144,9 @@ class HimalayaMailService {
 
   Future<String> _text(List<String> arguments) async {
     final value = await _json(arguments);
-    if (value is! String)
+    if (value is! String) {
       throw const FormatException('Expected message text from mail client.');
+    }
     return value;
   }
 
@@ -227,7 +230,7 @@ class HimalayaMailService {
       '${_command(['message', 'send', '--account', account], json: false)} < "\$tmp" >/dev/null',
       bytes,
     );
-    if (!result.ok) {
+    if (result.killedBySignal || result.exitCode != 0) {
       throw StateError(
         'Sending was not confirmed. Check Sent before retrying. '
         '${result.stderr.trim()}',
@@ -236,14 +239,16 @@ class HimalayaMailService {
   }
 
   String _id(String value) {
-    if (!RegExp(r'^\d+$').hasMatch(value))
+    if (!RegExp(r'^\d+$').hasMatch(value)) {
       throw const FormatException('Invalid message identifier.');
+    }
     return value;
   }
 
   void _requireConnection() {
-    if (!_ssh.isConnected)
+    if (!_ssh.isConnected) {
       throw StateError('Mail server unavailable: reconnect SSH.');
+    }
   }
 }
 
@@ -257,14 +262,16 @@ class MailDraft {
   factory MailDraft.fromTemplate(String template) {
     final normalized = template.replaceAll('\r\n', '\n');
     final boundary = normalized.indexOf('\n\n');
-    if (boundary < 0)
+    if (boundary < 0) {
       throw const FormatException('Invalid compose template from server.');
+    }
     final headers = <String, String>{};
     String? previous;
     for (final line in normalized.substring(0, boundary).split('\n')) {
       if (line.startsWith(' ') || line.startsWith('\t')) {
-        if (previous != null)
+        if (previous != null) {
           headers[previous] = '${headers[previous]} ${line.trim()}';
+        }
         continue;
       }
       final colon = line.indexOf(':');
@@ -287,8 +294,9 @@ class MailDraft {
         throw const FormatException('Mail headers cannot contain line breaks.');
       }
     }
-    if (from.isEmpty || to.trim().isEmpty)
+    if (from.isEmpty || to.trim().isEmpty) {
       throw const FormatException('Sender and recipient are required.');
+    }
     final encodedBody = base64Encode(utf8.encode(body));
     final lines = <String>[];
     for (var offset = 0; offset < encodedBody.length; offset += 76) {
@@ -310,11 +318,13 @@ class MailDraft {
       }
       chunk += next;
     }
-    if (chunk.isNotEmpty)
+    if (chunk.isNotEmpty) {
       words.add('=?UTF-8?B?${base64Encode(utf8.encode(chunk))}?=');
+    }
     return [
       'From: $from',
       'To: $to',
+      'Date: ${DateFormat('EEE, dd MMM yyyy HH:mm:ss', 'en_US').format(DateTime.now().toUtc())} +0000',
       'Subject: ${words.join('\r\n ')}',
       for (final name in ['cc', 'in-reply-to', 'references'])
         if ((headers[name] ?? '').isNotEmpty) '$name: ${headers[name]}',
