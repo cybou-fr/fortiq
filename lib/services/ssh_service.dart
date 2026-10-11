@@ -554,7 +554,8 @@ class SshClientService extends ChangeNotifier implements RemoteShell {
     }
     final result = await _client!.runWithResult(command);
     final code = result.exitCode;
-    if ((code != null && code != 0) || result.exitSignal != null) {
+    // An absent remote exit status is UNKNOWN, never proof of success.
+    if (code != 0 || result.exitSignal != null) {
       throw SshCommandException(
         command,
         code,
