@@ -102,8 +102,8 @@ if ai_file.is_file():
         "GGUF",
         "`ai`",
         "CPU-only",
-        "без запуска llama.cpp",
-        "только после явного",
+        "без запуска модели",
+        "явного согласия",
         "cache",
     ):
         expect(required in ai_text,
