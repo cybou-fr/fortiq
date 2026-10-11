@@ -78,11 +78,25 @@ class _RemoteMailboxViewerState extends State<RemoteMailboxViewer> {
     }
 
     setState(() => _isSending = true);
-    final success = await widget.sshService.mail.sendSystemMail(
-      to: to,
-      subject: subject,
-      body: body,
-    );
+    late final bool success;
+    try {
+      success = await widget.sshService.mail.sendSystemMail(
+        to: to,
+        subject: subject,
+        body: body,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isSending = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Mail result unknown. Check the Linux mail queue before retrying.',
+          ),
+        ),
+      );
+      return;
+    }
 
     if (mounted) {
       setState(() {
@@ -96,7 +110,9 @@ class _RemoteMailboxViewerState extends State<RemoteMailboxViewer> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(success ? 'System mail sent successfully!' : 'Failed to send mail'),
+          content: Text(success
+              ? 'Accepted by Linux mail command (delivery not confirmed).'
+              : 'Linux mail command rejected the message.'),
           backgroundColor: success ? Colors.green.shade700 : Colors.red.shade700,
         ),
       );
