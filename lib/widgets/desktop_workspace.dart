@@ -14,6 +14,7 @@ import 'markdown_studio.dart';
 import 'spotlight_search.dart';
 import 'log_viewer.dart';
 import 'mailbox_viewer.dart';
+import 'mail_window.dart';
 import 'media_viewer.dart';
 
 enum FortiqAppType {
@@ -28,6 +29,7 @@ enum FortiqAppType {
   spotlight,
   logViewer,
   mailbox,
+  mail,
   mediaViewer,
 }
 
@@ -192,6 +194,10 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
       case FortiqAppType.mailbox:
         title = 'Mailbox & System Notifier (/var/mail)';
         size = const Size(820, 520);
+        break;
+      case FortiqAppType.mail:
+        title = 'Mail';
+        size = const Size(940, 620);
         break;
       case FortiqAppType.mediaViewer:
         title = 'Media Viewer: ${filePath?.split('/').last ?? "image"}';
@@ -604,6 +610,13 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
           sshService: widget.sshService,
           domainColor: widget.domainColor,
         );
+      case FortiqAppType.mail:
+        return RemoteMailWindow(
+          sshService: widget.sshService,
+          domainColor: widget.domainColor,
+          onDirtyChanged: (dirty) => win.isDirty = dirty,
+          onOpenTerminal: () => _openWindow(FortiqAppType.terminal),
+        );
       case FortiqAppType.mediaViewer:
         return RemoteMediaViewer(
           sshService: widget.sshService,
@@ -640,6 +653,7 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
             _dockItem(Icons.search, 'Search Hub', FortiqAppType.spotlight),
             _dockItem(Icons.public, 'Browser', FortiqAppType.browser),
             _dockItem(Icons.mail_outline, 'Mailbox', FortiqAppType.mailbox),
+            _dockItem(Icons.email_outlined, 'Mail', FortiqAppType.mail),
             _dockItem(Icons.menu_book, 'Docs & Notes', FortiqAppType.docsStudio),
             _dockItem(Icons.receipt_long, 'System Logs', FortiqAppType.logViewer),
             _dockItem(Icons.bar_chart, 'Processes', FortiqAppType.processManager),
@@ -709,6 +723,8 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
         return Icons.receipt_long;
       case FortiqAppType.mailbox:
         return Icons.mail_outline;
+      case FortiqAppType.mail:
+        return Icons.email_outlined;
       case FortiqAppType.mediaViewer:
         return Icons.image;
     }
