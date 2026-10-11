@@ -9,6 +9,32 @@ const goodAnswer =
     '"cached":false,"age_seconds":0}';
 
 void main() {
+  test('status reads Linux memory without starting AI inference', () async {
+    final shell = FakeShell((command) {
+      expect(command, contains('ai status --json'));
+      return '{"schema":"fortiq-ai-status/v1",'
+          '"available":false,"reason":"vps_too_small",'
+          '"memory_total_mb":2048,"memory_available_mb":860}';
+    });
+    final status = await AiService(shell).status();
+    expect(status.available, isFalse);
+    expect(status.reason, 'vps_too_small');
+    expect(status.availableMemoryMb, 860);
+    expect(shell.inputs, isEmpty);
+    expect(shell.commands.single, isNot(contains('llama-cli')));
+  });
+
+  test('status rejects invalid output instead of enabling AI by guessing', () async {
+    final shell = FakeShell((_) => '{"available":true}');
+    await expectLater(AiService(shell).status(), throwsFormatException);
+  });
+
+  test('status requires SSH and never accesses a local model', () async {
+    final shell = FakeShell((_) => '')..isConnected = false;
+    await expectLater(AiService(shell).status(), throwsStateError);
+    expect(shell.commands, isEmpty);
+  });
+
   test('explain uses SSH stdin, never a direct AI API or model on Windows', () async {
     final shell = FakeShell((_) => '')
       ..inputResult = (_, _) => const InputResult(
