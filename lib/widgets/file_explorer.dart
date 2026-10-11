@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
+import 'package:file_selector/file_selector.dart';
 
 import 'mono.dart';
 import '../models/linux_models.dart';
 import '../services/ssh_service.dart';
 import '../services/desktop_task_controller.dart';
+import '../services/sftp_transfer_service.dart';
 import 'ui_errors.dart';
 
 class RemoteFileExplorer extends StatefulWidget {
@@ -403,6 +405,37 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
     }
   }
 
+  Future<void> _downloadItem(LinuxFileInfo item) async {
+    if (item.isDirectory || _isLoading || !widget.sshService.isConnected) return;
+    final source = _currentPath == '/'
+        ? '/${item.name}' : '$_currentPath/${item.name}';
+    final client = widget.sshService.rawClient;
+    if (client == null) return;
+    final destination = await getSaveLocation(suggestedName: item.name);
+    if (destination == null || !mounted) return;
+    if (!widget.sshService.isConnected ||
+        widget.sshService.rawClient != client) {
+      showActionError(context, 'Download', 'SSH session changed.');
+      return;
+    }
+    final task = await _tasks.runTransfer(
+      'Download ${item.name}',
+      (progress) => const SftpTransferService().download(
+        client: client,
+        remotePath: source,
+        localPath: destination.path,
+        onProgress: progress,
+        sessionCurrent: () => widget.sshService.isConnected &&
+            widget.sshService.rawClient == client,
+      ),
+      isSessionCurrent: () => widget.sshService.isConnected &&
+          widget.sshService.rawClient == client,
+    );
+    if (mounted && task.state == DesktopTaskState.failed) {
+      showActionError(context, 'Download', task.message ?? 'Transfer failed');
+    }
+  }
+
   Future<void> _deleteItem(LinuxFileInfo item) async {
     final directory = _currentPath;
     final client = widget.sshService.rawClient;
@@ -740,6 +773,13 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
                                     ),
                                   ),
                                 ],
+                                if (!file.isDirectory)
+                                  IconButton(
+                                    icon: const Icon(Icons.download_outlined,
+                                        size: 16, color: Colors.white60),
+                                    tooltip: 'Download via SFTP',
+                                    onPressed: _isLoading ? null : () => _downloadItem(file),
+                                  ),
                                 IconButton(
                                   icon: const Icon(Icons.copy_outlined,
                                       size: 16, color: Colors.white60),
@@ -792,7 +832,9 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
                         title: Text(task.label,
                             style: const TextStyle(fontSize: 12)),
                         subtitle: Text(task.message ??
-                            task.state.name,
+                            (task.totalBytes == null
+                                ? '${task.state.name} · ${task.bytesTransferred} bytes'
+                                : '${task.state.name} · ${task.bytesTransferred}/${task.totalBytes} bytes'),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(fontSize: 11)),
