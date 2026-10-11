@@ -33,6 +33,9 @@ class _RemoteLogViewerState extends State<RemoteLogViewer> {
 
   bool _isLoading = true;
   List<Map<String, dynamic>> _logs = [];
+
+  // Последняя ошибка загрузки: журнал не должен молча выглядеть пустым.
+  Object? _error;
   final ScrollController _scrollController = ScrollController();
 
   final List<Map<String, String>> _logSources = [
@@ -72,13 +75,19 @@ class _RemoteLogViewerState extends State<RemoteLogViewer> {
     if (!silent) {
       setState(() => _isLoading = true);
     }
-    final res = await widget.sshService.system.fetchSystemLogs(
-      logType: _selectedLogType,
-      linesCount: _linesCount,
-    );
-    if (mounted) {
+    try {
+      final res = await widget.sshService.system.fetchSystemLogs(
+        logType: _selectedLogType,
+        linesCount: _linesCount,
+      );
       setState(() {
         _logs = res;
+        _error = null;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e;
         _isLoading = false;
       });
     }
@@ -308,6 +317,26 @@ class _RemoteLogViewerState extends State<RemoteLogViewer> {
                       strokeWidth: 2,
                     ),
                   )
+                : _error != null
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.error_outline, size: 40, color: Colors.redAccent),
+                              const SizedBox(height: 10),
+                              Text(
+                                _error.toString().replaceFirst('Exception: ', ''),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.white70),
+                              ),
+                              const SizedBox(height: 12),
+                              OutlinedButton(onPressed: _loadLogs, child: const Text('Retry')),
+                            ],
+                          ),
+                        ),
+                      )
                 : filteredLogs.isEmpty
                     ? Center(
                         child: Column(

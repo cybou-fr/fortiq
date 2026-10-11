@@ -31,6 +31,11 @@ class _RemoteNetworkInspectorState extends State<RemoteNetworkInspector> {
   Map<String, dynamic> _ufwData = {'installed': false, 'active': false, 'rules': []};
   List<Map<String, dynamic>> _interfaces = [];
 
+  // Ошибки по вкладкам: сбой одной вкладки не должен выглядеть как «пусто»
+  // и не должен прятать остальные.
+  Object? _portsError;
+  Object? _interfacesError;
+
   final TextEditingController _portController = TextEditingController();
   String _ruleAction = 'allow';
 
@@ -48,24 +53,54 @@ class _RemoteNetworkInspectorState extends State<RemoteNetworkInspector> {
 
   Future<void> _refreshAll() async {
     setState(() => _loading = true);
+    final net = widget.sshService.network;
+    var ports = <Map<String, dynamic>>[];
+    var ufw = <String, dynamic>{'installed': false, 'active': false, 'rules': []};
+    var ifaces = <Map<String, dynamic>>[];
+    Object? portsError, interfacesError;
     try {
-      final ports = await widget.sshService.network.fetchOpenPorts();
-      final ufw = await widget.sshService.network.fetchUfwStatus();
-      final ifaces = await widget.sshService.network.fetchNetworkInterfaces();
-
-      if (mounted) {
-        setState(() {
-          _openPorts = ports;
-          _ufwData = ufw;
-          _interfaces = ifaces;
-          _loading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      ports = await net.fetchOpenPorts();
+    } catch (e) {
+      portsError = e;
     }
+    try {
+      ufw = await net.fetchUfwStatus();
+    } catch (e) {
+      ufw = {'installed': true, 'active': false, 'rules': [], 'error': '$e'};
+    }
+    try {
+      ifaces = await net.fetchNetworkInterfaces();
+    } catch (e) {
+      interfacesError = e;
+    }
+    setState(() {
+      _openPorts = ports;
+      _ufwData = ufw;
+      _interfaces = ifaces;
+      _portsError = portsError;
+      _interfacesError = interfacesError;
+      _loading = false;
+    });
+  }
+
+  /// Ошибка загрузки вкладки с кнопкой повтора (вместо пустого списка).
+  Widget _errorView(Object error) {
+    final text = error.toString().replaceFirst('Exception: ', '');
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 40, color: Colors.redAccent),
+            const SizedBox(height: 10),
+            Text(text, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+            const SizedBox(height: 12),
+            OutlinedButton(onPressed: _refreshAll, child: const Text('Retry')),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _addRule() async {
@@ -180,6 +215,7 @@ class _RemoteNetworkInspectorState extends State<RemoteNetworkInspector> {
   }
 
   Widget _buildPortsTab() {
+    if (_portsError != null) return _errorView(_portsError!);
     return Column(
       children: [
         Container(
@@ -253,7 +289,7 @@ class _RemoteNetworkInspectorState extends State<RemoteNetworkInspector> {
   Widget _buildUfwTab() {
     final installed = _ufwData['installed'] as bool;
     final active = _ufwData['active'] as bool;
-    final rules = (_ufwData['rules'] as List<Map<String, dynamic>>?) ?? [];
+    final rules = (_ufwData['rules'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final error = _ufwData['error'] as String?;
 
     if (error != null) {
@@ -446,6 +482,7 @@ class _RemoteNetworkInspectorState extends State<RemoteNetworkInspector> {
   }
 
   Widget _buildInterfacesTab() {
+    if (_interfacesError != null) return _errorView(_interfacesError!);
     return Column(
       children: [
         Container(

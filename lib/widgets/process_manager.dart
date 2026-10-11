@@ -1,220 +1,107 @@
 import 'package:flutter/material.dart';
-import 'mono.dart';
 import '../services/ssh_service.dart';
+import 'remote_snapshot.dart';
 import 'ui_errors.dart';
 
 class RemoteProcessManager extends StatefulWidget {
   final SshClientService sshService;
   final Color domainColor;
-
-  const RemoteProcessManager({
-    super.key,
-    required this.sshService,
-    required this.domainColor,
-  });
-
+  const RemoteProcessManager({super.key, required this.sshService, required this.domainColor});
   @override
   State<RemoteProcessManager> createState() => _RemoteProcessManagerState();
 }
 
 class _RemoteProcessManagerState extends State<RemoteProcessManager> {
-
-  // Async loads may finish after the window was closed.
-  @override
-  void setState(VoidCallback fn) {
-    if (mounted) super.setState(fn);
-  }
-  List<Map<String, dynamic>> _processes = [];
-  bool _loading = false;
-  String _filter = '';
+  late final _snapshot = RemoteSnapshotController(widget.sshService,
+    load: widget.sshService.system.fetchProcesses);
+  String _filter = '', _sort = 'cpu';
+  final Set<int> _pending = {};
 
   @override
   void initState() {
     super.initState();
-    _loadProcesses();
+    _snapshot.addListener(_changed);
+    _snapshot.refresh();
   }
+  void _changed() { if (mounted) setState(() {}); }
+  @override
+  void dispose() { _snapshot.removeListener(_changed); _snapshot.dispose(); super.dispose(); }
 
-  Future<void> _loadProcesses() async {
-    setState(() => _loading = true);
+  Future<void> _terminate(Map<String, dynamic> process, {required bool force}) async {
+    final pid = process['pid'] as int;
+    if (_pending.contains(pid) || !_snapshot.available) return;
+    final client = widget.sshService.rawClient;
+    _pending.add(pid);
     try {
-      final list = await widget.sshService.system.fetchProcesses();
-      setState(() {
-        _processes = list;
-        _loading = false;
-      });
-    } catch (_) {
-      setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _killProcess(int pid, String name) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1F29),
-        title: Text('Kill Process: $name (PID: $pid)?', style: const TextStyle(color: Colors.white, fontSize: 15)),
-        content: const Text('Executes: kill -9 <pid>', style: TextStyle(color: Colors.white60)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Kill -9', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      try {
-        await widget.sshService.system.killProcess(pid, force: true);
-      } catch (e) {
-        showActionError(context, 'Kill process $pid', e);
+      final confirm = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+        title: Text('${force ? 'Force quit' : 'End'} ${process['comm']}?'),
+        content: Text('PID $pid · ${process['user']}\n${force ? 'Force quit stops the process immediately. Unsaved work may be lost.' : 'The process will be asked to terminate normally.'}'),
+        actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: Text(force ? 'Force quit' : 'End process'))],
+      ));
+      if (!mounted || confirm != true) return;
+      if (!_snapshot.available || client != widget.sshService.rawClient) {
+        showActionError(context, 'End process', 'SSH session changed. Refresh before retrying.'); return;
       }
-      _loadProcesses();
+      setState(() {});
+      await widget.sshService.system.killProcess(pid, force: force);
+      if (mounted) await _snapshot.refresh();
+    } catch (error) {
+      if (mounted) showActionError(context, 'End process $pid', error);
+    } finally {
+      _pending.remove(pid);
+      if (mounted) setState(() {});
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final filtered = _processes.where((p) {
-      final comm = (p['comm'] as String).toLowerCase();
-      final user = (p['user'] as String).toLowerCase();
-      return comm.contains(_filter.toLowerCase()) || user.contains(_filter.toLowerCase());
-    }).toList();
-
-    return Column(
-      children: [
-        // Action bar
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: const BoxDecoration(
-            color: Color(0xFF181922),
-            border: Border(bottom: BorderSide(color: Color(0xFF262837))),
-          ),
-          child: Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.refresh, size: 18, color: Colors.white70),
-                tooltip: 'Refresh (ps)',
-                onPressed: _loadProcesses,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Container(
-                  height: 32,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF111218),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: const Color(0xFF2C2E40)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.search, size: 14, color: Colors.white38),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: TextField(
-                          style: const TextStyle(color: Colors.white, fontSize: 12),
-                          decoration: const InputDecoration(
-                            border: InputBorder.none,
-                            hintText: 'Filter by process name or user...',
-                            hintStyle: TextStyle(color: Colors.white38, fontSize: 12),
-                            isDense: true,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          onChanged: (v) => setState(() => _filter = v),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        // Header
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          color: const Color(0xFF15161E),
-          child: const Row(
-            children: [
-              SizedBox(width: 60, child: Text('PID', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold))),
-              SizedBox(width: 80, child: Text('USER', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold))),
-              SizedBox(width: 65, child: Text('CPU %', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold))),
-              SizedBox(width: 65, child: Text('MEM %', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold))),
-              Expanded(child: Text('COMMAND', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold))),
-              SizedBox(width: 40),
-            ],
-          ),
-        ),
-
-        // Process rows
-        Expanded(
-          child: _loading
-              ? Center(child: CircularProgressIndicator(color: widget.domainColor))
-              : ListView.builder(
-                  itemCount: filtered.length,
-                  itemBuilder: (context, index) {
-                    final p = filtered[index];
-                    final pid = p['pid'] as int;
-                    final comm = p['comm'] as String;
-                    final cpu = p['cpu'] as double;
-                    final mem = p['mem'] as double;
-                    final user = p['user'] as String;
-
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                      decoration: const BoxDecoration(
-                        border: Border(bottom: BorderSide(color: Color(0xFF1A1B24))),
-                      ),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 60,
-                            child: Text('$pid', style: const TextStyle(color: Colors.white60, fontSize: 11, fontFamily: kMonoFont, fontFamilyFallback: kMonoFontFallback)),
-                          ),
-                          SizedBox(
-                            width: 80,
-                            child: Text(user, style: const TextStyle(color: Colors.white60, fontSize: 11)),
-                          ),
-                          SizedBox(
-                            width: 65,
-                            child: Text(
-                              '${cpu.toStringAsFixed(1)}%',
-                              style: TextStyle(
-                                color: cpu > 20 ? Colors.orangeAccent : Colors.white70,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 65,
-                            child: Text('${mem.toStringAsFixed(1)}%', style: const TextStyle(color: Colors.white60, fontSize: 11)),
-                          ),
-                          Expanded(
-                            child: Text(
-                              comm,
-                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close, size: 14, color: Colors.redAccent),
-                            tooltip: 'Kill (kill -9)',
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            onPressed: () => _killProcess(pid, comm),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-        ),
-      ],
-    );
+    final filter = _filter.toLowerCase();
+    final processes = (_snapshot.data ?? <Map<String, dynamic>>[]).where((p) =>
+      '${p['comm']} ${p['user']} ${p['pid']}'.toLowerCase().contains(filter)).toList();
+    processes.sort((a, b) {
+      final result = switch (_sort) {
+        'pid' => (a['pid'] as int).compareTo(b['pid'] as int),
+        'name' => '${a['comm']}'.compareTo('${b['comm']}'),
+        'mem' => (b['mem'] as num).compareTo(a['mem'] as num),
+        _ => (b['cpu'] as num).compareTo(a['cpu'] as num),
+      };
+      return result == 0 ? (a['pid'] as int).compareTo(b['pid'] as int) : result;
+    });
+    return Column(children: [
+      Padding(padding: const EdgeInsets.all(8), child: Row(children: [
+        IconButton(tooltip: 'Refresh processes', onPressed: _snapshot.available && !_snapshot.loading ? _snapshot.refresh : null,
+          icon: const Icon(Icons.refresh, color: Colors.white70, size: 18)),
+        Expanded(child: TextField(onChanged: (value) => setState(() => _filter = value),
+          style: const TextStyle(color: Colors.white, fontSize: 12),
+          decoration: const InputDecoration(isDense: true, hintText: 'Name, user or PID', hintStyle: TextStyle(color: Colors.white38)))),
+        PopupMenuButton<String>(tooltip: 'Sort processes', icon: const Icon(Icons.sort, color: Colors.white70, size: 18),
+          onSelected: (value) => setState(() => _sort = value),
+          itemBuilder: (_) => [for (final entry in {'cpu': 'CPU (highest first)', 'mem': 'Memory (highest first)', 'name': 'Name', 'pid': 'PID'}.entries)
+            CheckedPopupMenuItem(value: entry.key, checked: _sort == entry.key, child: Text(entry.value))]),
+      ])),
+      RemoteSnapshotStatus(snapshot: _snapshot),
+      Expanded(child: processes.isEmpty ? Center(child: Text(_snapshot.loading ? 'Loading processes…' : 'No matching processes', style: const TextStyle(color: Colors.white54)))
+        : ListView.builder(itemCount: processes.length, itemBuilder: (context, index) {
+          final process = processes[index];
+          final pid = process['pid'] as int;
+          final cpu = (process['cpu'] as num).toDouble(), memory = (process['mem'] as num).toDouble();
+          return ListTile(dense: true,
+            title: Text('${process['comm']}', maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white, fontSize: 13)),
+            subtitle: Text('PID $pid · ${process['user']} · CPU ${cpu.toStringAsFixed(1)}% · RAM ${memory.toStringAsFixed(1)}%',
+              style: TextStyle(color: cpu > 20 ? Colors.orangeAccent : Colors.white54, fontSize: 11)),
+            trailing: _pending.contains(pid) ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : PopupMenuButton<bool>(tooltip: 'Process actions', enabled: _snapshot.available && !_snapshot.loading,
+                icon: const Icon(Icons.more_vert, size: 18, color: Colors.white60),
+                onSelected: (force) => _terminate(process, force: force), itemBuilder: (_) => const [
+                  PopupMenuItem(value: false, child: Text('End process')),
+                  PopupMenuItem(value: true, child: Text('Force quit')),
+                ]),
+          );
+        })),
+      Padding(padding: const EdgeInsets.all(8), child: Text('${processes.length} / ${_snapshot.data?.length ?? 0} processes · CPU is ps lifetime average',
+        style: const TextStyle(color: Colors.white38, fontSize: 10))),
+    ]);
   }
 }
