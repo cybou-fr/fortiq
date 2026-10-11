@@ -52,6 +52,8 @@ OBSOLETE_DIRECT_MAIL_REQUIREMENTS = (
     "почтовый аккаунт работает независимо от SSH",
     "локальная почта и документы в целевой модели не зависят от SSH",
     "независимые Local/Account-приложения",
+    "локальную черновую копию",
+    "самостоятельный локальный backend",
 )
 
 errors: list[str] = []
@@ -73,8 +75,18 @@ if CONTRACT.is_file():
             re.search(rf"^\| {re.escape(app)} \|", contract_text, re.M) is not None,
             f"Missing executable mapping for {app} in SSH frontend contract",
         )
-    expect("MailService → RemoteShell/SSH" in contract_text,
-           "Missing mail-over-SSH requirement")
+    expect("Mailbox UI → MailService → SSH" in contract_text,
+           "Missing Mail GUI → SSH → Linux CLI requirement")
+    expect("Linux-сервер = backend" in contract_text,
+           "Linux must remain the sole backend")
+    expect("Все серверные настройки" in contract_text,
+           "Server settings and installation must remain on Linux")
+    expect("в оперативной памяти" in contract_text,
+           "UI drafts must remain RAM-only, not a local work store")
+    expect("шифрованием at rest" in contract_text,
+           "Future Linux at-rest encryption requirement missing")
+    expect("не планируются по умолчанию" in contract_text,
+           "Custom server CLIs/transport must not be default work")
     expect("Lemon Squeezy" in contract_text,
            "Missing separate licensing-control-plane exception")
 
@@ -107,6 +119,17 @@ for file in (ROOT / "lib").rglob("*.dart"):
         if forbidden.search(content):
             errors.append(f"{relative}: possible direct remote network client ({forbidden.pattern})")
 
+# A new business-data database in Flutter is a deviation from the UI-only
+# contract: workspace state and authoritative drafts live on Linux.
+# Existing bootstrap/preferences and encrypted license state are explicitly
+# separate and remain permitted.
+for file in (ROOT / "lib").rglob("*.dart"):
+    relative = file.relative_to(ROOT).as_posix()
+    content = file.read_text(encoding="utf-8")
+    for package in ("sqflite", "drift", "isar", "realm", "hive"):
+        if re.search(rf"import\s+['\"]package:{package}(?:/|['\"])", content):
+            errors.append(f"{relative}: new local work database requires architecture review")
+
 pubspec = (ROOT / "pubspec.yaml").read_text(encoding="utf-8")
 for prefix in ("mailer:", "enough_mail:", "imap_client:", "smtp_client:", "pop3:"):
     expect(re.search(rf"^\s*{re.escape(prefix)}", pubspec, re.M) is None,
@@ -119,4 +142,4 @@ if errors:
     sys.exit(1)
 
 print("SSH/CLI architecture contract: PASS")
-print("All 14 APP mappings present; active docs linked; no direct client protocols found.")
+print("All 14 APP mappings and Linux-only compute/storage/config guardrails present; no direct client protocols found.")
