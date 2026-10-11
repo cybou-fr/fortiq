@@ -299,7 +299,7 @@ class _RemoteLogViewerState extends State<RemoteLogViewer> {
                   onPressed: filteredLogs.isEmpty || _isLoading || _error != null
                       ? null
                       : () {
-                          final lines = filteredLogs.take(35).map(
+                          final lines = filteredLogs.reversed.take(35).toList().reversed.map(
                             (entry) => '[${entry['level']}] ${entry['text']}',
                           ).join('\n');
                           final bytes = utf8.encode(
