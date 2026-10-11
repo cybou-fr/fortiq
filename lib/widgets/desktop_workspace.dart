@@ -975,20 +975,18 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
   }
 
   void _openDesktopFile(String path) {
-    switch (classifyDesktopFile(path)) {
-      case DesktopFileKind.image:
-        _openWindow(FortiqAppType.mediaViewer, filePath: path);
-      case DesktopFileKind.markdown:
-        _openWindow(FortiqAppType.docsStudio, filePath: path);
-      case DesktopFileKind.text:
-        _openWindow(FortiqAppType.editor, filePath: path);
-      case DesktopFileKind.pdf:
-        _showUnsupportedFile(path,
-            'PDF preview is not yet available in FORTIQ. '
-            'Use Download via SFTP in Files to open it locally.');
-      case DesktopFileKind.unsupported:
-        _showUnsupportedFile(path,
-            'No viewer is registered for this file type. '
+    final kind = classifyDesktopFile(path);
+    if (kind == DesktopFileKind.image) {
+      _openWindow(FortiqAppType.mediaViewer, filePath: path);
+    } else if (kind == DesktopFileKind.markdown) {
+      _openWindow(FortiqAppType.docsStudio, filePath: path);
+    } else if (kind == DesktopFileKind.text) {
+      _openWindow(FortiqAppType.editor, filePath: path);
+    } else {
+      _showUnsupportedFile(path, kind == DesktopFileKind.pdf
+          ? 'PDF preview is not yet available in FORTIQ. '
+            'Use Download via SFTP in Files to open it locally.'
+          : 'No viewer is registered for this file type. '
             'Use Download via SFTP in Files to open it locally.');
     }
   }
