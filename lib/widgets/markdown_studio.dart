@@ -90,7 +90,7 @@ uptime -p
     });
 
     try {
-      final content = await widget.sshService.readFile(path);
+      final content = await widget.sshService.files.readFile(path);
       if (!mounted) return; // window closed while loading: controller is gone
       _contentController.text = content;
       setState(() {
@@ -116,7 +116,7 @@ uptime -p
     // while the upload runs).
     final sent = _contentController.text;
     try {
-      final atomic = await widget.sshService.writeFile(path, sent);
+      final atomic = await widget.sshService.files.writeFile(path, sent);
       final unchangedSinceSend = mounted && _contentController.text == sent;
       setState(() {
         _saving = false;

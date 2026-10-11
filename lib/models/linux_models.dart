@@ -49,3 +49,37 @@ class LinuxService {
 
   bool get isRunning => active == 'active';
 }
+
+class LinuxFileInfo {
+  final String permissions;
+  final int links;
+  final String owner;
+  final String group;
+  final int size;
+  final DateTime modified;
+  final String name;
+  final bool isDirectory;
+  final bool isLink;
+
+  LinuxFileInfo({
+    required this.permissions,
+    required this.links,
+    required this.owner,
+    required this.group,
+    required this.size,
+    required this.modified,
+    required this.name,
+    required this.isDirectory,
+    required this.isLink,
+  });
+
+  String get formattedSize {
+    if (isDirectory) return '--';
+    if (size < 1024) return '$size B';
+    if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(1)} KB';
+    if (size < 1024 * 1024 * 1024) {
+      return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(size / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+}

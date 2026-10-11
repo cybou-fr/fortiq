@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fortiq/services/server_setup_service.dart';
-import 'package:fortiq/services/ssh_service.dart';
+import 'package:fortiq/services/shell.dart';
+import 'package:fortiq/services/terminal_service.dart';
 
 void main() {
   group('shQuote', () {

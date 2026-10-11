@@ -48,9 +48,9 @@ class _RemoteNetworkInspectorState extends State<RemoteNetworkInspector> {
   Future<void> _refreshAll() async {
     setState(() => _loading = true);
     try {
-      final ports = await widget.sshService.fetchOpenPorts();
-      final ufw = await widget.sshService.fetchUfwStatus();
-      final ifaces = await widget.sshService.fetchNetworkInterfaces();
+      final ports = await widget.sshService.network.fetchOpenPorts();
+      final ufw = await widget.sshService.network.fetchUfwStatus();
+      final ifaces = await widget.sshService.network.fetchNetworkInterfaces();
 
       if (mounted) {
         setState(() {
@@ -73,7 +73,7 @@ class _RemoteNetworkInspectorState extends State<RemoteNetworkInspector> {
 
     _portController.clear();
     try {
-      await widget.sshService.addUfwRule(port, _ruleAction);
+      await widget.sshService.network.addUfwRule(port, _ruleAction);
     } catch (e) {
       showActionError(context, 'Add firewall rule', e);
     }
@@ -82,7 +82,7 @@ class _RemoteNetworkInspectorState extends State<RemoteNetworkInspector> {
 
   Future<void> _deleteRule(int ruleNum) async {
     try {
-      await widget.sshService.deleteUfwRule(ruleNum);
+      await widget.sshService.network.deleteUfwRule(ruleNum);
     } catch (e) {
       showActionError(context, 'Delete firewall rule', e);
     }

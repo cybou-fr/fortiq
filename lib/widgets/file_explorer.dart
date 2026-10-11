@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/linux_models.dart';
 import '../services/ssh_service.dart';
 import 'ui_errors.dart';
 
@@ -48,7 +49,7 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
     });
 
     try {
-      final list = await widget.sshService.listDirectory(path);
+      final list = await widget.sshService.files.listDirectory(path);
       setState(() {
         _currentPath = path;
         _pathController.text = path;
@@ -99,7 +100,7 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
     showDialog(
       context: context,
       builder: (context) => FutureBuilder<String>(
-        future: widget.sshService.readFile(filePath),
+        future: widget.sshService.files.readFile(filePath),
         builder: (context, snapshot) {
           return AlertDialog(
             backgroundColor: const Color(0xFF1E1F29),
@@ -173,7 +174,7 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
     if (name != null && name.isNotEmpty) {
       final newDirPath = _currentPath == '/' ? '/$name' : '$_currentPath/$name';
       try {
-        await widget.sshService.createDirectory(newDirPath);
+        await widget.sshService.files.createDirectory(newDirPath);
       } catch (e) {
         showActionError(context, 'Create folder', e);
       }
@@ -205,7 +206,7 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
     if (confirm == true) {
       final fullPath = _currentPath == '/' ? '/${item.name}' : '$_currentPath/${item.name}';
       try {
-        await widget.sshService.remove(fullPath, recursive: item.isDirectory);
+        await widget.sshService.files.remove(fullPath, recursive: item.isDirectory);
       } catch (e) {
         showActionError(context, 'Delete ${item.name}', e);
       }

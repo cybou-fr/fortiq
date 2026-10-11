@@ -71,7 +71,7 @@ class _RemoteLogViewerState extends State<RemoteLogViewer> {
     if (!silent) {
       setState(() => _isLoading = true);
     }
-    final res = await widget.sshService.fetchSystemLogs(
+    final res = await widget.sshService.system.fetchSystemLogs(
       logType: _selectedLogType,
       linesCount: _linesCount,
     );

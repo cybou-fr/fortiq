@@ -50,7 +50,7 @@ class _RemoteMailboxViewerState extends State<RemoteMailboxViewer> {
 
   Future<void> _fetchMail() async {
     setState(() => _isLoading = true);
-    final list = await widget.sshService.fetchSystemMail(mailboxUser: _selectedMailbox);
+    final list = await widget.sshService.mail.fetchSystemMail(mailboxUser: _selectedMailbox);
     if (mounted) {
       setState(() {
         _messages = list;
@@ -77,7 +77,7 @@ class _RemoteMailboxViewerState extends State<RemoteMailboxViewer> {
     }
 
     setState(() => _isSending = true);
-    final success = await widget.sshService.sendSystemMail(
+    final success = await widget.sshService.mail.sendSystemMail(
       to: to,
       subject: subject,
       body: body,

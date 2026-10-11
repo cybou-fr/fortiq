@@ -36,7 +36,7 @@ class _RemoteProcessManagerState extends State<RemoteProcessManager> {
   Future<void> _loadProcesses() async {
     setState(() => _loading = true);
     try {
-      final list = await widget.sshService.fetchProcesses();
+      final list = await widget.sshService.system.fetchProcesses();
       setState(() {
         _processes = list;
         _loading = false;
@@ -66,7 +66,7 @@ class _RemoteProcessManagerState extends State<RemoteProcessManager> {
 
     if (confirm == true) {
       try {
-        await widget.sshService.killProcess(pid, force: true);
+        await widget.sshService.system.killProcess(pid, force: true);
       } catch (e) {
         showActionError(context, 'Kill process $pid', e);
       }

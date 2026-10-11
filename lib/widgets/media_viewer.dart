@@ -54,7 +54,7 @@ class _RemoteMediaViewerState extends State<RemoteMediaViewer> {
     });
 
     try {
-      final bytes = await widget.sshService.readBinaryFile(widget.filePath);
+      final bytes = await widget.sshService.files.readBinaryFile(widget.filePath);
       if (mounted) {
         setState(() {
           _imageData = bytes;

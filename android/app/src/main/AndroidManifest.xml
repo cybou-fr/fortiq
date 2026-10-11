@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- SSH connections and the tunnel browser need network access in release builds too. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="fortiq"
         android:name="${applicationName}"

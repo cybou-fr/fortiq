@@ -36,7 +36,7 @@ class _RemoteServiceManagerState extends State<RemoteServiceManager> {
   Future<void> _loadServices() async {
     setState(() => _loading = true);
     try {
-      final list = await widget.sshService.fetchServices();
+      final list = await widget.sshService.system.fetchServices();
       setState(() {
         _services = list;
         _loading = false;
@@ -48,7 +48,7 @@ class _RemoteServiceManagerState extends State<RemoteServiceManager> {
 
   Future<void> _action(String unit, String act) async {
     try {
-      await widget.sshService.controlService(unit, act);
+      await widget.sshService.system.controlService(unit, act);
     } catch (e) {
       showActionError(context, '$act $unit', e);
     }

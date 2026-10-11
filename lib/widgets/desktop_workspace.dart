@@ -117,7 +117,7 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
   Future<void> _refreshMetrics() async {
     if (!widget.sshService.isConnected) return;
     try {
-      final data = await widget.sshService.fetchMetrics();
+      final data = await widget.sshService.system.fetchMetrics();
       if (mounted) {
         setState(() => _metrics = data);
       }
@@ -271,7 +271,7 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
     // Closing the window is an explicit end of that shell; just disconnecting
     // or quitting leaves it running for the next time.
     final session = win.sessionName;
-    if (session != null) unawaited(widget.sshService.killTmuxSession(session));
+    if (session != null) unawaited(widget.sshService.terminal.killTmuxSession(session));
   }
 
   @override

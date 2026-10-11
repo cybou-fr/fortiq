@@ -96,7 +96,7 @@ class _RemoteFileEditorState extends State<RemoteFileEditor> {
     });
 
     try {
-      final content = await widget.sshService.readFile(widget.filePath);
+      final content = await widget.sshService.files.readFile(widget.filePath);
       if (!mounted) return; // window closed while loading: controller is gone
       _contentController.text = content;
       _lineCount = content.split('\n').length;
@@ -120,7 +120,7 @@ class _RemoteFileEditorState extends State<RemoteFileEditor> {
     // actually sent counts as saved.
     final sent = _contentController.text;
     try {
-      final atomic = await widget.sshService.writeFile(widget.filePath, sent);
+      final atomic = await widget.sshService.files.writeFile(widget.filePath, sent);
       final unchangedSinceSend = mounted && _contentController.text == sent;
       setState(() {
         _saving = false;

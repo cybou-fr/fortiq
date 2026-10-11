@@ -83,12 +83,12 @@ class _RemoteTerminalViewState extends State<RemoteTerminalView> {
     if (_attaching || !service.isConnected) return;
     _attaching = true;
     try {
-      final tmux = await service.hasTmux();
+      final tmux = await service.terminal.hasTmux();
       final cols = _terminal.viewWidth > 0 ? _terminal.viewWidth : 100;
       final rows = _terminal.viewHeight > 0 ? _terminal.viewHeight : 30;
       final session = tmux
-          ? await service.attachTmux(widget.sessionName, ptyWidth: cols, ptyHeight: rows)
-          : await service.startShell(ptyWidth: cols, ptyHeight: rows);
+          ? await service.terminal.attachTmux(widget.sessionName, ptyWidth: cols, ptyHeight: rows)
+          : await service.terminal.startShell(ptyWidth: cols, ptyHeight: rows);
       if (!mounted) {
         // The window was closed while the shell was being opened.
         session.close();
@@ -152,7 +152,7 @@ class _RemoteTerminalViewState extends State<RemoteTerminalView> {
   Future<void> _installTmux() async {
     setState(() => _installingTmux = true);
     try {
-      await widget.sshService.installTmux();
+      await widget.sshService.terminal.installTmux();
       // Restart the shell inside tmux.
       final old = _session;
       _session = null;

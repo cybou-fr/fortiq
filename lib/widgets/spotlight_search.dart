@@ -54,7 +54,7 @@ class _RemoteSpotlightSearchState extends State<RemoteSpotlightSearch> {
 
     setState(() => _loading = true);
     try {
-      final res = await widget.sshService.searchFiles(
+      final res = await widget.sshService.files.searchFiles(
         q,
         searchRoot: _searchRoot,
         searchContent: _searchContent,
