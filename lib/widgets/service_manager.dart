@@ -5,6 +5,7 @@ import 'remote_snapshot.dart';
 import 'ui_errors.dart';
 import 'ai_advice_dialog.dart';
 import '../services/ai_service.dart';
+import '../services/service_diagnostic_tools.dart';
 
 class RemoteServiceManager extends StatefulWidget {
   final SshClientService sshService;
@@ -104,6 +105,39 @@ class _RemoteServiceManagerState extends State<RemoteServiceManager> {
       title: 'Explain $unit',
       loadContext: () => AiService(widget.sshService).serviceEvidence(unit),
     );
+  }
+
+  Future<void> _investigate(String unit) async {
+    if (!_snapshot.available) return;
+    final client = widget.sshService.rawClient;
+    try {
+      final report = await ServiceDiagnosticTools(widget.sshService).investigate(unit);
+      if (!mounted || !_snapshot.available ||
+          client != widget.sshService.rawClient) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Investigate $unit'),
+          content: SizedBox(
+            width: 650,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 460),
+              child: SingleChildScrollView(
+                child: SelectableText(report.toPlainText()),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (mounted) showActionError(context, 'Investigate $unit', error);
+    }
   }
 
   Future<void> _details(String unit) async {
@@ -278,6 +312,8 @@ class _RemoteServiceManagerState extends State<RemoteServiceManager> {
                               ),
                               onSelected: (action) => action == 'details'
                                   ? _details(unit)
+                                  : action == 'investigate'
+                                  ? _investigate(unit)
                                   : action == 'explain'
                                   ? _explain(unit)
                                   : _action(unit, action),
@@ -285,6 +321,10 @@ class _RemoteServiceManagerState extends State<RemoteServiceManager> {
                                 const PopupMenuItem(
                                   value: 'details',
                                   child: Text('Details'),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'investigate',
+                                  child: Text('Investigate (read-only)'),
                                 ),
                                 const PopupMenuItem(
                                   value: 'explain',

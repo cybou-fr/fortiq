@@ -106,12 +106,12 @@ void main() {
     final shell = FakeShell((_) => 'unit failed');
     final result = await AiService(shell).serviceEvidence('nginx.service');
     expect(result, contains('nginx.service'));
-    expect(shell.commands.single, contains('journalctl'));
-    expect(shell.commands.single, contains("'nginx.service'"));
+    expect(shell.commands[1], contains('journalctl'));
+    expect(shell.commands[0], contains("'nginx.service'"));
     await expectLater(
       AiService(shell).serviceEvidence('nginx; reboot'),
       throwsArgumentError,
     );
-    expect(shell.commands.length, 1);
+    expect(shell.commands.length, 3);
   });
 }
