@@ -7,8 +7,11 @@ call it over SSH via `AiService` and show advisory output.
 
 **Not yet provided:** automatic llama.cpp binary/GGUF installation,
 selection of a production GGUF, proof of speed on a real VPS, streaming
-generation, external AI, or production CPU benchmarking. `ai setup`
-currently returns a JSON `not_implemented` error deliberately; its
+generation, external AI, or **production qualification on real VPS**.
+`ai benchmark --json` now performs a manual, bounded **cold-start**
+CPU inference measurement with elapsed time and peak child RSS; it does
+**not** calculate tokens/s or persist a performance certification.
+`ai setup` still returns `not_implemented` deliberately; its
 `--check` mode is read-only.
 
 ## One-time manual installation on the Linux host
@@ -37,6 +40,7 @@ To verify the actual llama.cpp CLI options and run in a disposable VM:
 llama-cli --version
 llama-cli --help
 ai setup --check --json
+ai benchmark --json  # explicit CPU run; not invoked at SSH login
 printf 'Explain why nginx exited with code 1' | ai explain --stdin --json
 ```
 
@@ -50,6 +54,28 @@ If resource gates fail, `ai status --json` returns
 tools are unaffected. By default, 1–2GB VPS do not run inference.
 These are conservative screening rules, **not a proof** that a particular
 GGUF is usable on a 4GB VPS.
+
+## Resource and process protections
+
+The `ai` command refuses low-memory hosts according to its conservative
+read-only preflight. The GUI now calls `ai status --json` **before reading
+service logs or invoking inference**, so an unsupported VPS does not
+perform an AI request. This is a memory/capability gate, **not** an
+automatically calibrated CPU-speed guarantee.
+
+The child inference process uses a parent-death signal, output is bounded
+while streaming (rather than after capturing an arbitrary amount), and
+timeouts/cancellation terminate its process group. No stdout/stderr prompt
+data is written to disk. Explicit `ai benchmark --json` reports measured
+cold-start duration and peak child RSS on Linux, without claiming token
+throughput, accuracy or production suitability.
+
+Cache metadata includes a full SHA-256 of GGUF computed on first use or
+file-identity changes; identical subsequent requests reuse a private
+metadata record instead of reading the entire model again. The metadata
+is invalidated on changes to inode, device, size, mtime or ctime. This
+is a performance optimization, **not** a signed integrity check: verified
+model downloads and safe file installation remain separate requirements.
 
 ## Cache is off until explicitly requested
 
