@@ -9,6 +9,7 @@ import 'known_hosts_service.dart';
 import 'mail_service.dart';
 import 'network_service.dart';
 import 'shell.dart';
+import 'socks_proxy.dart';
 import 'system_service.dart';
 import 'terminal_service.dart';
 
@@ -118,7 +119,7 @@ class SshClientService extends ChangeNotifier implements RemoteShell {
   int _missedPings = 0;
   bool _tunnelWanted = false;
 
-  SSHDynamicForward? _socksForward;
+  SocksProxy? _socksForward;
   Future<void>? _tunnelClosing;
   static int? _browserProxyPort;
 
@@ -168,10 +169,9 @@ class SshClientService extends ChangeNotifier implements RemoteShell {
     if (existing != null && !existing.isClosed) return existing.port;
 
     await _tunnelClosing; // the previous listener must release the port first
-    _socksForward = await client.forwardDynamic(
-      bindHost: '127.0.0.1',
-      bindPort: await browserProxyPort(),
-      options: const SSHDynamicForwardOptions(maxConnections: 512),
+    _socksForward = await SocksProxy.bind(
+      port: await browserProxyPort(),
+      dial: (host, port) => client.forwardLocal(host, port),
     );
     notifyListeners();
     return _socksForward!.port;

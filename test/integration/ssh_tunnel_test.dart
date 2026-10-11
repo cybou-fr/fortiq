@@ -31,7 +31,13 @@ head -c 3000000 /dev/urandom > /tmp/fqweb/big.bin
 pkill -f "http.server $webPort" || true
 cd /tmp/fqweb
 nohup python3 -m http.server $webPort --bind 127.0.0.2 >/tmp/fqweb/log 2>&1 &
-sleep 1
+# wait until it really answers, instead of hoping that a pause is long enough
+for i in \$(seq 1 100); do
+  curl -s -o /dev/null http://$host:$webPort/index.txt && exit 0
+  sleep 0.1
+done
+echo "the test web server did not start" >&2
+exit 1
 ''');
   });
   tearDown(() => h.server.root('pkill -f "http.server $webPort"; exit 0'));
@@ -46,12 +52,15 @@ sleep 1
   }) async {
     final socket = await Socket.connect('127.0.0.1', proxyPort, timeout: const Duration(seconds: 5));
     final input = StreamIterator<Uint8List>(socket);
+    final pending = <int>[]; // bytes received but not consumed yet
     Future<List<int>> read(int n) async {
-      final out = <int>[];
-      while (out.length < n) {
+      while (pending.length < n) {
         if (!await input.moveNext()) break;
-        out.addAll(input.current);
+        pending.addAll(input.current);
       }
+      final take = pending.length < n ? pending.length : n;
+      final out = pending.sublist(0, take);
+      pending.removeRange(0, take);
       return out;
     }
 
@@ -67,7 +76,8 @@ sleep 1
       // bound address: IPv4 = 4+2 bytes more
       await read(head[3] == 1 ? 6 : head[3] == 4 ? 18 : 0);
       socket.add(utf8.encode(request));
-      final body = <int>[];
+      final body = <int>[...pending];
+      pending.clear();
       while (await input.moveNext()) {
         body.addAll(input.current);
       }
@@ -138,13 +148,17 @@ sleep 1
       addTearDown(ssh.disconnect);
       final port = await ssh.startSocksTunnel();
 
-      final results = await Future.wait([
+      final outcomes = await Future.wait([
         for (var i = 0; i < 40; i++)
-          viaSocks(port, host, webPort, request: 'GET /index.txt HTTP/1.0\r\n\r\n'),
+          viaSocks(port, host, webPort, request: 'GET /index.txt HTTP/1.0\r\n\r\n')
+              .then((r) => r.reply == 0 && text(r.body).contains('hello from the server')
+                  ? 'ok'
+                  : 'reply=${r.reply} body=${r.body.length}')
+              .catchError((Object e) => 'error: $e'),
       ]);
 
-      expect(results.every((r) => r.reply == 0 && text(r.body).contains('hello from the server')),
-          isTrue);
+      final bad = outcomes.where((o) => o != 'ok').toList();
+      expect(bad, isEmpty, reason: '${bad.length} of 40 failed: ${bad.toSet()}');
     });
   });
 
