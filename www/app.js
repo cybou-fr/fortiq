@@ -1,26 +1,31 @@
-'use strict';
+"use strict";
 
-const filters = document.querySelectorAll('[data-filter]');
-const tools = document.querySelectorAll('[data-category]');
-const counter = document.querySelector('.tools-count');
+const filters = document.querySelectorAll("[data-filter]");
+const tools = document.querySelectorAll("[data-category]");
+const counter = document.querySelector(".tools-count");
+const pluralRules = new Intl.PluralRules(document.documentElement.lang);
 
 filters.forEach((button) => {
-  button.addEventListener('click', () => {
+  button.addEventListener("click", () => {
     const category = button.dataset.filter;
     let visible = 0;
-    filters.forEach((item) => {
-      const selected = item === button;
-      item.classList.toggle('active', selected);
-      item.setAttribute('aria-pressed', String(selected));
-    });
+    filters.forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
     tools.forEach((tool) => {
-      const matches = category === 'all' || tool.dataset.category.split(' ').includes(category);
-      tool.hidden = !matches;
-      if (matches) visible += 1;
+      tool.hidden = category !== "all" && !tool.dataset.category.split(" ").includes(category);
+      if (!tool.hidden) visible += 1;
     });
-    const plural = visible % 10 === 1 && visible % 100 !== 11 ? 'инструмент'
-      : visible % 10 >= 2 && visible % 10 <= 4 && (visible % 100 < 12 || visible % 100 > 14)
-        ? 'инструмента' : 'инструментов';
-    counter.textContent = `${visible} ${plural}`;
+    const rule = pluralRules.select(visible);
+    const word = rule === "one" ? counter.dataset.singular
+      : rule === "few" ? counter.dataset.few : counter.dataset.many;
+    counter.textContent = `${visible} ${word}`;
+  });
+});
+
+const modes = document.querySelectorAll("[data-mode]");
+const desktop = document.querySelector(".desktop");
+modes.forEach((button) => {
+  button.addEventListener("click", () => {
+    desktop.dataset.scene = button.dataset.mode;
+    modes.forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
   });
 });

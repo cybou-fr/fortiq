@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:dartssh2/dartssh2.dart';
 import 'package:fortiq/services/shell.dart';
 
@@ -24,6 +27,10 @@ class FakeShell implements RemoteShell {
 
   int _logins = 0;
 
+  /// What [executeWithInput] received, and what it answers with.
+  final List<({String command, Uint8List input})> inputs = [];
+  InputResult Function(String command, Uint8List input)? inputResult;
+
   @override
   SSHClient? get rawClient => null;
 
@@ -39,6 +46,16 @@ class FakeShell implements RemoteShell {
     answer(command).split('\n').forEach(onLine);
     return 0;
   }
+
+  @override
+  Future<InputResult> executeWithInput(String command, Uint8List input) async {
+    commands.add(command);
+    inputs.add((command: command, input: input));
+    return inputResult?.call(command, input) ?? const InputResult();
+  }
+
+  /// The text of the most recent input sent to the server.
+  String get lastInputText => utf8.decode(inputs.last.input);
 
   @override
   Future<bool> canLoginAgain() async {

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import '../models/linux_models.dart';
 import 'shell.dart';
 
@@ -11,9 +12,10 @@ import 'shell.dart';
 /// the same way as a finished one (EOF on stdin), hence the size check.
 /// New files and files in unwritable directories are written directly; when an
 /// existing file had to be written that way the script reports
-/// [_nonAtomicMarker] on stderr so the UI can warn about it.
-const _nonAtomicMarker = 'FORTIQ_NONATOMIC';
-const _atomicWriteScript = r'''
+/// [nonAtomicMarker] on stderr so the UI can warn about it.
+const nonAtomicMarker = 'FORTIQ_NONATOMIC';
+@visibleForTesting
+const atomicWriteScript = r'''
 t=$(readlink -f -- "$1") || t=$1
 d=$(dirname -- "$t")
 existed=0
@@ -45,57 +47,14 @@ class FileService {
 
   /// Lists files using `ls -la --time-style=+%s`
   Future<List<LinuxFileInfo>> listDirectory(String path) async {
-    // Using standard POSIX ls with timestamp in unix epoch for precision
-    final output = await _ssh.execute('ls -la --time-style=+%s ${shQuote(path)}');
-    final lines = LineSplitter.split(output);
-    final results = <LinuxFileInfo>[];
-
-    for (final line in lines) {
-      final trimmed = line.trim();
-      if (trimmed.isEmpty || trimmed.startsWith('total ')) continue;
-
-      // ls -la format:
-      // drwxr-xr-x  2 root root 4096 1728599420 filename
-      final parts = trimmed.split(RegExp(r'\s+'));
-      if (parts.length < 7) continue;
-
-      final permissions = parts[0];
-      final links = int.tryParse(parts[1]) ?? 1;
-      final owner = parts[2];
-      final group = parts[3];
-      final size = int.tryParse(parts[4]) ?? 0;
-      final timestampSec = int.tryParse(parts[5]) ?? 0;
-      final modified = DateTime.fromMillisecondsSinceEpoch(timestampSec * 1000);
-
-      // File name may contain spaces
-      final name = parts.sublist(6).join(' ');
-
-      if (name == '.' || name == '..') continue;
-
-      final isDir = permissions.startsWith('d');
-      final isLink = permissions.startsWith('l');
-
-      results.add(LinuxFileInfo(
-        permissions: permissions,
-        links: links,
-        owner: owner,
-        group: group,
-        size: size,
-        modified: modified,
-        name: name,
-        isDirectory: isDir,
-        isLink: isLink,
-      ));
-    }
-
-    // Sort: directories first, then alphabetically
-    results.sort((a, b) {
-      if (a.isDirectory && !b.isDirectory) return -1;
-      if (!a.isDirectory && b.isDirectory) return 1;
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
-
-    return results;
+    // One record per entry, NUL-separated, so that any file name survives
+    // (spaces, quotes, newlines): header fields, then name, then link target.
+    // -H follows the starting directory if it is itself a symbolic link.
+    final output = await _ssh.execute(
+      'find -H ${shQuote(path)} -mindepth 1 -maxdepth 1 '
+      r"-printf '%y\t%Y\t%M\t%n\t%u\t%g\t%s\t%T@\0%f\0%l\0'",
+    );
+    return parseDirectoryListing(output);
   }
 
   /// Creates a directory using `mkdir -p`
@@ -127,24 +86,14 @@ class FileService {
   /// Returns false when the file could only be overwritten in place (its
   /// directory is not writable), which a dropped connection could truncate.
   Future<bool> writeFile(String path, String content) async {
-    final client = _ssh.rawClient;
-    if (client == null || !_ssh.isConnected) {
-      throw Exception('Not connected to SSH server');
-    }
     // Content goes through stdin: command arguments are limited to ~128 KB.
     final bytes = Uint8List.fromList(utf8.encode(content));
-    final command = 'sh -c ${shQuote(_atomicWriteScript)} sh ${shQuote(path)} ${bytes.length}';
-    final session = await client.execute(command);
-    final stderrFuture = utf8.decodeStream(session.stderr);
-    session.stdin.add(bytes);
-    await session.stdin.close();
-    await session.done;
-    final err = await stderrFuture;
-    final code = session.exitCode;
-    if ((code != null && code != 0) || session.exitSignal != null) {
-      throw SshCommandException(command, code, err);
+    final command = 'sh -c ${shQuote(atomicWriteScript)} sh ${shQuote(path)} ${bytes.length}';
+    final result = await _ssh.executeWithInput(command, bytes);
+    if (!result.ok) {
+      throw SshCommandException(command, result.exitCode, result.stderr);
     }
-    return !err.contains(_nonAtomicMarker);
+    return !result.stderr.contains(nonAtomicMarker);
   }
 
   /// Searches files by name or content on the remote host
@@ -203,4 +152,36 @@ class FileService {
       return [];
     }
   }
+}
+
+/// Parses the output of the `find -printf` command used by
+/// [FileService.listDirectory]. Folders (and links to folders) come first.
+List<LinuxFileInfo> parseDirectoryListing(String output) {
+  final parts = output.split('\x00');
+  final results = <LinuxFileInfo>[];
+  for (var i = 0; i + 2 < parts.length; i += 3) {
+    final fields = parts[i].split('\t');
+    if (fields.length < 8) continue;
+    final type = fields[0]; // d f l ...
+    final targetType = fields[1]; // type after following a link: d f N L ?
+    final mtime = double.tryParse(fields[7]) ?? 0;
+    final target = parts[i + 2];
+    results.add(LinuxFileInfo(
+      permissions: fields[2],
+      links: int.tryParse(fields[3]) ?? 1,
+      owner: fields[4],
+      group: fields[5],
+      size: int.tryParse(fields[6]) ?? 0,
+      modified: DateTime.fromMillisecondsSinceEpoch((mtime * 1000).round()),
+      name: parts[i + 1],
+      isDirectory: type == 'd' || (type == 'l' && targetType == 'd'),
+      isLink: type == 'l',
+      linkTarget: type == 'l' ? target : null,
+    ));
+  }
+  results.sort((a, b) {
+    if (a.isDirectory != b.isDirectory) return a.isDirectory ? -1 : 1;
+    return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+  });
+  return results;
 }

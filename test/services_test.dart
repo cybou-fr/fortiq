@@ -7,19 +7,17 @@ import 'package:fortiq/services/system_service.dart';
 
 void main() {
   group('FileService', () {
-    test('lists a directory: skips "total", sorts folders first, quotes the path', () async {
+    test('lists a directory: preserves names, sorts folders first, quotes the path', () async {
       final shell = FakeShell((_) => [
-            'total 12',
-            '-rw-r--r-- 1 debian debian  120 1728599420 notes.txt',
-            'drwxr-xr-x 2 debian debian 4096 1728599421 projects',
-            'drwxr-xr-x 4 root   root   4096 1728599422 .',
-            '-rw-r--r-- 1 debian debian    5 1728599423 a.md',
-          ].join('\n'));
+            'f\tf\t-rw-r--r--\t1\tdebian\tdebian\t120\t1728599420\x00notes  draft\n.txt\x00\x00',
+            'd\td\tdrwxr-xr-x\t2\tdebian\tdebian\t4096\t1728599421\x00projects\x00\x00',
+            'f\tf\t-rw-r--r--\t1\tdebian\tdebian\t5\t1728599423\x00a.md\x00\x00',
+          ].join());
 
       final files = await FileService(shell).listDirectory('/home/my dir');
 
-      expect(shell.commands.single, "ls -la --time-style=+%s '/home/my dir'");
-      expect(files.map((f) => f.name), ['projects', 'a.md', 'notes.txt']);
+      expect(shell.commands.single, startsWith("find -H '/home/my dir' -mindepth 1 -maxdepth 1 "));
+      expect(files.map((f) => f.name), ['projects', 'a.md', 'notes  draft\n.txt']);
       expect(files.first.isDirectory, isTrue);
       expect(files.last.size, 120);
     });

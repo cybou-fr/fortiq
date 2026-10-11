@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
 
 /// What the Linux services need from a connection. [SshClientService]
@@ -19,6 +20,21 @@ abstract interface class RemoteShell {
 
   /// Runs [command] and reports output lines as they arrive; returns the exit code.
   Future<int> runStreaming(String command, void Function(String line) onLine);
+
+  /// Runs [command] with [input] on its stdin (file contents are far bigger than
+  /// a command line may be) and waits for it to finish.
+  Future<InputResult> executeWithInput(String command, Uint8List input);
+}
+
+/// How a command that was fed through stdin ended.
+class InputResult {
+  final int? exitCode;
+  final bool killedBySignal;
+  final String stderr;
+
+  const InputResult({this.exitCode, this.killedBySignal = false, this.stderr = ''});
+
+  bool get ok => !killedBySignal && (exitCode == null || exitCode == 0);
 }
 
 /// Quotes [value] so the remote shell treats it as one literal word.

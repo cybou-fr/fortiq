@@ -61,6 +61,9 @@ class LinuxFileInfo {
   final bool isDirectory;
   final bool isLink;
 
+  /// Where a symbolic link points (null for other entries).
+  final String? linkTarget;
+
   LinuxFileInfo({
     required this.permissions,
     required this.links,
@@ -71,6 +74,7 @@ class LinuxFileInfo {
     required this.name,
     required this.isDirectory,
     required this.isLink,
+    this.linkTarget,
   });
 
   String get formattedSize {

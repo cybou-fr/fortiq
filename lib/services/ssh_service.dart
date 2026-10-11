@@ -15,6 +15,24 @@ import 'terminal_service.dart';
 // Shell helpers are part of this library's public surface.
 export 'shell.dart';
 
+/// The server key was refused: the user said no, or no one could be asked, or it
+/// no longer matches the remembered key.
+///
+/// dartssh2 reports a refused key as "connection closed before authentication",
+/// which is indistinguishable from a failed login, so this says what happened.
+class HostKeyRejectedError implements Exception {
+  final HostKeyInfo? info;
+
+  HostKeyRejectedError(this.info);
+
+  bool get changed => info?.changed ?? false;
+
+  @override
+  String toString() => changed
+      ? 'The server key has changed and was not trusted'
+      : 'The server key was not trusted';
+}
+
 /// Host key presented by the server that the user has to approve.
 class HostKeyInfo {
   final String host;
@@ -34,6 +52,22 @@ class HostKeyInfo {
   });
 
   bool get changed => previous != null;
+}
+
+/// Set while a connection attempt runs: did the server key get refused?
+class _Rejection {
+  bool rejected = false;
+  HostKeyInfo? info;
+
+  void refuse(HostKeyInfo i) {
+    rejected = true;
+    info = i;
+  }
+}
+
+class _KeyProblem implements Exception {
+  final String message;
+  const _KeyProblem(this.message);
 }
 
 enum SshConnectionState { disconnected, connecting, connected, reconnecting }
@@ -188,31 +222,36 @@ class SshClientService extends ChangeNotifier implements RemoteShell {
   }
 
   /// Opens and authenticates one SSH connection and makes it the current one.
+  /// The identities in [key], or an exception that says what is wrong with it.
+  static List<SSHKeyPair>? _parseIdentities(String? key) {
+    if (key == null || key.trim().isEmpty) return null;
+    try {
+      if (SSHKeyPair.isEncryptedPem(key)) {
+        throw const _KeyProblem('Encrypted private keys (with passphrase) are not supported yet');
+      }
+      return SSHKeyPair.fromPem(key);
+    } on _KeyProblem catch (e) {
+      throw Exception(e.message);
+    } catch (_) {
+      throw Exception('Cannot parse the private key file');
+    }
+  }
+
   /// Connects the socket and builds the client for [p] (not yet authenticated).
+  /// [rejection] tells afterwards whether the server key was refused.
   Future<SSHClient> _newClient(
     _ConnectionParams p,
     Future<bool> Function(HostKeyInfo info)? onHostKey,
+    _Rejection rejection,
   ) async {
+    // A bad key is reported before anything goes over the network.
+    final identities = _parseIdentities(p.privateKey);
+
     final socket = await SSHSocket.connect(
       p.host,
       p.port,
       timeout: const Duration(seconds: 10),
     );
-
-    List<SSHKeyPair>? identities;
-    final key = p.privateKey;
-    if (key != null && key.trim().isNotEmpty) {
-      if (SSHKeyPair.isEncryptedPem(key)) {
-        socket.destroy();
-        throw Exception('Encrypted private keys (with passphrase) are not supported yet');
-      }
-      try {
-        identities = SSHKeyPair.fromPem(key);
-      } catch (_) {
-        socket.destroy();
-        throw Exception('Cannot parse the private key file');
-      }
-    }
 
     final password = p.password;
     return SSHClient(
@@ -224,8 +263,17 @@ class SshClientService extends ChangeNotifier implements RemoteShell {
       // answers would keep the connect (or every reconnect) hanging forever.
       handshakeTimeout: const Duration(seconds: 15),
       authTimeout: const Duration(seconds: 30),
-      onVerifyHostKey: (type, fingerprint) =>
-          _verifyHostKey(p.host, p.port, type, utf8.decode(fingerprint), onHostKey),
+      onVerifyHostKey: (type, fingerprint) async {
+        final ok = await _verifyHostKey(
+          p.host,
+          p.port,
+          type,
+          utf8.decode(fingerprint),
+          onHostKey,
+          rejection,
+        );
+        return ok;
+      },
     );
   }
 
@@ -239,7 +287,7 @@ class SshClientService extends ChangeNotifier implements RemoteShell {
     SSHClient? probe;
     try {
       // A key that no longer matches fails here instead of being trusted.
-      probe = await _newClient(p, null);
+      probe = await _newClient(p, null, _Rejection());
       await probe.authenticated.timeout(const Duration(seconds: 30));
       return true;
     } catch (_) {
@@ -254,12 +302,16 @@ class SshClientService extends ChangeNotifier implements RemoteShell {
     int epoch,
     Future<bool> Function(HostKeyInfo info)? onHostKey,
   ) async {
-    final client = await _newClient(p, onHostKey);
+    final rejection = _Rejection();
+    final client = await _newClient(p, onHostKey, rejection);
 
     try {
       await client.authenticated;
     } catch (_) {
       client.close();
+      if (rejection.info != null || rejection.rejected) {
+        throw HostKeyRejectedError(rejection.info);
+      }
       rethrow;
     }
 
@@ -371,8 +423,8 @@ class SshClientService extends ChangeNotifier implements RemoteShell {
       await _open(params, epoch, null);
     } catch (e) {
       if (epoch != _epoch || _state != SshConnectionState.reconnecting) return;
-      if (e is SSHAuthError || e is SSHHostkeyError) {
-        lastDisconnectReason = e is SSHHostkeyError
+      if (e is SSHAuthError || e is SSHHostkeyError || e is HostKeyRejectedError) {
+        lastDisconnectReason = e is HostKeyRejectedError || e is SSHHostkeyError
             ? 'Reconnect stopped: the server key changed or is not trusted'
             : 'Reconnect stopped: authentication failed';
         _params = null;
@@ -400,20 +452,29 @@ class SshClientService extends ChangeNotifier implements RemoteShell {
     String type,
     String fingerprint,
     Future<bool> Function(HostKeyInfo info)? onHostKey,
+    _Rejection rejection,
   ) async {
     final current = '$type $fingerprint';
     final known = await KnownHostsService.lookup(host, port);
     if (known == current) return true;
-    if (onHostKey == null) return false;
 
-    final accepted = await onHostKey(HostKeyInfo(
+    final info = HostKeyInfo(
       host: host,
       port: port,
       type: type,
       fingerprint: fingerprint,
       previous: known,
-    ));
-    if (accepted) await KnownHostsService.remember(host, port, current);
+    );
+    if (onHostKey == null) {
+      rejection.refuse(info);
+      return false;
+    }
+    final accepted = await onHostKey(info);
+    if (accepted) {
+      await KnownHostsService.remember(host, port, current);
+    } else {
+      rejection.refuse(info);
+    }
     return accepted;
   }
 
@@ -460,6 +521,24 @@ class SshClientService extends ChangeNotifier implements RemoteShell {
     await Future.wait([pump(session.stdout), pump(session.stderr)]);
     await session.done;
     return session.exitCode ?? -1;
+  }
+
+  @override
+  Future<InputResult> executeWithInput(String command, Uint8List input) async {
+    final client = _client;
+    if (client == null || !_isConnected) {
+      throw Exception('Not connected to SSH server');
+    }
+    final session = await client.execute(command);
+    final stderrFuture = utf8.decodeStream(session.stderr);
+    session.stdin.add(input);
+    await session.stdin.close();
+    await session.done;
+    return InputResult(
+      exitCode: session.exitCode,
+      killedBySignal: session.exitSignal != null,
+      stderr: await stderrFuture,
+    );
   }
 
   @override
