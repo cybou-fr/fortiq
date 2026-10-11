@@ -1,109 +1,111 @@
-# FORTIQ — Licensing and Paddle Integration
+# FORTIQ — Licensing and Lemon Squeezy Integration
 
-**Decision:** FORTIQ is paid Distributed Desktop Software. Paddle handles checkout and recurring billing.
-**Status:** product contract / planned implementation. No licensing integration exists in the audited baseline `f0ca0954`.
-**Public presentation:** describe what the desktop does; avoid defining the product by unrelated service categories.
+**Product:** FORTIQ — Distributed Desktop Software.
+**Decision:** Lemon Squeezy is the checkout, subscription and software-license provider.
+**Status:** specification for R0; no billing or licensing integration is implemented in the currently audited application.
 
 ## 1. Exactly two offers
 
 | | Intro | Pro |
 |---|---|---|
-| Payment | **€1 once** | **Annual recurring subscription** |
-| Entitlement | **7 × 24 hours** after verified purchase | Active paid annual term |
-| Renewal | None | Yearly automatic renewal until cancelled |
-| Access | All FORTIQ applications | All FORTIQ applications |
-| Eligibility | Once per verified purchaser | Available directly or after Intro |
-| Pricing | €1 | **Annual amount undecided** |
+| Payment | **€2 one-time** | **Annual recurring subscription** |
+| Entitlement | **Seven consecutive days** | Paid annual subscription term |
+| Renewal | **None** | Once a year, until canceled |
+| Functionality | Complete FORTIQ | Complete FORTIQ |
+| Availability | Intended: once per purchaser | Directly available or after Intro |
+| Price | **€2** | **Annual amount not yet decided** |
 
-No feature gating between Intro and Pro. Intro must never turn into Pro or charge the customer again without a separate purchase and clear authorization. Intro is a one-time Paddle product/price, while Pro uses a yearly recurring price.
+Intro is a **one-time product**, not a paid or free introductory period attached to Pro. Purchasing Intro must never create or automatically renew a Pro subscription. Customer-facing pricing should state the final amount and renewal terms clearly, including applicable taxes.
 
-The actual buyer-facing amount, taxes, cancellation details and next renewal must be shown accurately in checkout before confirmation. Any change of annual price is a separate commercial decision.
+The "one Intro per purchaser" rule is a **product requirement**, not an existing Lemon Squeezy guarantee. Built-in license keys track license/activation counts but do not automatically stop a customer buying a new Intro license in a second checkout. Decide on proportionate buyer identity/eligibility verification (and its cost) before calling this rule enforced.
 
-## 2. User journeys
+## 2. Built-in Lemon Squeezy license capabilities
 
-**Initial install:** app starts → activation window offers Intro and Pro → user chooses offer → opens approved Paddle checkout → backend verifies completed payment → client activates → launches workspace.
+Lemon Squeezy can automatically generate a license key for each purchased software product/variant, deliver it in the email receipt and show it in My Orders. A one-time product supports a configurable **License length** and **Activation limit**; a subscription product keeps the key tied to its subscription lifecycle.
 
-**Intro:** verified transaction grants seven consecutive days; license status displays exact expiration. One-time eligibility is enforced server-side against a stable purchaser identity. A failed payment or abandoned checkout grants no access.
+Configure the catalog:
 
-**Intro → Pro:** user can purchase Pro at any time; a completed annual purchase supersedes Intro in the entitlement view. Pro never starts automatically.
+- **FORTIQ Intro**: one-time **€2**, license keys enabled, **license length = seven days**, activation count to be decided.
+- **FORTIQ Pro**: **yearly subscription**, license keys enabled, annual amount to be approved, activation count to be decided.
+- Verify in test mode the exact expiration timestamp and timezone behavior. The key should expire after the first seven-day entitlement period, not after seven days of each activation.
+- Record live/test store, product and variant identifiers separately. Only permit the configured FORTIQ products.
 
-**Pro:** verified active paid subscription grants access through its valid paid period. Yearly renewal updates the entitlement. Cancellation stops future renewal but keeps access for time already paid.
+The License API supports `activate`, `validate` and `deactivate`. On successful activation, store the `instance.id` and validate both the license and that instance. Check `store_id`, `product_id` and/or `variant_id` on each response. License status can be `inactive`, `active`, `expired` or `disabled`; "inactive" can simply mean the key has not been activated on a device.
 
-**Expired:** show clear renewal or restore-purchase actions; keep the local profiles, files, documents, drafts and saved state intact. Provide an appropriate way to retrieve user data.
+Lemon Squeezy's license key for a subscription expires when the subscription expires. A canceled annual subscription can remain usable until the end of its paid term. Do not treat the `cancelled` subscription status alone as immediate expiration.
 
-**Refund, chargeback, disputed payment:** apply policy to entitlement after verifying canonical billing state and applicable law; provide a clear, recoverable state. Never treat unverified checkout redirects as payment evidence.
+Official docs: https://docs.lemonsqueezy.com/help/licensing/generating-license-keys
+and https://docs.lemonsqueezy.com/help/licensing/license-keys-subscriptions
 
-## 3. Systems and secrets
+## 3. Minimum viable architecture
 
-    Windows FORTIQ Desktop
-      ↔ License API (activate, status, restore, checkout intent)
-          ↔ Entitlement DB (customer, purchases, subscriptions, decisions)
-          ← Verified Paddle webhooks
-          ↔ Paddle API when reconciliation is needed
+    FORTIQ Desktop
+      ├── Purchase Intro / Pro → hosted Lemon Squeezy Checkout
+      ├── Enter or restore license key
+      ├── Activate / validate / deactivate via HTTPS License API
+      ├── Local encrypted license-key storage + bounded validity cache
+      └── Manage Pro → hosted Lemon Squeezy Customer Portal
 
-The backend holds all Paddle credentials and webhook signing secrets. The desktop holds only minimal identifiers and a server-signed entitlement or short-lived status token. The entitlement is tied to an authenticated customer identity without demanding a full account-management product at launch.
+Lemon Squeezy supplies product checkout, email receipt, license issuance, license activation/validation and the customer subscription portal. Reuse these first; do not build a large custom billing backend by default.
 
-Do not use machine hardware serials, IP addresses or email string matching alone as anti-fraud authority. Select, document and privacy-review a proportionate customer verification mechanism and device policy before release.
+A **small server-side component is optional for ordinary licensed access**. It becomes necessary if strict one-per-purchaser Intro enforcement, central purchaser identity, signed offline entitlements or server-only API operations are implemented. If used, keep it narrow:
+- Verify webhook HMAC signatures and reconcile provider changes;
+- enforce a documented identity-based eligibility policy before allowing discounted Intro purchase;
+- avoid exposing Lemon Squeezy administrative API or webhook secrets in the desktop;
+- hold only the minimum identity, entitlement and event metadata needed.
 
-## 4. Entitlement model
+**Do not claim duplicate Intro purchases are prevented** until the eligibility mechanism is implemented and tested. Changing account email or device may not be sufficient proof that a purchaser is different.
 
-Suggested logical states: `unactivated`, `intro_active`, `pro_active`, `grace`, `expired`, `billing_attention`, `revoked`.
+## 4. User experience and lifecycle
 
-Recommended fields: `customerId`, `productId`, `offer`, `entitlementId`, `sourceTransactionId`/`subscriptionId`, `startsAt`, `paidThrough`, `status`, `issuedAt`, `expiresAt`, `tokenVersion`.
+**Install → purchase:** launch desktop without requiring SSH; offer Intro and Pro with exact price and terms. Open Lemon Squeezy's hosted checkout. Failed, canceled or merely redirected checkout does not grant access.
 
-Separate Paddle's subscription state from effective app access. Use provider event ID, transaction ID and subscription ID to make all processing idempotent. Webhook processing verifies signature, stores the event, updates state transactionally and tolerates duplicates, delay and out-of-order events. A reconciliation job re-checks Paddle as source of truth.
+**Activate:** after purchase, the buyer receives a license key from Lemon Squeezy. Allow paste/input, activation and validity check, then reveal the full workspace. Any optional automatic post-checkout activation must be verified against the provider, not a return URL alone.
 
-Intro eligibility cannot be restored to unused simply by deleting the app, reinstalling Windows or changing an email alias.
+**Intro:** one confirmed €2 payment grants seven days. Never automatically charge Pro. On expiry, offer a Pro purchase and preserve user settings/documents.
 
-## 5. Offline behavior
+**Pro:** annual purchase and renewals maintain license validity. The "Manage subscription" action opens the hosted Customer Portal, which already supports cancellation and payment-method changes. Cancellation retains access through the valid term; handle provider `expired` and `disabled` states.
 
-The application and its remote-resource operations should tolerate short Internet outages. Design a bounded offline entitlement cache validated by server signatures, with monotonic time protection where available and revalidation on reconnection.
+**Switch devices:** provide license-instance deactivation and reactivation within the approved activation policy.
 
-**To decide before release:** exact offline grace duration, active device count and revocation behavior. Do not silently choose 72 hours or two devices; both were only earlier suggestions, not confirmed product decisions.
+**Connectivity:** avoid instantly disabling FORTIQ during a short network outage. A secure cache/offline grace is a release policy to decide and test, not a silently assumed 72-hour default. A customer-edited preferences file or changed system clock is not authoritative proof of payment.
 
-Do not delete or modify user data when a paid entitlement is no longer active.
+**Data safety:** expiration, failed renewal and refunds must never delete local SSH profiles, keys, drafts, documents or workspace settings. Make account and license recovery clear.
 
-## 6. Paddle integration steps (LIC-01…LIC-07)
+## 5. R0 implementation tasks (LIC-01…LIC-07)
 
-| ID | Task | Completion criterion |
+| ID | Work | Acceptance |
 |---|---|---|
-| LIC-01 | Configure verified Paddle seller/product and two prices | Intro is one-time €1; Pro is annual recurring with approved price; sandbox/production isolated |
-| LIC-02 | Checkout + activation window in desktop | Buyer sees correct terms; canceled checkout grants no access; restore purchase works |
-| LIC-03 | Minimal License API + webhook ingress | Signed verification, idempotent event handling, canonical reconciliation, secrets server-side |
-| LIC-04 | Entitlement persistence + signed local cache | Restart, short outage, expiration and subscription cancel work predictably |
-| LIC-05 | Intro once per verified purchaser | Reinstall/retry/duplicate webhook cannot grant a second intro |
-| LIC-06 | Customer self-service subscription management | Pro cancel and renewal state visible; link to Paddle portal; no conversion from Intro |
-| LIC-07 | Financial/compliance release checklist | Accurate receipts and billing UX, correct product descriptions, terms, privacy notices and validated payout setup |
+| LIC-01 | Activate Lemon Squeezy store, configure €2 Intro seven-day one-time license and annual Pro license product | Test-mode products and live products separately verified; Pro price approved before going live |
+| LIC-02 | Desktop purchase, activation, restore-key and status UI | Buyer can activate without SSH; canceled checkout does not unlock app; correct expiry visible |
+| LIC-03 | Integrate native License API with product/instance validation; only add minimal webhook/backend if the policy requires it | HTTP/error/rate limit handling; no store API secrets in Windows build |
+| LIC-04 | Safe local license storage, bounded offline cache and validity refresh | Restart/outage/expiry/disabled and device migration covered; user data preserved |
+| LIC-05 | One-time Intro purchaser eligibility | Define verifiable identity and implement an actual repeat-purchase gate; clearly flag unenforced state during development |
+| LIC-06 | Pro self-service subscription management via Customer Portal | Annual charge shown; cancellation does not end paid access immediately |
+| LIC-07 | Windows release acceptance, commercial/legal pages and purchase tests | Fresh-install checkout, receipts, refund flows, restore, error handling and accurate offer wording |
 
-For the €1 Intro, measure the payment and refund costs as part of the economics review; do not set a second low-value payment simply to work around an integration failure.
+The annual Pro price, supported device count, buyer identity rules, offline grace period and distributor signing method remain **undecided**.
 
-## 7. Release and support expectations
+## 6. Verification checklist
 
-The application presents one consistent full-featured paid experience. Account/payment and product incidents require a minimal usable contact/recovery flow. Product diagnostics should favor reproducible error codes, clear self-help and privacy-protective logs.
+1. Intro makes exactly one **€2** charge and its issued key expires after seven days; checkout does not create a subscription.
+2. Intro → Pro requires a **separate authorized purchase**; no automatic upgrade or billing.
+3. Pro renews annually; customer can cancel via Lemon Squeezy Portal and remains entitled until the applicable end date.
+4. Expired and disabled license key cannot activate or validate as entitled; active key belongs to FORTIQ's configured store/product/variant.
+5. Activation instances can be deactivated when migrating devices. Duplicated initialization does not waste activation slots.
+6. A checkout redirect without a confirmed license never unlocks the desktop.
+7. A second paid Intro checkout is blocked **only once** buyer eligibility enforcement has been built; test it separately rather than assuming native licensing provides it.
+8. No private SSH keys are affected by license expiry; payment and license secrets are protected.
+9. Test-mode purchase, license, subscription and Customer Portal flows are tested end-to-end; live identifiers are correctly replaced at release.
+10. Subscription cancellation, renewal failure, refund and disabled/expired states produce a recoverable user-visible outcome.
 
-Product site must communicate verified functionality, platform availability, license duration, annual renewal, cancellation and any permitted offline behavior.
+## 7. Official documentation
 
-Paddle provides the customer-facing merchant-of-record checkout and billing layer, while the software publisher remains responsible for delivering a functioning licensed product and for its own local business/tax obligations.
+- License keys: https://docs.lemonsqueezy.com/help/licensing/generating-license-keys
+- License API: https://docs.lemonsqueezy.com/api/license-api
+- Subscriptions and keys: https://docs.lemonsqueezy.com/help/licensing/license-keys-subscriptions
+- Customer Portal: https://docs.lemonsqueezy.com/help/online-store/customer-portal
+- Test mode: https://docs.lemonsqueezy.com/help/getting-started/test-mode
+- Webhooks (if needed): https://docs.lemonsqueezy.com/help/webhooks
 
-## 8. Acceptance tests
-
-- One €1 Intro purchase activates seven days and produces no subsequent charges.
-- One purchaser cannot repeat Intro after reinstalling the application.
-- Pro purchased directly activates a full annual paid term; direct purchase from Intro works.
-- Pro cancellation retains access to the paid-through date.
-- Expired Intro offers only Pro; subscription payment failure follows a visible recoverable status.
-- Duplicate and out-of-order Paddle webhooks do not double activate or shorten a valid paid term.
-- Offline cache works strictly within the approved policy; changed client clock does not trivially extend access.
-- A spoofed checkout redirect, replayed event or locally edited preferences file does not grant a license.
-- License expiration or refund does not delete customer documents/settings.
-- Installation, purchase and restore run when no SSH host is connected.
-- No client release contains server-side Paddle secrets.
-
-## 9. References
-
-- Paddle Billing / subscriptions: https://developer.paddle.com/
-- One-time digital purchases: https://developer.paddle.com/get-started/how-paddle-works/digital-products/
-- FORTIQ architecture: [ARCHITECTURE.md](ARCHITECTURE.md)
-- Development sequence: [DEVELOPMENT_MATRIX.md](DEVELOPMENT_MATRIX.md)
-
-The exact SDK, API fields and webhook event contracts are implementation choices to validate against current official Paddle documentation and Sandbox before coding.
+Confirm product approval and actual tax-inclusive checkout amounts in the live Lemon Squeezy store before publishing payment links.
