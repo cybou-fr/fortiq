@@ -105,8 +105,13 @@ class DesktopTaskController extends ChangeNotifier {
         task.message = 'SSH session changed. Verify the transfer manually.';
       }
     } on TransferCancelled {
-      task.state = DesktopTaskState.cancelled;
-      task.message = 'Transfer cancelled. A partial file may remain.';
+      if (isSessionCurrent != null && !isSessionCurrent()) {
+        task.state = DesktopTaskState.unknown;
+        task.message = 'SSH session changed. Verify the remote result manually.';
+      } else {
+        task.state = DesktopTaskState.cancelled;
+        task.message = 'Transfer cancelled. A partial file may remain.';
+      }
     } catch (error) {
       task.state = isSessionCurrent != null && !isSessionCurrent()
           ? DesktopTaskState.unknown
