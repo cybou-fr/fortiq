@@ -43,13 +43,13 @@ void main() {
 
   test('rejects newline header injection and recipients starting with dash', () async {
     final ssh = FakeShell((_) => '');
-    for (final recipient in ['-Cdebug', 'root\\nCc:evil', 'root;touch /tmp/x']) {
+    for (final recipient in ['-Cdebug', 'root\nCc:evil', 'root;touch /tmp/x']) {
       expect(await MailService(ssh).sendSystemMail(
         to: recipient, subject: 'safe', body: 'hello',
       ), isFalse);
     }
     expect(await MailService(ssh).sendSystemMail(
-      to: 'root', subject: 'Test\\nBcc: other', body: 'hello',
+      to: 'root', subject: 'Test\nBcc: other', body: 'hello',
     ), isFalse);
     expect(ssh.commands, isEmpty);
   });
