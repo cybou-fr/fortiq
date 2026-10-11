@@ -77,6 +77,37 @@ is invalidated on changes to inode, device, size, mtime or ctime. This
 is a performance optimization, **not** a signed integrity check: verified
 model downloads and safe file installation remain separate requirements.
 
+## Optional offline staging of pre-verified model/runtime artifacts
+
+An additional **offline** helper, [`stage.py`](stage.py), can copy an already
+downloaded **Linux ELF** `llama-cli` and a manually chosen **GGUF** into the
+per-user paths expected by `ai`. It does **not** choose or download a model,
+run `sudo`, execute the binary, overwrite existing files, or connect to any
+AI API. It is not the unfinished `ai setup` automatic installer.
+
+Get **trusted SHA-256 checksums independently from the model/runtime source**
+and verify the exact licensing and CPU architecture. A matching SHA-256 only
+confirms that the staged file matches the supplied digest; it does not make
+an untrusted file safe or prove the model will run fast.
+
+```bash
+sha256sum /trusted/llama-cli /trusted/model.gguf
+python3 tool/ai/stage.py \
+  --llama /trusted/llama-cli --llama-sha256 EXPECTED_BINARY_SHA256 \
+  --model /trusted/model.gguf --model-sha256 EXPECTED_MODEL_SHA256
+
+# Same invocation with --apply only after reviewing the read-only result.
+# The script installs ~/.local/bin/llama-cli and
+# ~/.local/share/ai/model.gguf, without replacing existing files.
+```
+
+Place the `ai` script itself in `~/.local/bin/ai` as shown above.
+Then execute `ai status --json` and **measure `ai benchmark --json`
+on a disposable Linux test VPS** before relying on production AI. The
+stager verifies checksums and basic ELF/GGUF headers, not a running
+inference engine, complete GGUF metadata, CPU instruction compatibility,
+or the binary's provenance.
+
 ## Cache is off until explicitly requested
 
 An exact-cache hit is returned **before starting llama.cpp**. A changed
