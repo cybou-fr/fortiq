@@ -772,7 +772,6 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
                 if (_tasks.tasks.isEmpty) return const SizedBox.shrink();
                 return ExpansionTile(
                   initiallyExpanded: true,
-                  dense: true,
                   title: Text('File tasks · ${_tasks.runningCount} running',
                       style: const TextStyle(fontSize: 12)),
                   trailing: _tasks.runningCount > 0
