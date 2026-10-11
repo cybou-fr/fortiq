@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
 
@@ -56,4 +57,61 @@ class SftpTransferService {
       await sftp.close();
     }
   }
+  /// Explicit upload into a selected Linux directory. Stage under a temporary
+  /// name, verify the byte count, then publish after checking the destination.
+  /// The SFTP v3 rename/check pair is not atomic no-clobber: concurrent writers
+  /// on the server can still race. Do not use for overwrite-sensitive workflows.
+  Future<void> upload({
+    required SSHClient client,
+    required String localPath,
+    required String remotePath,
+    required void Function(int bytes, int? totalBytes) onProgress,
+    required bool Function() sessionCurrent,
+  }) async {
+    if (localPath.isEmpty || remotePath.isEmpty ||
+        remotePath.contains('\x00')) {
+      throw ArgumentError('Invalid transfer paths');
+    }
+    final source = File(localPath);
+    final length = await source.length();
+    if (!sessionCurrent()) throw StateError('SSH session changed.');
+    final sftp = await client.sftp();
+    final partial = '$remotePath.fortiq-upload-${DateTime.now().microsecondsSinceEpoch}';
+    try {
+      try {
+        await sftp.stat(remotePath);
+        throw StateError('Destination already exists on Linux.');
+      } on SftpStatusError catch (error) {
+        if (error.code != SftpStatusCode.noSuchFile) rethrow;
+      }
+      final handle = await sftp.open(
+        partial,
+        mode: SftpFileOpenMode.create | SftpFileOpenMode.write,
+      );
+      try {
+        final writer = handle.write(
+          source.openRead().map((data) => Uint8List.fromList(data)),
+          onProgress: (sent) => onProgress(sent, length),
+        );
+        await writer.done;
+      } finally {
+        await handle.close();
+      }
+      if (!sessionCurrent()) throw StateError('SSH session changed.');
+      final attrs = await sftp.stat(partial);
+      if (attrs.size != length) {
+        throw StateError('Incomplete upload; temporary remote file retained.');
+      }
+      try {
+        await sftp.stat(remotePath);
+        throw StateError('Destination appeared during upload.');
+      } on SftpStatusError catch (error) {
+        if (error.code != SftpStatusCode.noSuchFile) rethrow;
+      }
+      await sftp.rename(partial, remotePath);
+    } finally {
+      await sftp.close();
+    }
+  }
+
 }
