@@ -6,8 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
-/// Non-secret product identifiers and hosted checkout URLs are supplied at build
-/// time. Never embed Lemon Squeezy administrative API or webhook secrets here.
+/// Public product IDs and hosted links only. No administrative API secrets.
 class FortiqLicenseConfig {
   static const storeId = String.fromEnvironment('FORTIQ_LS_STORE_ID');
   static const introVariantId = String.fromEnvironment('FORTIQ_LS_INTRO_VARIANT_ID');
@@ -16,19 +15,24 @@ class FortiqLicenseConfig {
   static const proCheckout = String.fromEnvironment('FORTIQ_LS_PRO_CHECKOUT');
   static const storeSlug = String.fromEnvironment('FORTIQ_LS_STORE_SLUG');
 
-  /// Release builds always require a license. Debug builds may opt in to test.
   static const requireLicense = bool.fromEnvironment('dart.vm.product') ||
       bool.fromEnvironment('FORTIQ_REQUIRE_LICENSE');
 
-  static bool get configured =>
-      int.tryParse(storeId) != null &&
-      int.tryParse(introVariantId) != null &&
-      int.tryParse(proVariantId) != null &&
-      int.parse(introVariantId) != int.parse(proVariantId);
+  static bool get configured {
+    final store = int.tryParse(storeId);
+    final intro = int.tryParse(introVariantId);
+    final pro = int.tryParse(proVariantId);
+    return store != null && store > 0 && intro != null && intro > 0 &&
+        pro != null && pro > 0 && intro != pro;
+  }
 
   static Uri? get portalUrl {
     final slug = storeSlug.trim();
-    if (!RegExp(r'^[a-zA-Z0-9-]+
+    if (!RegExp(r'^[a-zA-Z0-9-]+$').hasMatch(slug)) return null;
+    return Uri.parse('https://' + slug + '.lemonsqueezy.com/billing');
+  }
+
+  static Uri? checkoutUrl(LicenseOffer offer) {
     final value = offer == LicenseOffer.intro ? introCheckout : proCheckout;
     final url = Uri.tryParse(value);
     if (url == null || url.scheme != 'https' ||
