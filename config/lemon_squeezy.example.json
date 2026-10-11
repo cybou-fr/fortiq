@@ -1,0 +1,9 @@
+{
+  "FORTIQ_REQUIRE_LICENSE": "true",
+  "FORTIQ_LS_STORE_ID": "0",
+  "FORTIQ_LS_INTRO_VARIANT_ID": "0",
+  "FORTIQ_LS_PRO_VARIANT_ID": "0",
+  "FORTIQ_LS_INTRO_CHECKOUT": "https://your-store.lemonsqueezy.com/checkout/buy/REPLACE_INTRO",
+  "FORTIQ_LS_PRO_CHECKOUT": "https://your-store.lemonsqueezy.com/checkout/buy/REPLACE_PRO",
+  "FORTIQ_LS_STORE_SLUG": "your-store"
+}
