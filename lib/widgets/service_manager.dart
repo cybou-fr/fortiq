@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../services/ssh_service.dart';
 import 'remote_snapshot.dart';
 import 'ui_errors.dart';
+import 'ai_advice_dialog.dart';
+import '../services/ai_service.dart';
 
 class RemoteServiceManager extends StatefulWidget {
   final SshClientService sshService;
@@ -97,44 +99,10 @@ class _RemoteServiceManagerState extends State<RemoteServiceManager> {
     if (!_snapshot.available) return;
     final client = widget.sshService.rawClient;
     try {
-      final details = await widget.sshService.system.fetchServiceDetails(unit);
-      if (!mounted ||
-          !_snapshot.available ||
-          client != widget.sshService.rawClient) {
-        return;
-      }
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(unit),
-          content: SizedBox(
-            width: 520,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (final entry in details.entries)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: SelectableText(
-                        '${entry.key}: ${entry.value.isEmpty ? '—' : entry.value}',
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
-            ),
-          ],
-        ),
-      );
-    } catch (error) {
-      if (mounted) showActionError(context, 'Service details', error);
+      await widget.sshService.system.controlService(unit, act);
+    } catch (e) {
+      if (!mounted) return;
+      showActionError(context, '$act $unit', e);
     }
   }
 
@@ -283,6 +251,54 @@ class _RemoteServiceManagerState extends State<RemoteServiceManager> {
                                 ),
                               ],
                             ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isRunning ? Colors.green.withValues(alpha: 0.15) : Colors.red.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: isRunning ? Colors.green.withValues(alpha: 0.5) : Colors.red.withValues(alpha: 0.5),
+                              ),
+                            ),
+                            child: Text(
+                              sub,
+                              style: TextStyle(
+                                color: isRunning ? Colors.greenAccent : Colors.redAccent,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          IconButton(
+                            icon: const Icon(Icons.auto_awesome, size: 16, color: Colors.white70),
+                            tooltip: 'Explain service with server AI (read-only)',
+                            onPressed: () {
+                              showAiAdviceDialog(
+                                context: context,
+                                ssh: widget.sshService,
+                                title: 'Explain $unit',
+                                loadContext: () => AiService(widget.sshService).serviceEvidence(unit),
+                              );
+                            },
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.refresh, size: 16, color: Colors.white70),
+                            tooltip: 'Restart (systemctl restart)',
+                            onPressed: () => _action(unit, 'restart'),
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              isRunning ? Icons.stop : Icons.play_arrow,
+                              size: 16,
+                              color: isRunning ? Colors.orangeAccent : Colors.greenAccent,
+                            ),
+                            tooltip: isRunning ? 'Stop' : 'Start',
+                            onPressed: () => _action(unit, isRunning ? 'stop' : 'start'),
+                          ),
+                        ],
+                      ),
                     );
                   },
                 ),

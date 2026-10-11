@@ -262,6 +262,17 @@ void main() {
       expect(base64Decode(back), bytes);
     });
 
+    test('stdin command stdout is returned together with a strict exit status', () async {
+      const message = 'AI says: check systemctl';
+      final r = await ssh.executeWithInput(
+        'cat',
+        Uint8List.fromList(utf8.encode(message)),
+      );
+      expect(r.exitCode, 0);
+      expect(r.stdout, message);
+      expect(r.stderr, isEmpty);
+    });
+
     test('a command fed through stdin reports its failure', () async {
       final r = await ssh.executeWithInput('cat >/dev/null; echo bad >&2; exit 4', Uint8List(0));
       expect(r.ok, isFalse);
