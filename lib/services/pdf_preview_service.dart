@@ -12,7 +12,7 @@ class PdfPreviewService {
     final result = await shell.execute(
       'LC_ALL=C pdfinfo -- ${shQuote(path)}',
     );
-    final match = RegExp(r'^Pages:\\s*(\\d+)\\s*$', multiLine: true)
+    final match = RegExp(r'^Pages:\s*(\d+)\s*$', multiLine: true)
         .firstMatch(result);
     final pages = int.tryParse(match?.group(1) ?? '');
     if (pages == null || pages < 1 || pages > 100000) {
@@ -30,7 +30,7 @@ class PdfPreviewService {
       'pdftoppm -f $page -l $page -singlefile -scale-to 1400 '
       '-png -- $q | base64 -w 0',
     );
-    final bytes = base64Decode(data.replaceAll(RegExp(r'\\s+'), ''));
+    final bytes = base64Decode(data.replaceAll(RegExp(r'\s+'), ''));
     if (bytes.length < 8 || bytes[0] != 0x89 || bytes[1] != 0x50 ||
         bytes[2] != 0x4e || bytes[3] != 0x47) {
       throw StateError('PDF renderer did not return a PNG.');
