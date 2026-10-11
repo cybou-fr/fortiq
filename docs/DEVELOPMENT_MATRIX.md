@@ -1,253 +1,210 @@
-# Fortiq: матрица развития универсального удалённого рабочего стола
+# FORTIQ — Development Matrix
 
-Дата снимка: 11 октября 2026 года. Базовый коммит: `938a15f`.
-Матрица учитывает незакоммиченные изменения, прочитанные при подготовке, включая переподключение, tmux, браузерный прокси и подготовку сервера. Это план, а не перечень выпущенных возможностей. Рабочие файлы продолжают изменяться: перед реализацией каждого пункта нужно обновить его исходное состояние.
+**Snapshot:** 2026-10-11. **Reviewed commit:** `cb737744cc970a5388f1edfbf45e6c185f071857`.
+**Scope:** Distributed Desktop Software, all existing apps retained.
+**Evidence level:** source inspection of `main`; tests and real-server integration were not executed as part of this documentation review.
 
-[README](../README.md) описывает запуск, требования, текущее поведение и ограничения. Матрица определяет состав развития и критерии приёмки. При выпуске изменённые возможности обновляются в обоих документах; запланированные функции не переносятся в текущие возможности README до реализации и проверки.
+Related documents: [README](../README.md) (current build), [PRODUCT_SCOPE](PRODUCT_SCOPE.md) (product), [ARCHITECTURE](ARCHITECTURE.md) (contracts), [LICENSING](LICENSING.md) (Paddle business logic).
 
-## 1. Назначение и принципы
+## 1. Decisions and priorities
 
-Fortiq — единый рабочий стол для повседневной работы, бизнеса и администрирования удалённой системы. Все существующие приложения сохраняются. Почта и управление дисками получают ранние полноценные поставки, остальные инструменты развиваются вместе с ними.
+- Product is FORTIQ, a paid distributed desktop application with one set of full capabilities.
+- Two purchase options only: **Intro €1 for seven days once, no renewal**; **Pro billed annually, price TBD**. Paddle is the payment and billing layer.
+- Existing 12 application types remain. Existing Linux environment auto-preparation remains and is strengthened.
+- Prioritize commercially usable Windows builds, trustworthy licensing, robust SSH/setup, resource identity and integrated user workflows.
+- The roadmap has acceptance gates, not guaranteed delivery dates. Work not yet implemented must be described as planned.
+- Reuse app capabilities as common services; preserve resource ownership across local, remote and account sources.
 
-- Каждая поставка улучшает рабочие приложения, работу с данными и управление системой.
-- Развитие ведётся параллельными направлениями; конкретные изменения объединяются последовательно через общие контракты и проверки.
-- Наличие интерфейса или метода в коде означает «реализовано в коде», а не «проверено на реальной системе».
-- Почта, документы и административные инструменты используют общие файлы, задачи, уведомления и рабочие пространства.
-- Локальные ресурсы, ресурсы сервера и ресурсы аккаунта явно различаются. Переключение сервера не переносит операции на другой хост.
-- Управление бизнес-приложениями через браузер, встроенные приложения и показ произвольных удалённых GUI-программ — разные возможности, которые развиваются отдельно.
-- Windows — текущая основная платформа. Android, прежде всего планшеты, развивается отдельным направлением; Linux/macOS/iOS пока не заявляются как проверенные. Наличие платформенной папки не означает поддержку.
+## 2. Current code audit
 
-## 2. Что уже есть в коде
-
-| Область | Реализованная основа | Что ещё надо подтвердить |
+| Area | Observed implementation | Gap or verification |
 |---|---|---|
-| Оболочка | Внутренние окна, док, ключи окон, сворачивание через Offstage, проверка dirty при закрытии | Несколько редакторов, смена порядка, размеры окна, восстановление после перезапуска |
-| SSH | Проверка ключа хоста, состояния соединения, повторное подключение и проверка доступности | Длительный разрыв, смена ключа при повторе, остановка повторов пользователем |
-| Терминал | PTY, потоковый UTF-8, tmux и повторное присоединение | Несколько сессий, отсутствие tmux, выход из shell, разрыв в момент открытия |
-| Сохранение | Снимок отправленного текста, сохранение dirty для новых правок, временный файл в доступном каталоге | Конкурирующие изменения на сервере, ACL/атрибуты, прерванная запись и неатомарная ветка |
-| Браузер | SOCKS через основную SSH-сессию, настройки WebView2, отсутствие прямого fallback | Маршрут HTTP/DNS, внутренние адреса, отказ прокси и повторное подключение |
-| Подготовка сервера | ServerSetupService, список требований, статус пакетов и обновлений, журнал | Права, apt lock, ошибки установки, повторное подключение во время операции |
-| Проверки | Один файл тестов с группами shQuote, asRoot, tmuxAttachCommand и parseUpgradable | Нет достаточного покрытия рабочих сценариев приложений |
+| UI | `main.dart` requires `isSessionActive` to show `HeadlessDesktopWorkspace` | Start shell and activation independently of SSH |
+| Applications | `FortiqAppType` in `desktop_workspace.dart` lists 12 types | Central registry; resource-aware instances; persistence |
+| Session | SSH TOFU, reconnect, ping, dynamic SOCKS | Single-flight reconnect; late-result cleanup; transport integration testing |
+| Terminal | PTY, UTF-8 stream, tmux session naming | `_openWindow` reuses same Terminal instance |
+| Files | `file_service.dart`: shell ls/cat/base64 and write | SFTP, streaming transfers, robust metadata, save conflicts |
+| System | `system_service.dart`: processes, service control, logs/metrics | Structured outputs, lifecycle and error coverage |
+| Network | `network_service.dart`: ports/UFW | UDP and reliable parsing/error categories |
+| Server setup | `server_setup_service.dart` auto-installs/updates required packages when permitted | Dispose/cancellation, apt lock, no overlapping remote jobs, clear status |
+| Browser | Windows WebView2 over SSH SOCKS | Actual DNS/route/fail-closed integration tests |
+| Mail | `mail_service.dart` uses Linux system mail | Future account mail/MIME, cache and independent drafts |
+| Tests | `test/shell_quote_test.dart`, `test/services_test.dart` | CI, widget and integration coverage |
+| Android | `android/app/src/main/AndroidManifest.xml` includes INTERNET | Windows-only browser dependency and device validation |
+| Licensing | No Paddle/entitlement modules or integration | Entire LIC-01…07 track |
+| Distribution | Windows Flutter build instructions | Signing, release process, installation and update tests |
 
-Источники: `lib/main.dart`, `lib/widgets/desktop_workspace.dart`, `lib/services/ssh_service.dart`, `lib/services/server_setup_service.dart`, `test/shell_quote_test.dart`.
+**Risks confirmed in source:** `_setup.run()` is launched unawaited from desktop init and the service is disposed when the desktop closes; async completion/disposal needs explicit protection. Reconnect retry paths have no explicit single-flight guard. Current tool code and some old documentation refer to different locations. These are implementation findings, not proof of a production failure.
 
-## 3. Общие задачи и зависимости
+## 3. Shared engineering work
 
-| ID | Изменение | Зачем | Критерий готовности |
+| ID | Priority | Contract / work | Acceptance |
 |---|---|---|---|
-| CORE-01 | Отделить оболочку рабочего стола от состояния SSH в main.dart | Локальная почта и черновики доступны без сервера | Запуск без SSH; подключение, отключение и смена хоста не уничтожают локальные окна |
-| CORE-02 | Реестр приложений вместо разрозненных switch в desktop_workspace.dart | Добавлять приложения и действия без расхождения дока, иконок и фабрик | Все 12 существующих типов доступны; размеры, несколько окон и зависимости описаны в одном месте |
-| CORE-03 | ResourceLocation: тип ресурса, server/account ID, путь и доступные действия | Не путать локальное вложение с удалённым файлом | Открытие, сохранение и передачи используют явное местоположение; неверный сервер отклоняется |
-| CORE-04 | Менеджер фоновых задач: прогресс, отмена, ошибки, история | Синхронизация, передачи, анализ диска и обновления не зависят от открытого окна | Сворачивание не прерывает задачу; закрытие окна не скрывает результат; после разрыва результат может быть «неизвестен» |
-| CORE-05 | Локальная база и системное хранилище секретов | Почтовый кеш, черновики, рабочие пространства и токены | Секретов нет в shared_preferences/логах; проверены миграция базы и восстановление черновика |
-| CORE-06 | Общие уведомления и маршрутизация действий | Открывать письмо, файл, процесс, службу или задачу из другого приложения | Уведомление приводит к нужному ресурсу и серверу; ошибки не превращаются в пустой успешный результат |
-| CORE-07 | Обнаружение возможностей хоста и политика повышения прав | Не обещать операции без инструмента или разрешения | Недоступная возможность объясняется; нужны права показываются отдельно от «не установлено» |
-| CORE-08 | Жизненный цикл асинхронных операций | Исключить устаревшие ответы и работу с уничтоженными контроллерами | Закрытие/смена ресурса во время загрузки не меняет другой ресурс; поздние сессии освобождаются |
-| CORE-09 | Сохранение рабочих пространств | Возвращаться к набору окон и ресурсов | Восстанавливаются геометрия и ресурсы; секреты и небезопасные команды не записываются в пространство |
+| CORE-01 | R0/R1 | Shell and activation independent of SSH | Open desktop/activation without remote connection; connect later without losing local state |
+| CORE-02 | R1 | Central App Registry | All 12 widgets appear consistently; per-app multiple-window policy defined |
+| CORE-03 | R1 | ResourceLocation (local/host/account) | Every operation uses explicit resource ID; switching server never redirects an in-flight action |
+| CORE-04 | R1 | Shared Task Manager | Progress, cancellation, failure and unknown outcome visible outside initiating window |
+| CORE-05 | R0/R1 | Local database and OS credential store | No secret in preferences/logs; restore drafts and saved workspace metadata |
+| CORE-06 | R1/R2 | Notifications and cross-app Action Router | Service opens its logs/config on the same host; task opens source |
+| CORE-07 | R0/R1 | Host capabilities, privilege discovery, automatic dependency setup | Missing packages installed when allowed, system updates honor configured policy, error and progress visible |
+| CORE-08 | R0 | Safe async lifecycle and reconnect | Single-flight reconnect; no use of disposed notifier; late session closed |
+| CORE-09 | R2/R3 | Persistent workspaces | Layout, windows, source references and drafts restored without replaying remote writes |
+| CORE-10 | R0/R1 | Remote operation safety | Unknown outcome identified; no automatic repetition of potentially destructive actions |
+| CORE-11 | R1 | Multi-resource Session Manager | A/B sources maintain independent connection state, host keys and tunnels |
+| CORE-12 | R0 | CI and verified Windows packaging | Static analysis + unit tests on every PR; install/run/update smoke test; repeatable release artifacts |
 
-Предлагаемые новые модули: `lib/desktop/app_registry.dart`, `lib/desktop/desktop_actions.dart`, `lib/models/resource_location.dart`, `lib/services/task_service.dart`, `lib/services/credential_store.dart`, `lib/services/local_store.dart`. Эти файлы пока не являются существующей реализацией.
+Detailed behavior is defined in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-`SshClientService` постепенно оставить ответственным за транспорт, соединение и каналы. Почту, диски, файловые операции и парсеры выделять в отдельные сервисы по мере изменения соответствующей функции. Переписывать весь сервис до первой поставки не требуется.
+## 4. Licensing and commercial release
 
-## 4. Матрица приложений
+| ID | Priority | Work | Acceptance |
+|---|---|---|---|
+| LIC-01 | R0 | Paddle product, seller verification, one-time Intro and yearly Pro | €1 Intro, seven days once, no auto-renewal; Pro annual price explicitly approved |
+| LIC-02 | R0 | Purchase/activation/subscription UI in FORTIQ | Checkout, restore and expiry visible even without SSH |
+| LIC-03 | R0 | Small licensing backend and Paddle webhooks | Signatures verified, idempotent events, reconciliation, no billing secrets in app |
+| LIC-04 | R0 | Entitlement token, local cache and renewal state | Access consistent through restart/outage/cancel/expiry/refund |
+| LIC-05 | R0 | Intro one-time eligibility | Reinstall or duplicate transaction never grants repeat Intro |
+| LIC-06 | R0 | Self-service Pro billing and cancellation | Buyer can cancel renewal; access remains through paid-through date |
+| LIC-07 | R0 | Sales release readiness | Price, renewal, platform, license terms and support channel honestly documented |
 
-### APP-01 — Файлы
+Policy choices still open: **Pro annual price**, device count, offline grace length, activation identity mechanism, Windows signing/distribution. Do not silently select defaults. All Intro/Pro functionality is identical.
 
-- **Код:** `widgets/file_explorer.dart`; listDirectory/createDirectory/remove/readFile в `services/ssh_service.dart`.
-- **Сейчас:** каталоги, навигация, создание папки, удаление, открытие файла. Имена и метаданные разбираются из вывода ls.
-- **Подтверждённые ограничения:** разделение по пробелам и склейка имени искажают повторяющиеся пробелы; имя ссылки включает отображение её цели. Нет пользовательского центра передач и корзины.
-- **Ближайший шаг:** SFTP-список каталога, загрузка/скачивание, переименование, копирование пути. Добавить защиту от устаревшего ответа при быстрой навигации.
-- **Бизнес:** избранные каталоги, недавние документы, пересылка файла как вложения, выбор места сохранения.
-- **Администрирование:** права/владелец, ссылки, операции между каталогами, открытие терминала в выбранной папке.
-- **Зависимости:** CORE-03/04/08; SFTP в существующем SSH-клиенте.
-- **Готовность:** корректны имена с пробелами, кавычками и Unicode; передача большого файла показывает прогресс и ошибку; действие невозможно перенаправить на другой сервер.
+## 5. Application matrix
 
-### APP-02 — Текстовый редактор
+Keep APP identifiers stable. Present status is from repository source, not certification on real servers.
 
-- **Код:** `widgets/file_editor.dart`; writeFile в `services/ssh_service.dart`.
-- **Сейчас:** текст, номера строк, Ctrl+S, dirty, проверка Reload, сравнение текста с отправленным снимком.
-- **Ограничения:** нет проверки внешнего изменения файла; ветка прямой записи остаётся неатомарной; замена файла не сохраняет все атрибуты.
-- **Ближайший шаг:** локальный черновик, поиск/замена, переход к строке, проверка версии файла перед сохранением и выбор при конфликте.
-- **Бизнес:** восстановление документов, удобная работа с несколькими файлами и кодировками.
-- **Администрирование:** подсветка конфигов, diff перед записью, резервная копия и связанное действие «перезапустить службу».
-- **Зависимости:** CORE-03/05/08; файловый сервис.
-- **Готовность:** правки переживают перезапуск клиента; изменение на сервере не перезаписывается молча; набор текста во время сохранения остаётся dirty.
+### APP-01 — Files
+- **Now:** explorer plus `FileService` listing via shell, reading, delete/create, basic search.
+- **R1:** SFTP file metadata and streaming upload/download, rename, large-file progress, proper Unicode/symlink handling, explicit source IDs.
+- **R2:** recently used, favorites, transfer center, attach/open actions.
+- **Acceptance:** exact names including spaces and Unicode; interrupted transfer reports failure; no cross-host transfer without explicit destination.
 
-### APP-03 — Документы и Markdown Studio
+### APP-02 — Editor
+- **Now:** text editing, dirty state, Ctrl+S, fallback non-atomic writes.
+- **R1:** local durable drafts, find/replace, external-change conflict detection, diff before service config changes.
+- **R2:** multiple files, line navigation, reusable document storage.
+- **Acceptance:** crash preserves draft; concurrent edit warns; save errors remain visible; staged save is not reported atomic when it is not.
 
-- **Код:** `widgets/markdown_studio.dart`.
-- **Сейчас:** Markdown, предпросмотр, путь на сервере, сохранение и dirty. Начальный путь заметки — /root/notes.md.
-- **Ограничения:** нет постоянного локального черновика и версий; путь по умолчанию неудобен непривилегированному пользователю. Интерфейс загрузки требует проверки защиты несохранённого текста.
-- **Ближайший шаг:** выбор расположения, черновики, поиск, шаблоны заметки/инструкции/отчёта. Приложение сохраняется отдельно от редактора.
-- **Бизнес:** структурированные заметки, протоколы встреч, экспорт и просмотр документов.
-- **Администрирование:** runbook, инструкции восстановления, ссылки на файлы, службы и сохранённые фильтры логов.
-- **Зависимости:** CORE-03/05/06; общий механизм черновиков с редактором.
-- **Готовность:** загрузка другой заметки не уничтожает правки без выбора; заметка восстанавливается после перезапуска и открывает ссылки на ресурсы.
+### APP-03 — Docs & Markdown Studio
+- **Now:** remote Markdown editing/preview.
+- **R2:** local/remote document locations, persistent drafts, templates, open resource links, search.
+- **R3/R4:** document export and runbook linking.
+- **Acceptance:** open another note without overwriting edits; reopen the same note after restart.
 
-### APP-04 — Почта: ранний приоритет
+### APP-04 — Mail
+- **Now:** Linux system mailbox via `MailService`, minimal send/read.
+- **R2:** real IMAP/SMTP account source, TLS, MIME, attachments, read/reply, drafts and local cache; retain system mailbox source.
+- **R3:** multiple accounts, optional OAuth, search/sync and cross-app actions.
+- **Acceptance:** read/compose/attach/store sent mail; avoid duplicate sending on uncertain outcomes; account mail works with SSH disconnected.
 
-- **Код:** `widgets/mailbox_viewer.dart`; fetchSystemMail/sendSystemMail в `services/ssh_service.dart`.
-- **Сейчас:** системные ящики debian/root, простое чтение mbox и отправка через mail/sendmail с локальной fallback-записью.
-- **Ограничения:** системная почта не является IMAP-клиентом; нет аккаунтов, MIME-вложений, серверных папок и кеша. Bash-массив в чтении зависит от shell сервера; запись в локальный mbox не подтверждает доставку внешнему адресату.
-- **Ближайший шаг:** одно приложение с источниками «почтовый аккаунт» и «системная почта»; модели Account/Folder/Message/Attachment/Draft; IMAP+SMTP, TLS, один аккаунт, чтение/ответ/вложение/черновик.
-- **Следующий шаг:** несколько аккаунтов, OAuth выбранных провайдеров, объединённые входящие, поиск, IDLE/периодическая синхронизация, очередь действий и уведомления.
-- **Бизнес:** обычная переписка, вложения с компьютера или сервера, адресаты, подписи, календарные приглашения как следующий уровень.
-- **Администрирование:** системные уведомления в общем интерфейсе; экспорт отчёта/лога в письмо; отдельный статус системного источника.
-- **Зависимости:** CORE-01/03/04/05/06; выбор почтовой библиотеки после проверки SDK и возможности транспортного адаптера.
-- **Готовность первой поставки:** добавить реальный аккаунт, прочитать MIME-письмо, скачать вложение, ответить, увидеть отправленную копию, восстановить черновик без SSH.
-- **Особые проверки:** HTML без скриптов и автоматических внешних изображений; письмо, принятое SMTP, не отправляется повторно из-за сбоя сохранения копии; кеш учитывает аккаунт/папку/UIDVALIDITY/UID.
+### APP-05 — Browser
+- **Now:** Windows WebView2 over dynamic SOCKS on active SSH session.
+- **R0:** integration checks for proxy routing, DNS, localhost, failure, reconnect; accurate route state.
+- **R2:** bookmarks, downloads through task center, links from other apps.
+- **Acceptance:** only verified supported routes advertised; tunnel failure reliably reported.
 
-### APP-05 — Браузер
+### APP-06 — Viewer
+- **Now:** remote-image viewing with base64 transfer.
+- **R2:** scalable image handling and PDF reading on Windows, open from Files/Mail.
+- **R4:** advanced media support if justified.
+- **Acceptance:** large file does not freeze UI; failures are shown; downloaded assets are resource-tagged.
 
-- **Код:** `widgets/browser_window.dart`; startSocksTunnel/browserProxyPort в `services/ssh_service.dart`.
-- **Сейчас:** WebView2, адресная строка, переходы, прокси через существующую SSH-сессию.
-- **Ограничения:** Windows-зависимость; фактическая маршрутизация и восстановление среды требуют интеграционной проверки. Закладки, загрузки и пространства сайтов отсутствуют.
-- **Ближайший шаг:** проверить HTTP/DNS/внутренние адреса/отказ туннеля; добавить закладки, загрузки, открытие ссылки из документа.
-- **Бизнес:** CRM, внутренние порталы, веб-офис; набор сайтов рабочего пространства.
-- **Администрирование:** панели localhost и частной сети сервера, понятная индикация маршрута и профиля хоста.
-- **Зависимости:** CORE-03/04/06/09; текущий SSH-прокси.
-- **Готовность:** доказан выход через выбранный сервер; при разрыве нет скрытого прямого fallback; скачивание видно в центре задач.
+### APP-07 — Search Hub
+- **Now:** filename/content queries using server shell commands.
+- **R2:** unified scoped search by host, local documents and app type; result opens correct resource; search tasks cancellable.
+- **Acceptance:** no mixed-host results; unknown permissions visibly indicated; exact filename/line reference preserved.
 
-### APP-06 — Медиа и просмотр документов
+### APP-08 — Terminal
+- **Now:** SSH PTY and tmux, but desktop opens only one Terminal app instance.
+- **R1:** independent terminal windows/sessions, stable host/session associations, open terminal in selected folder.
+- **Acceptance:** two terminals simultaneously, correct tmux reattach, no cross-host session reuse.
 
-- **Код:** `widgets/media_viewer.dart`; readBinaryFile в `services/ssh_service.dart`.
-- **Сейчас:** изображения, масштаб и поворот; содержимое загружается целиком через base64.
-- **Ограничения:** нет потокового доступа, PDF/аудио/видео; память растёт с размером файла.
-- **Ближайший шаг:** галерея каталога, ограничение размера, миниатюры, просмотр локального вложения и PDF.
-- **Бизнес:** просмотр документов и материалов без ручного скачивания/поиска внешней программы.
-- **Администрирование:** скриншоты, графики и результаты задач с переходом к исходному файлу.
-- **Следующий уровень:** медиаплеер с потоковым чтением, буфером и перемоткой.
-- **Зависимости:** CORE-03/04; файловый сервис и выбор движков просмотра.
-- **Готовность:** следующий/предыдущий файл, PDF из почты и с сервера; слишком большой файл объясняется, а не приводит к зависанию.
+### APP-09 — Processes
+- **Now:** processes from shell ps, search and kill.
+- **R1:** full sorted process list, SIGTERM then explicit SIGKILL, details, resource identity.
+- **R2:** linked ports/services.
+- **Acceptance:** verify PID before action; handle privilege failure and PID reuse.
 
-### APP-07 — Поиск
+### APP-10 — Services
+- **Now:** systemd list and start/stop/restart.
+- **R1:** structured properties, enable state, jump to logs and config, restart-with-verification.
+- **Acceptance:** complete flow Services → Logs → Editor → Save → Restart → Verify.
 
-- **Код:** `widgets/spotlight_search.dart`; searchFiles в `services/ssh_service.dart`.
-- **Сейчас:** удалённый поиск имени/содержимого через find/grep с ограниченным числом результатов.
-- **Ограничения:** результаты содержимого разделяются двоеточиями; пути с двоеточием неоднозначны; определение каталога по завершающему / ненадёжно; открытие не передаёт номер строки редактору.
-- **Ближайший шаг:** явная область, отмена запроса, структурированные результаты, открытие нужной строки, отметка усечённых результатов.
-- **Бизнес:** поиск документов, затем заметок и почтового кеша.
-- **Администрирование:** конфиги, логи и ресурсы выбранного сервера.
-- **Зависимости:** CORE-03/04/06; действия редактора; репозиторий почты для общего поиска.
-- **Готовность:** быстрый второй запрос не показывает результаты первого; строка открывается корректно; источник и ограничения видны.
+### APP-11 — Network
+- **Now:** interfaces, TCP and UFW tools with textual parsers.
+- **R1:** UDP, accurate listening statuses, no silently empty results, audited rule modifications.
+- **R2:** ports → processes → services.
+- **Acceptance:** network query errors are distinct from "no ports"; rule result confirmed.
 
-### APP-08 — Терминал
+### APP-12 — Logs
+- **Now:** journal/syslog/auth/dmesg views and text-level heuristics.
+- **R1:** structured journal fields, source/time/priority filters and bounded tail.
+- **R2:** saved filters and service-to-log route.
+- **Acceptance:** service context preserved, tail cancellable, permission-denied visible.
 
-- **Код:** `widgets/terminal_view.dart`; attachTmux/startShell в `services/ssh_service.dart`.
-- **Сейчас:** PTY, tmux, переподключение, потоковый UTF-8, вспомогательные клавиши.
-- **Ограничения:** несколько терминалов требуют согласования с политикой окон; сохранение сессии зависит от tmux на сервере, а не только состояния виджета.
-- **Ближайший шаг:** несколько независимых сессий, список tmux-сессий, открытие в каталоге, поиск и копирование вывода.
-- **Бизнес:** рабочие скрипты и специализированные CLI-инструменты.
-- **Администрирование:** долгие задачи, восстановление сессий, связь с процессами и журналом выполнения.
-- **Зависимости:** CORE-02/03/09; сервис возможностей хоста.
-- **Готовность:** две сессии не смешиваются; tmux восстанавливается после разрыва; отсутствие tmux объясняется; новый терминал открывается в выбранной папке.
+### APP-13 — Disks
+- **Now:** no standalone disk app, root filesystem metric only.
+- **R1:** disk inventory, mounts, sizes and capacity, read-only directory usage scan.
+- **R4:** mounting, SMART where supported, partition operations with tested safety workflow.
+- **Acceptance:** correct lsblk fields; scan cancellable; unsupported capabilities explicit; changing actions tested only on disposable VM.
 
-### APP-09 — Процессы
+### APP-14 — Server Status & Setup
+- **Now:** required-package discovery/installation/update and OS update checks.
+- **R0:** retain full automatic required-package setup, add single-flight lifecycle, structured status, retry-safe verification, apt lock handling and stable cancellation.
+- **R1:** shared capability model, clear privileged-op results, per-server policy/status/history.
+- **Acceptance:** fresh supported Debian/Ubuntu host prepares itself when privileges allow; second concurrent setup does not run; policy for wider upgrades is respected; reconnect does not send unexpected extra apt changes.
 
-- **Код:** `widgets/process_manager.dart`; fetchProcesses/killProcess в `services/ssh_service.dart`.
-- **Сейчас:** ограниченный список ps, поиск и принудительное завершение с подтверждением.
-- **Ограничения:** список ограничен верхними процессами; краткого comm недостаточно для диагностики; принудительное завершение является основным действием.
-- **Ближайший шаг:** сортировка, контролируемое обновление, подробности процесса, SIGTERM как обычное действие и отдельный SIGKILL.
-- **Бизнес:** понять нагрузку и зависшее приложение.
-- **Администрирование:** дерево процессов, аргументы, пользователь, связанные порты/служба.
-- **Зависимости:** CORE-06/07; типизированный ProcessService.
-- **Готовность:** показывается ошибка доступа; PID перепроверяется перед действием с учётом повторного использования; мягкое завершение отделено от принудительного.
+## 6. Delivery milestones
 
-### APP-10 — Службы
-
-- **Код:** `widgets/service_manager.dart`; fetchServices/controlService в `services/ssh_service.dart`.
-- **Сейчас:** ограниченный список загруженных service units и start/stop/restart.
-- **Ограничения:** не все установленные службы представлены; поля могут смещаться на выводе с маркером ошибки; нет зависимостей, unit-файла и встроенных логов.
-- **Ближайший шаг:** свойства через структурированный контракт, полный поиск, статус автозапуска, переход к journal и unit-файлу.
-- **Бизнес:** состояние сервисов, от которых зависит работа портала/почты/файлов.
-- **Администрирование:** enable/disable, зависимости, конфигурация, restart с проверкой результата.
-- **Зависимости:** CORE-06/07; редактор и логи.
-- **Готовность:** сценарий «ошибка службы → логи → конфиг → перезапуск → проверка» выполняется без ручного поиска ресурсов.
-
-### APP-11 — Сеть и firewall
-
-- **Код:** `widgets/network_inspector.dart`; fetchOpenPorts/fetchUfwStatus в `services/ssh_service.dart`.
-- **Сейчас:** интерфейсы, TCP-порты, UFW, операции с правилами и установка.
-- **Подтверждённые ограничения:** фильтр LISTEN пропускает UDP; ss и netstat имеют разные позиции адреса, но используют один разбор; ошибки получения часто превращаются в пустой список.
-- **Ближайший шаг:** раздельные парсеры, UDP, типизированные результаты, явный статус недоступности, переход порт → процесс.
-- **Бизнес:** доступность портала и нужного сетевого ресурса с понятным объяснением ошибки.
-- **Администрирование:** правила, интерфейсы, связь с процессом/службой, журнал изменения правил.
-- **Зависимости:** CORE-06/07; ProcessService и ServiceService.
-- **Готовность:** тестовые выводы ss/netstat правильно разобраны; ошибка не выглядит отсутствием портов; изменение правила показывает фактический результат.
-
-### APP-12 — Логи
-
-- **Код:** `widgets/log_viewer.dart`; fetchSystemLogs в `services/ssh_service.dart`.
-- **Сейчас:** journal/auth/syslog/dmesg, фильтры; уровень приблизительно определяется по словам текста.
-- **Ограничения:** эвристика уровня не заменяет приоритет journal; ошибки и недоступные источники могут выглядеть как отсутствие событий.
-- **Ближайший шаг:** структурированные события journal, фильтр службы/времени/приоритета, поток новых записей с паузой и ограниченным буфером.
-- **Бизнес:** понятные ошибки рабочих операций и экспорт выбранного фрагмента.
-- **Администрирование:** сохранённые фильтры, переход от службы, диагностика перезапуска и отключений.
-- **Зависимости:** CORE-04/06/07; ServiceService.
-- **Готовность:** переход от службы сохраняет фильтр; поток можно остановить; недоступный журнал отличается от пустого.
-
-### APP-13 — Диски: новое приложение, ранний приоритет
-
-- **Код:** отдельного приложения нет; есть только сводная метрика df для корневой файловой системы.
-- **Ближайший шаг:** DiskService + DiskManagerWindow; устройства/разделы/файловые системы/точки монтирования, размеры в байтах, анализ выбранного каталога.
-- **Бизнес:** свободное место, крупнейшие папки, переход в файлы, предупреждение о нехватке места.
-- **Администрирование:** SMART при поддержке, монтирование, использующие раздел процессы, затем разделы и форматирование.
-- **Зависимости:** CORE-03/04/06/07; JSON lsblk с явными колонками и проверкой возможностей; backend операций по возможностям хоста.
-- **Готовность первого выпуска:** виртуальные и физические устройства отображаются корректно; сканирование отменяется; ошибки доступа и неподдерживаемый SMART не считаются успешным результатом.
-- **Условия для операций изменения:** повторная идентификация устройства; защита системных/занятых устройств; понятный план изменения; подтверждение; журнал. Проверки разметки только на образах/тестовой VM. После разрыва неизвестный результат проверяется, команда не повторяется автоматически.
-
-### APP-14 — Состояние и подготовка сервера
-
-- **Код:** `services/server_setup_service.dart`, `widgets/server_status.dart`; индикатор интегрируется в оболочку.
-- **Сейчас:** Debian/Ubuntu, требования tmux/procps/iproute2, проверка пакетов, обновления и журнал. run() может устанавливать необходимые пакеты при наличии прав; общесистемные автообновления зависят от настройки.
-- **Ближайший шаг:** отделить проверку от установки, показать выбранную политику и историю; оформить обнаружение возможностей как общий сервис.
-- **Бизнес:** объяснение «почему приложение недоступно» и состояние рабочей среды.
-- **Администрирование:** обновления, требование перезагрузки, журнал пакетов и управление политикой.
-- **Зависимости:** CORE-04/07; отдельные политики установки зависимостей и системных обновлений.
-- **Готовность:** подключение ведёт себя согласно видимой настройке; занятый apt не вызывает дублирующую операцию; смена сервера не переносит задачу; не-Debian система получает понятный статус поддержки.
-
-## 5. Поставки с развитием трёх направлений
-
-| Поставка | Рабочие приложения | Файлы и хранение | Управление системой | Общая готовность |
-|---|---|---|---|---|
-| R0 — общий контракт | Локальные черновики редактора/заметок | ResourceLocation и интерфейс передач | Возможности хоста и состояния соединения | Все существующие приложения доступны; проверены сворачивание/закрытие/разрыв; устаревшие дефекты не считаются открытыми без перепроверки |
-| R1 — первые полноценные сценарии | Один IMAP/SMTP-аккаунт, MIME, ответ, черновик | SFTP-передачи + обзор дисков | Мягкое завершение процесса, свойства службы и переход в логи | Можно получить вложение, сохранить его на сервере; увидеть свободное место; диагностировать одну службу |
-| R2 — связи | Несколько аккаунтов/OAuth, PDF, ссылки заметок | Анализ места, галерея, поиск с переходом к строке | TCP/UDP → процесс → служба; фильтры journal | Работают сквозные сценарии из раздела 6; фоновая задача видна вне исходного окна |
-| R3 — ежедневная работа | Уведомления, поиск почты, очередь действий, порталы | Избранное, корзина, версии/конфликты, монтирование | Независимые терминалы, состояние диска, политики обновлений | Рабочее пространство восстанавливается; ошибки и недоступные права показываются согласованно |
-| R4 — расширенные операции | Шаблоны/экспорт документов, медиаплеер | Разделы/форматирование, затем поддерживаемые изменения размера | История операций и расширенная диагностика | Пройдены проверки на тестовой VM; результат после разрыва проверяется без автоматического повтора |
-
-Поставки — этапы готовности, не календарные обещания. Не ждать завершения всех функций почты, чтобы улучшать процессы, файлы и логи. После общего контракта независимые части можно разрабатывать одновременно; объединение всегда проверяет сквозные сценарии.
-
-## 6. Сквозные сценарии приёмки
-
-| ID | Сценарий | Проверяемый результат |
+| Stage | Deliverable | Release gate |
 |---|---|---|
-| FLOW-01 | Письмо → вложение → просмотр → сохранение на сервер | Местоположение понятно; передача видна; повтор не портит файл |
-| FLOW-02 | Файл сервера → письмо → отправка | Вложена правильная версия; разрыв загрузки не отправляет неполное вложение |
-| FLOW-03 | Служба → журнал → конфиг → diff → restart | Сохранение подтверждено; restart не выполняется после неудачной записи; проверен новый статус |
-| FLOW-04 | Мало места → анализ → папка → очистка | Частичные данные отмечены; удаление проверяемо; свободное место обновляется |
-| FLOW-05 | Порт → процесс → служба → диагностика | Контекст сервера и идентичность процесса сохраняются |
-| FLOW-06 | Разрыв SSH при открытых редакторе, почте и терминале | Черновики доступны; локальная почта работает; удалённые операции ждут/ошибаются явно; tmux восстанавливается при поддержке |
-| FLOW-07 | Закрыть и восстановить рабочее пространство | Открыты правильные ресурсы; нет секретов в состоянии и автоматического повтора опасных действий |
+| **R0 — Paid Windows foundation** | LIC-01…07; independent activation shell; CORE-08/10/12; APP-14 hardened; APP-05 verified route; clean README and release build | One-time Intro and yearly Pro complete verified purchases in Paddle Sandbox; Windows install; non-destructive user data on expiration; SSH/connect/setup stability tests |
+| **R1 — Connected desktop** | CORE-02/03/04/07/11; APP-01 SFTP, APP-02 durable editor, APP-08 multi-terminal, APP-09/10/11/12 structured tools, APP-13 disk overview | Multi-host context reliable; files transfer with progress; service diagnosis flow succeeds; no silent remote re-execution |
+| **R2 — Integrated daily work** | CORE-06/09 foundation; APP-03 Docs, APP-04 first real mail account, APP-05 browser workflow, APP-06 PDF/images, APP-07 search | Mail attachment → Files/Viewer and services/logs/editor flows; restore workspace and drafts; verified integration tests |
+| **R3 — Distributed desktop maturity** | restored workspaces, improved mail/sync, history/notifications, tablet UX track, cross-resource navigation | Multi-source persistence and device-specific workflows verified |
+| **R4 — Advanced capabilities** | advanced Disks operations, extended media/docs, additional validated platforms, optional research features | Dedicated safety tests on disposable environments and clearly supported target platforms |
 
-## 7. Качество, границы и порядок первых задач
+R0 targets the **first paid release**. R1 and later deepen the product. No R0 claim of production readiness is implied until the release gate actually passes.
 
-Для каждой карточки: тесты на парсеры и контракты, widget-проверки там, где возможна потеря состояния, интеграционные проверки реальных протоколов и действий. Для почты нужен тестовый ящик; для Linux — VM с root и непривилегированным пользователем, без sudo и с выбранными правами. Проверять отсутствие необязательных инструментов и ошибки сети. Для одного нового документа запуск тестов приложения не требуется; матрица не утверждает, что текущая рабочая версия прошла их повторно.
+## 7. Cross-application acceptance flows
 
-Начальная последовательность:
+| ID | Flow | Pass criterion | Target |
+|---|---|---|---|
+| FLOW-01 | Mail → attachment → Files/Viewer | Correct source and complete saved attachment | R2 |
+| FLOW-02 | Server file → compose mail → send | Same file version and no duplicate send | R2 |
+| FLOW-03 | Services → Logs → Editor → Restart → Verify | Save success precedes restart; outcome checked | R1 |
+| FLOW-04 | Disk capacity → directory scan → Files | Accurate sizes and cancellation, correct source | R1 |
+| FLOW-05 | Port → Process → Service → Logs | Source and process identity retained | R2 |
+| FLOW-06 | SSH disconnect with terminal/editor/task | Clear task state, draft preserved, tmux restored | R1 |
+| FLOW-07 | App restart → workspace restore | Same windows/resources with no secret persistence | R2/R3 |
+| FLOW-08 | First-run Intro purchase → activation | €1 once and seven-day grant, no renewal | R0 |
+| FLOW-09 | Annual Pro renewal/cancellation | Paid-through access, self-service cancel, correct new entitlement | R0 |
+| FLOW-10 | Switch from remote A to remote B | No side effect redirects to wrong source | R1 |
+| FLOW-11 | Auto setup on fresh Debian/Ubuntu | Required tools prepared, progress visible, no duplicate concurrent apt | R0 |
 
-1. Зафиксировать актуальную рабочую версию и перепроверить уже внесённые исправления; обновить раздел 2.
-2. Ввести ResourceLocation и жизненный цикл фоновой задачи; использовать их сначала в файлах и почте.
-3. Отделить оболочку от SSH, сохранив весь док и существующие окна; добавить локальную базу/черновики и хранилище секретов.
-4. Развивать одновременно APP-04 (один полноценный почтовый аккаунт), APP-01/13 (SFTP + обзор дисков), APP-09/10/12 (процессы + служба + журнал).
-5. Принять R1 по пользовательским сценариям, затем наращивать R2 без остановки любого из трёх направлений.
+## 8. Platform track and verification
 
-Отдельное будущее направление — запуск произвольных удалённых графических программ. Оно потребует выбора протокола/агента, сеансов, буфера обмена, ввода и доступа к файлам. Существующие встроенные Flutter-приложения и браузер не обеспечивают эту возможность сами по себе; выбор технологии оформляется отдельным исследованием, не блокирующим R1–R3.
+- **PLAT-01 Android/tablet:** INTERNET permission is already declared; assess browser replacement, OS secure store, filesystem dialogs, window scaling, touch, keyboard, reconnect and entitlement policy; verify on a real device.
+- **PLAT-02 Linux/macOS:** evaluate portability of native plugins, secure storage and browser support on each OS; ship only after its tests.
+- **PLAT-03 iOS:** research signing/store rules and license/checkout distribution requirements before committing to a release.
+- **Research only:** remote graphical application streaming needs a separate protocol/design spike; do not imply functionality from the current Flutter widgets.
 
-Платформенное направление PLAT-01 — Android/планшеты: добавить INTERNET в release-манифест, выбрать замену webview_windows и адаптацию защищённого хранения/файловых диалогов, проверить док, размеры окон, ввод, фоновые задачи и переподключение на устройстве. Это отдельная последовательность небольших изменений рядом с R0–R4. Критерий готовности — проверенные сценарии почты, файлов и терминала на планшете; браузер включается после проверки замены и прокси. Linux/macOS/iOS получают отдельные проверки и не наследуют статус Windows автоматически. Экспорт Markdown в PDF относится к развитию APP-03/R4; поиск и подсветка редактора — к APP-02; несколько терминалов — к APP-08/R3. Тем самым прежние планы README сохраняются в общей матрице.
+**Required checks:** `flutter analyze`, `flutter test`, widget integration, disposable real SSH VM, Paddle Sandbox webhooks, Windows install/update and crash recovery. Existing GitHub repository has no workflow shown in the audited tree; CI configuration is a deliverable.
 
-Выбор библиотек IMAP/MIME, OAuth, базы, защищённого хранения, PDF и медиа — отдельные короткие проверки совместимости с установленным Dart/Flutter, Windows и нужным транспортом. Номера версий и обещания поддержки провайдеров не фиксируются до проверки. Бизнес-функции совместной работы, доступов и аудита нескольких пользователей требуют отдельной серверной модели: один SSH-профиль не заменяет её.
+## 9. Engineering order / suggested issue batches
 
-## 8. Как поддерживать матрицу
+1. **R0-A:** fix async lifecycle, reconnect single-flight, server setup concurrency and predictable operation outcomes; add CI.
+2. **R0-B:** introduce standalone desktop/activation surface with local state; keep existing apps and automatic setup.
+3. **R0-C:** create Paddle Intro/Pro test catalog, backend, webhooks and signed entitlement; confirm unknown policy parameters.
+4. **R0-D:** build purchase/restore/cancel UX and packaged Windows release; pass R0 integration matrix.
+5. **R1-A:** implement ResourceLocation, Session Manager and shared Tasks with explicit source ownership.
+6. **R1-B:** finish SFTP, multi-terminal and safe editor/drafts; validate cross-resource correctness.
+7. **R1-C:** improve structured system observability and add read-only Disks; validate complete service diagnosis.
+8. **R2:** integrate user content apps, account mail, viewer/search, workspace persistence and cross-app navigation.
+9. **R3/R4:** deepen everyday use, verify platforms and advanced operations only after acceptance gates.
 
-После каждой поставки обновлять исходное состояние, список проверенных сценариев и оставшиеся ограничения соответствующих APP/CORE/FLOW. Статусы задач: «запланировано», «в работе», «реализовано в коде», «проверено», «доступно в выпуске». В карточке хранить ссылку на изменение и проверку; не повышать статус на основании наличия кнопки или метода.
+Every issue must include observed baseline, target behavior, dependencies, tests, risk and status. Do not mark a capability "done" only because its widget exists.
+
+## 10. Status language and maintenance
+
+Allowed states: **planned**, **in progress**, **implemented in code**, **verified**, **released**. Mark a result verified only with actual test evidence; update code paths after refactors. Review this matrix on every release and keep README's current-features section factual.
