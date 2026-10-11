@@ -149,12 +149,18 @@ class SftpTransferService {
       // Atomic no-clobber publish on the same Linux filesystem: hard-link
       // creation fails if the target appeared after our last check.
       final publish = await client.runWithResult(
-        'ln -- ${shQuote(partial)} ${shQuote(remotePath)} && '
-        'rm -- ${shQuote(partial)}',
+        'ln -- ${shQuote(partial)} ${shQuote(remotePath)}',
       );
       if (publish.exitCode != 0) {
         throw StateError('Could not publish upload without overwriting; '
             'verify the temporary remote file.');
+      }
+      // Publication has succeeded. Removing the staging link is only cleanup:
+      // a cleanup failure must not turn a committed upload into a failed task.
+      try {
+        await sftp.remove(partial);
+      } catch (_) {
+        // The final path exists; stale staging link may need manual cleanup.
       }
     } on TransferCancelled {
       // Only delete this invocation's staging file, after the writer handle
