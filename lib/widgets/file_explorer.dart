@@ -282,6 +282,62 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
     }
   }
 
+  Future<void> _renameItem(LinuxFileInfo item) async {
+    if (_isLoading || !widget.sshService.isConnected) return;
+    final directory = _currentPath;
+    final client = widget.sshService.rawClient;
+    final controller = TextEditingController(text: item.name);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Rename ${item.name}'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'New name'),
+          onSubmitted: (value) => Navigator.pop(dialogContext, value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text),
+            child: const Text('Rename'),
+          ),
+        ],
+      ),
+    );
+    // The controller is no longer needed once the dialog has closed.
+    controller.dispose();
+    if (!mounted || name == null || name == item.name) return;
+    if (name.isEmpty || name == '.' || name == '..' ||
+        name.contains('/') || name.contains('\\x00')) {
+      showActionError(context, 'Rename', 'Enter a valid file name.');
+      return;
+    }
+    if (!widget.sshService.isConnected ||
+        widget.sshService.rawClient != client || _currentPath != directory) {
+      showActionError(context, 'Rename', 'SSH session or directory changed.');
+      return;
+    }
+    final source = directory == '/' ? '/${item.name}' : '$directory/${item.name}';
+    final target = directory == '/' ? '/$name' : '$directory/$name';
+    setState(() => _isLoading = true);
+    try {
+      await widget.sshService.files.rename(source, target);
+      if (mounted && widget.sshService.rawClient == client &&
+          _currentPath == directory) {
+        await _loadDirectory(directory);
+      }
+    } catch (error) {
+      if (mounted) showActionError(context, 'Rename', error);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _deleteItem(LinuxFileInfo item) async {
     final directory = _currentPath;
     final client = widget.sshService.rawClient;
@@ -619,6 +675,12 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
                                     ),
                                   ),
                                 ],
+                                IconButton(
+                                  icon: const Icon(Icons.drive_file_rename_outline,
+                                      size: 16, color: Colors.white60),
+                                  tooltip: 'Rename',
+                                  onPressed: _isLoading ? null : () => _renameItem(file),
+                                ),
                                 IconButton(
                                   icon: const Icon(
                                     Icons.delete_outline,
