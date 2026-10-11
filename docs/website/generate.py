@@ -10,6 +10,11 @@ COPY = {
         'description': 'Meet Fortiq. Your Linux files, documents and server tools, together in one familiar desktop for Windows.',
         'skip': 'Skip to content', 'home': 'Fortiq home', 'navigation': 'Main navigation', 'language': 'Language',
         'overview': 'Overview', 'tools': 'Tools', 'windows': 'For Windows',
+        'pricing': 'Pricing', 'pricingTitle': 'Everything included.',
+        'pricingText': 'Two ways to get Fortiq. The same full functionality.',
+        'introPeriod': '14 days', 'proPeriod': 'per year', 'proPrice': '39.90 €',
+        'introTerms': 'One-time purchase. No automatic renewal.',
+        'proTerms': 'Annual subscription. Renews every year.', 'full': 'Full functionality',
         'hero1': 'Linux.', 'hero2': 'In a familiar place.',
         'intro': 'Your files. Your tools. Your way of working.<br> Bring your Linux server into one familiar desktop.',
         'explore': 'Explore Fortiq', 'see': 'Take a closer look',
@@ -66,6 +71,11 @@ COPY = {
         'description': 'Découvrez Fortiq. Vos fichiers Linux, vos documents et vos outils serveur réunis dans un bureau familier pour Windows.',
         'skip': 'Aller au contenu', 'home': 'Accueil Fortiq', 'navigation': 'Navigation principale', 'language': 'Langue',
         'overview': 'Présentation', 'tools': 'Outils', 'windows': 'Pour Windows',
+        'pricing': 'Tarifs', 'pricingTitle': 'Tout est inclus.',
+        'pricingText': 'Deux façons de choisir Fortiq. Les mêmes fonctionnalités complètes.',
+        'introPeriod': '14 jours', 'proPeriod': 'par an', 'proPrice': '39,90 €',
+        'introTerms': 'Achat unique. Sans renouvellement automatique.',
+        'proTerms': 'Abonnement annuel. Renouvellement chaque année.', 'full': 'Toutes les fonctionnalités',
         'hero1': 'Linux.', 'hero2': 'Comme chez vous.',
         'intro': 'Vos fichiers. Vos outils. Votre façon de travailler.<br> Retrouvez votre serveur Linux dans un bureau familier.',
         'explore': 'Découvrir Fortiq', 'see': 'Voir de plus près',
@@ -122,6 +132,11 @@ COPY = {
         'description': 'Знакомьтесь: Fortiq. Файлы Linux, документы и инструменты управления сервером в одном привычном рабочем столе для Windows.',
         'skip': 'Перейти к содержимому', 'home': 'Fortiq — главная', 'navigation': 'Основная навигация', 'language': 'Язык',
         'overview': 'Обзор', 'tools': 'Инструменты', 'windows': 'Для Windows',
+        'pricing': 'Тарифы', 'pricingTitle': 'Всё включено.',
+        'pricingText': 'Два варианта доступа к Fortiq. Один полный набор возможностей.',
+        'introPeriod': '14 дней', 'proPeriod': 'в год', 'proPrice': '39,90 €',
+        'introTerms': 'Разовая покупка, без автопродления.',
+        'proTerms': 'Годовая подписка. Ежегодное продление.', 'full': 'Полный функционал',
         'hero1': 'Linux.', 'hero2': 'Как дома.',
         'intro': 'Ваши файлы. Ваши инструменты. Ваш привычный ритм.<br> Работайте с Linux-сервером на одном знакомом рабочем столе.',
         'explore': 'Открыть возможности', 'see': 'Посмотреть поближе',
@@ -219,7 +234,7 @@ def render(lang):
   <a class="skip" href="#main">{c['skip']}</a>
   <header class="site-header"><div class="nav-shell">
     <a class="brand" href="#top" aria-label="{c['home']}"><img src="{prefix}assets/fortiq-icon.png" alt="" width="34" height="34"><span>fortiq</span></a>
-    <nav class="main-nav" aria-label="{c['navigation']}"><a href="#overview">{c['overview']}</a><a href="#tools">{c['tools']}</a><a href="#windows">{c['windows']}</a></nav>
+    <nav class="main-nav" aria-label="{c['navigation']}"><a href="#overview">{c['overview']}</a><a href="#tools">{c['tools']}</a><a href="#pricing">{c['pricing']}</a><a href="#windows">{c['windows']}</a></nav>
     <nav class="languages" aria-label="{c['language']}">{languages}</nav>
   </div></header>
   <main id="main">
@@ -253,6 +268,7 @@ def render(lang):
     </section>
     <section class="tool-section section-space wrap" id="tools" aria-labelledby="tools-title"><div class="section-intro"><p class="eyebrow">{c['toolsLabel']}</p><h2 id="tools-title">{c['toolsTitle']}</h2><p class="section-lead">{c['toolsText']}</p></div><div class="tool-toolbar"><div class="filter-group" role="group" aria-label="{c['filters']}"><button type="button" data-filter="all" aria-pressed="true">{c['all']}</button><button type="button" data-filter="work" aria-pressed="false">{c['work']}</button><button type="button" data-filter="system" aria-pressed="false">{c['systemFilter']}</button></div><span class="tools-count" aria-live="polite" data-singular="{c['singular']}" data-few="{c['few']}" data-many="{c['many']}">12 {c['many']}</span></div><div class="tools-grid">{cards}</div><p class="section-note">{c['toolsNote']}</p></section>
     <section class="connection wrap" aria-labelledby="connection-title"><div class="connection-copy"><p class="eyebrow">{c['connectLabel']}</p><h2 id="connection-title">{c['connectTitle']}</h2><p>{c['connectText']}</p></div><div class="connection-art" aria-hidden="true"><div class="connection-orbit"></div><div class="connection-computer"><img src="{prefix}assets/fortiq-icon.png" alt="" width="76" height="76"><span>{c['computer']}</span></div><div class="ssh-line"><span>SSH</span></div><div class="connection-server"><div class="server-unit"><i></i><i></i></div><div class="server-unit"><i></i><i></i></div><span>{c['server']}</span></div></div></section>
+    <section class="pricing section-space wrap" id="pricing" aria-labelledby="pricing-title"><div class="section-intro"><p class="eyebrow">{c['pricing']}</p><h2 id="pricing-title">{c['pricingTitle']}</h2><p class="section-lead">{c['pricingText']}</p></div><div class="pricing-grid"><article class="price-card" aria-labelledby="intro-title"><h3 id="intro-title">FORTIQ INTRO</h3><p class="price">2 €</p><p class="price-period">{c['introPeriod']}</p><p class="price-full">{c['full']}</p><p class="price-terms">{c['introTerms']}</p></article><article class="price-card price-pro" aria-labelledby="pro-title"><h3 id="pro-title">FORTIQ PRO</h3><p class="price">{c['proPrice']}</p><p class="price-period">{c['proPeriod']}</p><p class="price-full">{c['full']}</p><p class="price-terms">{c['proTerms']}</p></article></div></section>
     <section class="windows section-space wrap" id="windows" aria-labelledby="windows-title"><img src="{prefix}assets/fortiq-icon.png" alt="" width="86" height="86"><p class="product-name">Fortiq {c['windows'].lower().replace('windows', 'Windows')}</p><h2 id="windows-title">{c['windowsTitle']}</h2><p class="section-lead">{c['windowsText']}</p><div class="requirements">{requirements}</div><ol class="start-steps">{steps}</ol></section>
   </main>
   <footer class="footer wrap"><a class="brand" href="#top" aria-label="{c['home']}"><img src="{prefix}assets/fortiq-icon.png" alt="" width="28" height="28"><span>fortiq</span></a><p>{c['footer']}</p><a class="back-top" href="#top">{c['top']} <span aria-hidden="true">↑</span></a></footer>
