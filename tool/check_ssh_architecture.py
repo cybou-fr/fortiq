@@ -91,21 +91,25 @@ if CONTRACT.is_file():
     expect("Lemon Squeezy" in contract_text,
            "Missing separate licensing-control-plane exception")
 
-# AI is optional: Ollama is an existing Linux runtime, not a direct
-# client-side LLM, and its loopback server is not an exposed FORTIQ API.
+# AI remains a server-side, optional CLI feature.
+# llama.cpp loads a verified GGUF on CPU only when cache has no fresh answer.
+# FORTIQ must never expose an AI HTTP service or client-side inference.
 ai_file = ROOT / "docs/AI_CLI.md"
 if ai_file.is_file():
     ai_text = ai_file.read_text(encoding="utf-8")
     for required in (
-        "Ollama",
-        "127.0.0.1:11434",
-        "OLLAMA_NO_CLOUD=1",
+        "llama.cpp",
+        "GGUF",
         "`ai`",
         "CPU-only",
-        "только после явного",
+        "без запуска модели",
+        "явного согласия",
+        "cache",
     ):
         expect(required in ai_text,
-               f"AI_CLI.md: missing Linux-only Ollama contract: {required}")
+               f"AI_CLI.md: missing Linux-only llama.cpp/cache contract: {required}")
+    expect("Ollama" not in ai_text,
+           "AI_CLI.md: obsolete Ollama runtime must not return")
 else:
     errors.append("Missing optional AI CLI contract")
 

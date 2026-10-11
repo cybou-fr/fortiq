@@ -194,3 +194,5 @@ llama-cli -m /path/to/verified-model.gguf --threads 2 --ctx-size 1024 --n-predic
 6. Intro и Pro сохраняют одинаковые функции: **2 € / 14 дней**, **39,90 € / год**. AI не выделяется в отдельный тариф и оплачиваемый облачный inference не обещается.
 
 **Релизный статус:** R2/P2 experiment, НЕ реализовано. До настоящего замера и интеграционного теста запрещено рекламировать AI как включённую готовую функцию.
+
+Связанные документы: [SSH_FRONTEND_CONTRACT](SSH_FRONTEND_CONTRACT.md), [ARCHITECTURE](ARCHITECTURE.md), [PRODUCT_SCOPE](PRODUCT_SCOPE.md), [DEVELOPMENT_MATRIX](DEVELOPMENT_MATRIX.md).
