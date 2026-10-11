@@ -21,6 +21,7 @@ import 'log_viewer.dart';
 import 'mailbox_viewer.dart';
 import 'mail_window.dart';
 import 'media_viewer.dart';
+import 'pdf_viewer.dart';
 import 'disks_window.dart';
 
 enum FortiqAppType {
@@ -37,6 +38,7 @@ enum FortiqAppType {
   mailbox,
   mail,
   mediaViewer,
+  pdfViewer,
   disks,
 }
 
@@ -155,7 +157,8 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
       final fileWindow =
           type == FortiqAppType.editor ||
           type == FortiqAppType.docsStudio ||
-          type == FortiqAppType.mediaViewer;
+          type == FortiqAppType.mediaViewer ||
+          type == FortiqAppType.pdfViewer;
       final existing = _windows
           .where(
             (w) => w.appType == type && (!fileWindow || w.filePath == filePath),
@@ -226,6 +229,10 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
       case FortiqAppType.mediaViewer:
         title = 'Media Viewer: ${filePath?.split('/').last ?? "image"}';
         size = const Size(760, 520);
+        break;
+      case FortiqAppType.pdfViewer:
+        title = 'PDF: ${filePath?.split('/').last ?? "document"}';
+        size = const Size(850, 650);
         break;
       case FortiqAppType.disks:
         title = 'Disks';
@@ -961,6 +968,11 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
           filePath: win.filePath ?? '',
           domainColor: widget.domainColor,
         );
+      case FortiqAppType.pdfViewer:
+        return RemotePdfViewer(
+          sshService: widget.sshService,
+          filePath: win.filePath ?? '',
+        );
       case FortiqAppType.disks:
         return RemoteDisksWindow(
           sshService: widget.sshService,
@@ -982,12 +994,11 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
       _openWindow(FortiqAppType.docsStudio, filePath: path);
     } else if (kind == DesktopFileKind.text) {
       _openWindow(FortiqAppType.editor, filePath: path);
+    } else if (kind == DesktopFileKind.pdf) {
+      _openWindow(FortiqAppType.pdfViewer, filePath: path);
     } else {
-      _showUnsupportedFile(path, kind == DesktopFileKind.pdf
-          ? 'PDF preview is not yet available in FORTIQ. '
-            'Use Download via SFTP in Files to open it locally.'
-          : 'No viewer is registered for this file type. '
-            'Use Download via SFTP in Files to open it locally.');
+      _showUnsupportedFile(path, 'No viewer is registered for this file type. '
+          'Use Download via SFTP in Files to open it locally.');
     }
   }
 
