@@ -1009,8 +1009,19 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
                             DesktopTaskState.completed => Icons.check_circle_outline,
                             DesktopTaskState.failed => Icons.error_outline,
                             DesktopTaskState.unknown => Icons.help_outline,
+                            DesktopTaskState.cancelled => Icons.cancel_outlined,
                           }),
                           title: Text(task.label),
+                          trailing: task.state == DesktopTaskState.running &&
+                                  task.cancellation != null
+                              ? IconButton(
+                                  tooltip: 'Request upload cancellation',
+                                  icon: const Icon(Icons.cancel_outlined),
+                                  onPressed: task.cancellation!.isRequested
+                                      ? null
+                                      : () => _desktopTasks.cancelTransfer(task.id),
+                                )
+                              : null,
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
