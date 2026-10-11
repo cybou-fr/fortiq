@@ -85,7 +85,7 @@ A **small server-side component is optional for ordinary licensed access**. It b
 
 **Connectivity:** avoid instantly disabling FORTIQ during a short network outage. A secure cache/offline grace is a release policy to decide and test, not a silently assumed 72-hour default. A customer-edited preferences file or changed system clock is not authoritative proof of payment.
 
-**Data safety:** expiration, failed renewal and refunds must never delete local SSH profiles, keys, temporary drafts, workspace settings or remote Linux documents. Make account and license recovery clear.
+**Data safety:** expiration, failed renewal and refunds must never delete the minimal local SSH bootstrap/credentials or any **server-side** documents, permanent drafts, workspace settings and working data. Unsaved editor text may temporarily exist in GUI RAM, never as a separate client work backend. Make account and license recovery clear.
 
 ## 5. R0 implementation tasks (LIC-01…LIC-07)
 
