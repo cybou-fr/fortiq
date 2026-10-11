@@ -4,6 +4,16 @@ import 'package:fortiq/services/shell.dart';
 import 'package:fortiq/services/terminal_service.dart';
 
 void main() {
+  group('SSH input exit status', () {
+    test('only a confirmed zero exit code is successful', () {
+      expect(const InputResult(exitCode: 0).ok, isTrue);
+      expect(const InputResult(exitCode: 1).ok, isFalse);
+      expect(const InputResult(exitCode: null).ok, isFalse,
+          reason: 'A missing SSH exit status is an unknown outcome');
+      expect(const InputResult(exitCode: 0, killedBySignal: true).ok, isFalse);
+    });
+  });
+
   group('shQuote', () {
     test('wraps plain values in single quotes', () {
       expect(shQuote('/home/user'), "'/home/user'");
