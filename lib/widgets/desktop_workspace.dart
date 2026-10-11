@@ -1011,7 +1011,26 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
                             DesktopTaskState.unknown => Icons.help_outline,
                           }),
                           title: Text(task.label),
-                          subtitle: Text(task.message ?? task.state.name),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(task.message ?? task.state.name),
+                              if (task.totalBytes != null) ...[
+                                const SizedBox(height: 4),
+                                LinearProgressIndicator(
+                                  value: task.progress,
+                                  minHeight: 4,
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  '${task.bytesTransferred} / ${task.totalBytes} bytes',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              ] else if (task.bytesTransferred > 0)
+                                Text('${task.bytesTransferred} bytes transferred',
+                                    style: const TextStyle(fontSize: 11)),
+                            ],
+                          ),
                         ),
                     ],
                   ),
