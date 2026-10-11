@@ -303,7 +303,7 @@ class _RemoteLogViewerState extends State<RemoteLogViewer> {
                             (entry) => '[${entry['level']}] ${entry['text']}',
                           ).join('\n');
                           final bytes = utf8.encode(
-                            'Linux ${_selectedLogType} logs:\n$lines',
+                            'Linux $_selectedLogType logs:\n$lines',
                           );
                           final excerpt = utf8.decode(
                             bytes.take(7800).toList(),
@@ -312,7 +312,7 @@ class _RemoteLogViewerState extends State<RemoteLogViewer> {
                           showAiAdviceDialog(
                             context: context,
                             ssh: widget.sshService,
-                            title: 'Explain ${_selectedLogType} logs',
+                            title: 'Explain $_selectedLogType logs',
                             loadContext: () async => excerpt,
                           );
                         },
