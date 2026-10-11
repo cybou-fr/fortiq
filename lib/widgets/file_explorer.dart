@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import 'mono.dart';
 import '../models/linux_models.dart';
 import '../services/ssh_service.dart';
+import '../services/desktop_task_controller.dart';
 import 'ui_errors.dart';
 
 class RemoteFileExplorer extends StatefulWidget {
@@ -36,6 +37,7 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
   late String _currentPath;
   List<LinuxFileInfo> _files = [];
   bool _isLoading = false;
+  final DesktopTaskController _tasks = DesktopTaskController();
   String? _error;
   final TextEditingController _pathController = TextEditingController();
   final List<String> _history = [];
@@ -57,6 +59,7 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
   void dispose() {
     _loadSerial++;
     _pathController.dispose();
+    _tasks.dispose();
     super.dispose();
   }
 
@@ -379,17 +382,21 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
       showActionError(context, 'Copy', 'SSH session or directory changed.');
       return;
     }
-    setState(() => _isLoading = true);
-    try {
-      await widget.sshService.files.copy(source, target);
-      if (mounted && widget.sshService.rawClient == client &&
-          _currentPath == directory) {
-        await _loadDirectory(directory);
-      }
-    } catch (error) {
-      if (mounted) showActionError(context, 'Copy', error);
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+    // Operation can continue while the user browses other directories.
+    // It is not cancelled when its window is closed: SSH may still complete.
+    final task = await _tasks.run(
+      'Copy ${item.name}',
+      () => widget.sshService.files.copy(source, target),
+      isSessionCurrent: () =>
+          widget.sshService.isConnected &&
+          widget.sshService.rawClient == client,
+    );
+    if (!mounted) return;
+    if (task.state == DesktopTaskState.completed &&
+        _currentPath == directory) {
+      await _loadDirectory(directory);
+    } else if (task.state == DesktopTaskState.failed) {
+      showActionError(context, 'Copy', task.message ?? 'Copy failed');
     }
   }
 
@@ -757,6 +764,50 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
                         );
                       },
                     ),
+            ),
+
+            AnimatedBuilder(
+              animation: _tasks,
+              builder: (context, _) {
+                if (_tasks.tasks.isEmpty) return const SizedBox.shrink();
+                return ExpansionTile(
+                  initiallyExpanded: true,
+                  dense: true,
+                  title: Text('File tasks · ${_tasks.runningCount} running',
+                      style: const TextStyle(fontSize: 12)),
+                  trailing: _tasks.runningCount > 0
+                      ? const SizedBox(width: 15, height: 15,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : IconButton(
+                          tooltip: 'Clear finished tasks',
+                          icon: const Icon(Icons.clear_all, size: 18),
+                          onPressed: _tasks.clearFinished,
+                        ),
+                  children: [
+                    for (final task in _tasks.tasks.take(5))
+                      ListTile(
+                        dense: true,
+                        title: Text(task.label,
+                            style: const TextStyle(fontSize: 12)),
+                        subtitle: Text(task.message ??
+                            task.state.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 11)),
+                        leading: Icon(
+                          task.state == DesktopTaskState.completed
+                              ? Icons.check_circle_outline
+                              : task.state == DesktopTaskState.failed
+                                  ? Icons.error_outline
+                                  : task.state == DesktopTaskState.unknown
+                                      ? Icons.help_outline
+                                      : Icons.hourglass_top,
+                          size: 17,
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
 
             // Status bar
