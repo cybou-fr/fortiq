@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'mono.dart';
+import 'ai_advice_dialog.dart';
 import '../services/ssh_service.dart';
 
 class RemoteLogViewer extends StatefulWidget {
@@ -287,6 +289,33 @@ class _RemoteLogViewerState extends State<RemoteLogViewer> {
                       ],
                     ),
                   ),
+                ),
+
+                // Explain only the entries currently displayed in this window.
+                // The optional Linux CLI receives no unselected files or logs.
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.auto_awesome, size: 14),
+                  label: const Text('Explain with AI'),
+                  onPressed: filteredLogs.isEmpty || _isLoading || _error != null
+                      ? null
+                      : () {
+                          final lines = filteredLogs.take(35).map(
+                            (entry) => '[${entry['level']}] ${entry['text']}',
+                          ).join('\n');
+                          final bytes = utf8.encode(
+                            'Linux ${_selectedLogType} logs:\n$lines',
+                          );
+                          final excerpt = utf8.decode(
+                            bytes.take(7800).toList(),
+                            allowMalformed: true,
+                          );
+                          showAiAdviceDialog(
+                            context: context,
+                            ssh: widget.sshService,
+                            title: 'Explain ${_selectedLogType} logs',
+                            loadContext: () async => excerpt,
+                          );
+                        },
                 ),
 
                 // Reload button
