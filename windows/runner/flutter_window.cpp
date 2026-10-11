@@ -1,6 +1,10 @@
 #include "flutter_window.h"
 
 #include <optional>
+#include <vector>
+#include <wincrypt.h>
+
+#include <flutter/standard_method_codec.h>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -25,6 +29,48 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+
+  // Seal license keys using the current Windows user's DPAPI credentials.
+  // Only ciphertext is persisted by Dart; secrets never enter preferences.
+  protected_storage_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(),
+          "fortiq/protected_storage",
+          &flutter::StandardMethodCodec::GetInstance());
+  protected_storage_channel_->SetMethodCallHandler(
+      [](const flutter::MethodCall<flutter::EncodableValue>& call,
+         std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+        if (call.method_name() != "protect" &&
+            call.method_name() != "unprotect") {
+          result->NotImplemented();
+          return;
+        }
+        const auto* input = call.arguments()
+            ? std::get_if<std::vector<uint8_t>>(call.arguments())
+            : nullptr;
+        if (!input || input->empty()) {
+          result->Error("invalid_input", "Expected non-empty binary data.");
+          return;
+        }
+        DATA_BLOB original = {
+            static_cast<DWORD>(input->size()),
+            const_cast<BYTE*>(input->data()),
+        };
+        DATA_BLOB output = {};
+        BOOL ok = call.method_name() == "protect"
+            ? ::CryptProtectData(&original, L"FORTIQ license", nullptr, nullptr,
+                                 nullptr, CRYPTPROTECT_UI_FORBIDDEN, &output)
+            : ::CryptUnprotectData(&original, nullptr, nullptr, nullptr,
+                                   nullptr, CRYPTPROTECT_UI_FORBIDDEN, &output);
+        if (!ok) {
+          result->Error("dpapi_failed", "Windows could not protect the license.");
+          return;
+        }
+        std::vector<uint8_t> bytes(output.pbData,
+                                   output.pbData + output.cbData);
+        ::LocalFree(output.pbData);
+        result->Success(flutter::EncodableValue(bytes));
+      });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -41,6 +87,7 @@ bool FlutterWindow::OnCreate() {
 
 void FlutterWindow::OnDestroy() {
   if (flutter_controller_) {
+    protected_storage_channel_.reset();
     flutter_controller_ = nullptr;
   }
 
