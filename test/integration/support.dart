@@ -175,8 +175,8 @@ exit 0
         );
         return ssh;
       } on SocketException {
-        if (attempt >= 4) rethrow;
-        await Future.delayed(const Duration(milliseconds: 500));
+        if (attempt >= 8) rethrow;
+        await Future.delayed(const Duration(seconds: 1));
       }
     }
   }
