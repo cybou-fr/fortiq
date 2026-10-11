@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
+import 'shell.dart';
 
 /// Explicit export from a remote Linux file to a user-chosen local path.
 /// Uses the authenticated SSH transport; no extra service, port or API.
@@ -59,8 +60,8 @@ class SftpTransferService {
   }
   /// Explicit upload into a selected Linux directory. Stage under a temporary
   /// name, verify the byte count, then publish after checking the destination.
-  /// The SFTP v3 rename/check pair is not atomic no-clobber: concurrent writers
-  /// on the server can still race. Do not use for overwrite-sensitive workflows.
+  /// A Linux hard-link publish avoids the SFTP rename overwrite race.
+  /// Requires the temporary file and target in the same filesystem.
   Future<void> upload({
     required SSHClient client,
     required String localPath,
@@ -108,7 +109,16 @@ class SftpTransferService {
       } on SftpStatusError catch (error) {
         if (error.code != SftpStatusCode.noSuchFile) rethrow;
       }
-      await sftp.rename(partial, remotePath);
+      // Atomic no-clobber publish on the same Linux filesystem: hard-link
+      // creation fails if the target appeared after our last check.
+      final publish = await client.runWithResult(
+        'ln -- ${shQuote(partial)} ${shQuote(remotePath)} && '
+        'rm -- ${shQuote(partial)}',
+      );
+      if (publish.exitCode != 0) {
+        throw StateError('Could not publish upload without overwriting; '
+            'verify the temporary remote file.');
+      }
     } finally {
       await sftp.close();
     }
