@@ -1285,6 +1285,8 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
         return Icons.email_outlined;
       case FortiqAppType.mediaViewer:
         return Icons.image;
+      case FortiqAppType.pdfViewer:
+        return Icons.picture_as_pdf;
       case FortiqAppType.disks:
         return Icons.storage;
     }
