@@ -1,0 +1,22 @@
+name: SSH CLI architecture contract
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "README.md"
+      - "docs/**"
+      - "lib/**"
+      - "pubspec.yaml"
+      - "tool/check_ssh_architecture.py"
+      - ".github/workflows/ssh-architecture.yml"
+  workflow_dispatch:
+
+jobs:
+  enforce-ssh-cli:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce frontend-only SSH transport and server CLI mappings
+        run: python3 tool/check_ssh_architecture.py

@@ -4,6 +4,21 @@
 **Decision:** Lemon Squeezy is the checkout, subscription and software-license provider.
 **Status:** Windows desktop purchase/activation UI, Lemon Squeezy License API client, Windows DPAPI persistence and unit tests are implemented in `main`. Store products, live checkout URLs, end-to-end payments and release approval remain outstanding. See [LICENSING_SETUP.md](LICENSING_SETUP.md).
 
+## Architecture boundary: SSH data plane vs. license control plane
+
+FORTIQ is **a thin frontend for Linux console utilities**. Every work-facing
+application (Files, Editor, Docs, Mail, Browser, system tools and future apps)
+operates through a selected server's **SSH** connection. Mail does **not**
+open direct SMTP/IMAP connections from Flutter; it launches Linux-hosted
+mail CLI commands via SSH. SFTP and SOCKS forwarding are inside SSH.
+
+**Lemon Squeezy is a strictly separate licensing and purchase control plane**:
+its checkout, Customer Portal and License API use HTTPS independently of SSH,
+because the user needs to activate FORTIQ before connecting to a Linux server.
+This exception grants no direct network transport for any work-facing app.
+Cached UI settings and temporary drafts are also not independent work
+backends. Binding contract: [SSH_FRONTEND_CONTRACT.md](SSH_FRONTEND_CONTRACT.md).
+
 ## 1. Exactly two offers
 
 | | Intro | Pro |
@@ -70,7 +85,7 @@ A **small server-side component is optional for ordinary licensed access**. It b
 
 **Connectivity:** avoid instantly disabling FORTIQ during a short network outage. A secure cache/offline grace is a release policy to decide and test, not a silently assumed 72-hour default. A customer-edited preferences file or changed system clock is not authoritative proof of payment.
 
-**Data safety:** expiration, failed renewal and refunds must never delete local SSH profiles, keys, drafts, documents or workspace settings. Make account and license recovery clear.
+**Data safety:** expiration, failed renewal and refunds must never delete local SSH profiles, keys, temporary drafts, workspace settings or remote Linux documents. Make account and license recovery clear.
 
 ## 5. R0 implementation tasks (LIC-01…LIC-07)
 
