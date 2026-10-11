@@ -38,6 +38,7 @@ class SftpTransferService {
       if (!sessionCurrent()) throw StateError('SSH session changed.');
       final total = attrs.size;
       final sink = partial.openWrite(mode: FileMode.writeOnly);
+      Object? failure;
       try {
         await sftp.download(
           remotePath,
@@ -49,8 +50,19 @@ class SftpTransferService {
           closeDestination: false,
         );
         await sink.flush();
-      } finally {
+      } catch (error) {
+        failure = error;
+      }
+      try {
         await sink.close();
+      } catch (error) {
+        // После отмены закрытие файла может сообщить «File closed» и скрыть
+        // настоящую причину; первая ошибка важнее.
+        failure ??= error;
+      }
+      if (failure != null) {
+        if (cancellation?.isRequested ?? false) throw const TransferCancelled();
+        throw failure;
       }
       cancellation?.throwIfRequested();
       if (!sessionCurrent()) throw StateError('SSH session changed.');

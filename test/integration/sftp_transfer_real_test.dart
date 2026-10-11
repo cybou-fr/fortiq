@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fortiq/services/desktop_task_controller.dart';
 import 'package:fortiq/services/sftp_transfer_service.dart';
 import 'package:fortiq/services/ssh_service.dart';
 
@@ -105,5 +106,93 @@ void main() {
       throwsStateError,
     );
     expect(dest('c.bin').existsSync(), isFalse, reason: 'чужую сессию за успех не принимаем');
+  });
+
+  test('отмена скачивания: итогового файла нет', () async {
+    await ssh.execute(
+      "python3 -c \"import sys; sys.stdout.buffer.write(b'x'*4000000)\" > $remoteDir/d.bin",
+    );
+    final cancel = TransferCancellation();
+    await expectLater(
+      service.download(
+        client: ssh.rawClient!,
+        remotePath: '$remoteDir/d.bin',
+        localPath: dest('d.bin').path,
+        onProgress: (b, t) => cancel.request(),
+        sessionCurrent: () => true,
+        cancellation: cancel,
+      ),
+      throwsA(isA<TransferCancelled>()),
+    );
+    expect(dest('d.bin').existsSync(), isFalse);
+  });
+
+  group('загрузка на сервер', () {
+    Future<void> upload(
+      File source,
+      String remote, {
+      TransferCancellation? cancel,
+      bool Function()? current,
+    }) => service.upload(
+      client: ssh.rawClient!,
+      localPath: source.path,
+      remotePath: remote,
+      onProgress: (b, t) {},
+      sessionCurrent: current ?? () => true,
+      cancellation: cancel,
+    );
+
+    Future<File> localFile(String name, List<int> bytes) async =>
+        (await dest(name).writeAsBytes(bytes));
+
+    test('содержимое доходит без изменений, временных файлов не остаётся', () async {
+      final bytes = List.generate(1500000, (i) => i % 251);
+      final src = await localFile('up.bin', bytes);
+      await upload(src, '$remoteDir/up.bin');
+
+      final sum = (await ssh.execute('cksum < $remoteDir/up.bin')).trim().split(' ');
+      expect(int.parse(sum[1]), bytes.length);
+      expect(await ssh.execute('ls -A $remoteDir | grep fortiq-upload || true'), isEmpty);
+    });
+
+    test('имя с пробелами, кавычкой и кириллицей — одно обычное имя', () async {
+      final src = await localFile('s.txt', 'привет'.codeUnits);
+      const name = "$remoteDir/мой файл 'x'; touch pwn.txt";
+      await upload(src, name);
+      expect(await ssh.execute('test -e $remoteDir/pwn.txt && echo есть || echo нет'), contains('нет'));
+      expect(await ssh.execute("ls $remoteDir | grep -c 'мой файл'"), contains('1'));
+    });
+
+    test('существующий файл на сервере не перезаписывается', () async {
+      await ssh.execute('echo original > $remoteDir/keep.txt');
+      final src = await localFile('k.txt', 'новое'.codeUnits);
+      await expectLater(upload(src, '$remoteDir/keep.txt'), throwsStateError);
+      expect((await ssh.execute('cat $remoteDir/keep.txt')).trim(), 'original');
+    });
+
+    test('отмена: файла на сервере нет', () async {
+      final src = await localFile('c.bin', List.filled(3000000, 7));
+      final cancel = TransferCancellation()..request();
+      await expectLater(
+        upload(src, '$remoteDir/cancelled.bin', cancel: cancel),
+        throwsA(isA<TransferCancelled>()),
+      );
+      expect(await ssh.execute('ls $remoteDir | grep -c "^cancelled.bin\$" || true'), contains('0'));
+    });
+
+    test('в каталог без прав записи — ошибка, ничего не создано', () async {
+      final src = await localFile('r.txt', 'x'.codeUnits);
+      await expectLater(upload(src, '/root/nope.txt'), throwsA(anything));
+    });
+
+    test('сессия сменилась: загрузка не публикуется', () async {
+      final src = await localFile('m.bin', List.filled(2000000, 1));
+      var calls = 0;
+      await expectLater(
+        upload(src, '$remoteDir/moved.bin', current: () => ++calls < 3),
+        throwsStateError,
+      );
+      expect(await ssh.execute('ls $remoteDir | grep -c "^moved.bin\$" || true'), contains('0'));
+    });
   });
 }
