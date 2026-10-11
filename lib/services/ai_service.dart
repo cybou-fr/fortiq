@@ -31,7 +31,7 @@ class AiService {
     }
     // The cache is opt-in because logs can contain credentials. The CLI
     // enforces its own consent and TTL checks before any persistent write.
-    final command = 'ai explain --stdin --json'
+    final command = 'export PATH="$HOME/.local/bin:$PATH"; ai explain --stdin --json'
         '${allowServerCache ? ' --cache --cache-sensitive' : ''}';
     final result = await _ssh.executeWithInput(command, input);
     // Never assume that a missing exit status means success.
