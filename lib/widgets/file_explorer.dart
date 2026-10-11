@@ -418,6 +418,7 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
       showActionError(context, 'Download', 'SSH session changed.');
       return;
     }
+    final cancellation = TransferCancellation();
     final task = await _tasks.runTransfer(
       'Download ${item.name}',
       (progress) => const SftpTransferService().download(
@@ -425,9 +426,11 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
         remotePath: source,
         localPath: destination.path,
         onProgress: progress,
+        cancellation: cancellation,
         sessionCurrent: () => widget.sshService.isConnected &&
             widget.sshService.rawClient == client,
       ),
+      cancellation: cancellation,
       isSessionCurrent: () => widget.sshService.isConnected &&
           widget.sshService.rawClient == client,
     );
