@@ -51,7 +51,7 @@ class FakeShell implements RemoteShell {
   Future<InputResult> executeWithInput(String command, Uint8List input) async {
     commands.add(command);
     inputs.add((command: command, input: input));
-    return inputResult?.call(command, input) ?? const InputResult();
+    return inputResult?.call(command, input) ?? const InputResult(exitCode: 0);
   }
 
   /// The text of the most recent input sent to the server.
