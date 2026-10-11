@@ -9,6 +9,7 @@ import 'models/server_profile.dart';
 import 'widgets/qubes_window_frame.dart';
 import 'widgets/desktop_workspace.dart';
 import 'widgets/mono.dart';
+import 'widgets/license_gate.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,7 +48,7 @@ class FortiqApp extends StatelessWidget {
           primary: Color(0xFF8B5CF6),
         ),
       ),
-      home: const FortiqHomeScreen(),
+      home: const FortiqLicenseGate(child: FortiqHomeScreen()),
     );
   }
 }
