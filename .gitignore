@@ -49,3 +49,6 @@ app.*.map.json
 
 # throwaway key of the local integration-test server
 test/integration/.keys/
+
+# Per-store local build configuration (IDs are public, but do not check in customer setup).
+/config/lemon_squeezy.local.json
