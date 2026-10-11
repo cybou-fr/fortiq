@@ -117,7 +117,7 @@ Intro не переходит автоматически в Pro. Отмена Pr
 | Workspace | **Files** | Каталоги, создание, удаление, открытие файлов | `ls`, `mkdir`, `rm`, `cat` |
 | Workspace | **Editor** | Текст, Ctrl+S, dirty, подтверждение Reload и закрытия | stdin; атомарная замена при доступном файле и каталоге |
 | Workspace | **Docs & Notes** | Markdown с предпросмотром | файловый сервис, как Editor |
-| Workspace | **Mailbox** | Чтение системной почты и запуск отправки на Linux | `/var/mail`, серверные `mail`/`sendmail` через SSH; fallback в mbox не доказывает доставку |
+| Workspace | **Mailbox** | Чтение системной почты и запуск отправки на Linux | `/var/mail`, серверные `mail`/`sendmail` через SSH; отправка только через доступный Linux MTA; неизвестный результат не выдаётся за доставку |
 | Workspace | **Browser** | Адресная строка и просмотр страниц | WebView2 + SOCKS5 внутри SSH, серверный `sshd`; для CLI-запросов `curl` |
 | Workspace | **Media Viewer** | Изображения, масштаб и поворот | `base64` по SSH |
 | System | **Terminal** | xterm, восстановление при наличии tmux | `tmux` или обычный SSH PTY |
