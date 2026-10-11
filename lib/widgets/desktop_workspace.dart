@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../services/ssh_service.dart';
 import '../services/server_setup_service.dart';
+import '../services/desktop_task_controller.dart';
 import 'server_status.dart';
 import 'file_explorer.dart';
 import 'process_manager.dart';
@@ -86,6 +87,7 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
   bool get hasUnsavedChanges => _windows.any((w) => w.isDirty);
 
   final List<InternalWindow> _windows = [];
+  final DesktopTaskController _desktopTasks = DesktopTaskController();
   String? _activeWindowId;
   late final ServerSetupService _setup = ServerSetupService(
     widget.sshService,
@@ -129,6 +131,7 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
   void dispose() {
     _setup.dispose();
     _metricsTimer?.cancel();
+    _desktopTasks.dispose();
     super.dispose();
   }
 
@@ -877,6 +880,7 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
       case FortiqAppType.fileExplorer:
         return RemoteFileExplorer(
           sshService: widget.sshService,
+          taskController: _desktopTasks,
           initialPath: win.filePath ?? '/',
           domainColor: widget.domainColor,
           onPathChanged: (path) {
@@ -983,6 +987,50 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
     }
   }
 
+  void _showDesktopTasks() {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Desktop tasks'),
+        content: SizedBox(
+          width: 540,
+          height: 360,
+          child: AnimatedBuilder(
+            animation: _desktopTasks,
+            builder: (context, _) => _desktopTasks.tasks.isEmpty
+                ? const Center(child: Text('No tasks in this session'))
+                : ListView(
+                    children: [
+                      for (final task in _desktopTasks.tasks)
+                        ListTile(
+                          dense: true,
+                          leading: Icon(switch (task.state) {
+                            DesktopTaskState.running => Icons.hourglass_top,
+                            DesktopTaskState.completed => Icons.check_circle_outline,
+                            DesktopTaskState.failed => Icons.error_outline,
+                            DesktopTaskState.unknown => Icons.help_outline,
+                          }),
+                          title: Text(task.label),
+                          subtitle: Text(task.message ?? task.state.name),
+                        ),
+                    ],
+                  ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => _desktopTasks.clearFinished(),
+            child: const Text('Clear finished'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDock() {
     return Container(
       height: 52,
@@ -1009,6 +1057,18 @@ class HeadlessDesktopWorkspaceState extends State<HeadlessDesktopWorkspace> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            AnimatedBuilder(
+              animation: _desktopTasks,
+              builder: (context, _) => IconButton(
+                tooltip: 'Desktop tasks (${_desktopTasks.runningCount} running)',
+                icon: Badge(
+                  isLabelVisible: _desktopTasks.runningCount > 0,
+                  label: Text('${_desktopTasks.runningCount}'),
+                  child: const Icon(Icons.task_alt, color: Colors.white70),
+                ),
+                onPressed: _showDesktopTasks,
+              ),
+            ),
             _dockItem(Icons.folder_open, 'Files', FortiqAppType.fileExplorer),
             _dockItem(Icons.storage, 'Disks', FortiqAppType.disks),
             _dockItem(Icons.search, 'Search Hub', FortiqAppType.spotlight),
