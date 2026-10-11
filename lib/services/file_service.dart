@@ -83,6 +83,23 @@ class FileService {
     );
   }
 
+  /// Copies one server-side file or directory without replacing a destination.
+  /// This is a synchronous SSH operation, not an SFTP transfer/progress API.
+  Future<void> copy(String source, String destination) async {
+    if (source.isEmpty || destination.isEmpty || source == destination ||
+        source.contains('\x00') || destination.contains('\x00')) {
+      throw ArgumentError('Invalid copy paths');
+    }
+    // GNU cp -T treats the destination as the exact target, not as a
+    // directory into which the source is silently copied.
+    await _ssh.execute(
+      'if [ -e ${shQuote(destination)} ] || [ -L ${shQuote(destination)} ]; then '
+      'echo "Destination already exists" >&2; exit 1; fi; '
+      'cp -a -n -T -- ${shQuote(source)} ${shQuote(destination)} && '
+      '{ [ -e ${shQuote(destination)} ] || [ -L ${shQuote(destination)} ]; }',
+    );
+  }
+
   /// Reads file content using `cat`
   Future<String> readFile(String path) async {
     return await _ssh.execute('cat -- ${shQuote(path)}');
