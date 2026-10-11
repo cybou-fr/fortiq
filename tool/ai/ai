@@ -96,6 +96,15 @@ def runtime_path() -> str | None:
     return shutil.which(value)
 
 
+def has_gguf_header(model: Path) -> bool:
+    """Read only four bytes, never load the full GGUF to check availability."""
+    try:
+        with model.open("rb") as source:
+            return source.read(4) == b"GGUF"
+    except OSError:
+        return False
+
+
 def system_state() -> dict:
     model = model_path()
     binary = runtime_path()
@@ -109,6 +118,8 @@ def system_state() -> dict:
         reason = "model_missing"
     elif binary is None:
         reason = "runtime_missing"
+    elif not has_gguf_header(model):
+        reason = "invalid_model_header"
     elif free < model.stat().st_size * 2 + reserve:
         reason = "insufficient_available_memory"
     return {
