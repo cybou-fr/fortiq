@@ -147,10 +147,10 @@ class CliTest(unittest.TestCase):
 
     def test_excessive_llama_stdout_is_stopped_without_caching(self):
         self.llama.write_text(
-            "#!/usr/bin/env python3\\n"
-            "import sys\\n"
-            "sys.stdout.write('A' * 1000000)\\n"
-            "sys.stdout.flush()\\n"
+            "#!/usr/bin/env python3\n"
+            "import sys\n"
+            "sys.stdout.write('A' * 1000000)\n"
+            "sys.stdout.flush()\n"
         )
         r, answer = self.run_ai("ask", "--stdin", "--cache", message="boom")
         self.assertEqual(r.returncode, 2)
@@ -162,10 +162,10 @@ class CliTest(unittest.TestCase):
         import time
         pidfile = Path(self.temp.name) / "child.pid"
         self.llama.write_text(
-            "#!/usr/bin/env python3\\n"
-            "import os, time\\n"
-            f"open({str(pidfile)!r}, 'w').write(str(os.getpid()))\\n"
-            "time.sleep(20)\\n"
+            "#!/usr/bin/env python3\n"
+            "import os, time\n"
+            f"open({str(pidfile)!r}, 'w').write(str(os.getpid()))\n"
+            "time.sleep(20)\n"
         )
         process = subprocess.Popen(
             [sys.executable, str(CLI), "ask", "--stdin", "--json"],
