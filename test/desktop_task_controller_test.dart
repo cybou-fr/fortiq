@@ -131,4 +131,21 @@ void main() {
     tasks.dispose();
   });
 
+  test('SSH loss during cancellation remains unknown, not cancelled', () async {
+    final tasks = DesktopTaskController();
+    final token = TransferCancellation();
+    final gate = Completer<void>();
+    var sessionCurrent = true;
+    final pending = tasks.runTransfer('Download', (_) async {
+      await gate.future;
+      token.throwIfRequested();
+    }, cancellation: token, isSessionCurrent: () => sessionCurrent);
+    tasks.cancelTransfer(tasks.tasks.single.id);
+    sessionCurrent = false;
+    gate.complete();
+    final task = await pending;
+    expect(task.state, DesktopTaskState.unknown);
+    tasks.dispose();
+  });
+
 }
