@@ -303,12 +303,26 @@ class _PurchaseCard extends StatelessWidget {
   );
 }
 
-class _LicenseDetails extends StatelessWidget {
+class _LicenseDetails extends StatefulWidget {
   final FortiqLicenseService service;
   const _LicenseDetails({required this.service});
 
   @override
+  State<_LicenseDetails> createState() => _LicenseDetailsState();
+}
+
+class _LicenseDetailsState extends State<_LicenseDetails> {
+  final _replacementKey = TextEditingController();
+
+  @override
+  void dispose() {
+    _replacementKey.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final service = widget.service;
     return AnimatedBuilder(
       animation: service,
       builder: (context, _) {
@@ -327,6 +341,33 @@ class _LicenseDetails extends StatelessWidget {
               Text(service.error!,
                   style: const TextStyle(color: Colors.orangeAccent)),
             ],
+            if (entitlement?.offer == LicenseOffer.intro &&
+                FortiqLicenseConfig.checkoutUrl(LicenseOffer.pro) != null) ...[
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: () => _openExternal(
+                    FortiqLicenseConfig.checkoutUrl(LicenseOffer.pro)!),
+                child: const Text('Buy Pro · 39.90 € / year'),
+              ),
+            ],
+            const SizedBox(height: 12),
+            TextField(
+              controller: _replacementKey,
+              obscureText: true,
+              enableSuggestions: false,
+              autocorrect: false,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'Activate another license key',
+              ),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: service.busy
+                  ? null
+                  : () => service.activate(_replacementKey.text),
+              child: const Text('Use this key'),
+            ),
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,
