@@ -451,6 +451,7 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
       return;
     }
     final remote = p.posix.join(directory, name);
+    final cancellation = TransferCancellation();
     final task = await _tasks.runTransfer(
       'Upload $name',
       (progress) => const SftpTransferService().upload(
@@ -458,9 +459,11 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
         localPath: local.path,
         remotePath: remote,
         onProgress: progress,
+        cancellation: cancellation,
         sessionCurrent: () => widget.sshService.isConnected &&
             widget.sshService.rawClient == client,
       ),
+      cancellation: cancellation,
       isSessionCurrent: () => widget.sshService.isConnected &&
           widget.sshService.rawClient == client,
     );
@@ -892,6 +895,16 @@ class _RemoteFileExplorerState extends State<RemoteFileExplorer> {
                                   style: const TextStyle(fontSize: 10)),
                           ],
                         ),
+                        trailing: task.state == DesktopTaskState.running &&
+                                task.cancellation != null
+                            ? IconButton(
+                                tooltip: 'Request upload cancellation',
+                                icon: const Icon(Icons.cancel_outlined, size: 18),
+                                onPressed: task.cancellation!.isRequested
+                                    ? null
+                                    : () => _tasks.cancelTransfer(task.id),
+                              )
+                            : null,
                         leading: Icon(
                           task.state == DesktopTaskState.completed
                               ? Icons.check_circle_outline
