@@ -6,9 +6,9 @@ class MemoryStore implements LicenseStore {
   @override
   Future<StoredFortiqLicense?> read() async => value;
   @override
-  Future<void> write(StoredFortiqLicense record) async => value = record;
+  Future<void> write(StoredFortiqLicense record) async { value = record; }
   @override
-  Future<void> clear() async => value = null;
+  Future<void> clear() async { value = null; }
 }
 
 class FakeLemonSqueezy implements LicenseApi {
