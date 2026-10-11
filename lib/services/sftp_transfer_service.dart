@@ -38,8 +38,9 @@ class SftpTransferService {
       if (!sessionCurrent()) throw StateError('SSH session changed.');
       final total = attrs.size;
       final sink = partial.openWrite(mode: FileMode.writeOnly);
+      int receivedBytes;
       try {
-        await sftp.download(
+        receivedBytes = await sftp.download(
           remotePath,
           sink,
           onProgress: (received) {
@@ -54,9 +55,8 @@ class SftpTransferService {
       }
       cancellation?.throwIfRequested();
       if (!sessionCurrent()) throw StateError('SSH session changed.');
-      final actualBytes = await partial.length();
-      if (actualBytes != (total ?? actualBytes) ||
-          (total == null && actualBytes == 0 && (attrs.size ?? 0) > 0)) {
+      if (await partial.length() != receivedBytes ||
+          (total != null && receivedBytes != total)) {
         throw StateError('Incomplete transfer. Partial file retained.');
       }
       if (await target.exists()) {
