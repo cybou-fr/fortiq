@@ -1,5 +1,5 @@
-import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -247,40 +247,49 @@ class _RemoteLogViewerState extends State<RemoteLogViewer> {
                     ),
                   ),
 
-                // Explain only the entries currently displayed in this window.
-                // The optional Linux CLI receives no unselected files or logs.
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.auto_awesome, size: 14),
-                  label: const Text('Explain with AI'),
-                  onPressed: filteredLogs.isEmpty || _isLoading || _error != null
-                      ? null
-                      : () {
-                          final lines = filteredLogs.reversed.take(35).toList().reversed.map(
-                            (entry) => '[${entry['level']}] ${entry['text']}',
-                          ).join('\n');
-                          final bytes = utf8.encode(
-                            'Linux $_selectedLogType logs:\n$lines',
-                          );
-                          final excerpt = utf8.decode(
-                            bytes.take(7800).toList(),
-                            allowMalformed: true,
-                          );
-                          showAiAdviceDialog(
-                            context: context,
-                            ssh: widget.sshService,
-                            title: 'Explain $_selectedLogType logs',
-                            loadContext: () async => excerpt,
-                          );
+                  // Lines Count Selector
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF222334),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<int>(
+                        value: _linesCount,
+                        dropdownColor: const Color(0xFF222334),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.white70,
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 50, child: Text('50 lines')),
+                          DropdownMenuItem(
+                            value: 100,
+                            child: Text('100 lines'),
+                          ),
+                          DropdownMenuItem(
+                            value: 200,
+                            child: Text('200 lines'),
+                          ),
+                          DropdownMenuItem(
+                            value: 500,
+                            child: Text('500 lines'),
+                          ),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() => _linesCount = val);
+                            _snapshot.invalidate(clear: true);
+                            _loadLogs();
+                          }
                         },
-                ),
-
-                // Reload button
-                IconButton(
-                  icon: const Icon(Icons.refresh, size: 16, color: Colors.white70),
-                  tooltip: 'Manual Refresh',
-                  splashRadius: 18,
-                  onPressed: () => _loadLogs(),
-                ),
+                      ),
+                    ),
+                  ),
 
                   // Auto Refresh Switch
                   InkWell(
@@ -327,6 +336,37 @@ class _RemoteLogViewerState extends State<RemoteLogViewer> {
                         ],
                       ),
                     ),
+                  ),
+
+                  // Объяснить только те записи, что сейчас показаны в окне.
+                  // Команда `ai` на сервере не получает ничего сверх выбранного.
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.auto_awesome, size: 14),
+                    label: const Text('Explain with AI'),
+                    onPressed:
+                        filteredLogs.isEmpty || _isLoading || _error != null
+                        ? null
+                        : () {
+                            final lines = filteredLogs.reversed
+                                .take(35)
+                                .toList()
+                                .reversed
+                                .map((e) => '[${e['level']}] ${e['text']}')
+                                .join('\n');
+                            final bytes = utf8.encode(
+                              'Linux $_selectedLogType logs:\n$lines',
+                            );
+                            final excerpt = utf8.decode(
+                              bytes.take(7800).toList(),
+                              allowMalformed: true,
+                            );
+                            showAiAdviceDialog(
+                              context: context,
+                              ssh: widget.sshService,
+                              title: 'Explain $_selectedLogType logs',
+                              loadContext: () async => excerpt,
+                            );
+                          },
                   ),
 
                   // Reload button
