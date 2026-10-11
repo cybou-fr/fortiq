@@ -115,8 +115,10 @@ Containers (Docker/Podman), Jobs (systemd timers/cron) и Backup & Restore — �
 Целевой выпуск **R0** включает проверку покупок в Lemon Squeezy Test Mode, штатную
 выдачу и проверку лицензионных ключей через License API, безопасное локальное
 хранение, работающий Windows-пакет и испытания подготовки сервера. Для Pro
-используется встроенный Customer Portal. Текущая ветка `main` ещё не содержит
-интеграции Lemon Squeezy. Контракт оплаты и тесты — в [LICENSING.md](LICENSING.md).
+используется встроенный Customer Portal. Текущая ветка `main` содержит клиентскую
+интеграцию License API, но магазин и настоящие checkout-ссылки ещё не настроены.
+Контракт оплаты и тесты — в [LICENSING.md](LICENSING.md), инструкция подключения —
+в [LICENSING_SETUP.md](LICENSING_SETUP.md).
 
 Для публичного описания продукта используем положительное позиционирование
 «Distributed Desktop Software» и проверенные возможности FORTIQ.
