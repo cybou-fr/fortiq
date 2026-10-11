@@ -87,6 +87,7 @@ class SftpTransferService {
     if (!sessionCurrent()) throw StateError('SSH session changed.');
     final sftp = await client.sftp();
     final partial = '$remotePath.fortiq-upload-${DateTime.now().microsecondsSinceEpoch}';
+    var createdPartial = false;
     try {
       try {
         await sftp.stat(remotePath);
@@ -98,6 +99,7 @@ class SftpTransferService {
         partial,
         mode: SftpFileOpenMode.create | SftpFileOpenMode.write,
       );
+      createdPartial = true;
       try {
         Stream<Uint8List> chunks() async* {
           await for (final data in source.openRead()) {
@@ -138,6 +140,18 @@ class SftpTransferService {
         throw StateError('Could not publish upload without overwriting; '
             'verify the temporary remote file.');
       }
+    } on TransferCancelled {
+      // Only delete this invocation's staging file, after the writer handle
+      // has closed and only while the original authenticated session is live.
+      // Cleanup failure must not hide the cancellation.
+      if (createdPartial && sessionCurrent()) {
+        try {
+          await sftp.remove(partial);
+        } catch (_) {
+          // A staging file may remain; report this through task metadata later.
+        }
+      }
+      rethrow;
     } finally {
       await sftp.close();
     }
