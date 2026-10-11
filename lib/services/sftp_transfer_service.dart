@@ -54,7 +54,9 @@ class SftpTransferService {
       }
       cancellation?.throwIfRequested();
       if (!sessionCurrent()) throw StateError('SSH session changed.');
-      if (total != null && await partial.length() != total) {
+      final actualBytes = await partial.length();
+      if (actualBytes != (total ?? actualBytes) ||
+          (total == null && actualBytes == 0 && (attrs.size ?? 0) > 0)) {
         throw StateError('Incomplete transfer. Partial file retained.');
       }
       if (await target.exists()) {
@@ -97,7 +99,9 @@ class SftpTransferService {
       }
       final handle = await sftp.open(
         partial,
-        mode: SftpFileOpenMode.create | SftpFileOpenMode.write,
+        mode: SftpFileOpenMode.create |
+            SftpFileOpenMode.write |
+            SftpFileOpenMode.exclusive,
       );
       createdPartial = true;
       try {
