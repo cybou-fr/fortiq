@@ -81,7 +81,7 @@ def meminfo() -> tuple[int, int]:
 def model_path() -> Path | None:
     value = os.environ.get("AI_MODEL", "").strip()
     if not value:
-        return None
+        value = "~/.local/share/ai/model.gguf"
     return Path(value).expanduser()
 
 
