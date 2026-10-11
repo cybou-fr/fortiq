@@ -76,8 +76,10 @@ class FileService {
       throw ArgumentError('Invalid rename paths');
     }
     await _ssh.execute(
-      'mv -n -- ${shQuote(source)} ${shQuote(destination)} && '
-      'test ! -e ${shQuote(source)}',
+      'if [ -e ${shQuote(destination)} ] || [ -L ${shQuote(destination)} ]; then '
+      'echo "Destination already exists" >&2; exit 1; fi; '
+      'mv -nT -- ${shQuote(source)} ${shQuote(destination)} && '
+      'test ! -e ${shQuote(source)} && test ! -L ${shQuote(source)}',
     );
   }
 
