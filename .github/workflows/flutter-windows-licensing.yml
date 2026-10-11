@@ -9,6 +9,13 @@ on:
       - "lib/main.dart"
       - "windows/runner/**"
       - "test/license_service_test.dart"
+      - "test/ai_service_test.dart"
+      - "lib/services/ai_service.dart"
+      - "lib/services/ssh_service.dart"
+      - "lib/services/shell.dart"
+      - "lib/widgets/ai_advice_dialog.dart"
+      - "lib/widgets/log_viewer.dart"
+      - "lib/widgets/service_manager.dart"
       - "pubspec.yaml"
       - ".github/workflows/flutter-windows-licensing.yml"
   workflow_dispatch:
@@ -31,5 +38,9 @@ jobs:
         run: flutter analyze lib/services/license_service.dart lib/widgets/license_gate.dart test/license_service_test.dart
       - name: Test licensing behavior
         run: flutter test test/license_service_test.dart
+      - name: Analyze Linux AI GUI integration
+        run: flutter analyze lib/services/ai_service.dart lib/services/ssh_service.dart lib/services/shell.dart lib/widgets/ai_advice_dialog.dart lib/widgets/log_viewer.dart lib/widgets/service_manager.dart test/ai_service_test.dart
+      - name: Test Linux AI adapter and licensing
+        run: flutter test test/ai_service_test.dart
       - name: Build Windows debug
         run: flutter build windows --debug
