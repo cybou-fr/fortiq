@@ -102,4 +102,33 @@ void main() {
     tasks.dispose();
   });
 
+  test('download cancellation request marks task cancelled after cooperation', () async {
+    final tasks = DesktopTaskController();
+    final token = TransferCancellation();
+    final gate = Completer<void>();
+    final pending = tasks.runTransfer('Download', (progress) async {
+      progress(64, 1024);
+      await gate.future;
+      token.throwIfRequested();
+    }, cancellation: token);
+    expect(tasks.cancelTransfer(tasks.tasks.single.id), isTrue);
+    gate.complete();
+    final task = await pending;
+    expect(task.state, DesktopTaskState.cancelled);
+    expect(task.progress, 0.0625);
+    expect(tasks.runningCount, 0);
+    tasks.dispose();
+  });
+
+  test('late cancellation does not rewrite a completed transfer', () async {
+    final tasks = DesktopTaskController();
+    final token = TransferCancellation();
+    final task = await tasks.runTransfer('Download', (progress) async {
+      progress(12, 12);
+    }, cancellation: token);
+    expect(tasks.cancelTransfer(task.id), isFalse);
+    expect(task.state, DesktopTaskState.completed);
+    tasks.dispose();
+  });
+
 }
