@@ -118,7 +118,7 @@ fi
     final recipient = to.trim();
     if (recipient.isEmpty ||
         recipient.length > 254 ||
-        !RegExp(r'^[A-Za-z0-9_+.-]+(?:@[A-Za-z0-9.-]+)?$').hasMatch(recipient) ||
+        !RegExp(r'^[A-Za-z0-9_+.][A-Za-z0-9_+.-]*(?:@[A-Za-z0-9.-]+)?$').hasMatch(recipient) ||
         subject.isEmpty || subject.length > 998 ||
         subject.contains('\r') || subject.contains('\n')) {
       return false;

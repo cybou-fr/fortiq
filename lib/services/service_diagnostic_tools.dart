@@ -49,8 +49,8 @@ class ServiceDiagnosticTools {
     if (!_ssh.isConnected) throw StateError('Reconnect SSH first.');
     final output = await _ssh.execute(
       'for tool in systemctl journalctl ss; do '
-      'if command -v "$tool" >/dev/null 2>&1; then '
-      'printf "%s:yes\\n" "$tool"; else printf "%s:no\\n" "$tool"; fi; '
+      'if command -v "\$tool" >/dev/null 2>&1; then '
+      'printf "%s:yes\\n" "\$tool"; else printf "%s:no\\n" "\$tool"; fi; '
       'done',
     );
     return [
