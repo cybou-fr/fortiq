@@ -106,6 +106,30 @@ class CliTest(unittest.TestCase):
         self.assertFalse(value["cached"])
         self.assertEqual(self.count(), 3)
 
+    def test_expired_entry_is_never_reused(self):
+        self.run_ai("explain", "--stdin", "--cache", "--cache-sensitive",
+                    message="journal entry")
+        self.assertEqual(self.count(), 1)
+        entry = next(self.cache_dir.glob("*.json"))
+        record = json.loads(entry.read_text())
+        record["created_epoch"] = 1  # well before the ten-minute TTL
+        entry.write_text(json.dumps(record))
+        _, answer = self.run_ai("explain", "--stdin", "--cache",
+                                "--cache-sensitive", message="journal entry")
+        self.assertFalse(answer["cached"])
+        self.assertEqual(self.count(), 2)
+
+    def test_two_identical_simultaneous_requests_only_launch_one_model(self):
+        from concurrent.futures import ThreadPoolExecutor
+        def ask(_):
+            return self.run_ai("ask", "--stdin", "--cache", message="shared question")
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            replies = list(pool.map(ask, (1, 2)))
+        self.assertEqual([r.returncode for r, _ in replies], [0, 0])
+        self.assertEqual(self.count(), 1)
+        self.assertEqual(sorted(answer["cached"] for _, answer in replies),
+                         [False, True])
+
     def test_sensitive_explain_needs_explicit_consent(self):
         r, value = self.run_ai("explain", "--stdin", "--cache", message="SECRET_PLACEHOLDER")
         self.assertNotEqual(r.returncode, 0)
