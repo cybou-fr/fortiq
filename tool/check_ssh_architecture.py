@@ -153,7 +153,10 @@ for file in (ROOT / "lib").rglob("*.dart"):
         if re.search(rf"import\s+['\"]package:{package}(?:/|['\"])", content):
             errors.append(f"{relative}: new local work database requires architecture review")
 
-pubspec = (ROOT / "pubspec.yaml").read_text(encoding="utf-8")
+# Реализация на Flutter удалена (тег flutter-final): проверки Dart действуют
+# только пока такие файлы есть. Правила для C++/Qt добавляются вместе с кодом.
+pubspec_path = ROOT / "pubspec.yaml"
+pubspec = pubspec_path.read_text(encoding="utf-8") if pubspec_path.exists() else ""
 for prefix in ("mailer:", "enough_mail:", "imap_client:", "smtp_client:", "pop3:"):
     expect(re.search(rf"^\s*{re.escape(prefix)}", pubspec, re.M) is None,
            f"pubspec.yaml: direct-mail client dependency {prefix} is forbidden")

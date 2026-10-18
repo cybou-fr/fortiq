@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- The app's dark background (same as the Flutter scaffold colour). Used behind the
-         launcher icon, on the splash screen and while the first frame is drawn. -->
-    <color name="fortiq_surface">#13141B</color>
-</resources>
