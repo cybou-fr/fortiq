@@ -9,7 +9,7 @@
 FORTIQ is **a thin frontend for Linux console utilities**. Every work-facing
 application (Files, Editor, Docs, Mail, Browser, system tools and future apps)
 operates through a selected server's **SSH** connection. Mail does **not**
-open direct SMTP/IMAP connections from Flutter; it launches Linux-hosted
+open direct SMTP/IMAP connections from the client; it launches Linux-hosted
 mail CLI commands via SSH. SFTP and SOCKS forwarding are inside SSH.
 
 **Lemon Squeezy is a strictly separate licensing and purchase control plane**:

@@ -8,7 +8,7 @@
 
 FORTIQ — **frontend для серверных Linux CLI, запускаемых через SSH**.
 Все предметные операции, включая почту, выполняются выбранным Linux-сервером
-через SSH exec/PTY/SFTP/forwarding. **Прямого SMTP/IMAP из Flutter нет.**
+через SSH exec/PTY/SFTP/forwarding. **Прямого SMTP/IMAP из клиента нет.**
 HTTPS-соединение с Lemon Squeezy служит только для покупки, лицензии
 и управления подпиской до подключения к Linux и не меняет SSH-архитектуру
 инструментов. См. [SSH_FRONTEND_CONTRACT](SSH_FRONTEND_CONTRACT.md).
@@ -49,26 +49,16 @@ HTTPS-соединение с Lemon Squeezy служит только для п�
 
 ## 3. Запуск и тестирование
 
-Flutter использует `String.fromEnvironment`, параметры передаются при сборке.
-Создать **локальный** JSON-файл `config/lemon_squeezy.local.json` по примеру
-[lemon_squeezy.example.json](../config/lemon_squeezy.example.json).
+Идентификаторы магазина (`store_id`, `variant_id`, ссылки checkout) передаются клиенту при сборке
+(способ — параметры CMake или файл конфигурации; выбирается вместе с каркасом Qt-проекта).
+Создать **локальный** `config/lemon_squeezy.local.json` по примеру
+[lemon_squeezy.example.json](../config/lemon_squeezy.example.json); файл не коммитится.
 
-```powershell
-flutter pub get
-flutter run -d windows --dart-define-from-file=config/lemon_squeezy.local.json
-```
+Требования к поведению (из прототипа):
 
-В примере параметр `FORTIQ_REQUIRE_LICENSE=true` включает экран активации
-даже в Debug. Без него обычный Debug запускается как раньше, чтобы продолжать
-разработку. **Release-билд всегда требует лицензию**, даже без этого флага:
-
-```powershell
-flutter build windows --release --dart-define-from-file=config/lemon_squeezy.local.json
-```
-
-Если в Release не переданы валидные Store ID и Variant ID, появится экран
-ошибки конфигурации. До публичного выпуска обязательно проверить, что ссылки
-оплаты настоящие и магазин опубликован.
+- Релизная сборка всегда требует лицензию; отладочная может включать экран активации флагом.
+- Если не заданы корректные Store ID и Variant ID, показывается экран ошибки конфигурации.
+- До публичного выпуска проверить, что ссылки и идентификаторы относятся к нужным тарифам.
 
 ## 4. Пользовательский сценарий
 
@@ -105,17 +95,16 @@ flutter build windows --release --dart-define-from-file=config/lemon_squeezy.loc
 - Полная Windows-сборка, реальные SSH-сценарии, настройка Linux на VM.
 - Отдельное решение для правила «Intro только один раз на покупателя».
 
-## 6. Реализованные файлы
+## 6. Что надо реализовать в клиенте на Qt
 
-- `lib/services/license_service.dart`: API, проверка продукта/экземпляра,
-  сохранение лицензии, состояния.
-- `lib/widgets/license_gate.dart`: два тарифа, checkout, активация,
-  проверка/деактивация, ссылка на Customer Portal.
-- `lib/main.dart`: проверка доступа перед созданием SSH-интерфейса.
-- `windows/runner/flutter_window.*`: защищённое хранение через Windows DPAPI.
-- `test/license_service_test.dart`: сценарии продукта, статусов, активаций.
-- `.github/workflows/flutter-windows-licensing.yml`: автоматический анализ,
-  тест лицензирования и компиляция Windows.
+Прежняя реализация (Flutter, Windows DPAPI, тесты, CI) удалена; её сценарии сохранены в теге
+`flutter-final`. Новый клиент должен дать:
+
+- службу лицензии: вызовы License API, проверка продукта и экземпляра, состояния и ошибки;
+- экран выбора тарифа: два тарифа, checkout, активация, проверка и деактивация, Customer Portal;
+- проверку доступа до создания SSH-интерфейса;
+- защищённое хранение лицензии средствами ОС (Windows DPAPI / Credential Manager);
+- автотесты состояний лицензии и активаций.
 
 **Оставшиеся R0-задачи:** проверенный реальный магазин и Test Mode, однократность
 Intro по покупателю (если требуется строго), безопасное хранение импортированных
