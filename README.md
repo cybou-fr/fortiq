@@ -346,20 +346,10 @@ docs/
 
 ## Иконка и брендинг
 
-Все иконки получаются из одного исходника `assets/branding/fortiq-icon-source.png` (знак на
-прозрачном фоне) скриптом [tool/generate_icons.py](tool/generate_icons.py):
-
-```bash
-pip install pillow
-python tool/generate_icons.py
-```
-
-Скрипт обновляет иконку Windows (`app_icon.ico`), иконки Android (обычные, адаптивные с отдельным
-слоем и монохромный слой для тем Android 13), заставку Android, набор `AppIcon` для iOS и знак
-внутри приложения (`assets/branding/fortiq_mark.png`). Иконка это знак на тёмном фоне приложения
-(`#13141B`), поэтому она одинаково читается на светлых и тёмных панелях задач и рабочих столах.
-После смены исходника перегенерируйте иконки и пересоберите приложение. Linux и macOS в проекте
-пока нет, для них иконки не создаются.
+Исходники знака лежат в `assets/branding/` (`fortiq-icon-source.png`, `fortiq_mark.png`). Скрипт,
+который раскладывал их по каталогам Flutter-проекта (Android, iOS, Windows), удалён вместе с
+реализацией на Flutter; для C++/Qt иконки будут готовиться заново (тег `flutter-final` хранит
+прежний `tool/generate_icons.py`). Иконка это знак на тёмном фоне (`#13141B`).
 
 ## Разработка
 

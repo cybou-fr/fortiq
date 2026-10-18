@@ -1,54 +1,20 @@
-# Miscellaneous
-*.class
+# Общее
 *.log
 *.pyc
+__pycache__/
 *.swp
 .DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
-
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
 .idea/
+*.iml
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
+# Сборка C++/Qt
 /build/
-/coverage/
+/out/
+CMakeUserPresets.json
+*.user
 
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
-
-# Widget Preview related
-.widget_preview/
-
-# throwaway key of the local integration-test server
+# Одноразовый ключ локального тестового сервера
 test/integration/.keys/
 
-# Per-store local build configuration (IDs are public, but do not check in customer setup).
+# Локальная конфигурация магазина (ID публичные, но данные покупателей не коммитим)
 /config/lemon_squeezy.local.json
