@@ -106,6 +106,10 @@ public:
     Q_INVOKABLE void createFolder(const QString &name);
     Q_INVOKABLE void renameEntry(const QString &path, const QString &newName);
     Q_INVOKABLE void trashEntry(const QString &path);
+    // Trash actions. keepBoth restores as "name (n)" when the name is taken.
+    Q_INVOKABLE void restoreEntry(const QString &trashedPath, bool keepBoth = false);
+    Q_INVOKABLE void deletePermanently(const QString &trashedPath);
+    Q_INVOKABLE void emptyTrash();
 
 signals:
     void changed();

@@ -28,6 +28,8 @@ Item {
     property rect normalGeometry
 
     readonly property bool connected: controller !== null && controller.connected
+    readonly property bool inTrash: fixture ? fixturePreview === "trashview"
+        : (connected && controller.trashDirectory.length > 0 && location === controller.trashDirectory)
     readonly property bool busy: controller !== null && controller.busy
     readonly property var sampleEntries: [
         { name: "Bureau", directory: true, path: "/home/demo/Bureau", mtime: 1760788800, size: 4096, mode: "drwxr-xr-x", owner: "demo" },
@@ -43,7 +45,12 @@ Item {
         { name: "Budget.xlsx", path: "/home/demo/Budget.xlsx", mtime: 1760760000, size: 48200, mode: "-rw-r--r--", owner: "demo" },
         { name: "Notes.txt", path: "/home/demo/Notes.txt", mtime: 1760750000, size: 1830, mode: "-rw-r--r--", owner: "demo" }
     ]
-    readonly property var entries: fixture ? sampleEntries : (connected ? controller.entries : [])
+    readonly property var sampleTrash: [
+        { name: "ancien-rapport.pdf", path: "/home/demo/.local/share/Trash/files/ancien-rapport.pdf", mtime: 1760700000, size: 820000, mode: "-rw-r--r--", owner: "demo" },
+        { name: "Brouillons", directory: true, path: "/home/demo/.local/share/Trash/files/Brouillons", mtime: 1760600000, size: 4096, mode: "drwxr-xr-x", owner: "demo" },
+        { name: "capture.png", path: "/home/demo/.local/share/Trash/files/capture.png", mtime: 1760500000, size: 240000, mode: "-rw-r--r--", owner: "demo" }
+    ]
+    readonly property var entries: fixture ? (fixturePreview === "trashview" ? sampleTrash : sampleEntries) : (connected ? controller.entries : [])
     readonly property string location: fixture ? "/home/demo" : (connected ? controller.currentDirectory : "")
     readonly property string home: fixture ? "/home/demo" : (connected ? controller.homeDirectory : "")
 
@@ -104,8 +111,31 @@ Item {
         pendingOp = "rename"; pendingEntry = entry
         opDialog.openWith("Renommer", entry.directory ? "Dossier" : "Fichier", "Renommer", false, true, entry.name)
     }
+    function restore(entry) {
+        if (!entry || !connected) return
+        pendingOp = "restore"; pendingEntry = entry
+        controller.restoreEntry(entry.path, false)
+    }
+    function askDeletePermanently(entry) {
+        if (!entry || !connected) return
+        pendingOp = "delete"; pendingEntry = entry
+        opDialog.openWith("Supprimer définitivement ?",
+            "« " + entry.name + " »" + (entry.directory ? " et tout son contenu" : "")
+            + " sera supprimé de " + controller.serverLabel + ". Cette action est irréversible.",
+            "Supprimer définitivement", true, false, "")
+    }
+    function askEmptyTrash() {
+        if (!connected) return
+        pendingOp = "empty"; pendingEntry = null
+        const n = entries.length
+        opDialog.openWith("Vider la corbeille ?",
+            n + " élément" + (n > 1 ? "s" : "") + " de la corbeille de " + controller.serverLabel
+            + " seront supprimés définitivement, y compris les fichiers cachés. Cette action est irréversible.",
+            "Vider la corbeille", true, false, "")
+    }
     function askTrash(entry) {
         if (!entry || !connected) return
+        if (inTrash) { askDeletePermanently(entry); return }
         if (controller.trashDirectory.length > 0 && String(entry.path).startsWith(controller.trashDirectory + "/")) {
             showNotice("Déjà dans la corbeille. La suppression définitive n'est pas encore disponible.", true)
             return
@@ -464,10 +494,53 @@ Item {
             }
         }
 
+        Rectangle {
+            id: trashBanner
+            visible: win.inTrash
+            z: 4
+            x: 10; y: 8; width: parent.width - 20; height: 36; radius: 10
+            color: "#1FFFFFFF"
+            border.width: 1; border.color: "#26FFFFFF"
+            Text {
+                x: 12; anchors.verticalCenter: parent.verticalCenter
+                width: parent.width - trashActions.width - 30; elide: Text.ElideRight
+                text: "🗑  Corbeille · " + win.entries.length + " élément" + (win.entries.length > 1 ? "s" : "")
+                      + "  —  les éléments peuvent être restaurés à leur emplacement d'origine"
+                color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily
+            }
+            Row {
+                id: trashActions
+                anchors.right: parent.right; anchors.rightMargin: 6
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 6
+                Repeater {
+                    model: [
+                        { k: "restore", t: "Restaurer", on: win.selected !== null, danger: false },
+                        { k: "empty", t: "Vider la corbeille…", on: win.entries.length > 0, danger: true }
+                    ]
+                    Rectangle {
+                        required property var modelData
+                        height: 26; radius: 7
+                        width: bl.implicitWidth + 20
+                        opacity: modelData.on && !(win.connected && win.controller.operationBusy) ? 1 : 0.4
+                        color: modelData.danger ? (bm.containsMouse ? "#C2410C" : "#80C2410C") : (bm.containsMouse ? Theme.selection : "#802D6FE0")
+                        Text { id: bl; anchors.centerIn: parent; text: modelData.t; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
+                        MouseArea {
+                            id: bm
+                            anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                            enabled: modelData.on && win.connected && !win.controller.operationBusy
+                            onClicked: modelData.k === "restore" ? win.restore(win.selected) : win.askEmptyTrash()
+                        }
+                    }
+                }
+            }
+        }
+
         GridView {
             id: grid
             visible: win.viewMode === "grid"
             anchors.fill: parent; anchors.margins: 10
+            anchors.topMargin: win.inTrash ? 52 : 10
             cellWidth: Math.max(104, width / Math.max(1, Math.floor(width / 116)))
             cellHeight: 108
             model: win.shown
@@ -522,6 +595,7 @@ Item {
             id: list
             visible: win.viewMode === "list"
             anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6
+            anchors.topMargin: win.inTrash ? 50 : 0
             model: win.shown
             currentIndex: -1
             keyNavigationEnabled: true
@@ -620,7 +694,8 @@ Item {
             spacing: 6
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: win.entries.length === 0 ? "Dossier vide" : "Aucun élément ne correspond à « " + win.filterText + " »"
+                text: win.entries.length === 0 ? (win.inTrash ? "La corbeille est vide" : "Dossier vide")
+                                               : "Aucun élément ne correspond à « " + win.filterText + " »"
                 color: Theme.ink; font.pixelSize: 14; font.family: Theme.fontFamily
             }
             Text {
@@ -692,8 +767,10 @@ Item {
         MenuItem { text: "Ouvrir"; onTriggered: win.open(win.selected) }
         MenuItem { text: "Télécharger…"; enabled: win.selected !== null && !win.selected.directory; onTriggered: win.askDownload(win.selected) }
         MenuSeparator {}
-        MenuItem { text: "Renommer…    F2"; onTriggered: win.askRename(win.selected) }
-        MenuItem { text: "Mettre à la corbeille…    Suppr"; onTriggered: win.askTrash(win.selected) }
+        MenuItem { text: "Restaurer"; visible: win.inTrash; height: visible ? implicitHeight : 0; onTriggered: win.restore(win.selected) }
+        MenuItem { text: "Supprimer définitivement…    Suppr"; visible: win.inTrash; height: visible ? implicitHeight : 0; onTriggered: win.askDeletePermanently(win.selected) }
+        MenuItem { text: "Renommer…    F2"; visible: !win.inTrash; height: visible ? implicitHeight : 0; onTriggered: win.askRename(win.selected) }
+        MenuItem { text: "Mettre à la corbeille…    Suppr"; visible: !win.inTrash; height: visible ? implicitHeight : 0; onTriggered: win.askTrash(win.selected) }
         MenuSeparator {}
         MenuItem { text: "Nouveau dossier…"; onTriggered: win.askNewFolder() }
     }
@@ -708,6 +785,9 @@ Item {
             if (win.pendingOp === "newFolder") win.controller.createFolder(value)
             else if (win.pendingOp === "rename") win.controller.renameEntry(win.pendingEntry.path, value)
             else if (win.pendingOp === "trash") win.controller.trashEntry(win.pendingEntry.path)
+            else if (win.pendingOp === "delete") win.controller.deletePermanently(win.pendingEntry.path)
+            else if (win.pendingOp === "empty") win.controller.emptyTrash()
+            else if (win.pendingOp === "restoreKeepBoth") win.controller.restoreEntry(win.pendingEntry.path, true)
         }
         onRejected: { win.pendingOp = ""; win.view.forceActiveFocus() }
     }
@@ -716,7 +796,13 @@ Item {
         target: win.connected ? win.controller : null
         ignoreUnknownSignals: true
         function onOperationFinished(ok, message, code, path) {
-            if (ok || win.pendingOp === "trash" || code === "unknown") {
+            if (!ok && code === "conflict" && win.pendingOp === "restore") {
+                win.pendingOp = "restoreKeepBoth"
+                opDialog.openWith("Restaurer « " + win.pendingEntry.name + " »", message
+                    + " Le restaurer sous un autre nom (« … (2) ») ?", "Garder les deux", false, false, "")
+                return
+            }
+            if (ok || code === "unknown" || ["trash", "delete", "empty", "restore", "restoreKeepBoth"].indexOf(win.pendingOp) >= 0) {
                 opDialog.visible = false
                 win.pendingOp = ""
                 win.showNotice(code === "unknown" ? "État inconnu — " + message : message, !ok)

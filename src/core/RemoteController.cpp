@@ -511,8 +511,8 @@ void RemoteController::runOperation(const QString &doneMessage, std::function<Ss
         const bool ok = r.status == SshResult::Status::Ok;
         // The folder changed (or may have): drop its RAM copy and re-list.
         if (ok || r.code == "unknown") {
-            m_cache.remove(folder);
-            m_cache.remove(trashDirectory());
+            // Restores and Trash moves touch other folders too.
+            m_cache.clear();
             if (m_currentDirectory == folder) refresh();
         }
         emit operationFinished(ok, ok ? doneMessage : r.message, r.code, r.directory);
@@ -541,6 +541,19 @@ void RemoteController::renameEntry(const QString &path, const QString &newName) 
 void RemoteController::trashEntry(const QString &path) {
     runOperation(QStringLiteral("« %1 » mis à la corbeille.").arg(path.section('/', -1)),
                  [path](SshSession &s) { return s.moveToTrash(path); });
+}
+
+void RemoteController::restoreEntry(const QString &trashedPath, bool keepBoth) {
+    runOperation(QStringLiteral("« %1 » restauré.").arg(trashedPath.section('/', -1)), [trashedPath, keepBoth](SshSession &s) {
+        return s.restoreFromTrash(trashedPath, keepBoth ? ConflictPolicy::KeepBoth : ConflictPolicy::Fail);
+    });
+}
+void RemoteController::deletePermanently(const QString &trashedPath) {
+    runOperation(QStringLiteral("« %1 » supprimé définitivement.").arg(trashedPath.section('/', -1)),
+                 [trashedPath](SshSession &s) { return s.deleteFromTrash(trashedPath); });
+}
+void RemoteController::emptyTrash() {
+    runOperation(QStringLiteral("Corbeille vidée."), [](SshSession &s) { return s.emptyTrash(); });
 }
 
 void RemoteController::disconnectServer() {

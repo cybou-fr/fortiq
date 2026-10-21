@@ -75,6 +75,15 @@ public:
     // by gio, trash-cli and desktop file managers, so it stays restorable.
     // Never falls back to deletion; a folder on another filesystem fails.
     SshResult moveToTrash(const QString &path);
+    // Restores Trash/files/<name> to the Path in its .trashinfo. An occupied
+    // original name is a "conflict" unless KeepBoth picks "name (n)"; a
+    // missing original folder is an error (nothing is recreated silently).
+    SshResult restoreFromTrash(const QString &trashedPath, ConflictPolicy policy);
+    // Permanent deletion, only for items inside Trash/files (recursive for
+    // folders, symlinks removed, never followed) and their .trashinfo.
+    SshResult deleteFromTrash(const QString &trashedPath);
+    // Permanently deletes everything in Trash/files and Trash/info.
+    SshResult emptyTrash();
     QString homeDirectory() const;
     bool isOpen() const;
     void close();

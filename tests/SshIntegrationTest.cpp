@@ -331,6 +331,99 @@ private slots:
         QVERIFY(session.isOpen());
     }
 
+    // FORTIQ_IT_UPLOAD_DIR must contain keep/precious.txt and may contain
+    // linktree/escape -> ../keep; FORTIQ_IT_CLI_TRASHED may name an item that
+    // trash-put moved from FORTIQ_IT_UPLOAD_DIR to the Trash.
+    void restoreDeleteAndEmptyTrash() {
+        const QString remoteDir = qEnvironmentVariable("FORTIQ_IT_UPLOAD_DIR");
+        if (remoteDir.isEmpty()) QSKIP("FORTIQ_IT_UPLOAD_DIR not set");
+        ConnectionRequest request = base;
+        request.expectedHostFingerprint = fingerprint;
+        if (request.password.isEmpty()) request.keyPath = qEnvironmentVariable("FORTIQ_IT_KEY");
+        fortiq::SshSession session;
+        const SshResult opened = session.open(request);
+        QVERIFY(opened.status == SshResult::Status::Ok);
+        const QString home = opened.home;
+        const QString files = home + "/.local/share/Trash/files";
+        const QString tag = QString::number(QDateTime::currentMSecsSinceEpoch());
+        QTemporaryDir local;
+        const QString small = local.filePath("s.txt");
+        { QFile f(small); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("x\n"); }
+        const auto ok = fortiq::TransferProgress([](qint64, qint64) { return true; });
+
+        // Restore to the original place.
+        const QString name = QStringLiteral("restore-é-%1.txt").arg(tag);
+        QVERIFY(session.upload(small, remoteDir, name, fortiq::ConflictPolicy::Fail, ok).status == SshResult::Status::Ok);
+        SshResult r = session.moveToTrash(remoteDir + "/" + name);
+        QVERIFY(r.status == SshResult::Status::Ok);
+        const QString trashed = r.directory;
+        r = session.restoreFromTrash(trashed, fortiq::ConflictPolicy::Fail);
+        QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(r.message));
+        QCOMPARE(r.directory, remoteDir + "/" + name);
+        QVERIFY(!names(session.list(files)).contains(trashed.section('/', -1)));
+        QVERIFY(session.readFile(home + "/.local/share/Trash/info/" + trashed.section('/', -1) + ".trashinfo", 10).status
+                == SshResult::Status::Error);
+
+        // Occupied name: conflict, then keep both.
+        r = session.moveToTrash(remoteDir + "/" + name);
+        const QString again = r.directory;
+        QVERIFY(session.upload(small, remoteDir, name, fortiq::ConflictPolicy::Fail, ok).status == SshResult::Status::Ok);
+        QCOMPARE(session.restoreFromTrash(again, fortiq::ConflictPolicy::Fail).code, QStringLiteral("conflict"));
+        r = session.restoreFromTrash(again, fortiq::ConflictPolicy::KeepBoth);
+        QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(r.message));
+        QVERIFY(r.directory.endsWith(QStringLiteral(" (2).txt")));
+
+        // Original folder gone: refused, item stays in the Trash.
+        const QString gone = QStringLiteral("gone-%1").arg(tag);
+        QVERIFY(session.makeDirectory(remoteDir, gone).status == SshResult::Status::Ok);
+        QVERIFY(session.upload(small, remoteDir + "/" + gone, "f.txt", fortiq::ConflictPolicy::Fail, ok).status == SshResult::Status::Ok);
+        const QString orphan = session.moveToTrash(remoteDir + "/" + gone + "/f.txt").directory;
+        QVERIFY(session.moveToTrash(remoteDir + "/" + gone).status == SshResult::Status::Ok);
+        r = session.restoreFromTrash(orphan, fortiq::ConflictPolicy::Fail);
+        QVERIFY(r.status == SshResult::Status::Error);
+        QVERIFY(names(session.list(files)).contains(orphan.section('/', -1)));
+
+        // Permanent deletion of a nested folder holding a symlink to keep/:
+        // the link is removed, its target is untouched.
+        const QString tree = QStringLiteral("tree-%1").arg(tag);
+        QVERIFY(session.makeDirectory(remoteDir, tree).status == SshResult::Status::Ok);
+        QVERIFY(session.makeDirectory(remoteDir + "/" + tree, "sub").status == SshResult::Status::Ok);
+        QVERIFY(session.upload(small, remoteDir + "/" + tree + "/sub", "deep.txt", fortiq::ConflictPolicy::Fail, ok).status == SshResult::Status::Ok);
+        const QString inTrash = session.moveToTrash(remoteDir + "/" + tree).directory;
+        QVERIFY(!inTrash.isEmpty());
+        // Outside the Trash permanent deletion is refused.
+        QVERIFY(session.deleteFromTrash(remoteDir + "/" + name).status == SshResult::Status::Error);
+        QVERIFY(session.deleteFromTrash(home).status == SshResult::Status::Error);
+        r = session.deleteFromTrash(inTrash);
+        QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(r.message));
+        QVERIFY(r.bytes >= 3);
+        QVERIFY(!names(session.list(files)).contains(inTrash.section('/', -1)));
+        // linktree/ (prepared on the server) holds "escape" -> ../keep.
+        if (names(session.list(remoteDir)).contains(QStringLiteral("linktree"))) {
+            const QString linked = session.moveToTrash(remoteDir + "/linktree").directory;
+            QVERIFY(!linked.isEmpty());
+            r = session.deleteFromTrash(linked);
+            QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(r.message));
+        }
+        QVERIFY(names(session.list(remoteDir + "/keep")).contains(QStringLiteral("precious.txt")));
+
+        // An item trashed by trash-put on the server restores as well.
+        const QString cli = qEnvironmentVariable("FORTIQ_IT_CLI_TRASHED");
+        if (!cli.isEmpty()) {
+            r = session.restoreFromTrash(files + "/" + cli, fortiq::ConflictPolicy::Fail);
+            QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(r.message));
+            QCOMPARE(r.directory, remoteDir + "/" + cli);
+        }
+
+        // Empty the Trash: files/ and info/ are empty afterwards.
+        r = session.emptyTrash();
+        QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(r.message));
+        QVERIFY(session.list(files).entries.isEmpty());
+        QVERIFY(session.list(home + "/.local/share/Trash/info").entries.isEmpty());
+        QVERIFY(names(session.list(remoteDir + "/keep")).contains(QStringLiteral("precious.txt")));
+        QVERIFY(session.isOpen());
+    }
+
     void controllerOperations() {
         const QString remoteDir = qEnvironmentVariable("FORTIQ_IT_UPLOAD_DIR");
         if (remoteDir.isEmpty()) QSKIP("FORTIQ_IT_UPLOAD_DIR not set");
