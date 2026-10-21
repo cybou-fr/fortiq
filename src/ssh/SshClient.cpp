@@ -1083,6 +1083,68 @@ SshResult SshSession::search(const QString &dirPath, const QString &query, const
     return r;
 }
 
+QByteArray SshSession::shellQuote(const QString &value) { return shQuote(value); }
+
+SshResult SshSession::runScript(const QByteArray &script, qint64 maxStdout, const std::function<bool()> &keepGoing)
+{
+    if (!isOpen()) return transferFail(QStringLiteral("SSH session is not open."));
+    LIBSSH2_CHANNEL *channel = libssh2_channel_open_session(d->handle);
+    if (!channel) {
+        d->close();
+        return transferFail(QStringLiteral("SSH connection lost."));
+    }
+    if (libssh2_channel_exec(channel, "sh -s") != 0) {
+        libssh2_channel_free(channel);
+        return transferFail(QStringLiteral("The server refused command execution."));
+    }
+    qsizetype sent = 0;
+    while (sent < script.size()) {
+        const auto w = libssh2_channel_write(channel, script.constData() + sent, static_cast<size_t>(script.size() - sent));
+        if (w < 0) { libssh2_channel_free(channel); return transferFail(QStringLiteral("Cannot start the command.")); }
+        sent += w;
+    }
+    libssh2_channel_send_eof(channel);
+
+    libssh2_session_set_timeout(d->handle, 200);
+    QByteArray out, err;
+    bool truncated = false, stopped = false, lost = false;
+    char buffer[65536];
+    while (true) {
+        bool any = false;
+        auto n = libssh2_channel_read(channel, buffer, sizeof(buffer));
+        if (n > 0) {
+            any = true;
+            out.append(buffer, std::min<qint64>(n, maxStdout - out.size()));
+            if (out.size() >= maxStdout) { truncated = true; break; }
+        } else if (n < 0 && n != LIBSSH2_ERROR_TIMEOUT && n != LIBSSH2_ERROR_EAGAIN) { lost = true; break; }
+        n = libssh2_channel_read_stderr(channel, buffer, sizeof(buffer));
+        if (n > 0) { any = true; if (err.size() < 8192) err.append(buffer, std::min<qint64>(n, 8192 - err.size())); }
+        else if (n < 0 && n != LIBSSH2_ERROR_TIMEOUT && n != LIBSSH2_ERROR_EAGAIN) { lost = true; break; }
+        if (!any && libssh2_channel_eof(channel)) break;
+        if (keepGoing && !keepGoing()) { stopped = true; break; }
+    }
+    int exitCode = -1;
+    if (!truncated && !stopped && !lost) {
+        libssh2_session_set_timeout(d->handle, 5000);
+        libssh2_channel_wait_closed(channel);
+        exitCode = libssh2_channel_get_exit_status(channel);
+    }
+    libssh2_channel_close(channel);
+    libssh2_channel_free(channel);
+    libssh2_session_set_timeout(d->handle, 15000);
+    if (lost) {
+        d->close();
+        return transferFail(QStringLiteral("SSH connection lost."));
+    }
+    SshResult r;
+    r.status = stopped ? SshResult::Status::Error : SshResult::Status::Ok;
+    r.data = std::move(out);
+    r.truncated = truncated;
+    r.message = QString::fromUtf8(err);
+    r.code = stopped ? QStringLiteral("cancelled") : QStringLiteral("exit:%1").arg(exitCode);
+    return r;
+}
+
 SshResult SshClient::list(const ConnectionRequest &request)
 {
     SshSession session;

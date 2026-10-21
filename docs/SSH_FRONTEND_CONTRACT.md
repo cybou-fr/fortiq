@@ -53,6 +53,7 @@
 |---|---|---|---|---|
 | APP-01 | **Smart Files** | SFTP read-only, далее проверенные `find`, `stat`, `rg`, `cp`, `mv` | SSH exec; SFTP внутри SSH | **Qt R0.1: исходники SFTP list/navigation, без native acceptance; остальное цель** |
 | APP-01b | Smart Files search | GNU `find`, `rg` (предпочтительно) или GNU `grep` | `sh -s` по SSH exec, скрипт и данные в stdin, запрос в одинарных кавычках; stdout NUL-разделённый | в Files, проверено на WSL Debian 13 (find 4.10, grep 3.11, rg 14.1.1) |
+| APP-03a | Logs (первый срез) | `journalctl -o json`, `systemctl list-units`, `find`, `stat`, `tail`, `head`, `id` | `sh -s` по SSH exec, значения в одинарных кавычках; только чтение | журнал, службы, /var/log, слежение, группы повторов; проверено на WSL Debian 13 (systemd 257) |
 | APP-02 | Editor | SFTP (OpenSSH `sftp-server`, расширение `posix-rename@openssh.com`) | SFTP внутри SSH: чтение, временный файл, атомарная замена, проверка чтением | текстовые файлы UTF-8 до 1 МиБ в Files, проверено на WSL Debian 13; полноценного приложения Editor нет |
 | APP-03 | Docs/Markdown | CLI файлов; при конвертации `pandoc` / `cmark` | SSH exec/SFTP | не начато |
 | APP-04 | Mail | `mail`, `sendmail`, `notmuch`, `mu`, `mbsync` — по совместимым возможностям | **Только SSH → серверная CLI** | не начато |

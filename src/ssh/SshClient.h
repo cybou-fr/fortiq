@@ -104,6 +104,12 @@ public:
     // the tool used ("find", "rg", "grep"); `truncated` = limit reached.
     SshResult search(const QString &dir, const QString &query, const QString &mode, int limit,
                      const std::function<bool(int found)> &keepGoing);
+    // Runs a POSIX sh script sent on stdin to `sh -s` (the login shell never
+    // parses it). stdout -> data (at most maxStdout bytes, then the channel is
+    // closed: `truncated`), stderr -> message (first 8 KiB), exit status ->
+    // code "exit:N". Callers must quote data with shellQuote().
+    SshResult runScript(const QByteArray &script, qint64 maxStdout, const std::function<bool()> &keepGoing = {});
+    static QByteArray shellQuote(const QString &value);
     QString homeDirectory() const;
     bool isOpen() const;
     void close();

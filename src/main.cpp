@@ -1,4 +1,5 @@
 #ifndef FORTIQ_NO_SSH
+#include "core/LogsController.h"
 #include "core/RemoteController.h"
 #endif
 
@@ -47,7 +48,7 @@ int main(int argc, char *argv[])
     QCommandLineOption wallpaperOption("wallpaper",
         "Bundled wallpaper (aurora, desert, city), 'none' for the placeholder, or an image file.", "name|path");
     QCommandLineOption fixturePreviewOption("fixture-preview",
-        "With --reference-fixture: show the file viewer (text, image) or the transfer queue with samples.", "text|image|editor|transfers|trash|trashview|search");
+        "With --reference-fixture: show the file viewer (text, image) or the transfer queue with samples.", "text|image|editor|transfers|trash|trashview|search|logs");
     parser.addOptions({ fixtureOption, screenshotOption, wallpaperOption, fixturePreviewOption });
     parser.process(app);
 
@@ -55,7 +56,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("shellFixture", parser.isSet(fixtureOption));
     const QString fixturePreview = parser.value(fixturePreviewOption);
     engine.rootContext()->setContextProperty("shellFixturePreview",
-        parser.isSet(fixtureOption) && QStringList{ "text", "image", "editor", "transfers", "trash", "trashview", "search" }.contains(fixturePreview) ? fixturePreview : QString());
+        parser.isSet(fixtureOption) && QStringList{ "text", "image", "editor", "transfers", "trash", "trashview", "search", "logs" }.contains(fixturePreview) ? fixturePreview : QString());
     const QString wallpaper = parser.value(wallpaperOption);
     const bool bundled = !parser.isSet(wallpaperOption)
         || QStringList{ "aurora", "desert", "city", "none" }.contains(wallpaper);
@@ -69,8 +70,11 @@ int main(int argc, char *argv[])
 #ifndef FORTIQ_NO_SSH
     fortiq::RemoteController controller;
     engine.rootContext()->setContextProperty("remote", &controller);
+    fortiq::LogsController logs(&controller);
+    engine.rootContext()->setContextProperty("logs", &logs);
 #else
     engine.rootContext()->setContextProperty("remote", QVariant::fromValue<QObject *>(nullptr));
+    engine.rootContext()->setContextProperty("logs", QVariant::fromValue<QObject *>(nullptr));
 #endif
     engine.loadFromModule("Fortiq.App", "Main");
     if (engine.rootObjects().isEmpty()) return 1;

@@ -7,6 +7,7 @@ import QtQuick
 Item {
     id: shell
     property var controller: null
+    property var logsController: null
     property bool fixture: false
     property string fixturePreview: ""
     property url wallpaperSource: ""
@@ -14,10 +15,11 @@ Item {
     // right-click the desktop to cycle. An explicit file overrides it.
     readonly property var wallpapers: ["aurora", "desert", "city"]
     property string wallpaperName: "aurora"
-    property bool launcherOpen: fixture
+    property bool launcherOpen: fixture && fixturePreview !== "logs"
     property bool controlOpen: fixture
     property bool filesOpen: true
-    property bool browserOpen: fixture
+    property bool browserOpen: fixture && fixturePreview !== "logs"
+    property bool logsOpen: fixture && fixturePreview === "logs"
     property date now: new Date()
 
     width: Theme.canvasWidth
@@ -38,6 +40,7 @@ Item {
         if (app === "files") filesOpen = true
         else if (app === "launcher") launcherOpen = !launcherOpen
         else if (app === "browser") browserOpen = !browserOpen
+        else if (app === "logs") { logsOpen = true; launcherOpen = false }
     }
 
     Wallpaper {
@@ -79,11 +82,23 @@ Item {
         fixture: shell.fixture
     }
 
+    LogsWindow {
+        visible: shell.logsOpen
+        x: 300; y: 130
+        width: 900; height: 640
+        backdrop: wallpaper
+        logs: shell.logsController
+        remote: shell.controller
+        fixture: shell.fixture
+        onCloseRequested: shell.logsOpen = false
+    }
+
     LauncherPanel {
         visible: shell.launcherOpen
         x: 98; y: 497; width: 438; height: 443
         backdrop: wallpaper
         fixture: shell.fixture
+        onLaunch: (app) => shell.launch(app)
     }
 
     ControlCenter {

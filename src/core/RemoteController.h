@@ -15,6 +15,7 @@
 namespace fortiq {
 class SshSession;
 struct SshResult;
+struct ConnectionRequest;
 
 class RemoteController : public QObject {
     Q_OBJECT
@@ -75,6 +76,10 @@ public:
     bool canGoBack() const { return !m_back.isEmpty(); }
     bool canGoForward() const { return !m_forward.isEmpty(); }
     int lastLatencyMs() const { return m_latencyMs; }
+    // For sibling services (Logs) that open their own connection to the same
+    // pinned server: credentials stay in RAM, the token changes per server.
+    ConnectionRequest connectionRequest() const;
+    int connectionToken() const { return m_generation; }
     bool previewOpen() const { return !m_previewPath.isEmpty(); }
     bool previewBusy() const { return m_previewBusy; }
     QString previewPath() const { return m_previewPath; }

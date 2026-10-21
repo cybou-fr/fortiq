@@ -48,6 +48,15 @@ RemoteController::~RemoteController() {
     m_searchPool.waitForDone();
 }
 
+ConnectionRequest RemoteController::connectionRequest() const {
+    ConnectionRequest req;
+    req.host = m_host; req.port = m_port; req.user = m_user;
+    req.password = m_password; req.keyPath = m_keyPath;
+    req.expectedHostFingerprint = QSettings{}.value(pinKey()).toString();
+    req.directory = QStringLiteral("/");
+    return req;
+}
+
 QString RemoteController::rememberedHost() const {
     return QSettings{}.value("bootstrap/lastHost").toString();
 }

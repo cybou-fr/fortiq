@@ -4,6 +4,7 @@
 // read independently on the server) are set; FORTIQ_IT_KEY adds an unencrypted
 // private-key login check. Secrets come only from the
 // environment and are never printed.
+#include "core/LogsController.h"
 #include "core/RemoteController.h"
 #include "ssh/SshClient.h"
 
@@ -610,6 +611,109 @@ private slots:
         controller.clearSearch();
         QVERIFY(!controller.searchActive());
         controller.disconnectServer();
+        settings.remove(pin);
+    }
+
+    void logsGroupingIsDeterministic() {
+        using fortiq::LogsController;
+        QCOMPARE(LogsController::templateOf(QStringLiteral("worker 913 exited, client 10.0.0.12:443 id 0x1f2e")),
+                 QStringLiteral("worker # exited, client ‹ip› id ‹hex›"));
+        QCOMPARE(LogsController::templateOf(QStringLiteral("job 123e4567-e89b-12d3-a456-426614174000 done")),
+                 QStringLiteral("job ‹id› done"));
+        QVariantList events;
+        for (int i = 0; i < 3; ++i)
+            events << QVariantMap { { "unit", "a.service" }, { "message", QStringLiteral("timeout after %1 ms").arg(100 + i) },
+                                    { "priority", 3 - (i == 2) }, { "time", 1000.0 * (i + 1) } };
+        events << QVariantMap { { "unit", "b.service" }, { "message", "timeout after 5 ms" }, { "priority", 6 }, { "time", 9000.0 } };
+        const QVariantList groups = LogsController::groupPatterns(events);
+        QCOMPARE(groups.size(), 2);
+        QCOMPARE(groups[0].toMap().value("count").toInt(), 3);
+        QCOMPARE(groups[0].toMap().value("priority").toInt(), 2); // worst of the group
+        const QVariantMap e = LogsController::parseJournalLine(
+            R"({"__REALTIME_TIMESTAMP":"1760788800000000","PRIORITY":"3","_SYSTEMD_UNIT":"nginx.service","MESSAGE":[104,105],"__CURSOR":"s=1","_PID":"7"})");
+        QCOMPARE(e.value("message").toString(), QStringLiteral("hi"));
+        QCOMPARE(e.value("priority").toInt(), 3);
+        QCOMPARE(e.value("unit").toString(), QStringLiteral("nginx.service"));
+        QVERIFY(LogsController::parseJournalLine("not json").isEmpty());
+    }
+
+    // FORTIQ_IT_UPLOAD_DIR/app.log must exist; the user must NOT be in adm /
+    // systemd-journal; FORTIQ_IT_LOG_TAG names three `logger -p user.err` lines
+    // "<tag> failed after N ms" written just before the run.
+    void logsJournalFilesFollow() {
+        const QString remoteDir = qEnvironmentVariable("FORTIQ_IT_UPLOAD_DIR");
+        const QString tag = qEnvironmentVariable("FORTIQ_IT_LOG_TAG");
+        if (remoteDir.isEmpty() || tag.isEmpty()) QSKIP("FORTIQ_IT_UPLOAD_DIR / FORTIQ_IT_LOG_TAG not set");
+        fortiq::RemoteController controller;
+        fortiq::LogsController logs(&controller);
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+
+        // Sources.
+        QSignalSpy sources(&logs, &fortiq::LogsController::sourcesChanged);
+        logs.loadSources();
+        QTRY_VERIFY_WITH_TIMEOUT(sources.count() == 1, 15000);
+        QVERIFY(!logs.units().isEmpty());
+        bool lockedSeen = false;
+        for (const QVariant &f : logs.files()) lockedSeen |= !f.toMap().value("readable").toBool();
+        QVERIFY(lockedSeen); // e.g. /var/log/fail2ban.log (root:adm 640)
+
+        // Journal, errors only, last 15 min: our three lines, one repeat group, limited access stated.
+        logs.setRange(QStringLiteral("15min"));
+        logs.setMaxPriority(3);
+        QTRY_VERIFY_WITH_TIMEOUT(!logs.busy(), 20000);
+        int ours = 0;
+        for (const QVariant &v : logs.events()) {
+            const QVariantMap e = v.toMap();
+            QVERIFY(e.value("priority").toInt() <= 3);
+            if (e.value("message").toString().startsWith(tag)) ++ours;
+        }
+        QCOMPARE(ours, 3);
+        bool grouped = false;
+        for (const QVariant &v : logs.patterns())
+            grouped |= v.toMap().value("template").toString() == fortiq::LogsController::templateOf(tag + QStringLiteral(" failed after 1 ms"))
+                       && v.toMap().value("count").toInt() >= 3; // earlier runs in the window share the template
+        QVERIFY(grouped);
+        QCOMPARE(logs.state(), QStringLiteral("limited"));
+
+        // Plain file: last lines, then only appended ones, then rotation.
+        const QString file = remoteDir + "/app.log";
+        logs.select(QStringLiteral("file"), file);
+        QTRY_VERIFY_WITH_TIMEOUT(!logs.busy(), 15000);
+        QCOMPARE(logs.events().size(), 2);
+        fortiq::SshSession writer;
+        ConnectionRequest request = base;
+        request.expectedHostFingerprint = fingerprint;
+        if (request.password.isEmpty()) request.keyPath = key;
+        QVERIFY(writer.open(request).status == SshResult::Status::Ok);
+        QVERIFY(writer.runScript("printf 'third line\\nfourth line\\n' >> " + fortiq::SshSession::shellQuote(file) + "\n", 1024).code == "exit:0");
+        QSignalSpy changed(&logs, &fortiq::LogsController::changed);
+        logs.setFollowing(true);
+        QTRY_VERIFY_WITH_TIMEOUT(logs.events().size() == 4, 15000);
+        QCOMPARE(logs.events().last().toMap().value("message").toString(), QStringLiteral("fourth line"));
+        QVERIFY(writer.runScript("printf 'after rotation\\n' > " + fortiq::SshSession::shellQuote(file) + "\n", 1024).code == "exit:0");
+        QTRY_VERIFY_WITH_TIMEOUT(logs.state() == "rotated", 15000);
+        QTRY_VERIFY_WITH_TIMEOUT(logs.events().size() == 1, 15000);
+        logs.setFollowing(false);
+
+        // Unreadable file: explicit denied state, no escalation.
+        logs.select(QStringLiteral("file"), QStringLiteral("/var/log/fail2ban.log"));
+        QTRY_VERIFY_WITH_TIMEOUT(!logs.busy(), 15000);
+        QCOMPARE(logs.state(), QStringLiteral("denied"));
+        QVERIFY(logs.events().isEmpty());
+
+        // Disconnect freezes the view and stops following.
+        logs.select(QStringLiteral("journal"));
+        QTRY_VERIFY_WITH_TIMEOUT(!logs.busy(), 15000);
+        logs.setFollowing(true);
+        controller.disconnectServer();
+        QCOMPARE(logs.state(), QStringLiteral("disconnected"));
+        QVERIFY(!logs.following());
         settings.remove(pin);
     }
 

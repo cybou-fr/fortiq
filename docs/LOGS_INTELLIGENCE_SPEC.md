@@ -1,6 +1,6 @@
 # FORTIQ — Logs / Linux operational intelligence specification v1
 
-**Status:** target app; NOT implemented in the C++/Qt client. **Second flagship after Smart Files.** Must remain useful **without AI**, and without turning FORTIQ into a DevOps-only dashboard. **Visual reference:** [UI SPEC](UI_SPEC_V1.md); [SSH boundary](SSH_FRONTEND_CONTRACT.md).
+**Status:** first slice in the C++/Qt client (22.10.2026), see [QT_MIGRATION](QT_MIGRATION.md); the rest of this document remains target. **Second flagship after Smart Files.** Must remain useful **without AI**, and without turning FORTIQ into a DevOps-only dashboard. **Visual reference:** [UI SPEC](UI_SPEC_V1.md); [SSH boundary](SSH_FRONTEND_CONTRACT.md).
 
 ## Product value
 

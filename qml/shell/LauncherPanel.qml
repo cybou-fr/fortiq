@@ -6,6 +6,7 @@ import QtQuick
 Glass {
     id: launcher
     property bool fixture: false
+    signal launch(string app)
     radius: 16
     tint: Theme.launcher
 
@@ -47,6 +48,12 @@ Glass {
                 required property var modelData
                 width: 69; height: 74
                 AppIcon { anchors.horizontalCenter: parent.horizontalCenter; size: 38; kind: modelData.k }
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: !launcher.fixture && (modelData.k === "files" || modelData.k === "logs")
+                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: launcher.launch(modelData.k)
+                }
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter; y: 47
                     text: modelData.t; color: Theme.ink

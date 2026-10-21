@@ -19,6 +19,7 @@ Window {
     DesktopShell {
         id: shell
         controller: remote
+        logsController: logs
         fixture: shellFixture
         fixturePreview: shellFixturePreview
         wallpaperSource: shellWallpaper
