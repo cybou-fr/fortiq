@@ -1,3 +1,5 @@
+> **Qt migration status (2026-10-21):** This document contains Flutter-era implementation details for reference, not proof that those components exist in the Qt client. **Current architecture:** C++20/Qt Quick/QML GUI → native libssh2 SSH/SFTP → Linux, initially read-only Files. The target SSH-only data plane and server-owned working data remain mandatory. See [QT_MIGRATION.md](QT_MIGRATION.md) and the updated [README](../README.md); old implementation at tag `flutter-final`.
+
 # FORTIQ: архитектура и общие контракты
 
 Статус: целевой технический контракт, 11 октября 2026 года. Имена ниже задают

@@ -1,3 +1,5 @@
+> **Qt implementation update (2026-10-21):** Replace every historical reference to Flutter as the active client with C++20/Qt 6/QML. The architecture is unchanged: client GUI → SSH/SFTP → existing Linux tools. The Flutter implementation is archived at `flutter-final`. Current Qt capabilities and open risks are documented in [QT_MIGRATION.md](QT_MIGRATION.md). Statements about implemented Flutter features and tests do not constitute evidence for Qt.
+
 # FORTIQ — обязательный архитектурный контракт
 
 **Решение владельца продукта, 11 октября 2026 года. Нормативный документ.**
