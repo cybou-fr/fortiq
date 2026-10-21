@@ -21,6 +21,7 @@ Window {
         controller: remote
         fixture: shellFixture
         wallpaperSource: shellWallpaper
+        wallpaperName: shellWallpaperName
         transformOrigin: Item.TopLeft
         scale: window.canvasScale
         x: (window.width - width * scale) / 2

@@ -38,15 +38,23 @@ int main(int argc, char *argv[])
         "Visual-only reference scene (sample data, fixed clock). Never production data.");
     QCommandLineOption screenshotOption("screenshot",
         "Render 1536x1024 at DPR=1, save PNG to <path> and exit.", "path");
-    QCommandLineOption wallpaperOption("wallpaper", "Wallpaper image file.", "path");
+    QCommandLineOption wallpaperOption("wallpaper",
+        "Bundled wallpaper (aurora, desert, city), 'none' for the placeholder, or an image file.", "name|path");
     parser.addOptions({ fixtureOption, screenshotOption, wallpaperOption });
     parser.process(app);
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("shellFixture", parser.isSet(fixtureOption));
-    engine.rootContext()->setContextProperty("shellWallpaper", parser.isSet(wallpaperOption)
-        ? QUrl::fromLocalFile(QDir::current().absoluteFilePath(parser.value(wallpaperOption)))
-        : QUrl());
+    const QString wallpaper = parser.value(wallpaperOption);
+    const bool bundled = !parser.isSet(wallpaperOption)
+        || QStringList{ "aurora", "desert", "city", "none" }.contains(wallpaper);
+    engine.rootContext()->setContextProperty("shellWallpaperName",
+        // The reference fixture keeps the placeholder: none of the bundled
+        // wallpapers is the master's lake scene.
+        !parser.isSet(wallpaperOption) ? (parser.isSet(fixtureOption) ? QString() : QStringLiteral("aurora"))
+        : (wallpaper == "none" ? QString() : (bundled ? wallpaper : QString())));
+    engine.rootContext()->setContextProperty("shellWallpaper", bundled ? QUrl()
+        : QUrl::fromLocalFile(QDir::current().absoluteFilePath(wallpaper)));
 #ifndef FORTIQ_NO_SSH
     fortiq::RemoteController controller;
     engine.rootContext()->setContextProperty("remote", &controller);

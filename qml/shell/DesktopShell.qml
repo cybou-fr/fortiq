@@ -9,6 +9,10 @@ Item {
     property var controller: null
     property bool fixture: false
     property url wallpaperSource: ""
+    // Owner-supplied wallpapers bundled with the shell. Choice is RAM-only;
+    // right-click the desktop to cycle. An explicit file overrides it.
+    readonly property var wallpapers: ["aurora", "desert", "city"]
+    property string wallpaperName: "aurora"
     property bool launcherOpen: fixture
     property bool controlOpen: fixture
     property bool filesOpen: true
@@ -35,7 +39,20 @@ Item {
         else if (app === "browser") browserOpen = !browserOpen
     }
 
-    Wallpaper { id: wallpaper; anchors.fill: parent; source: shell.wallpaperSource }
+    Wallpaper {
+        id: wallpaper
+        anchors.fill: parent
+        source: shell.wallpaperSource.toString().length > 0 ? shell.wallpaperSource
+            : (shell.wallpaperName.length > 0 ? Qt.resolvedUrl("../../assets/wallpapers/" + shell.wallpaperName + ".jpg") : "")
+    }
+    MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.RightButton
+        onClicked: {
+            const i = shell.wallpapers.indexOf(shell.wallpaperName)
+            shell.wallpaperName = shell.wallpapers[(i + 1) % shell.wallpapers.length]
+        }
+    }
 
     ClockWidget {
         x: 119; y: 70

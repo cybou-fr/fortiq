@@ -40,6 +40,10 @@ qt_add_qml_module(fortiq_shell
     VERSION 1.0
     RESOURCE_PREFIX /qt/qml
     QML_FILES ${FORTIQ_SHELL_QML}
+    RESOURCES
+        assets/wallpapers/aurora.jpg
+        assets/wallpapers/desert.jpg
+        assets/wallpapers/city.jpg
 )
 target_link_libraries(fortiq_shell PRIVATE Qt6::Quick)
 
