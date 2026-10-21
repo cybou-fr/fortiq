@@ -1,3 +1,5 @@
+> **Qt migration (2026-10-21):** The following matrix includes historical Flutter-era implementation and test statuses; these do not apply to the new C++/Qt client. For actual Qt progress and next acceptance gates use [QT_MIGRATION.md](QT_MIGRATION.md). Current Qt `main` is an unqualified SSH/SFTP read-only Files milestone; old code is archived at `flutter-final`.
+
 # FORTIQ: матрица развития рабочего пространства
 
 Дата решения SSH/CLI: 11 октября 2026 года. Исторический снимок кода был сделан на `f0ca0954`; ниже явно указанные реализованные компоненты и решения 2026-10-11 уточнены по последующим коммитам. Перед приёмкой перепроверить текущий `main`.
