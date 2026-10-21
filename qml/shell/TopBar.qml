@@ -17,16 +17,16 @@ Rectangle {
         color: "#2A4C7A"
     }
 
-    Rectangle {
-        x: 22; y: 11
-        width: 25; height: 25; radius: 12.5
-        color: "transparent"
-        border.width: 2.5; border.color: "white"
-        Rectangle {
-            anchors.centerIn: parent
-            width: 13; height: 13; radius: 6.5
-            color: "transparent"; border.width: 2; border.color: "white"
-        }
+    // New FORTIQ mark: the only sanctioned visual difference from the owner
+    // reference sketch's original circular placeholder brand.
+    Image {
+        x: 16; y: 5
+        width: 36; height: 36
+        source: "qrc:/branding/fortiq_mark.png"
+        fillMode: Image.PreserveAspectFit
+        smooth: true
+        mipmap: true
+        asynchronous: false
     }
     Text {
         x: 64; anchors.verticalCenter: parent.verticalCenter
