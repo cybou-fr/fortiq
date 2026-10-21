@@ -50,6 +50,10 @@ Any behavioral change must update (as applicable):
 
 No one should move a planned feature into “implemented” because its document or an isolated fixture exists. Do not equate test logs with successful runtime qualification unless source version and platform match.
 
+## Separate marketing website caveat
+
+Existing static pages under `www/` illustrate an earlier product concept and currently emphasize Windows and many unimplemented apps. They are **not authoritative UI references and must not be presented as a shipped Qt product**. Before publishing a redesigned marketing website, align its EN/FR/RU pages with the exact screenshot, Windows+Android target, Smart Files/Logs priorities and evidence-backed feature availability. Documentation coherence does not imply the marketing website is already migrated.
+
 ## Automated checks
 
 Run `python3 tool/check_docs_consistency.py`. This checks relative Markdown links, the presence of normative files, contradictory stale statuses and consistent core UI/flagship references. It **does not** build Qt, prove security, or establish screenshot fidelity. Actual visual tests must use the original master PNG.
