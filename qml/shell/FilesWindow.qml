@@ -1,5 +1,7 @@
 import QtQuick
 import QtQuick.Controls
+import QtCore
+import QtQuick.Dialogs
 import QtQuick.Effects
 
 // Smart Files window, dark frosted glass (owner decision 21.10.2026: every
@@ -86,6 +88,12 @@ Item {
         if (entry.directory || entry.link) { filterText = ""; controller.navigate(entry.path) }
         else controller.openFile(entry.path)
     }
+    function askDownload(entry) {
+        if (!entry || entry.directory || !connected) return
+        downloadDialog.entry = entry
+        downloadDialog.selectedFile = downloadDialog.currentFolder + "/" + encodeURIComponent(entry.name)
+        downloadDialog.open()
+    }
     function crumbs() {
         if (location.length === 0) return []
         const out = [{ label: "/", path: "/" }]
@@ -129,6 +137,8 @@ Item {
         else if (alt && event.key === Qt.Key_Home) { controller.goHome(); event.accepted = true }
         else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) { win.open(win.selected); event.accepted = true }
         else if (event.key === Qt.Key_Space && win.selected && !win.selected.directory) { controller.openFile(win.selected.path); event.accepted = true }
+        else if (ctrl && event.key === Qt.Key_U) { uploadDialog.open(); event.accepted = true }
+        else if (ctrl && event.key === Qt.Key_D) { win.askDownload(win.selected); event.accepted = true }
         else if (event.key === Qt.Key_Escape) { win.filterText = ""; win.editingPath = false; event.accepted = true }
         else if (event.text.length === 1 && event.text.trim().length === 1 && !ctrl && !alt) {
             // Type-to-filter, like a desktop file manager.
@@ -370,6 +380,9 @@ Item {
             ToolButtonGlass { id: sortButton; glyph: "sort"; tip: "Trier"; onClicked: sortMenu.popup(sortButton, 0, sortButton.height + 4) }
             ToolButtonGlass { glyph: "eye"; tip: "Fichiers cachés (Ctrl+H)"; checked: win.showHidden; onClicked: win.showHidden = !win.showHidden }
             ToolButtonGlass { glyph: "↻"; tip: "Actualiser (F5)"; enabledState: win.connected; onClicked: win.controller.refresh() }
+            Item { width: 4; height: 1 }
+            ToolButtonGlass { glyph: "⤓"; tip: "Télécharger sur cet appareil (Ctrl+D)"; enabledState: win.connected && win.selected !== null && !win.selected.directory; onClicked: win.askDownload(win.selected) }
+            ToolButtonGlass { glyph: "⤒"; tip: "Envoyer des fichiers ici (Ctrl+U)"; enabledState: win.connected; onClicked: uploadDialog.open() }
         }
 
         Menu {
@@ -572,6 +585,68 @@ Item {
         }
     }
 
+    // ── transfers ──────────────────────────────────────────────────────
+    FileDialog {
+        id: downloadDialog
+        property var entry: null
+        title: "Télécharger « " + (entry ? entry.name : "") + " »"
+        fileMode: FileDialog.SaveFile
+        currentFolder: StandardPaths.writableLocation(StandardPaths.DownloadLocation)
+        onAccepted: if (entry) win.controller.download(entry.path, selectedFile)
+    }
+    FileDialog {
+        id: uploadDialog
+        title: "Envoyer vers " + win.location
+        fileMode: FileDialog.OpenFiles
+        onAccepted: win.controller.upload(selectedFiles, win.location)
+    }
+
+    // Drop local files anywhere on the content to upload them here.
+    DropArea {
+        id: drop
+        x: content.x; y: content.y; width: content.width; height: content.height
+        z: 8
+        enabled: win.connected && !win.fixture
+        keys: ["text/uri-list"]
+        onDropped: (d) => { if (d.hasUrls) { win.controller.upload(d.urls, win.location); d.acceptProposedAction() } }
+        Rectangle {
+            anchors.fill: parent; anchors.margins: 8
+            visible: drop.containsDrag
+            radius: 12
+            color: "#262F8CFF"
+            border.width: 2; border.color: Theme.accent
+            Text {
+                anchors.centerIn: parent
+                text: "Déposer pour envoyer dans\n" + win.location
+                horizontalAlignment: Text.AlignHCenter
+                color: Theme.ink; font.pixelSize: 15; font.family: Theme.fontFamily
+            }
+        }
+    }
+
+    readonly property var sampleTransfers: [
+        { id: 1, upload: true, name: "rapport-2026.pdf", remote: "/home/demo/Documents", state: "running", done: 3460000, total: 5200000, message: "" },
+        { id: 2, upload: false, name: "access.log", remote: "/var/log/nginx/access.log", state: "done", done: 812000, total: 812000, message: "Enregistré : C:/Users/vous/Downloads/access.log" },
+        { id: 3, upload: true, name: "Budget.xlsx", remote: "/home/demo", state: "conflict", done: 0, total: 48200, message: "« Budget.xlsx » existe déjà dans ce dossier." }
+    ]
+    QtObject {
+        id: sampleQueue
+        readonly property var transfers: win.sampleTransfers
+        function cancelTransfer(id) {}
+        function resolveConflict(id, policy) {}
+        function clearFinishedTransfers() {}
+    }
+
+    TransferPanel {
+        anchors.right: parent.right; anchors.rightMargin: 12
+        anchors.bottom: parent.bottom; anchors.bottomMargin: statusBar.height + 8
+        width: Math.min(420, content.width - 24)
+        z: 9
+        visible: transfers.length > 0
+        controller: win.fixture ? (win.fixturePreview === "transfers" ? sampleQueue : null)
+                                : (win.connected || (win.controller && win.controller.transfers.length > 0) ? win.controller : null)
+    }
+
     QtObject {
         id: samplePreview
         readonly property bool previewBusy: false
@@ -598,7 +673,7 @@ Fin.
         x: content.x; y: content.y
         width: content.width; height: content.height + statusBar.height
         z: 10
-        visible: (win.fixture && win.fixturePreview.length > 0) || (win.connected && win.controller.previewOpen)
+        visible: (win.fixture && (win.fixturePreview === "text" || win.fixturePreview === "image")) || (win.connected && win.controller.previewOpen)
         controller: win.fixture ? samplePreview : (win.connected ? win.controller : null)
         bottomRightRadius: 16
         onClosed: { win.controller.closePreview(); win.view.forceActiveFocus() }

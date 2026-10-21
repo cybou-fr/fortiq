@@ -4,6 +4,7 @@
 #include <QString>
 #include <QVariantList>
 
+#include <functional>
 #include <memory>
 
 namespace fortiq {
@@ -28,7 +29,15 @@ struct SshResult {
     QByteArray data;      // readFile(): bytes read, never written to disk
     qint64 fileSize = -1; // readFile(): full size reported by the server
     bool truncated = false;
+    // Transfers: "conflict", "cancelled", "unknown" (outcome on the server not
+    // known after a drop), or empty. `directory` holds the final path on Ok.
+    QString code;
+    qint64 bytes = 0;
 };
+
+// Called after every chunk; return false to cancel before publication.
+using TransferProgress = std::function<bool(qint64 done, qint64 total)>;
+enum class ConflictPolicy { Fail, Replace, KeepBoth };
 
 // One authenticated SSH connection with an SFTP channel, reused for every
 // listing. Blocking by design: all calls must come from ONE worker thread
@@ -47,6 +56,15 @@ public:
     SshResult list(const QString &directory);
     // Reads at most maxBytes of a regular file, read-only (SFTP READ open).
     SshResult readFile(const QString &path, qint64 maxBytes);
+    // Remote regular file -> local file. Written through QSaveFile (local
+    // temporary + atomic commit), size verified before commit.
+    SshResult download(const QString &remotePath, const QString &localPath, const TransferProgress &progress);
+    // Local file -> remoteDir/name. Exclusive unique temporary on the server,
+    // size verified, then published without silently replacing: Fail reports
+    // "conflict", KeepBoth picks "name (n).ext", Replace keeps the original
+    // under a backup name until the new file is in place.
+    SshResult upload(const QString &localPath, const QString &remoteDir, const QString &name,
+                     ConflictPolicy policy, const TransferProgress &progress);
     bool isOpen() const;
     void close();
 

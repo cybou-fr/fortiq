@@ -4,10 +4,14 @@
 #include <QByteArray>
 #include <QCryptographicHash>
 #include <QFile>
+#include <QFileInfo>
+#include <QRandomGenerator>
+#include <QSaveFile>
 #include <QTcpSocket>
 #include <QVariantMap>
 #include <algorithm>
 #include <mutex>
+#include <vector>
 
 #include <libssh2.h>
 #include <libssh2_sftp.h>
@@ -275,6 +279,195 @@ SshResult SshSession::readFile(const QString &path, qint64 maxBytes)
     result.data = std::move(data);
     result.message = QStringLiteral("%1 bytes read").arg(result.data.size());
     return result;
+}
+
+namespace {
+SshResult transferFail(const QString &reason, const QString &code = {}) {
+    SshResult r; r.message = reason; r.code = code; return r;
+}
+QString randomTag() {
+    return QString::number(QRandomGenerator::global()->generate64(), 36);
+}
+// "report.pdf" -> "report (2).pdf"; dotfiles keep their leading dot.
+QString numberedName(const QString &name, int n) {
+    const int dot = name.lastIndexOf('.');
+    if (dot <= 0) return QStringLiteral("%1 (%2)").arg(name).arg(n);
+    return QStringLiteral("%1 (%2)%3").arg(name.left(dot)).arg(n).arg(name.mid(dot));
+}
+}
+
+SshResult SshSession::download(const QString &remotePath, const QString &localPath, const TransferProgress &progress)
+{
+    if (!isOpen()) return transferFail(QStringLiteral("SSH session is not open."));
+    const auto clean = cleanAbsolutePath(remotePath);
+    if (!clean || localPath.isEmpty()) return transferFail(QStringLiteral("Invalid transfer paths."));
+    const QByteArray pathUtf8 = clean->toUtf8();
+    LIBSSH2_SFTP_ATTRIBUTES attr{};
+    if (libssh2_sftp_stat_ex(d->sftp, pathUtf8.constData(), static_cast<unsigned int>(pathUtf8.size()),
+            LIBSSH2_SFTP_STAT, &attr) != 0)
+        return transferFail(QStringLiteral("Cannot read remote file (permission or path error)."));
+    if ((attr.flags & LIBSSH2_SFTP_ATTR_PERMISSIONS) && !LIBSSH2_SFTP_S_ISREG(attr.permissions))
+        return transferFail(QStringLiteral("Only regular files can be downloaded."));
+    const qint64 total = (attr.flags & LIBSSH2_SFTP_ATTR_SIZE) ? static_cast<qint64>(attr.filesize) : -1;
+
+    LIBSSH2_SFTP_HANDLE *file = libssh2_sftp_open_ex(d->sftp, pathUtf8.constData(),
+        static_cast<unsigned int>(pathUtf8.size()), LIBSSH2_FXF_READ, 0, LIBSSH2_SFTP_OPENFILE);
+    if (!file) return transferFail(QStringLiteral("Cannot open remote file (permission error)."));
+
+    QSaveFile out(localPath);
+    if (!out.open(QIODevice::WriteOnly)) {
+        libssh2_sftp_close(file);
+        return transferFail(QStringLiteral("Cannot write the local file: %1").arg(out.errorString()));
+    }
+    std::vector<char> buffer(256 * 1024);
+    qint64 done = 0;
+    while (true) {
+        const auto n = libssh2_sftp_read(file, buffer.data(), buffer.size());
+        if (n == 0) break;
+        if (n < 0) {
+            libssh2_sftp_close(file);
+            out.cancelWriting();
+            if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) d->close();
+            return transferFail(QStringLiteral("Download interrupted; the local file was not created."));
+        }
+        if (out.write(buffer.data(), n) != n) {
+            libssh2_sftp_close(file);
+            out.cancelWriting();
+            return transferFail(QStringLiteral("Local write failed (disk full?)."));
+        }
+        done += n;
+        if (progress && !progress(done, total)) {
+            libssh2_sftp_close(file);
+            out.cancelWriting();
+            return transferFail(QStringLiteral("Cancelled; the local file was not created."), QStringLiteral("cancelled"));
+        }
+    }
+    libssh2_sftp_close(file);
+    if (total >= 0 && done != total) {
+        out.cancelWriting();
+        return transferFail(QStringLiteral("Size mismatch (%1 of %2 bytes); the local file was not created.").arg(done).arg(total));
+    }
+    if (!out.commit()) return transferFail(QStringLiteral("Cannot finalise the local file: %1").arg(out.errorString()));
+    SshResult r;
+    r.status = SshResult::Status::Ok;
+    r.directory = localPath;
+    r.bytes = done;
+    r.message = QStringLiteral("Downloaded");
+    return r;
+}
+
+SshResult SshSession::upload(const QString &localPath, const QString &remoteDir, const QString &name,
+                             ConflictPolicy policy, const TransferProgress &progress)
+{
+    if (!isOpen()) return transferFail(QStringLiteral("SSH session is not open."));
+    const auto dir = cleanAbsolutePath(remoteDir);
+    const auto target = dir ? safeChildPath(*dir, name) : std::nullopt;
+    if (!target) return transferFail(QStringLiteral("Invalid remote destination."));
+
+    QFile in(localPath);
+    if (!in.open(QIODevice::ReadOnly)) return transferFail(QStringLiteral("Cannot read the local file: %1").arg(in.errorString()));
+    if (!QFileInfo(localPath).isFile()) return transferFail(QStringLiteral("Only regular files can be uploaded."));
+    const qint64 total = in.size();
+
+    auto exists = [this](const QString &path) {
+        const QByteArray p = path.toUtf8();
+        LIBSSH2_SFTP_ATTRIBUTES a{};
+        return libssh2_sftp_stat_ex(d->sftp, p.constData(), static_cast<unsigned int>(p.size()), LIBSSH2_SFTP_LSTAT, &a) == 0;
+    };
+    QString finalPath = *target;
+    if (exists(finalPath)) {
+        if (policy == ConflictPolicy::Fail)
+            return transferFail(QStringLiteral("« %1 » already exists in this folder.").arg(name), QStringLiteral("conflict"));
+        if (policy == ConflictPolicy::KeepBoth) {
+            for (int n = 2; n < 1000 && exists(finalPath); ++n) finalPath = *safeChildPath(*dir, numberedName(name, n));
+            if (exists(finalPath)) return transferFail(QStringLiteral("No free name for this upload."), QStringLiteral("conflict"));
+        }
+    }
+
+    // Unique, exclusively created temporary owned by this transfer.
+    const QString tempPath = *safeChildPath(*dir, QStringLiteral(".%1.fortiq-upload-%2").arg(name.left(80), randomTag()));
+    const QByteArray tempUtf8 = tempPath.toUtf8();
+    LIBSSH2_SFTP_HANDLE *file = libssh2_sftp_open_ex(d->sftp, tempUtf8.constData(),
+        static_cast<unsigned int>(tempUtf8.size()), LIBSSH2_FXF_WRITE | LIBSSH2_FXF_CREAT | LIBSSH2_FXF_EXCL,
+        0644, LIBSSH2_SFTP_OPENFILE);
+    if (!file) return transferFail(QStringLiteral("Cannot create a file in this folder (permission error?)."));
+    auto removeTemp = [this, &tempUtf8] {
+        libssh2_sftp_unlink_ex(d->sftp, tempUtf8.constData(), static_cast<unsigned int>(tempUtf8.size()));
+    };
+
+    std::vector<char> buffer(256 * 1024);
+    qint64 done = 0;
+    while (true) {
+        const qint64 n = in.read(buffer.data(), static_cast<qint64>(buffer.size()));
+        if (n < 0) { libssh2_sftp_close(file); removeTemp(); return transferFail(QStringLiteral("Local read failed.")); }
+        if (n == 0) break;
+        qint64 off = 0;
+        while (off < n) {
+            const auto w = libssh2_sftp_write(file, buffer.data() + off, static_cast<size_t>(n - off));
+            if (w < 0) {
+                const bool lost = libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL;
+                libssh2_sftp_close(file);
+                if (lost) {
+                    d->close();
+                    // Nothing was published; only the owned temporary may remain.
+                    return transferFail(QStringLiteral("Connection lost during upload; nothing was published (a hidden temporary %1 may remain).")
+                                            .arg(tempPath.section('/', -1)));
+                }
+                removeTemp();
+                return transferFail(QStringLiteral("Remote write failed (quota or disk full?)."));
+            }
+            off += w;
+        }
+        done += n;
+        if (progress && !progress(done, total)) {
+            libssh2_sftp_close(file);
+            removeTemp();
+            return transferFail(QStringLiteral("Cancelled before publication; nothing changed on the server."), QStringLiteral("cancelled"));
+        }
+    }
+    libssh2_sftp_fsync(file); // best effort: not every server supports fsync@openssh.com
+    LIBSSH2_SFTP_ATTRIBUTES written{};
+    const bool statOk = libssh2_sftp_fstat_ex(file, &written, 0) == 0;
+    libssh2_sftp_close(file);
+    if (!statOk || !(written.flags & LIBSSH2_SFTP_ATTR_SIZE) || static_cast<qint64>(written.filesize) != total) {
+        removeTemp();
+        return transferFail(QStringLiteral("Size verification failed; nothing was published."));
+    }
+
+    // Publish. SFTP v3 rename never replaces an existing name, so a file that
+    // appeared meanwhile is reported as a conflict instead of being lost.
+    const QByteArray finalUtf8 = finalPath.toUtf8();
+    auto rename = [this](const QByteArray &from, const QByteArray &to) {
+        return libssh2_sftp_rename_ex(d->sftp, from.constData(), static_cast<unsigned int>(from.size()),
+                                      to.constData(), static_cast<unsigned int>(to.size()), 0);
+    };
+    QByteArray backupUtf8;
+    if (policy == ConflictPolicy::Replace && exists(finalPath)) {
+        backupUtf8 = safeChildPath(*dir, QStringLiteral(".%1.fortiq-replaced-%2").arg(name.left(80), randomTag()))->toUtf8();
+        if (rename(finalUtf8, backupUtf8) != 0) {
+            removeTemp();
+            return transferFail(QStringLiteral("Cannot set the existing file aside; nothing was replaced."));
+        }
+    }
+    if (rename(tempUtf8, finalUtf8) != 0) {
+        if (!isOpen() || libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
+            d->close();
+            return transferFail(QStringLiteral("Connection lost while publishing; check the folder before retrying."), QStringLiteral("unknown"));
+        }
+        if (!backupUtf8.isEmpty()) rename(backupUtf8, finalUtf8); // restore the original
+        removeTemp();
+        return transferFail(QStringLiteral("« %1 » appeared on the server meanwhile; nothing was replaced.").arg(finalPath.section('/', -1)),
+                            QStringLiteral("conflict"));
+    }
+    if (!backupUtf8.isEmpty())
+        libssh2_sftp_unlink_ex(d->sftp, backupUtf8.constData(), static_cast<unsigned int>(backupUtf8.size()));
+
+    SshResult r;
+    r.status = SshResult::Status::Ok;
+    r.directory = finalPath;
+    r.bytes = done;
+    r.message = QStringLiteral("Uploaded");
+    return r;
 }
 
 SshResult SshClient::list(const ConnectionRequest &request)

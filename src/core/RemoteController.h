@@ -5,8 +5,10 @@
 #include <QString>
 #include <QStringList>
 #include <QThreadPool>
+#include <QUrl>
 #include <QVariantList>
 
+#include <atomic>
 #include <memory>
 
 namespace fortiq {
@@ -33,6 +35,10 @@ class RemoteController : public QObject {
     Q_PROPERTY(QString previewText READ previewText NOTIFY previewChanged)
     Q_PROPERTY(QString previewImage READ previewImage NOTIFY previewChanged)
     Q_PROPERTY(QString previewInfo READ previewInfo NOTIFY previewChanged)
+    // Transfer queue: [{id, upload, name, remote, local, state, done, total, message}]
+    // state: queued | running | conflict | done | error | cancelled | unknown
+    Q_PROPERTY(QVariantList transfers READ transfers NOTIFY transfersChanged)
+    Q_PROPERTY(int activeTransfers READ activeTransfers NOTIFY transfersChanged)
     Q_PROPERTY(QString rememberedHost READ rememberedHost CONSTANT)
     Q_PROPERTY(QString rememberedUser READ rememberedUser CONSTANT)
     Q_PROPERTY(int rememberedPort READ rememberedPort CONSTANT)
@@ -59,6 +65,8 @@ public:
     QString previewText() const { return m_previewText; }
     QString previewImage() const { return m_previewImage; }
     QString previewInfo() const { return m_previewInfo; }
+    QVariantList transfers() const;
+    int activeTransfers() const;
     QString rememberedHost() const;
     QString rememberedUser() const;
     int rememberedPort() const;
@@ -80,15 +88,27 @@ public:
     // image (up to 16 MiB) or a hex dump of the first bytes for binaries.
     Q_INVOKABLE void openFile(const QString &path);
     Q_INVOKABLE void closePreview();
+    // Transfers run one at a time on a second SSH connection to the same
+    // pinned server, so browsing stays responsive.
+    Q_INVOKABLE void download(const QString &remotePath, const QUrl &localFile);
+    Q_INVOKABLE void upload(const QVariantList &localFiles, const QString &remoteDir = {});
+    // policy: "replace" (after explicit confirmation), "keepBoth" or "skip".
+    Q_INVOKABLE void resolveConflict(int id, const QString &policy);
+    Q_INVOKABLE void cancelTransfer(int id);
+    Q_INVOKABLE void clearFinishedTransfers();
 
 signals:
     void changed();
     void previewChanged();
+    void transfersChanged();
 
 private:
     enum class Kind { Open, List };
     void request(Kind kind, const QString &directory, bool record);
     void scrubPassword();
+    struct Transfer;
+    void startTransfer(int id, int policy);
+    Transfer *findTransfer(int id);
     QString pinKey() const;
 
     QThreadPool m_pool; // one persistent worker: the SSH socket lives there
@@ -119,5 +139,22 @@ private:
     QString m_previewText;
     QString m_previewImage;
     QString m_previewInfo;
+
+    struct Transfer {
+        int id = 0;
+        bool upload = false;
+        QString name;
+        QString remote; // download: source file; upload: target folder
+        QString local;
+        QString state = QStringLiteral("queued");
+        QString message;
+        qint64 done = 0;
+        qint64 total = -1;
+        std::shared_ptr<std::atomic_bool> cancel = std::make_shared<std::atomic_bool>(false);
+    };
+    QList<Transfer> m_transfers;
+    int m_nextTransferId = 1;
+    QThreadPool m_transferPool;
+    std::shared_ptr<std::unique_ptr<SshSession>> m_transferSession;
 };
 }

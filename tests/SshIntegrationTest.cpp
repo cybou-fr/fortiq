@@ -8,6 +8,11 @@
 #include "ssh/SshClient.h"
 
 #include <QCryptographicHash>
+#include <QDateTime>
+#include <QFile>
+#include <QFileInfo>
+#include <QUrl>
+#include <QTemporaryDir>
 #include <QSettings>
 #include <QSignalSpy>
 
@@ -156,6 +161,117 @@ private slots:
 
         controller.closePreview();
         QVERIFY(!controller.previewOpen());
+        controller.disconnectServer();
+        settings.remove(pin);
+    }
+
+    // Needs a writable folder FORTIQ_IT_UPLOAD_DIR on the test server.
+    void transfersAreSafe() {
+        const QString remoteDir = qEnvironmentVariable("FORTIQ_IT_UPLOAD_DIR");
+        if (remoteDir.isEmpty()) QSKIP("FORTIQ_IT_UPLOAD_DIR not set");
+        ConnectionRequest request = base;
+        request.expectedHostFingerprint = fingerprint;
+        if (request.password.isEmpty()) request.keyPath = qEnvironmentVariable("FORTIQ_IT_KEY");
+        fortiq::SshSession session;
+        QVERIFY(session.open(request).status == SshResult::Status::Ok);
+
+        QTemporaryDir local;
+        QVERIFY(local.isValid());
+        const QString tag = QString::number(QDateTime::currentMSecsSinceEpoch());
+        const QString name = QStringLiteral("Été %1 — résumé.txt").arg(tag);
+        const QString source = local.filePath(QStringLiteral("source.bin"));
+        QByteArray payload(3 * 1024 * 1024 + 17, Qt::Uninitialized);
+        for (qsizetype i = 0; i < payload.size(); ++i) payload[i] = char((i * 131) ^ (i >> 7));
+        { QFile f(source); QVERIFY(f.open(QIODevice::WriteOnly)); f.write(payload); }
+        const auto noProgress = fortiq::TransferProgress([](qint64, qint64) { return true; });
+
+        // 1. New file is published under its own name and reads back identically.
+        SshResult up = session.upload(source, remoteDir, name, fortiq::ConflictPolicy::Fail, noProgress);
+        QVERIFY2(up.status == SshResult::Status::Ok, qPrintable(up.message));
+        QCOMPARE(up.directory, remoteDir + "/" + name);
+        const QString back = local.filePath(QStringLiteral("back.bin"));
+        SshResult down = session.download(up.directory, back, noProgress);
+        QVERIFY2(down.status == SshResult::Status::Ok, qPrintable(down.message));
+        { QFile f(back); QVERIFY(f.open(QIODevice::ReadOnly)); QVERIFY(f.readAll() == payload); }
+
+        // 2. Same name: refused, then "keep both", then explicit replace.
+        up = session.upload(source, remoteDir, name, fortiq::ConflictPolicy::Fail, noProgress);
+        QCOMPARE(up.code, QStringLiteral("conflict"));
+        up = session.upload(source, remoteDir, name, fortiq::ConflictPolicy::KeepBoth, noProgress);
+        QVERIFY2(up.status == SshResult::Status::Ok, qPrintable(up.message));
+        QVERIFY(up.directory.endsWith(QStringLiteral("résumé (2).txt")));
+        const QString smaller = local.filePath(QStringLiteral("small.txt"));
+        { QFile f(smaller); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("replaced\n"); }
+        up = session.upload(smaller, remoteDir, name, fortiq::ConflictPolicy::Replace, noProgress);
+        QVERIFY2(up.status == SshResult::Status::Ok, qPrintable(up.message));
+        QCOMPARE(session.readFile(remoteDir + "/" + name, 100).data, QByteArray("replaced\n"));
+
+        // 3. Cancel during upload: nothing published, no owned temporary left.
+        const QString cancelled = QStringLiteral("cancel-%1.bin").arg(tag);
+        int calls = 0;
+        up = session.upload(source, remoteDir, cancelled, fortiq::ConflictPolicy::Fail,
+                            [&](qint64, qint64) { return ++calls < 2; });
+        QCOMPARE(up.code, QStringLiteral("cancelled"));
+        const QStringList after = names(session.list(remoteDir));
+        QVERIFY(!after.contains(cancelled));
+        for (const QString &n : after) QVERIFY2(!n.contains(QStringLiteral(".fortiq-")), qPrintable(n));
+
+        // 4. Cancelled download leaves no local file.
+        const QString partial = local.filePath(QStringLiteral("partial.bin"));
+        calls = 0;
+        down = session.download(remoteDir + "/" + name.left(name.size() - 4) + " (2).txt", partial,
+                                [&](qint64, qint64) { return ++calls < 2; });
+        QCOMPARE(down.code, QStringLiteral("cancelled"));
+        QVERIFY(!QFile::exists(partial));
+
+        // 5. Directories are not downloadable; invalid names are rejected.
+        QVERIFY(session.download(remoteDir, partial, noProgress).status == SshResult::Status::Error);
+        QVERIFY(session.upload(source, remoteDir, QStringLiteral("../escape"), fortiq::ConflictPolicy::Fail, noProgress).status
+                == SshResult::Status::Error);
+        QVERIFY(session.isOpen());
+    }
+
+    void controllerQueueResolvesConflicts() {
+        const QString remoteDir = qEnvironmentVariable("FORTIQ_IT_UPLOAD_DIR");
+        if (remoteDir.isEmpty()) QSKIP("FORTIQ_IT_UPLOAD_DIR not set");
+        fortiq::RemoteController controller;
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+
+        QTemporaryDir local;
+        const QString file = local.filePath(QStringLiteral("queue-%1.txt").arg(QDateTime::currentMSecsSinceEpoch()));
+        { QFile f(file); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("queue\n"); }
+        auto last = [&] { return controller.transfers().constLast().toMap(); };
+        auto finished = [&] {
+            const QString s = last().value("state").toString();
+            return s != "queued" && s != "running";
+        };
+
+        controller.upload({ QUrl::fromLocalFile(file) }, remoteDir);
+        QTRY_VERIFY_WITH_TIMEOUT(finished(), 15000);
+        QCOMPARE(last().value("state").toString(), QStringLiteral("done"));
+
+        controller.upload({ QUrl::fromLocalFile(file) }, remoteDir);
+        QTRY_VERIFY_WITH_TIMEOUT(finished(), 15000);
+        QCOMPARE(last().value("state").toString(), QStringLiteral("conflict"));
+        controller.resolveConflict(last().value("id").toInt(), QStringLiteral("keepBoth"));
+        QTRY_VERIFY_WITH_TIMEOUT(finished(), 15000);
+        QCOMPARE(last().value("state").toString(), QStringLiteral("done"));
+        QVERIFY(last().value("message").toString().contains(QStringLiteral("(2)")));
+
+        const QString saved = local.filePath(QStringLiteral("downloaded.txt"));
+        controller.download(remoteDir + "/" + QFileInfo(file).fileName(), QUrl::fromLocalFile(saved));
+        QTRY_VERIFY_WITH_TIMEOUT(finished(), 15000);
+        QCOMPARE(last().value("state").toString(), QStringLiteral("done"));
+        { QFile f(saved); QVERIFY(f.open(QIODevice::ReadOnly)); QCOMPARE(f.readAll(), QByteArray("queue\n")); }
+
+        controller.clearFinishedTransfers();
+        QVERIFY(controller.transfers().isEmpty());
         controller.disconnectServer();
         settings.remove(pin);
     }
