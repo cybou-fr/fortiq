@@ -15,11 +15,11 @@ Item {
     // right-click the desktop to cycle. An explicit file overrides it.
     readonly property var wallpapers: ["aurora", "desert", "city"]
     property string wallpaperName: "aurora"
-    property bool launcherOpen: fixture && fixturePreview !== "logs"
+    property bool launcherOpen: fixture && fixturePreview !== "logs" && fixturePreview !== "incident"
     property bool controlOpen: fixture
     property bool filesOpen: true
-    property bool browserOpen: fixture && fixturePreview !== "logs"
-    property bool logsOpen: fixture && fixturePreview === "logs"
+    property bool browserOpen: fixture && fixturePreview !== "logs" && fixturePreview !== "incident"
+    property bool logsOpen: fixture && (fixturePreview === "logs" || fixturePreview === "incident")
     property date now: new Date()
 
     width: Theme.canvasWidth
@@ -90,6 +90,7 @@ Item {
         logs: shell.logsController
         remote: shell.controller
         fixture: shell.fixture
+        fixtureIncident: shell.fixture && shell.fixturePreview === "incident"
         onCloseRequested: shell.logsOpen = false
     }
 

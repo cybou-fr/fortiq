@@ -36,6 +36,14 @@ class LogsController : public QObject {
     Q_PROPERTY(QVariantList counts READ counts NOTIFY changed)
     Q_PROPERTY(QVariantList units READ units NOTIFY sourcesChanged)
     Q_PROPERTY(QVariantList files READ files NOTIFY sourcesChanged)
+    // Incident inspector: events around an anchor and a deterministic synopsis.
+    Q_PROPERTY(bool inspectorOpen READ inspectorOpen NOTIFY inspectorChanged)
+    Q_PROPERTY(bool inspectorBusy READ inspectorBusy NOTIFY inspectorChanged)
+    Q_PROPERTY(int inspectorWindow READ inspectorWindow NOTIFY inspectorChanged)
+    Q_PROPERTY(int inspectorAnchor READ inspectorAnchor NOTIFY inspectorChanged)
+    Q_PROPERTY(QVariantList inspectorEvents READ inspectorEvents NOTIFY inspectorChanged)
+    Q_PROPERTY(QVariantMap synopsis READ synopsis NOTIFY inspectorChanged)
+    Q_PROPERTY(QString inspectorError READ inspectorError NOTIFY inspectorChanged)
 
 public:
     explicit LogsController(RemoteController *remote, QObject *parent = nullptr);
@@ -56,6 +64,13 @@ public:
     QVariantList counts() const { return m_counts; }
     QVariantList units() const { return m_units; }
     QVariantList files() const { return m_files; }
+    bool inspectorOpen() const { return m_inspectorOpen; }
+    bool inspectorBusy() const { return m_inspectorBusy; }
+    int inspectorWindow() const { return m_inspectorWindow; }
+    int inspectorAnchor() const { return m_inspectorAnchor; }
+    QVariantList inspectorEvents() const { return m_inspectorEvents; }
+    QVariantMap synopsis() const { return m_synopsis; }
+    QString inspectorError() const { return m_inspectorError; }
 
     // Loads the unit and /var/log file lists for the sidebar.
     Q_INVOKABLE void loadSources();
@@ -66,15 +81,30 @@ public:
     Q_INVOKABLE void setMaxPriority(int priority);
     Q_INVOKABLE void reload();
     Q_INVOKABLE void setFollowing(bool on);
+    // Opens the inspector around an event of the timeline: every unit of the
+    // current journal scope (system or user), severities 0..6, within
+    // ±windowSeconds; for a file source, the loaded lines in that window.
+    Q_INVOKABLE void inspect(const QVariantMap &event, int windowSeconds);
+    Q_INVOKABLE void setInspectorWindow(int windowSeconds);
+    Q_INVOKABLE void closeInspector();
+    // Plain-text report of the synopsis with method and event references.
+    Q_INVOKABLE QString inspectorReport() const;
 
     // Deterministic grouping key: numbers, hex, UUIDs, IPs masked. Public for tests.
     static QString templateOf(const QString &message);
     static QVariantList groupPatterns(const QVariantList &events);
     static QVariantMap parseJournalLine(const QByteArray &line);
+    // Deterministic synopsis of time-ordered events around `anchor`:
+    // {observed, inferred, unknown, next}, each a list of
+    // {text, refs: [event indices], action?, arg?}. No AI; inferred items
+    // are temporal/textual hypotheses and say so.
+    static QVariantMap synthesize(const QVariantList &events, int anchor, int windowSeconds,
+                                  bool limited, bool truncated, bool fileSource);
 
 signals:
     void changed();
     void sourcesChanged();
+    void inspectorChanged();
 
 private:
     void run(bool append);
@@ -109,5 +139,15 @@ private:
     QVariantList m_counts;
     QVariantList m_units;
     QVariantList m_files;
+    void runInspector();
+    QVariantMap m_anchorEvent;
+    bool m_inspectorOpen = false;
+    bool m_inspectorBusy = false;
+    int m_inspectorWindow = 300;
+    int m_inspectorAnchor = -1;
+    int m_inspectorSeq = 0;
+    QVariantList m_inspectorEvents;
+    QVariantMap m_synopsis;
+    QString m_inspectorError;
 };
 }

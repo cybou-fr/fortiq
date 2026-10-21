@@ -12,6 +12,7 @@ Item {
     property var logs: null          // LogsController (null in the preview build)
     property var remote: null        // RemoteController, for connection state
     property bool fixture: false
+    property bool fixtureIncident: false // fixture only: show the inspector sample
     signal closeRequested()
 
     property string view: "timeline" // "timeline" | "patterns"
@@ -60,6 +61,47 @@ Item {
 
     QtObject {
         id: sample
+        readonly property bool inspectorOpen: win.fixtureIncident
+        readonly property bool inspectorBusy: false
+        readonly property int inspectorWindow: 300
+        readonly property int inspectorAnchor: 3
+        readonly property string inspectorError: ""
+        readonly property var inspectorEvents: [
+            { timeText: "18/10 13:40:58", priority: 6, unit: "nginx.service", message: "Reloading nginx configuration" },
+            { timeText: "18/10 13:41:03", priority: 3, unit: "php-fpm.service", message: "WARNING: [pool www] server reached pm.max_children setting (5)" },
+            { timeText: "18/10 13:41:04", priority: 3, unit: "nginx.service", message: "upstream timed out (110: Connection timed out) while reading response header from upstream, client: 10.0.0.12" },
+            { timeText: "18/10 13:42:17", priority: 3, unit: "nginx.service", message: "upstream timed out (110: Connection timed out) while reading response header from upstream, client: 10.0.0.31" },
+            { timeText: "18/10 13:42:19", priority: 6, unit: "systemd", message: "php-fpm.service: Main process exited, code=killed, status=9/KILL" },
+            { timeText: "18/10 13:42:20", priority: 6, unit: "systemd", message: "php-fpm.service: Scheduled restart job, restart counter is at 1." },
+            { timeText: "18/10 13:42:21", priority: 6, unit: "systemd", message: "Started php-fpm.service - The PHP FastCGI Process Manager." }
+        ]
+        readonly property var synopsis: ({
+            observed: [
+                { text: "Fenêtre 13:40:58 – 13:42:21 (±5 min) : 7 événement(s), 3 erreur(s), 0 avertissement(s).", refs: [1, 2, 3] },
+                { text: "Événement choisi (13:42:17, nginx.service) : upstream timed out (110: Connection timed out) while reading response header…", refs: [3] },
+                { text: "Première erreur de la fenêtre à 13:41:03 (php-fpm.service) : WARNING: [pool www] server reached pm.max_children setting (5)", refs: [1] },
+                { text: "php-fpm.service : 1 erreur(s), 0 avertissement(s), de 13:41:03 à 13:41:03.", refs: [1] },
+                { text: "nginx.service : 2 erreur(s), 0 avertissement(s), de 13:41:04 à 13:42:17.", refs: [2, 3] },
+                { text: "php-fpm.service : processus principal terminé, statut 9/KILL, à 13:42:19.", refs: [4] },
+                { text: "php-fpm.service : redémarrage programmé n°1 à 13:42:20.", refs: [5] },
+                { text: "Répété ×2 : nginx.service · upstream timed out (#: Connection timed out) while reading response header from upstream, client: ‹ip›", refs: [2, 3] }
+            ],
+            inferred: [
+                { text: "Hypothèse : les erreurs de php-fpm.service (13:41:03) précèdent celles de nginx.service (13:41:04) de 1 s. Proximité dans le temps seulement, pas une cause démontrée.", refs: [1, 2] },
+                { text: "Hypothèse : le redémarrage de php-fpm.service à 13:42:20 suit 1 erreur(s) de cette unité dans les 77 s précédentes — réaction probable du gestionnaire de services.", refs: [1, 5] }
+            ],
+            unknown: [
+                { text: "La cause n'est pas déterminée : les événements sont reliés seulement par le temps, l'unité et le texte.", refs: [] },
+                { text: "Les messages de niveau debug et les fichiers de /var/log ne sont pas inclus.", refs: [] }
+            ],
+            next: [
+                { text: "Ouvrir le journal de php-fpm.service sur 24 h", refs: [], action: "unit", arg: "php-fpm.service" },
+                { text: "Sur le serveur, en lecture seule : systemctl status php-fpm.service", refs: [] },
+                { text: "Élargir la fenêtre à ±15 min", refs: [], action: "widen", arg: "900" }
+            ]
+        })
+        function setInspectorWindow(s) {}
+        function inspectorReport() { return "" }
         readonly property string source: "unit"
         readonly property string target: "nginx.service"
         readonly property string range: "1h"
@@ -404,6 +446,20 @@ Item {
                     color: Theme.ink; selectionColor: Theme.accent; font.pixelSize: 11; font.family: "Consolas"
                 }
                 Text {
+                    visible: ev.open
+                    anchors.right: parent.right; anchors.rightMargin: 10
+                    y: meta.y
+                    text: "Inspecter autour (±5 min) →"
+                    color: "#9CC6FF"; font.pixelSize: 10; font.underline: inspMouse.containsMouse; font.family: Theme.fontFamily
+                    z: 3
+                    MouseArea {
+                        id: inspMouse
+                        anchors.fill: parent; anchors.margins: -4; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        enabled: !win.fixture && ev.modelData.time > 0
+                        onClicked: win.logs.inspect(ev.modelData, 300)
+                    }
+                }
+                Text {
                     id: meta
                     visible: ev.open
                     x: 242; y: full.y + full.height + 6; width: parent.width - x - 8; elide: Text.ElideRight
@@ -474,6 +530,18 @@ Item {
             }
         }
         BusyIndicator { anchors.centerIn: parent; running: win.lc && win.lc.busy && win.lc.events.length === 0; visible: running }
+    }
+
+    IncidentInspector {
+        x: sidebar.width; y: toolbar.height
+        width: parent.width - x; height: parent.height - y
+        bottomRightRadius: 16
+        z: 20
+        visible: win.lc !== null && win.lc.inspectorOpen === true
+        lc: win.lc
+        priorityColor: win.priorityColor
+        onOpenUnit: (unit) => { win.logs.closeInspector(); win.choose("unit", unit); win.logs.setRange("24h") }
+        onClosed: if (!win.fixture) win.logs.closeInspector()
     }
 
     // ── status bar ─────────────────────────────────────────────────────

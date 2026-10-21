@@ -10,6 +10,7 @@
 
 #include <QCryptographicHash>
 #include <QDateTime>
+#include <QRegularExpression>
 #include <QFile>
 #include <QFileInfo>
 #include <QUrl>
@@ -461,7 +462,8 @@ private slots:
         // Keep both: a copy next to it; then an explicit overwrite.
         r = session.saveCopy(dir, "real.txt", "mine\n");
         QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(r.message));
-        QVERIFY(r.directory.endsWith(QStringLiteral("real (2).txt")));
+        // "real (2).txt", or a higher number if an earlier run left one.
+        QVERIFY(QRegularExpression(QStringLiteral(R"(/real \(\d+\)\.txt$)")).match(r.directory).hasMatch());
         QCOMPARE(session.readFile(r.directory, 100).data, QByteArray("mine\n"));
         r = session.saveFile(dir + "/real.txt", "mine\n", hash(v2), true);
         QVERIFY(r.status == SshResult::Status::Ok);
@@ -671,7 +673,7 @@ private slots:
         for (const QVariant &v : logs.events()) {
             const QVariantMap e = v.toMap();
             QVERIFY(e.value("priority").toInt() <= 3);
-            if (e.value("message").toString().startsWith(tag)) ++ours;
+            if (e.value("message").toString().startsWith(tag + QStringLiteral(" failed after"))) ++ours;
         }
         QCOMPARE(ours, 3);
         bool grouped = false;
@@ -714,6 +716,93 @@ private slots:
         controller.disconnectServer();
         QCOMPARE(logs.state(), QStringLiteral("disconnected"));
         QVERIFY(!logs.following());
+        settings.remove(pin);
+    }
+
+    void synopsisIsEvidenceBased() {
+        using fortiq::LogsController;
+        auto e = [](double s, int p, const QString &unit, const QString &msg, const QString &subject = {}) {
+            return QVariant(QVariantMap { { "time", s * 1000.0 }, { "priority", p }, { "unit", unit }, { "message", msg }, { "subject", subject } });
+        };
+        const QVariantList events {
+            e(100, 6, "nginx.service", "Reloading"),
+            e(101, 3, "php.service", "pool reached max children (5)"),                      // 1
+            e(102, 3, "nginx.service", "upstream timed out client 10.0.0.1"),               // 2
+            e(150, 3, "nginx.service", "upstream timed out client 10.0.0.2"),               // 3 anchor
+            e(151, 6, "systemd", "php.service: Main process exited, code=killed, status=9/KILL", "php.service"),
+            e(152, 6, "systemd", "php.service: Scheduled restart job, restart counter is at 1.", "php.service"), // 5
+            e(160, 3, "db.service", "disk quota exceeded on /var/lib/db"),                 // 6, only after anchor
+        };
+        const QVariantMap s = LogsController::synthesize(events, 3, 300, true, true, false);
+        auto texts = [&](const QString &k) { QStringList out; for (const QVariant &v : s.value(k).toList()) out << v.toMap().value("text").toString(); return out; };
+        auto refsOf = [&](const QString &k, const QString &needle) {
+            for (const QVariant &v : s.value(k).toList())
+                if (v.toMap().value("text").toString().contains(needle)) return v.toMap().value("refs").toList();
+            return QVariantList();
+        };
+        const QStringList observed = texts("observed"), inferred = texts("inferred"), unknown = texts("unknown");
+        QVERIFY(observed.first().contains("7 événement(s), 4 erreur(s)"));
+        QCOMPARE(refsOf("observed", "Première erreur"), (QVariantList { 1 }));
+        QCOMPARE(refsOf("observed", "redémarrage programmé n°1"), (QVariantList { 5 }));
+        QCOMPARE(refsOf("observed", "Répété ×2"), (QVariantList { 2, 3 }));
+        // Hypotheses are labelled and evidence-linked; no causal claim as fact.
+        for (const QString &x : inferred) QVERIFY(x.startsWith("Hypothèse"));
+        QCOMPARE(refsOf("inferred", "précèdent"), (QVariantList { 1, 2 }));
+        QCOMPARE(refsOf("inferred", "le redémarrage de php.service"), (QVariantList { 1, 5 }));
+        QVERIFY(!refsOf("inferred", "n'apparaît qu'après").isEmpty());
+        for (const QString &x : observed) QVERIFY2(!x.contains("cause"), qPrintable(x));
+        QVERIFY(unknown.first().contains("cause n'est pas déterminée"));
+        QVERIFY(unknown.join('\n').contains("Accès limité"));
+        QVERIFY(unknown.join('\n').contains("2000"));
+        // A calm window says so instead of inventing a story.
+        const QVariantMap calm = LogsController::synthesize({ e(1, 6, "a", "ok") }, 0, 60, false, false, false);
+        QCOMPARE(calm.value("inferred").toList().size(), 0);
+        QVERIFY(calm.value("unknown").toList().last().toMap().value("text").toString().contains("Aucune erreur"));
+    }
+
+    // FORTIQ_IT_CRASH_UNIT names a user service (systemd-run --user) that wrote
+    // "<3><tag> boom" and failed with Restart=on-failure just before the run.
+    void incidentInspectorOnRealRestart() {
+        const QString unit = qEnvironmentVariable("FORTIQ_IT_CRASH_UNIT");
+        const QString tag = qEnvironmentVariable("FORTIQ_IT_LOG_TAG");
+        if (unit.isEmpty() || tag.isEmpty()) QSKIP("FORTIQ_IT_CRASH_UNIT / FORTIQ_IT_LOG_TAG not set");
+        fortiq::RemoteController controller;
+        fortiq::LogsController logs(&controller);
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        logs.select(QStringLiteral("user"));
+        logs.setRange(QStringLiteral("15min"));
+        logs.setMaxPriority(7);
+        QTRY_VERIFY_WITH_TIMEOUT(!logs.busy(), 20000);
+        QVariantMap boom;
+        for (const QVariant &v : logs.events())
+            if (v.toMap().value("message").toString() == tag + " boom") boom = v.toMap();
+        QVERIFY2(!boom.isEmpty(), "crash line not found in the user journal");
+        QCOMPARE(boom.value("unit").toString(), unit);
+        QCOMPARE(boom.value("priority").toInt(), 3);
+
+        logs.inspect(boom, 60);
+        QVERIFY(logs.inspectorOpen());
+        QTRY_VERIFY_WITH_TIMEOUT(!logs.inspectorBusy(), 20000);
+        QVERIFY(logs.inspectorAnchor() >= 0);
+        const QVariantMap s = logs.synopsis();
+        QString all;
+        for (const QString &k : { "observed", "inferred" })
+            for (const QVariant &v : s.value(k).toList()) all += v.toMap().value("text").toString() + '\n';
+        QVERIFY2(all.contains(unit + " : redémarrage programmé"), qPrintable(all));
+        QVERIFY2(all.contains("Hypothèse : le redémarrage de " + unit), qPrintable(all));
+        const QString report = logs.inspectorReport();
+        QVERIFY(report.contains("sans AI") && report.contains(tag + " boom"));
+        logs.setInspectorWindow(900);
+        QTRY_VERIFY_WITH_TIMEOUT(!logs.inspectorBusy() && logs.inspectorWindow() == 900, 20000);
+        logs.closeInspector();
+        QVERIFY(!logs.inspectorOpen());
+        controller.disconnectServer();
         settings.remove(pin);
     }
 

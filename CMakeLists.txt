@@ -55,6 +55,7 @@ set(FORTIQ_SHELL_QML
     qml/shell/GlassDialog.qml
     qml/shell/SearchResults.qml
     qml/shell/LogsWindow.qml
+    qml/shell/IncidentInspector.qml
     qml/shell/ToolButtonGlass.qml
     qml/shell/ToolTipLite.qml
     qml/shell/TopBar.qml
