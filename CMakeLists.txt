@@ -169,6 +169,10 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_test(NAME fortiq_brand_assets
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tool/check_brand_assets.py"
+          --output "${FORTIQ_BRAND_OUTPUT}"
+          --android-output "${FORTIQ_ANDROID_PACKAGE_OUTPUT}")
     find_package(Qt6 6.8 REQUIRED COMPONENTS Test)
     qt_add_executable(fortiq_tests tests/RemotePathTest.cpp src/core/RemotePath.cpp src/core/RemotePath.h)
     target_link_libraries(fortiq_tests PRIVATE Qt6::Core Qt6::Test)

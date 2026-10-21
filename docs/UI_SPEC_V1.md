@@ -116,3 +116,9 @@ Tooling for steps 2–3 exists: `--reference-fixture --screenshot` and `tool/com
 **Sprint 3:** Logs with journald and permitted log files, filters, deterministic summaries, source-provenance, alongside minimum Terminal/System support. See [roadmap](FORTIQ_DESKTOP_BLUEPRINT.md).
 
 Do not build a fake Wi-Fi toggle, “working” browser mock, remote calendar, streaming media or AI assistant merely to fill the screenshot.
+
+## Explicit owner-approved logo exception (21 October 2026)
+
+The owner approved the **new cyan/blue/violet FORTIQ monogram** and requested native executable integration. In the reference screenshot, the 25px top-left circle is now replaced by the approved F mark while preserving **the same top-bar position, scale, surrounding layout and material**. No other reference-visible geometry, colors or window structure is authorized to change because of branding.
+
+Native assets are generated from the source in `assets/branding/fortiq_mark.png`; CMake integrates them into Windows EXE/Qt windows/Android launcher. See [Branding](../assets/branding/README.md). Windows/Android runtime visual acceptance still needs actual builds and device checks.

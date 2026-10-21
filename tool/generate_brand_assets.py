@@ -221,14 +221,22 @@ def main():
         (folder / "ic_launcher_round.png").write_bytes(data)
     drawable = args.android_output / "res/drawable-nodpi"
     drawable.mkdir(parents=True, exist_ok=True)
+    foreground_pixels = render(432, source, w, h, box)
     (drawable / "ic_launcher_foreground.png").write_bytes(
-        png(432, 432, render(432, source, w, h, box)))
+        png(432, 432, foreground_pixels))
+    # Android 13+ themed icons use monochrome alpha matching the same logo.
+    monochrome_pixels = bytearray(foreground_pixels)
+    for i in range(0, len(monochrome_pixels), 4):
+        monochrome_pixels[i:i + 3] = b"\xff\xff\xff"
+    (drawable / "ic_launcher_monochrome.png").write_bytes(
+        png(432, 432, monochrome_pixels))
     adaptive = args.android_output / "res/mipmap-anydpi-v26"
     adaptive.mkdir(parents=True, exist_ok=True)
     xml = ('<?xml version="1.0" encoding="utf-8"?>\n'
            '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n'
            '  <background android:drawable="@color/fortiq_icon_background"/>\n'
            '  <foreground android:drawable="@drawable/ic_launcher_foreground"/>\n'
+           '  <monochrome android:drawable="@drawable/ic_launcher_monochrome"/>\n'
            '</adaptive-icon>\n')
     for name in ("ic_launcher.xml", "ic_launcher_round.xml"):
         (adaptive / name).write_text(xml, encoding="utf-8")
