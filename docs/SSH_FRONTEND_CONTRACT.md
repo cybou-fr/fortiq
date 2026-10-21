@@ -51,7 +51,7 @@
 
 | APP | GUI-инструмент | Предпочтительный Linux CLI / подсистема | Транспорт | Статус |
 |---|---|---|---|---|
-| APP-01 | Files | `find`, `stat`, `cat`, `mkdir`, `cp`, `mv`, `rm`, `base64` | SSH exec; SFTP внутри SSH | не начато |
+| APP-01 | **Smart Files** | SFTP read-only, далее проверенные `find`, `stat`, `rg`, `cp`, `mv` | SSH exec; SFTP внутри SSH | **Qt R0.1: исходники SFTP list/navigation, без native acceptance; остальное цель** |
 | APP-02 | Editor | `cat`, `stat`, `mktemp`, `mv`, `sh` | SSH exec/stdin; сохранение на Linux | не начато |
 | APP-03 | Docs/Markdown | CLI файлов; при конвертации `pandoc` / `cmark` | SSH exec/SFTP | не начато |
 | APP-04 | Mail | `mail`, `sendmail`, `notmuch`, `mu`, `mbsync` — по совместимым возможностям | **Только SSH → серверная CLI** | не начато |
@@ -62,9 +62,11 @@
 | APP-09 | Processes | `ps`, `top`, `free`, `kill` | SSH exec | не начато |
 | APP-10 | Services | `systemctl`, `systemd-analyze` | SSH exec | не начато |
 | APP-11 | Network | `ip`, `ss`, `ufw`, `nft` | SSH exec | не начато |
-| APP-12 | Logs | `journalctl`, `tail`, `grep` | SSH exec/stream | не начато |
+| APP-12 | **Logs** | `journalctl -o json`, `systemctl`, `tail`, `rg` | SSH exec/stream | **flagship #2; не реализовано; анализ и синтез без AI** |
 | APP-13 | Disks | `lsblk`, `df`, `du`, `findmnt`, `smartctl` | SSH exec | не начато |
 | APP-14 | Server Setup | `apt-get`, `dpkg-query`, `systemctl`, `sshd`, `fail2ban`, `ufw` | SSH exec/stdin | не начато |
+
+Приоритет новых функций: **точный desktop-shell → Smart Files → Logs**, с поддерживающими Terminal/Services; окно и внешний вид задаёт [UI SPEC v1](UI_SPEC_V1.md), работа Files — [Smart Files](SMART_FILES_SPEC.md), Logs — [Logs intelligence](LOGS_INTELLIGENCE_SPEC.md).
 
 Эта таблица содержит **предпочтительные проверяемые исполнители**, а не обещание, что все пакеты доступны в любом дистрибутиве. Если зрелого инструмента не хватает, не писать отдельный backend автоматически; сначала выбирать проверенное Linux-решение или уточнять требования.
 

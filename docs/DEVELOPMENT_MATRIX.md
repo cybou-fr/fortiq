@@ -1,58 +1,67 @@
 # FORTIQ: матрица разработки
 
-Статус на 18 октября 2026: **ничего не реализовано.** Прототип на Flutter удалён (тег
-`flutter-final`), клиент на C++/Qt ещё не начат. «Не начато» ниже — честный статус. Статус меняется
-только вместе с тестом, который его подтверждает (юнит, интерфейс или настоящий Debian-стенд).
+Статус на 21.10.2026: **Qt R0.1 существует в исходниках, но не квалифицирован на Windows/Android**.
+Есть CMake, QML-каркас, libssh2 с fingerprint pinning, парольный SSH, read-only SFTP list,
+тест `RemotePath`. Никакие остальные функции ниже не считаются реализованными без фактических тестов.
+Визуально существующий `Main.qml` не соответствует нормативному скетчу из [UI SPEC v1](UI_SPEC_V1.md).
+Историческая Flutter-версия — git-тег `flutter-final`.
 
 ## 1. Приложения и исполнители
 
-Каждому приложению соответствует существующий Linux-инструмент; без проверенного исполнителя функция
-не считается готовой. Полный контракт — [SSH_FRONTEND_CONTRACT](SSH_FRONTEND_CONTRACT.md).
+Источник истины для UX: [UI SPEC v1](UI_SPEC_V1.md). [Smart Files](SMART_FILES_SPEC.md) и [Logs](LOGS_INTELLIGENCE_SPEC.md) — два первых flagship-приложения. Все операции на Linux — только SSH, независимо от внешнего вида UI.
 
-| APP | Приложение | Linux-исполнитель | Транспорт | Статус |
+| APP | Приложение | Серверный исполнитель | Фаза | Фактический статус Qt |
 |---|---|---|---|---|
-| 01 | Files | `find -printf`, `stat`, `cp`, `mv`, `rm`; SFTP | SSH exec, SFTP | не начато |
-| 02 | Editor | `cat`, `stat`, `mktemp`, `mv` | SSH exec/stdin | не начато |
-| 03 | Docs / Markdown | файлы; `pandoc` для экспорта | SSH exec | не начато |
-| 04 | Mail | консольный почтовый клиент на сервере (выбор не сделан; проверить Himalaya 1.x и аналоги); системная почта через `sendmail`/`mail` | SSH | не начато |
-| 05 | Browser | локальный веб-движок + SSH SOCKS | SSH forwarding | не начато |
-| 06 | Viewer | `file`, `pdftoppm` (Poppler), `base64` | SSH exec/SFTP | не начато |
-| 07 | Search | `find`, `grep`, `rg` | SSH exec | не начато |
-| 08 | Terminal | `bash`, `tmux` | SSH PTY | не начато |
-| 09 | Processes | `ps`, `kill` | SSH exec | не начато |
-| 10 | Services | `systemctl` | SSH exec | не начато |
-| 11 | Network | `ss`/`netstat`, `ip`, `ufw` | SSH exec | не начато |
-| 12 | Logs | `journalctl`, `tail` | SSH exec | не начато |
-| 13 | Disks | `lsblk`, `df`, `du`, `findmnt`, `smartctl` | SSH exec | не начато |
-| 14 | Server Setup | `apt-get`, `dpkg-query`, `systemctl`, `sshd`, `fail2ban`, `ufw` | SSH exec | не начато |
-| AI | `ai` над llama.cpp | `llama-cli` | SSH exec/stdin | не начато (спецификация есть) |
+| 01 | **Smart Files (flagship 1)** | SFTP; §find§/§stat§/§rg§ по проверке возможностей | R0.1–R1 | **код R0.1:** чтение SFTP и навигация; без подтверждённых Win/Android сборок, без записей/поиска/превью |
+| 12 | **Logs (flagship 2)** | §journalctl -o json§, §systemctl§, §tail§ / §rg§ | R1.5 | **не реализовано** |
+| 08 | Terminal (поддержка) | SSH PTY, §tmux§ при наличии | R1 | не реализовано |
+| 10 | Services / System Overview (поддержка) | §systemctl§/§uname§/§free§/§df§, обнаружение возможностей | R1–R1.5 | не реализовано |
+| 07 | Search | §find§/§grep§/§rg§ (серверное) | R1 | не реализовано |
+| 02 | Editor | §cat§/§stat§/§mktemp§/§mv§ | R2 | не реализовано |
+| 03 | Docs / Markdown | серверные файлы; §pandoc§ при наличии | R2 | не реализовано |
+| 04 | Mail | проверенная серверная CLI, §sendmail§/§mail§ | R2+ | не реализовано |
+| 05 | Browser | в будущем WebView с доказанным SSH SOCKS-only | R3+ | не реализовано, Android proxy пока не доказан |
+| 06 | Viewer | §file§/§pdfinfo§/§pdftoppm§/SFTP | R2 | не реализовано |
+| 09 | Processes | §ps§/§kill§ | R1.5+ | не реализовано |
+| 11 | Network | §ss§/§ip§ | R1.5+ | не реализовано |
+| 13 | Disks | §lsblk§/§df§/§du§/§findmnt§ | R2+ | не реализовано |
+| 14 | Server Setup | §apt-get§/§systemctl§/§fail2ban§/§ufw§ | R2+ после безопасного согласия | не реализовано |
+| AI | необязательная §ai§/llama.cpp | серверный §llama-cli§ + обёртка | позже | не реализовано |
+
+**Правило:** источник логов или директория недоступны = ошибка/§unsupported§, не пустой успешный список. Без AI работают Files и Logs.
 
 ## 2. Общие модули клиента
 
-| CORE | Модуль | Статус |
+| CORE | Модуль | Фактический статус Qt |
 |---|---|---|
-| 01 | Каркас: CMake, Qt 6.12, главное окно, стиль | не начато |
-| 02 | SSH-слой (подключение, ключи, ключ хоста, exec, PTY, SFTP, SOCKS) | не начато |
-| 03 | SessionManager (поколения, переподключение, проверка живости) | не начато |
-| 04 | TaskManager (прогресс, отмена, `unknown`) | не начато |
-| 05 | ResourceService / ResourceLocation | не начато |
-| 06 | AppDescriptor / ActionRouter, док, окна | не начато |
-| 07 | CredentialStore (защищённое хранилище) | не начато |
-| 08 | WorkspaceState на сервере | не начато |
-| 09 | Лицензирование Lemon Squeezy | не начато |
-| 10 | Подготовка сервера (модальное окно, второй вход, откат) | не начато |
-| 11 | Упаковка Windows, подпись, автообновление | не начато |
-| 12 | Сборка для Android-планшета | не начато |
+| 01 | CMake + C++20 + Qt Quick/QML | **каркас есть; native Windows/Android билд не доказан** |
+| 02 | SSH/libssh2 и host fingerprint | **код есть:** пароль/проверка host key/read-only SFTP; PTY, forwarding, key auth нет |
+| 03 | SessionManager / постоянное SSH соединение | **не реализовано**; текущий SFTP листинг переподключается |
+| 04 | TaskManager / операции / §unknown§ | не реализовано |
+| 05 | ResourceLocation / FileService | частично: SFTP список и пути; типизированная multi-server модель не реализована |
+| 06 | QML Desktop Shell, окна, dock, launcher | **только черновой §Main.qml§**; **эталон не реализован** |
+| 07 | Secure credentials | не реализовано (пароль в RAM) |
+| 08 | WorkspaceState только на Linux | не реализовано |
+| 09 | Лицензирование Lemon Squeezy | не реализовано в Qt |
+| 10 | Подготовка сервера с подтверждением и откатом | не реализовано |
+| 11 | Windows EXE + deployment | не проверено |
+| 12 | Android arm64 APK + touch | не проверено; Android — **первая очередь**, не R3 |
+| 13 | Smart Files full UX / transfers | не реализовано |
+| 14 | Logs analysis/synthesis | не реализовано |
 
-## 3. Этапы
+## 3. Этапы и приоритеты
 
-| Этап | Содержание |
-|---|---|
-| R0 | каркас, SSH-слой, профили и ключи хоста, переподключение, терминал, подготовка сервера, лицензия, пакет Windows |
-| R1 | Files и передача, Editor, Services, Logs, Processes, Network, Search |
-| R2 | Docs (Markdown, PDF), Mail, Viewer, Disks, Browser, необязательный `ai` |
-| R3 | интеграция приложений, рабочие пространства на сервере, Android |
-| R4 | расширенные функции (Containers, Jobs, Backup — по решению) |
+| Этап | Направление | Критерий |
+|---|---|---|
+| **R0.1 (исходники)** | QML/CMake + SHA256 host pin + password SSH + SFTP read-only | Пока не квалифицирован на устройствах |
+| **R0.2 / Sprint 1** | **точный Desktop Shell по скетчу**, постоянная SSH-сессия, совместимость Windows и Android | реальные сборки, реальный Debian, visual diff master-screen, отказ при неверном ключе |
+| **R1 / Sprint 2** | **Smart Files**, безопасные передачи, tasks/unknown, минимум Terminal | файлы на Debian, реальные обрывы/конфликты/Unicode, обе ОС |
+| **R1.5 / Sprint 3** | **Logs**, journald, фильтры, повторы, объяснимые сводки, поддержка Services/System | источники и доказательства событий, реальный Debian, реальные UI-сценарии |
+| **R2+** | Editor, Docs/PDF, Mail, Server Setup | серверные CLI и проверенные пользовательские сценарии |
+| **R3+** | Browser over verified SSH proxy, media, licensing/release | без direct-network fallback, обе платформы |
+| **Позже** | опциональный §ai§, расширенные интеграции | только после реальных испытаний |
+
+**Уже в R0.2** создаётся desktop-shell, не откладывается на R1.5/R3. **Android — цель с первого спринта**, а не последняя платформа. Документ [FORTIQ_DESKTOP_BLUEPRINT](FORTIQ_DESKTOP_BLUEPRINT.md) описывает техническую последовательность.
 
 ## 4. Правила приёмки
 
@@ -62,6 +71,8 @@
 2. Подставной сервер допускается для разбора вывода и логики, но не подтверждает готовность.
 3. Для каждого окна: ошибка показывается ошибкой, а не пустым списком.
 4. Не описывать цель как реализованное в README, на сайте и в справке.
+5. UI принимается по точному 1536×1024 master screenshot (хеш в [UI SPEC](UI_SPEC_V1.md)); сравнение рендеринга и адаптивный Android-тест обязательны, помимо функциональных SSH-испытаний.
+6. Logs — без AI: факты должны иметь ссылку на источник; вероятная причинная связь никогда не выдается за подтвержденную причину.
 
 ## Уроки прототипа
 

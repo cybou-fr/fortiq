@@ -4,7 +4,7 @@
 
 ## Migration constraints, not negotiable
 
-1. Not a DevOps dashboard. A universal remote Linux desktop with Files → Documents → Mail → Browser/media and systems tools; optional AI later.
+1. Not a DevOps dashboard. **Exact master-screenshot desktop UI** (not merely inspired by it) → **Smart Files** → **Logs** (deterministic analysis without AI) → supporting Terminal/System → Editor/Documents → Mail → Browser/media; AI optional later. [UI SPEC](UI_SPEC_V1.md), [Files](SMART_FILES_SPEC.md), [Logs](LOGS_INTELLIGENCE_SPEC.md).
 2. `GUI → SSH → existing Linux CLI/SFTP → GUI`. No new server daemon/agent, no HTTP backend or client-side IMAP/SMTP/FTP fallback.
 3. Linux retains all persistent work data and tool/workspace settings. Only minimal bootstrap (address, trusted host keys, credentials protected at rest when introduced) and separate commercial license state may persist locally.
 4. A workspace operation binds to an immutable server identity, account and path. On SSH disconnect, avoid replaying writes. `unknown` means the remote action may have happened.
@@ -13,23 +13,25 @@
 
 ## Completed in R0.1 source (not yet qualified by a full Qt build)
 
-- Qt 6.8+ CMake application with QML module and desktop/mobile navigation.
+- Qt 6.8+ CMake application with QML module and desktop/mobile navigation **only as an initial layout**. It does NOT match the exact owner screenshot ([UI SPEC](UI_SPEC_V1.md)) yet.
 - `RemoteController`: asynchronous calls on a worker pool, status, server affinity via generation token, remembered bootstrap only.
 - `SshClient`: native libssh2 TCP/SSH handshake, host-key fingerprint read and SHA256 pin comparison **before user authentication**; SFTP directory listing (read-only), no shell execution.
 - Files: home-directory listing, directory navigation, parent path, refresh; directories and regular files displayed separately.
 - Tests for rejecting ambiguous remote path segments.
 - Builds depend on **target-ABI-compatible libssh2** with crypto dependencies; Windows and Android validation has not been completed. Do not report these platforms as tested.
 
-## Vertical slices to deliver
+## Vertical slices to deliver (updated binding priorities)
 
 | Milestone | User value | Engineering acceptance |
 | --- | --- | --- |
-| **R0.1 — Bootstrap & Files read-only** | Connect and explore Linux home via SSH | Windows + Android arm64 builds, actual sshd/SFTP integration, unknown host explicit verification, changed key rejected, Unicode/permission/error cases, app background/resume tests |
-| **R0.2 — Credential & session hardening** | Connect securely to real configured servers | Ed25519 private-key auth via platform key store or secure credential provider, no plaintext key files, persistent session, bounded reconnect, cancellation and late-result isolation, host verification, password clearing, device rotation |
-| **R1 — Everyday Files & Editor** | Open text, edit, safe save, file transfers | SFTP upload/download progress, abort/unknown result, remote temp+rename and version check, safe conflict UI, large file and Unicode tests, one server-bound action context |
-| **R1.5 — Workspace** | Useful home screen with apps and tasks | Stable app descriptors, server-specific windows/tabs on desktop, mobile stack navigation, statuses/notifications, remote workspace persistence, setup capability discovery |
-| **R2 — Documents & Mail** | Daily working application | Linux CLI-backed document preview, PDF viewer and server-side mail CLI; no direct mobile IMAP/SMTP; mail delivery is verified, not assumed |
-| **R3 — Browser / Media / licensing / release** | Broader Linux desktop | Proven SSH-only proxying per platform, explicitly no direct WebView fallback; verified subscription/license flow, lifecycle and packaging |
+| **R0.1 — existing source baseline** | Preliminary connect and read-only SFTP navigation | Not yet proven on Windows and Android; existing code is not pixel-fidelity UI |
+| **R0.2 / Sprint 1 — exact shell & session** | Windowed desktop **matching the owner's sketch**, authenticated persistent SSH + SFTP listing | screenshot/diff at master 1536×1024, correct real Window/Android build, fingerprint checks, WSL/VPS |
+| **R1 / Sprint 2 — Smart Files** | Remote search/collections/previews and safe transfers with visible tasks; minimum Terminal | real Debian and Android/Windows acceptance, conflict/permission/offline testing, Task §unknown§ |
+| **R1.5 / Sprint 3 — Logs flagship** | Scoped journald and service logs, filters, live tail, repeated error groups, explainable evidence-linked summaries without AI; System/Services support | real journal and permissions, rotation and network loss, UI material fidelity |
+| **R2 — Editor/Docs/Mail + server setup** | Deeper everyday Linux working apps | native/CLI proofs, explicit consent on changes |
+| **R3 — Browser/media/licensing/release** | Larger product reach | verified SSH proxy without fallback on both platforms, commercial release gates |
+
+Android and Windows are **both first-class from Sprint 1**; no milestone moves Android into a late “platform phase”. Shell fidelity is **blocking**, not optional polish.
 
 ### Browser Android constraint
 
@@ -53,4 +55,4 @@ Qt WebEngine and Windows WebView2 do not provide a single browser component suit
 
 ## Old documents
 
-`README.md` is authoritative for **current Qt implemented** status. `docs/PRODUCT_SCOPE.md`, `docs/ARCHITECTURE.md`, `docs/DEVELOPMENT_MATRIX.md`, `docs/SSH_FRONTEND_CONTRACT.md` and `AGENTS.md` retain older Flutter-era implementation statements. Treat them as product requirements/historical background only until incrementally updated; do not transfer their “implemented” claims to the new Qt client. The legacy implementation is available at `flutter-final`.
+**Authority:** [SSH_FRONTEND_CONTRACT](SSH_FRONTEND_CONTRACT.md) defines work transport and persistence; [UI SPEC](UI_SPEC_V1.md) visual fidelity; [PRODUCT_SCOPE](PRODUCT_SCOPE.md) product scope; [Smart Files](SMART_FILES_SPEC.md) and [Logs](LOGS_INTELLIGENCE_SPEC.md) feature contracts; this migration and [DEVELOPMENT_MATRIX](DEVELOPMENT_MATRIX.md) milestones; [README](../README.md) only current implemented source status. Historical Flutter tests at `flutter-final` do not qualify Qt features.
