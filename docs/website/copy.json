@@ -76,7 +76,10 @@
     "tabFiles": "Files",
     "tabLogs": "Logs",
     "tabTerminal": "Terminal",
-    "dock": "Workspace"
+    "dock": "Workspace",
+    "referenceAlt": "Approved exact 1536×1024 FORTIQ desktop design reference, not a screenshot of the running Qt application.",
+    "visualTitleReference": "Approved desktop design reference",
+    "visualNoteReference": "Exact owner-supplied reference image, unchanged. This is a visual target, not a verified running Qt screenshot."
   },
   "fr": {
     "title": "FORTIQ — Votre Linux. Un nouveau bureau.",
@@ -155,7 +158,10 @@
     "tabFiles": "Fichiers",
     "tabLogs": "Journaux",
     "tabTerminal": "Terminal",
-    "dock": "Bureau"
+    "dock": "Bureau",
+    "referenceAlt": "Visuel de référence approuvé du bureau FORTIQ (1536×1024), et non une capture de l'application Qt en cours d'exécution.",
+    "visualTitleReference": "Référence graphique approuvée",
+    "visualNoteReference": "Image originale exacte, non retouchée. C'est un objectif graphique, pas une capture vérifiée de l'application Qt."
   },
   "ru": {
     "title": "FORTIQ — Ваш Linux. Новый рабочий стол.",
@@ -234,6 +240,9 @@
     "tabFiles": "Файлы",
     "tabLogs": "Журналы",
     "tabTerminal": "Терминал",
-    "dock": "Рабочий стол"
+    "dock": "Рабочий стол",
+    "referenceAlt": "Оригинальный утверждённый эскиз FORTIQ 1536×1024, не скриншот работающего Qt-приложения.",
+    "visualTitleReference": "Утверждённый оригинальный эскиз",
+    "visualNoteReference": "Оригинал без изменений. Это визуальный эталон, а не подтверждённый снимок работающего Qt-приложения."
   }
 }

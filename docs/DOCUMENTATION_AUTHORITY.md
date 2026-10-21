@@ -27,7 +27,7 @@
 6. **Deferred:** browser until its SSH-only routing is provable on Windows and Android; mail/docs/editor progressively after flagship basis; optional CPU Linux `ai` later.
 7. **Status:** Qt R0.1 source only (password login + pinned host fingerprint + SFTP list + RemotePath test); no qualified Windows/Android binaries, mature shell, Smart Files, Logs or license client.
 8. **Git workflow:** direct commits to `main`; no branches by default. The Flutter reference exists only at tag `flutter-final`.
-9. **Design verification:** master PNG SHA-256 recorded in UI SPEC. **The original image is NOT yet checked into Git**; golden pixel-comparison cannot run until it is. This is a tracked blocker, not a reason to choose a new wallpaper.
+9. **Design verification:** master PNG SHA-256 recorded in UI SPEC. **The exact image is not yet committed**. The verified import process is [tool/install_master_reference.py](../tool/install_master_reference.py); once imported it is copied into both `docs/design/reference/` and `www/assets/`, allowing the marketing preview to display the byte-exact design reference. Golden Qt pixel-comparison still requires the running app and separate screenshot evidence.
 
 ## Scope/acceptance matrix
 
@@ -52,7 +52,7 @@ No one should move a planned feature into “implemented” because its document
 
 ## Separate marketing website caveat
 
-Existing static pages under `www/` illustrate an earlier product concept and currently emphasize Windows and many unimplemented apps. They are **not authoritative UI references and must not be presented as a shipped Qt product**. Before publishing a redesigned marketing website, align its EN/FR/RU pages with the exact screenshot, Windows+Android target, Smart Files/Logs priorities and evidence-backed feature availability. Documentation coherence does not imply the marketing website is already migrated.
+Static pages in `www/` have been rewritten for Windows+Android, Smart Files, Logs, local Qt/SSH architecture and an explicit **development / no-download-yet** status. Their CSS desktop illustration remains clearly labeled conceptual until the verified original screenshot is imported; it does **not** qualify as exact UI or an app build. The site's source of truth is `docs/website/site-template.html` + `copy.json` and generator `generate.py`.
 
 ## Automated checks
 

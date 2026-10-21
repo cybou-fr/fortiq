@@ -1,131 +1,38 @@
-# Поддержка сайта Fortiq
+# FORTIQ static product website — EN / FR / RU
 
-Это внутренняя инструкция приватного проекта. **Текущий сайт — исторический концепт, не точный UI-макет FORTIQ и не доказательство готовности Windows/Android.** Перед новым внешним выпуском страницы должны быть согласованы с [UI SPEC](../UI_SPEC_V1.md) и реальным статусом [README](../../README.md).
-Публичные файлы сайта находятся
-только в `www`: английская `index.html`, французская `fr/index.html`, русская
-`ru/index.html`, общие `styles.css`, `app.js` и два PNG в `assets`.
-Для размещения копируйте содержимое `www`, не корень проекта или папку `docs`.
+**Status:** updated conceptual marketing preview, not a public release or download destination. The site is aligned with the new architecture: **local Qt/C++ QML Desktop Shell for remote Debian/Ubuntu**, Windows and Android first; flagship **Smart Files** and **Logs**.
 
-Сайт представляет FORTIQ как устанавливаемый **графический frontend к
-консольным приложениям Linux, выполняемым исключительно через SSH**.
-Каждому инструменту соответствует существующая серверная утилита; у клиента нет прямой SMTP/IMAP-связи. Browser работает
-через SSH SOCKS forwarding. Лицензирование Lemon Squeezy — отдельная
-служебная операция приложения. Это обязательное решение:
-[SSH_FRONTEND_CONTRACT](../SSH_FRONTEND_CONTRACT.md). Визуальный нормативный эталон — [UI SPEC v1](../UI_SPEC_V1.md), первые приложения — [Smart Files](../SMART_FILES_SPEC.md) и [Logs](../LOGS_INTELLIGENCE_SPEC.md).
-Пользователям не предлагаются репозиторий, исходный код, SDK или
-самостоятельная сборка. Тексты не обещают
-ещё не реализованные возможности: на 18.10.2026 приложение ещё не разработано
-(клиент создаётся заново на C++/Qt), поэтому сайт нельзя публиковать как
-описание готового продукта. Контакты, цены и адрес получения продукта
-добавляются только на основе подтверждённых данных.
+## Single source and regeneration
 
-Согласованные тарифы опубликованы в разделе `#pricing` на EN/FR/RU:
-**FORTIQ INTRO — 2 € на 14 дней**, разовая покупка без автопродления;
-**FORTIQ PRO — 39,90 € в год**, годовая подписка с ежегодным продлением.
-Оба тарифа включают полный функционал. До предоставления адреса checkout
-карточки тарифов не содержат активных кнопок оплаты.
+- `docs/website/site-template.html`: shared accessible HTML skeleton.
+- `docs/website/copy.json`: localized EN / FR / RU copy and honest capability/status labels.
+- `docs/website/generate.py`: deterministic Python stdlib generator.
+- `www/index.html`, `www/fr/index.html`, `www/ru/index.html`: generated outputs.
+- `www/styles.css`: responsive navy/blue/glass design.
 
-Адрес загрузки или заявки пока не предоставлен. До его появления основной
-призыв открывает возможности продукта, а раздел начала работы объясняет
-установку приложения и подключение к серверу. После получения настоящего адреса
-обновить призыв на первом экране и добавить кнопку в `#windows`.
-
-Сайт работает без сборки, внешних шрифтов и CDN. Все 12 инструментов доступны
-без JavaScript; скрипт добавляет фильтр категорий и переключение иллюстрации
-между рабочими и системными инструментами. Языковой переход — обычная ссылка
-между страницами, английский в корне открывается по умолчанию. Язык браузера
-не меняет выбор; перенаправлений, cookie и трекеров нет.
-
-Локальный просмотр из корня проекта:
-
-```powershell
-python -m http.server 8080 --bind 127.0.0.1 --directory www
+```sh
+python3 docs/website/generate.py
+python3 tool/check_docs_consistency.py
 ```
 
-Адрес: `http://127.0.0.1:8080`. Проверять мобильную компоновку, навигацию,
-фильтры и отсутствие ссылок на внутренние материалы перед публикацией.
+Do not hand-edit generated HTML without updating the generator source and regenerating all locales. No JS, external fonts, trackers, cookies or mandatory network dependencies are required.
 
-## Как показывать ценность FORTIQ при подготовке материалов
+## Design master screenshot (still pending binary import)
 
-**Позиционирование:** «Ваш Linux-сервер в удобном рабочем столе».
-Ключевой пользователь — разработчик или небольшая команда с Linux VPS
-и Windows-компьютером. Это гипотеза первичного сегмента.
+The exact owner-approved 1536×1024 PNG has SHA-256 `852b5944c61ebb8551cc10dadeda47e7924b92baec0fd4b7758ffe2a5c6ffaef`.
 
-Важнее каталог из 12 иконок — **доказуемый сценарий**:
-- реальный Linux-хост → SSH → Files (поиск/операции) → Logs (журнал/синтез с подтверждёнными источниками) → состояние служб → конфигурация →
-  проверка → подтверждённый результат;
-- реальный серверный файл → Editor → diff → сохранение → проверка;
-- первое подключение → видимый Server Setup → read-only результат
-  и первый полезный переход.
+Run `python3 tool/install_master_reference.py /path/to/fortiq-shell-master.png` with the actual original file. It copies unchanged PNG bytes to `docs/design/reference/fortiq-shell-master.png` and `www/assets/fortiq-shell-master.png` and regenerates the pages.
 
-**До выпуска** использовать только подтверждённые кадры и не обещать
-несуществующие переходы, «ремонт одним нажатием», автоматический откат
-любой операции или гарантированное выполнение за 3 минуты. Скорость
-проверять на добровольных пользователях и сравнивать с их привычной
-процедурой для той же задачи; текущее время — гипотеза UX, не
-маркетинговое обещание.
+Before the binary is imported, the website uses a **clearly labeled CSS conceptual illustration** which MUST NOT be treated as the target screenshot or runtime app. After import, the website shows the **exact PNG** labeled as the approved design reference, still **not** as a running Qt screenshot.
 
-Прайсинг **не меняется**: Intro 2 € / 14 дней, Pro 39,90 € / год,
-одинаковый функционал, без автоматического перехода Intro → Pro.
-После появления реального релиза можно добавить видео/анимацию
-доказанного рабочего процесса и ясный CTA к существующим тарифам.
-Новый тариф, backend аналитики и прямые соединения клиента не нужны.
+The binding contract for QML remains [UI SPEC](../UI_SPEC_V1.md), not this marketing page.
 
-Детальные критерии VALUE-01…06 и FLOW-11/12:
-[DEVELOPMENT_MATRIX](../DEVELOPMENT_MATRIX.md). Без согласия пользователя
-не собирать журналы, файлы, SSH-команды или идентификаторы хостов.
+## Release discipline
 
-### AI — только будущая концепция
+- Do not publish download buttons or imply Qt Windows/Android builds exist without actual evidence.
+- Do not present Smart Files advanced operations, Logs, Browser SSH proxy, license flow or AI as implemented.
+- Existing Qt R0.1 source has read-only SFTP path/listing and preliminary SSH only.
+- Before external publication, verify domain, asset attribution, security headers, translations, actual links, mobile responsiveness and brand rights.
+- No automatic checkout/payment CTA until Lemon Squeezy has been integrated and tested.
 
-[AI_CLI](../AI_CLI.md): необязательная Linux-команда **`ai`**
-через SSH над существующим **llama.cpp CPU-only** и GGUF.
-AI запускается по запросу **без API-порта и фонового сервиса**.
-На слабых VPS AI отключён, остальные инструменты работают.
-
-Linux-сервер сможет кешировать повторные точные вопросы/контекст/ответы,
-чтобы не запускать модель снова. TTL, контроль изменений контекста,
-ограничения размера и согласие для чувствительных данных обязательны;
-показывать кеш как совет, а не свежую проверку.
-Никаких внешних AI API и новых тарифов.
-
-**Не рекламировать как готовую функцию:** экспериментальные Linux `ai` и Explain были
-в историческом Flutter-прототипе (`flutter-final`), но отсутствуют в активном Qt R0.1.
-Нет квалифицированной GGUF, установщика и CPU-only испытаний; не обещать скорость,
-экономию ресурсов или кеш как подтверждённый результат.
-
-## Тексты и локализация
-
-`generate.py` — внутренняя единая основа разметки и текстов EN/FR/RU.
-После изменений запустить из корня проекта `python docs/website/generate.py`.
-Полученные HTML уже статические: хостингу не нужен Python или этап сборки.
-Стили и скрипт редактируются напрямую в `www`. Не копировать генератор в сайт.
-
-Проверять все три страницы, атрибуты lang/hreflang, активный язык, перевод
-метаданных и подписей, формы счётчика инструментов, длинные строки на мобильных
-экранах. Соблюдать доступный контраст, клавиатурный фокус и reduced-motion.
-
-## Внутренние материалы
-
-Устаревшие архивные указатели `PROJECT_README.md` и `DEVELOPMENT_MATRIX.md` удалены; актуальные документы
-лежат в корне проекта и в `docs`, главный контракт — `docs/SSH_FRONTEND_CONTRACT.md`.
-`GENERATION_PROMPTS.md` содержит промпты создания брендовых PNG и также остаётся
-во внутренней документации.
-
-Иллюстрация рабочего стола выполнена HTML/CSS и подписана как иллюстрация;
-демонстрационные пути и вывод терминала не являются данными пользователя.
-
-## Обязательная проверка текста сайта
-
-- Каждая демонстрируемая рабочая операция управляет **проверенной существующей Linux CLI через SSH**; Linux хранит рабочие данные и настройки, выполняет вычисления.
-- Почтовый ящик, вложения и отправка — только **серверная CLI** через SSH;
-  прямые SMTP/IMAP клиенты и независимое получение почты из C++/Qt не обещаются.
-- Покупка/лицензия Lemon Squeezy — отдельно от серверных функций.
-- Для инструмента без установленной CLI — сначала выбрать проверенный Linux-пакет и установить на сервере через SSH; свой backend по умолчанию не создаётся;
-  текст сайта не обещает будущую capability как уже выпущенную.
-
-- FORTIQ — только графическое представление/управление, не самостоятельный
-  файловый, почтовый или вычислительный backend.
-- Шифрование **данных на диске Linux** — будущее направление, не готовая возможность;
-  текущий SSH шифрует соединение.
-- Переход на новый транспорт и собственные серверные инструменты не обещаются
-  без конкретной необходимости и отдельного решения.
+See [Documentation Authority](../DOCUMENTATION_AUTHORITY.md).

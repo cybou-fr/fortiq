@@ -21,6 +21,22 @@ def render(language: str, content: dict) -> str:
               "ruCurrent": 'aria-current="page"' if language == "ru" else ""}
     for tag, arr in (("filesTag", content["filesTags"]), ("logsTag", content["logsTags"])):
         values.update({f"{tag}{i}": v for i, v in enumerate(arr)})
+    reference = ROOT / "www/assets/fortiq-shell-master.png"
+    if reference.exists():
+        from hashlib import sha256
+        digest = sha256(reference.read_bytes()).hexdigest()
+        expected = "852b5944c61ebb8551cc10dadeda47e7924b92baec0fd4b7758ffe2a5c6ffaef"
+        if digest != expected:
+            raise ValueError("Invalid exact FORTIQ master image SHA-256: " + digest)
+        values["referenceImage"] = (
+            '<img class="approved-design-reference" src="'
+            + prefix + 'assets/fortiq-shell-master.png" alt="'
+            + escape(content["referenceAlt"], quote=True) + '">'
+        )
+        values["visualTitle"] = content["visualTitleReference"]
+        values["visualNote"] = content["visualNoteReference"]
+    else:
+        values["referenceImage"] = ""
     result = TEMPLATE
     for key, value in values.items():
         result = result.replace("{{{" + key + "}}}", str(value))
