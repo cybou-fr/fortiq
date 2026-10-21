@@ -102,6 +102,7 @@ ctest --test-dir build -C Release --output-on-failure
 | [AI_CLI](docs/AI_CLI.md) | спецификация необязательной серверной команды `ai` |
 | [LICENSING](docs/LICENSING.md), [LICENSING_SETUP](docs/LICENSING_SETUP.md) | тарифы и подключение Lemon Squeezy |
 | [QT_MIGRATION](docs/QT_MIGRATION.md) | план и фактическое состояние перехода на Qt |
+| [DESKTOP_BLUEPRINT](docs/FORTIQ_DESKTOP_BLUEPRINT.md) | контракт desktop-shell, архитектура, 10 классов, 3 спринта, Windows/Android и стенды Debian |
 | [AGENTS](AGENTS.md) | правила разработки для людей и агентов |
 
 ## Структура репозитория
