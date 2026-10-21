@@ -45,8 +45,13 @@ def render(language: str, content: dict) -> str:
         raise ValueError("Unexpanded placeholder in " + language)
     return result
 
-for language, content in COPY.items():
-    target = ROOT / "www" / (language if language != "en" else "") / "index.html"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(render(language, content), encoding="utf-8")
-    print("Wrote", target.relative_to(ROOT))
+def main() -> None:
+    for language, content in COPY.items():
+        target = ROOT / "www" / (language if language != "en" else "") / "index.html"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(render(language, content), encoding="utf-8")
+        print("Wrote", target.relative_to(ROOT))
+
+
+if __name__ == "__main__":
+    main()

@@ -108,6 +108,7 @@ ctest --test-dir build -C Release --output-on-failure
 | [Smart Files](docs/SMART_FILES_SPEC.md) | первый flagship: навигация, интеллектуальный поиск, операции и безопасность |
 | [Logs](docs/LOGS_INTELLIGENCE_SPEC.md) | второй flagship: Linux-журналы, корреляция и проверяемые сводки без AI |
 | [Documentation Authority](docs/DOCUMENTATION_AUTHORITY.md) | иерархия контрактов, решения, выявленные риски и способ проверки согласованности |
+| [Static website](docs/website/README.md) | обновлённые EN/FR/RU страницы, генератор и правила публикации без ложных релизных обещаний |
 | [DESKTOP_BLUEPRINT](docs/FORTIQ_DESKTOP_BLUEPRINT.md) | контракт desktop-shell, архитектура, 10 классов, 3 спринта, Windows/Android и стенды Debian |
 | [AGENTS](AGENTS.md) | правила разработки для людей и агентов |
 

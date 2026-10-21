@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """FORTIQ documentation-only integrity check. No dependencies, no network."""
 from pathlib import Path
+import hashlib
 import re
+import runpy
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,8 +64,26 @@ for target in ("README.md", "AGENTS.md", "docs/PRODUCT_SCOPE.md",
         if name not in text:
             errors.append(f"{target}: missing contract link {name}")
 
+# Verify that the site is reproducibly generated from the shared sources.
+website = runpy.run_path(str(ROOT / "docs/website/generate.py"))
+for lang, content in website["COPY"].items():
+    path = ROOT / "www" / (lang if lang != "en" else "") / "index.html"
+    if not path.is_file():
+        errors.append(f"missing generated website: {path.relative_to(ROOT)}")
+    elif path.read_text(encoding="utf-8") != website["render"](lang, content):
+        errors.append(f"website drift: regenerate {path.relative_to(ROOT)}")
+
 image = ROOT / "docs/design/reference/fortiq-shell-master.png"
-if not image.is_file():
+site_image = ROOT / "www/assets/fortiq-shell-master.png"
+expected_sha = "852b5944c61ebb8551cc10dadeda47e7924b92baec0fd4b7758ffe2a5c6ffaef"
+if image.exists() != site_image.exists():
+    errors.append("master PNG must be imported into both docs/reference and www/assets")
+elif image.is_file():
+    for f in (image, site_image):
+        actual_sha = hashlib.sha256(f.read_bytes()).hexdigest()
+        if actual_sha != expected_sha:
+            errors.append(f"non-master/modified PNG {f.relative_to(ROOT)}: {actual_sha}")
+else:
     print("WARN: exact master screenshot not yet in Git; pixel-diff gate BLOCKED")
 
 if errors:
