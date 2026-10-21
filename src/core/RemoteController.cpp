@@ -489,7 +489,62 @@ void RemoteController::startTransfer(int id, int policyValue) {
     }));
 }
 
+void RemoteController::runOperation(const QString &doneMessage, std::function<SshResult(SshSession &)> op) {
+    if (!m_connected || m_operationBusy) return;
+    ConnectionRequest req;
+    req.host = m_host; req.port = m_port; req.user = m_user;
+    req.password = m_password; req.keyPath = m_keyPath;
+    req.expectedHostFingerprint = QSettings{}.value(pinKey()).toString();
+    req.directory = m_currentDirectory;
+    const int token = m_generation;
+    const QString folder = m_currentDirectory;
+    m_operationBusy = true;
+    emit operationBusyChanged();
+    auto slot = m_session;
+    auto *watcher = new QFutureWatcher<SshResult>(this);
+    connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, token, folder, doneMessage] {
+        const SshResult r = watcher->result();
+        watcher->deleteLater();
+        if (token != m_generation) return;
+        m_operationBusy = false;
+        emit operationBusyChanged();
+        const bool ok = r.status == SshResult::Status::Ok;
+        // The folder changed (or may have): drop its RAM copy and re-list.
+        if (ok || r.code == "unknown") {
+            m_cache.remove(folder);
+            m_cache.remove(trashDirectory());
+            if (m_currentDirectory == folder) refresh();
+        }
+        emit operationFinished(ok, ok ? doneMessage : r.message, r.code, r.directory);
+    });
+    watcher->setFuture(QtConcurrent::run(&m_pool, [slot, req, op] {
+        if (!*slot) *slot = std::make_unique<SshSession>();
+        SshSession &session = **slot;
+        if (!session.isOpen()) {
+            const SshResult opened = session.open(req); // pin re-checked
+            if (opened.status != SshResult::Status::Ok) return opened;
+        }
+        // Never replay a mutation after a drop: the result says "unknown".
+        return op(session);
+    }));
+}
+
+void RemoteController::createFolder(const QString &name) {
+    const QString dir = m_currentDirectory;
+    runOperation(QStringLiteral("Dossier « %1 » créé.").arg(name.trimmed()),
+                 [dir, name](SshSession &s) { return s.makeDirectory(dir, name); });
+}
+void RemoteController::renameEntry(const QString &path, const QString &newName) {
+    runOperation(QStringLiteral("Renommé en « %1 ».").arg(newName.trimmed()),
+                 [path, newName](SshSession &s) { return s.renameEntry(path, newName); });
+}
+void RemoteController::trashEntry(const QString &path) {
+    runOperation(QStringLiteral("« %1 » mis à la corbeille.").arg(path.section('/', -1)),
+                 [path](SshSession &s) { return s.moveToTrash(path); });
+}
+
 void RemoteController::disconnectServer() {
+    if (m_operationBusy) { m_operationBusy = false; emit operationBusyChanged(); }
     // Transfers are bound to this server: stop them, never redirect them.
     for (Transfer &t : m_transfers) {
         if (t.state == "queued" || t.state == "running" || t.state == "conflict") {

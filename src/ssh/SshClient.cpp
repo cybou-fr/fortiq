@@ -4,7 +4,9 @@
 #include <QByteArray>
 #include <QCryptographicHash>
 #include <QFile>
+#include <QDateTime>
 #include <QFileInfo>
+#include <QUrl>
 #include <QRandomGenerator>
 #include <QSaveFile>
 #include <QTcpSocket>
@@ -467,6 +469,136 @@ SshResult SshSession::upload(const QString &localPath, const QString &remoteDir,
     r.directory = finalPath;
     r.bytes = done;
     r.message = QStringLiteral("Uploaded");
+    return r;
+}
+
+QString SshSession::homeDirectory() const { return d->home; }
+
+namespace {
+bool validName(const QString &name) {
+    return !name.isEmpty() && name != "." && name != ".." && !name.contains('/')
+        && !name.contains(QChar::Null) && name.toUtf8().size() <= 255;
+}
+}
+
+SshResult SshSession::makeDirectory(const QString &dir, const QString &name)
+{
+    if (!isOpen()) return transferFail(QStringLiteral("SSH session is not open."));
+    const auto parent = cleanAbsolutePath(dir);
+    if (!parent || !validName(name.trimmed())) return transferFail(QStringLiteral("Invalid folder name."));
+    const QString target = *safeChildPath(*parent, name.trimmed());
+    const QByteArray p = target.toUtf8();
+    LIBSSH2_SFTP_ATTRIBUTES a{};
+    if (libssh2_sftp_stat_ex(d->sftp, p.constData(), static_cast<unsigned int>(p.size()), LIBSSH2_SFTP_LSTAT, &a) == 0)
+        return transferFail(QStringLiteral("« %1 » already exists.").arg(name.trimmed()), QStringLiteral("conflict"));
+    if (libssh2_sftp_mkdir_ex(d->sftp, p.constData(), static_cast<unsigned int>(p.size()), 0755) != 0) {
+        if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
+            d->close();
+            return transferFail(QStringLiteral("Connection lost; check whether the folder was created."), QStringLiteral("unknown"));
+        }
+        return transferFail(QStringLiteral("Cannot create the folder (permission error?)."));
+    }
+    SshResult r;
+    r.status = SshResult::Status::Ok;
+    r.directory = target;
+    r.message = QStringLiteral("Folder created");
+    return r;
+}
+
+SshResult SshSession::renameEntry(const QString &path, const QString &newName)
+{
+    if (!isOpen()) return transferFail(QStringLiteral("SSH session is not open."));
+    const auto source = cleanAbsolutePath(path);
+    if (!source || *source == "/" || !validName(newName.trimmed())) return transferFail(QStringLiteral("Invalid name."));
+    const auto target = safeChildPath(parentPath(*source), newName.trimmed());
+    if (!target) return transferFail(QStringLiteral("Invalid name."));
+    if (*target == *source) return transferFail(QStringLiteral("The name is unchanged."));
+    const QByteArray from = source->toUtf8(), to = target->toUtf8();
+    LIBSSH2_SFTP_ATTRIBUTES a{};
+    if (libssh2_sftp_stat_ex(d->sftp, to.constData(), static_cast<unsigned int>(to.size()), LIBSSH2_SFTP_LSTAT, &a) == 0)
+        return transferFail(QStringLiteral("« %1 » already exists.").arg(newName.trimmed()), QStringLiteral("conflict"));
+    // SFTP v3 rename never replaces an existing name.
+    if (libssh2_sftp_rename_ex(d->sftp, from.constData(), static_cast<unsigned int>(from.size()),
+                               to.constData(), static_cast<unsigned int>(to.size()), 0) != 0) {
+        if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
+            d->close();
+            return transferFail(QStringLiteral("Connection lost; check the folder before retrying."), QStringLiteral("unknown"));
+        }
+        return transferFail(QStringLiteral("Cannot rename (permission error or name taken meanwhile)."));
+    }
+    SshResult r;
+    r.status = SshResult::Status::Ok;
+    r.directory = *target;
+    r.message = QStringLiteral("Renamed");
+    return r;
+}
+
+SshResult SshSession::moveToTrash(const QString &path)
+{
+    if (!isOpen()) return transferFail(QStringLiteral("SSH session is not open."));
+    const auto source = cleanAbsolutePath(path);
+    const QString trash = d->home + QStringLiteral("/.local/share/Trash");
+    if (!source || *source == "/" || d->home.isEmpty() || *source == d->home
+        || d->home.startsWith(*source + "/") || trash.startsWith(*source + "/") || *source == trash)
+        return transferFail(QStringLiteral("This location cannot be moved to the Trash."));
+    if (source->startsWith(trash + "/"))
+        return transferFail(QStringLiteral("Already in the Trash. Permanent deletion is not available yet."));
+
+    auto statPath = [this](const QString &p, LIBSSH2_SFTP_ATTRIBUTES *a) {
+        const QByteArray b = p.toUtf8();
+        return libssh2_sftp_stat_ex(d->sftp, b.constData(), static_cast<unsigned int>(b.size()), LIBSSH2_SFTP_LSTAT, a) == 0;
+    };
+    auto ensureDir = [this, &statPath](const QString &p) {
+        LIBSSH2_SFTP_ATTRIBUTES a{};
+        if (statPath(p, &a)) return LIBSSH2_SFTP_S_ISDIR(a.permissions);
+        const QByteArray b = p.toUtf8();
+        return libssh2_sftp_mkdir_ex(d->sftp, b.constData(), static_cast<unsigned int>(b.size()), 0700) == 0;
+    };
+    LIBSSH2_SFTP_ATTRIBUTES srcAttr{};
+    if (!statPath(*source, &srcAttr)) return transferFail(QStringLiteral("The item no longer exists."));
+    for (const QString &p : { d->home + "/.local", d->home + "/.local/share", trash, trash + "/files", trash + "/info" })
+        if (!ensureDir(p)) return transferFail(QStringLiteral("Cannot prepare the Trash folder in your home."));
+
+    // Reserve a unique name by exclusively creating its .trashinfo first,
+    // as the specification requires; files/<name> is then the rename target.
+    const QString base = source->section('/', -1);
+    QString name = base;
+    LIBSSH2_SFTP_HANDLE *info = nullptr;
+    QByteArray infoPath;
+    for (int n = 1; n < 1000 && !info; ++n) {
+        name = n == 1 ? base : numberedName(base, n);
+        LIBSSH2_SFTP_ATTRIBUTES a{};
+        if (statPath(trash + "/files/" + name, &a)) continue;
+        infoPath = (trash + "/info/" + name + ".trashinfo").toUtf8();
+        info = libssh2_sftp_open_ex(d->sftp, infoPath.constData(), static_cast<unsigned int>(infoPath.size()),
+            LIBSSH2_FXF_WRITE | LIBSSH2_FXF_CREAT | LIBSSH2_FXF_EXCL, 0600, LIBSSH2_SFTP_OPENFILE);
+    }
+    if (!info) return transferFail(QStringLiteral("Cannot reserve a name in the Trash."));
+    const QByteArray content = "[Trash Info]\nPath=" + QUrl::toPercentEncoding(*source, "/")
+        + "\nDeletionDate=" + QDateTime::currentDateTime().toString(Qt::ISODate).left(19).toUtf8() + "\n";
+    const auto wrote = libssh2_sftp_write(info, content.constData(), static_cast<size_t>(content.size()));
+    const bool written = static_cast<qsizetype>(wrote) == content.size();
+    libssh2_sftp_close(info);
+    auto dropInfo = [this, &infoPath] {
+        libssh2_sftp_unlink_ex(d->sftp, infoPath.constData(), static_cast<unsigned int>(infoPath.size()));
+    };
+    if (!written) { dropInfo(); return transferFail(QStringLiteral("Cannot write the Trash record.")); }
+
+    const QByteArray from = source->toUtf8(), to = (trash + "/files/" + name).toUtf8();
+    if (libssh2_sftp_rename_ex(d->sftp, from.constData(), static_cast<unsigned int>(from.size()),
+                               to.constData(), static_cast<unsigned int>(to.size()), 0) != 0) {
+        if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
+            d->close();
+            return transferFail(QStringLiteral("Connection lost; check the folder and the Trash before retrying."), QStringLiteral("unknown"));
+        }
+        dropInfo();
+        // No copy-and-delete fallback: that would not be reversible or atomic.
+        return transferFail(QStringLiteral("Cannot move to the Trash (permission error, or the item is on another filesystem)."));
+    }
+    SshResult r;
+    r.status = SshResult::Status::Ok;
+    r.directory = trash + "/files/" + name;
+    r.message = QStringLiteral("Moved to the Trash");
     return r;
 }
 

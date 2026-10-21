@@ -65,6 +65,17 @@ public:
     // under a backup name until the new file is in place.
     SshResult upload(const QString &localPath, const QString &remoteDir, const QString &name,
                      ConflictPolicy policy, const TransferProgress &progress);
+    // New folder `name` in `dir` (mode 0755 before umask); never reuses an
+    // existing name ("conflict").
+    SshResult makeDirectory(const QString &dir, const QString &name);
+    // Renames within the same folder; refuses an existing target ("conflict").
+    SshResult renameEntry(const QString &path, const QString &newName);
+    // Moves a file or folder to the user's freedesktop.org Trash
+    // (~/.local/share/Trash: files/ + info/<name>.trashinfo), the format used
+    // by gio, trash-cli and desktop file managers, so it stays restorable.
+    // Never falls back to deletion; a folder on another filesystem fails.
+    SshResult moveToTrash(const QString &path);
+    QString homeDirectory() const;
     bool isOpen() const;
     void close();
 

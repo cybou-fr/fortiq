@@ -88,6 +88,36 @@ Item {
         if (entry.directory || entry.link) { filterText = ""; controller.navigate(entry.path) }
         else controller.openFile(entry.path)
     }
+    // ── file operations ────────────────────────────────────────────────
+    property string pendingOp: ""
+    property var pendingEntry: null
+    property string notice: ""
+    property bool noticeError: false
+    function showNotice(text, isError) { notice = text; noticeError = isError; noticeTimer.restart() }
+    function askNewFolder() {
+        if (!connected) return
+        pendingOp = "newFolder"; pendingEntry = null
+        opDialog.openWith("Nouveau dossier", "Dans " + location, "Créer", false, true, "Nouveau dossier")
+    }
+    function askRename(entry) {
+        if (!entry || !connected) return
+        pendingOp = "rename"; pendingEntry = entry
+        opDialog.openWith("Renommer", entry.directory ? "Dossier" : "Fichier", "Renommer", false, true, entry.name)
+    }
+    function askTrash(entry) {
+        if (!entry || !connected) return
+        if (controller.trashDirectory.length > 0 && String(entry.path).startsWith(controller.trashDirectory + "/")) {
+            showNotice("Déjà dans la corbeille. La suppression définitive n'est pas encore disponible.", true)
+            return
+        }
+        pendingOp = "trash"; pendingEntry = entry
+        opDialog.openWith("Mettre à la corbeille ?",
+            "« " + entry.name + " »" + (entry.directory ? " et tout son contenu" : "")
+            + " sera déplacé dans la corbeille de " + controller.serverLabel
+            + ". Vous pourrez le restaurer depuis la Corbeille.",
+            "Mettre à la corbeille", true, false, "")
+    }
+
     function askDownload(entry) {
         if (!entry || entry.directory || !connected) return
         downloadDialog.entry = entry
@@ -115,6 +145,9 @@ Item {
     }
 
     onLocationChanged: { grid.currentIndex = -1; list.currentIndex = -1 }
+    Component.onCompleted: if (fixture && fixturePreview === "trash")
+        opDialog.openWith("Mettre à la corbeille ?", "« Budget.xlsx » sera déplacé dans la corbeille de demo@linux. Vous pourrez le restaurer depuis la Corbeille.",
+                          "Mettre à la corbeille", true, false, "")
     // The frosted backdrop is sampled at the window's position.
     onXChanged: body.syncOrigin()
     onYChanged: body.syncOrigin()
@@ -139,6 +172,9 @@ Item {
         else if (event.key === Qt.Key_Space && win.selected && !win.selected.directory) { controller.openFile(win.selected.path); event.accepted = true }
         else if (ctrl && event.key === Qt.Key_U) { uploadDialog.open(); event.accepted = true }
         else if (ctrl && event.key === Qt.Key_D) { win.askDownload(win.selected); event.accepted = true }
+        else if (ctrl && (event.modifiers & Qt.ShiftModifier) && event.key === Qt.Key_N) { win.askNewFolder(); event.accepted = true }
+        else if (event.key === Qt.Key_F2) { win.askRename(win.selected); event.accepted = true }
+        else if (event.key === Qt.Key_Delete) { win.askTrash(win.selected); event.accepted = true }
         else if (event.key === Qt.Key_Escape) { win.filterText = ""; win.editingPath = false; event.accepted = true }
         else if (event.text.length === 1 && event.text.trim().length === 1 && !ctrl && !alt) {
             // Type-to-filter, like a desktop file manager.
@@ -197,11 +233,13 @@ Item {
                     { g: "⚙", t: "Configuration", p: "/etc" },
                     { g: "◷", t: "Temporaire", p: "/tmp" },
                     { g: "⛁", t: "Services web", p: "/var/www" },
-                    { g: "⏏", t: "Médias", p: "/media" }
+                    { g: "⏏", t: "Médias", p: "/media" },
+                    { g: "🗑", t: "Corbeille", p: "trash" }
                 ]
                 Rectangle {
                     required property var modelData
-                    readonly property string target: modelData.p === "~" ? win.home : modelData.p
+                    readonly property string target: modelData.p === "~" ? win.home
+                        : (modelData.p === "trash" ? (win.connected ? win.controller.trashDirectory : "") : modelData.p)
                     readonly property bool active: target.length > 0 && win.location === target
                     width: parent.width; height: 29; radius: 7
                     color: active ? Theme.selection : (placeMouse.containsMouse ? "#1AFFFFFF" : "transparent")
@@ -383,6 +421,7 @@ Item {
             Item { width: 4; height: 1 }
             ToolButtonGlass { glyph: "⤓"; tip: "Télécharger sur cet appareil (Ctrl+D)"; enabledState: win.connected && win.selected !== null && !win.selected.directory; onClicked: win.askDownload(win.selected) }
             ToolButtonGlass { glyph: "⤒"; tip: "Envoyer des fichiers ici (Ctrl+U)"; enabledState: win.connected; onClicked: uploadDialog.open() }
+            ToolButtonGlass { glyph: "+"; tip: "Nouveau dossier (Ctrl+Maj+N)"; enabledState: win.connected; onClicked: win.askNewFolder() }
         }
 
         Menu {
@@ -468,7 +507,11 @@ Item {
                 MouseArea {
                     id: cellMouse
                     anchors.fill: parent; hoverEnabled: true
-                    onClicked: { grid.currentIndex = cell.index; grid.forceActiveFocus() }
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    onClicked: (m) => {
+                        grid.currentIndex = cell.index; grid.forceActiveFocus()
+                        if (m.button === Qt.RightButton) itemMenu.popup()
+                    }
                     onDoubleClicked: win.open(cell.modelData)
                 }
             }
@@ -560,7 +603,11 @@ Item {
                 MouseArea {
                     id: rowMouse
                     anchors.fill: parent; hoverEnabled: true
-                    onClicked: { list.currentIndex = row.index; list.forceActiveFocus() }
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    onClicked: (m) => {
+                        list.currentIndex = row.index; list.forceActiveFocus()
+                        if (m.button === Qt.RightButton) itemMenu.popup()
+                    }
                     onDoubleClicked: win.open(row.modelData)
                 }
             }
@@ -637,6 +684,51 @@ Item {
         function clearFinishedTransfers() {}
     }
 
+    Menu {
+        id: itemMenu
+        palette.window: "#152238"; palette.windowText: "#F5F9FF"; palette.highlight: "#2D6FE0"
+        palette.text: "#F5F9FF"; palette.base: "#152238"; palette.light: "#152238"; palette.mid: "#2A3A58"
+        palette.highlightedText: "#FFFFFF"; palette.buttonText: "#F5F9FF"
+        MenuItem { text: "Ouvrir"; onTriggered: win.open(win.selected) }
+        MenuItem { text: "Télécharger…"; enabled: win.selected !== null && !win.selected.directory; onTriggered: win.askDownload(win.selected) }
+        MenuSeparator {}
+        MenuItem { text: "Renommer…    F2"; onTriggered: win.askRename(win.selected) }
+        MenuItem { text: "Mettre à la corbeille…    Suppr"; onTriggered: win.askTrash(win.selected) }
+        MenuSeparator {}
+        MenuItem { text: "Nouveau dossier…"; onTriggered: win.askNewFolder() }
+    }
+
+    GlassDialog {
+        id: opDialog
+        x: content.x; y: 0
+        width: content.width; height: parent.height
+        topRightRadius: 16; bottomRightRadius: 16
+        busy: win.connected && win.controller.operationBusy
+        onAccepted: (value) => {
+            if (win.pendingOp === "newFolder") win.controller.createFolder(value)
+            else if (win.pendingOp === "rename") win.controller.renameEntry(win.pendingEntry.path, value)
+            else if (win.pendingOp === "trash") win.controller.trashEntry(win.pendingEntry.path)
+        }
+        onRejected: { win.pendingOp = ""; win.view.forceActiveFocus() }
+    }
+
+    Connections {
+        target: win.connected ? win.controller : null
+        ignoreUnknownSignals: true
+        function onOperationFinished(ok, message, code, path) {
+            if (ok || win.pendingOp === "trash" || code === "unknown") {
+                opDialog.visible = false
+                win.pendingOp = ""
+                win.showNotice(code === "unknown" ? "État inconnu — " + message : message, !ok)
+                win.view.forceActiveFocus()
+            } else {
+                opDialog.error = message // keep the dialog open to fix the name
+            }
+        }
+    }
+
+    Timer { id: noticeTimer; interval: 4500; onTriggered: win.notice = "" }
+
     TransferPanel {
         anchors.right: parent.right; anchors.rightMargin: 12
         anchors.bottom: parent.bottom; anchors.bottomMargin: statusBar.height + 8
@@ -696,8 +788,10 @@ Fin.
         Text {
             x: 14; anchors.verticalCenter: parent.verticalCenter
             width: parent.width - 120; elide: Text.ElideRight
-            color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
+            color: win.notice.length > 0 ? (win.noticeError ? "#FCA5A5" : "#86EFAC") : Theme.inkMuted
+            font.pixelSize: 11; font.family: Theme.fontFamily
             text: {
+                if (win.notice.length > 0) return win.notice
                 const base = win.shown.length + " élément" + (win.shown.length > 1 ? "s" : "")
                     + " · " + win.folderCount + " dossier" + (win.folderCount > 1 ? "s" : "")
                 if (!win.selected) return base

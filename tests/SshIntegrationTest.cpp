@@ -276,6 +276,99 @@ private slots:
         settings.remove(pin);
     }
 
+    void folderRenameAndTrash() {
+        const QString remoteDir = qEnvironmentVariable("FORTIQ_IT_UPLOAD_DIR");
+        if (remoteDir.isEmpty()) QSKIP("FORTIQ_IT_UPLOAD_DIR not set");
+        ConnectionRequest request = base;
+        request.expectedHostFingerprint = fingerprint;
+        if (request.password.isEmpty()) request.keyPath = qEnvironmentVariable("FORTIQ_IT_KEY");
+        fortiq::SshSession session;
+        const SshResult opened = session.open(request);
+        QVERIFY(opened.status == SshResult::Status::Ok);
+        const QString home = opened.home;
+        const QString tag = QString::number(QDateTime::currentMSecsSinceEpoch());
+
+        // Create, then refuse the same name again.
+        const QString folder = QStringLiteral("Dossier été %1").arg(tag);
+        SshResult r = session.makeDirectory(remoteDir, folder);
+        QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(r.message));
+        QCOMPARE(session.makeDirectory(remoteDir, folder).code, QStringLiteral("conflict"));
+        QVERIFY(session.makeDirectory(remoteDir, QStringLiteral("a/b")).status == SshResult::Status::Error);
+        QVERIFY(session.makeDirectory(remoteDir, QStringLiteral("..")).status == SshResult::Status::Error);
+
+        // Rename within the folder; refuse an existing target and path tricks.
+        const QString renamed = QStringLiteral("Projet — %1").arg(tag);
+        r = session.renameEntry(remoteDir + "/" + folder, renamed);
+        QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(r.message));
+        QVERIFY(session.makeDirectory(remoteDir, folder).status == SshResult::Status::Ok);
+        QCOMPARE(session.renameEntry(remoteDir + "/" + folder, renamed).code, QStringLiteral("conflict"));
+        QVERIFY(session.renameEntry(remoteDir + "/" + folder, QStringLiteral("../escape")).status == SshResult::Status::Error);
+        QVERIFY(names(session.list(remoteDir)).contains(renamed));
+
+        // Trash: moved under ~/.local/share/Trash/files with a matching .trashinfo.
+        r = session.moveToTrash(remoteDir + "/" + renamed);
+        QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(r.message));
+        const QString trashed = r.directory;
+        QVERIFY(trashed.startsWith(home + "/.local/share/Trash/files/"));
+        QVERIFY(!names(session.list(remoteDir)).contains(renamed));
+        const QString infoPath = home + "/.local/share/Trash/info/" + trashed.section('/', -1) + ".trashinfo";
+        const QByteArray info = session.readFile(infoPath, 4096).data;
+        QVERIFY(info.startsWith("[Trash Info]\nPath="));
+        QVERIFY(info.contains(QUrl::toPercentEncoding(remoteDir + "/" + renamed, "/")));
+        QVERIFY(info.contains("DeletionDate="));
+        // Same name again goes to a distinct Trash name.
+        QVERIFY(session.makeDirectory(remoteDir, renamed).status == SshResult::Status::Ok);
+        r = session.moveToTrash(remoteDir + "/" + renamed);
+        QVERIFY(r.status == SshResult::Status::Ok);
+        QVERIFY(r.directory != trashed);
+
+        // Guard rails: home, /, the Trash and items already in it.
+        QVERIFY(session.moveToTrash(home).status == SshResult::Status::Error);
+        QVERIFY(session.moveToTrash(QStringLiteral("/")).status == SshResult::Status::Error);
+        QVERIFY(session.moveToTrash(home + "/.local/share/Trash").status == SshResult::Status::Error);
+        QVERIFY(session.moveToTrash(trashed).status == SshResult::Status::Error);
+        QVERIFY(session.moveToTrash(remoteDir + "/missing-" + tag).status == SshResult::Status::Error);
+        QVERIFY(session.isOpen());
+    }
+
+    void controllerOperations() {
+        const QString remoteDir = qEnvironmentVariable("FORTIQ_IT_UPLOAD_DIR");
+        if (remoteDir.isEmpty()) QSKIP("FORTIQ_IT_UPLOAD_DIR not set");
+        fortiq::RemoteController controller;
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        controller.navigate(remoteDir);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.currentDirectory() == remoteDir && !controller.busy(), 15000);
+
+        QSignalSpy finished(&controller, &fortiq::RemoteController::operationFinished);
+        const QString name = QStringLiteral("ctl-%1").arg(QDateTime::currentMSecsSinceEpoch());
+        auto listed = [&](const QString &n) { SshResult l; l.entries = controller.entries(); return names(l).contains(n); };
+
+        controller.createFolder(name);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 15000);
+        QVERIFY(finished.at(0).at(0).toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(listed(name) && !controller.busy(), 15000);
+
+        controller.renameEntry(remoteDir + "/" + name, name + "-b");
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 2, 15000);
+        QVERIFY(finished.at(1).at(0).toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(listed(name + "-b") && !listed(name), 15000);
+
+        controller.trashEntry(remoteDir + "/" + name + "-b");
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 3, 15000);
+        QVERIFY(finished.at(2).at(0).toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(!listed(name + "-b") && !controller.busy(), 15000);
+        QVERIFY(controller.trashDirectory().endsWith(QStringLiteral("/.local/share/Trash/files")));
+
+        controller.disconnectServer();
+        settings.remove(pin);
+    }
+
     void pinnedHostListsHomeWithUnicodeNames() {
         ConnectionRequest request = base;
         request.expectedHostFingerprint = fingerprint;

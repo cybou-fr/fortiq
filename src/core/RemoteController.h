@@ -9,10 +9,12 @@
 #include <QVariantList>
 
 #include <atomic>
+#include <functional>
 #include <memory>
 
 namespace fortiq {
 class SshSession;
+struct SshResult;
 
 class RemoteController : public QObject {
     Q_OBJECT
@@ -21,6 +23,8 @@ class RemoteController : public QObject {
     Q_PROPERTY(QString statusText READ statusText NOTIFY changed)
     Q_PROPERTY(QString currentDirectory READ currentDirectory NOTIFY changed)
     Q_PROPERTY(QString homeDirectory READ homeDirectory NOTIFY changed)
+    Q_PROPERTY(QString trashDirectory READ trashDirectory NOTIFY changed)
+    Q_PROPERTY(bool operationBusy READ operationBusy NOTIFY operationBusyChanged)
     Q_PROPERTY(QString serverLabel READ serverLabel NOTIFY changed)
     Q_PROPERTY(QString pendingFingerprint READ pendingFingerprint NOTIFY changed)
     Q_PROPERTY(QVariantList entries READ entries NOTIFY changed)
@@ -52,6 +56,8 @@ public:
     QString statusText() const { return m_status; }
     QString currentDirectory() const { return m_currentDirectory; }
     QString homeDirectory() const { return m_home; }
+    QString trashDirectory() const { return m_home.isEmpty() ? QString() : m_home + QStringLiteral("/.local/share/Trash/files"); }
+    bool operationBusy() const { return m_operationBusy; }
     QString serverLabel() const { return m_connected ? m_user + "@" + m_host : QString(); }
     QString pendingFingerprint() const { return m_pendingFingerprint; }
     QVariantList entries() const { return m_entries; }
@@ -96,16 +102,24 @@ public:
     Q_INVOKABLE void resolveConflict(int id, const QString &policy);
     Q_INVOKABLE void cancelTransfer(int id);
     Q_INVOKABLE void clearFinishedTransfers();
+    // File operations in the current folder; each ends with operationFinished.
+    Q_INVOKABLE void createFolder(const QString &name);
+    Q_INVOKABLE void renameEntry(const QString &path, const QString &newName);
+    Q_INVOKABLE void trashEntry(const QString &path);
 
 signals:
     void changed();
     void previewChanged();
     void transfersChanged();
+    void operationBusyChanged();
+    // code: "", "conflict" or "unknown" (outcome not known after a drop).
+    void operationFinished(bool ok, const QString &message, const QString &code, const QString &path);
 
 private:
     enum class Kind { Open, List };
     void request(Kind kind, const QString &directory, bool record);
     void scrubPassword();
+    void runOperation(const QString &doneMessage, std::function<SshResult(SshSession &)> op);
     struct Transfer;
     void startTransfer(int id, int policy);
     Transfer *findTransfer(int id);
@@ -132,6 +146,7 @@ private:
     QStringList m_forward;
     // RAM-only listing cache for instant back/forward; cleared on disconnect.
     QHash<QString, QVariantList> m_cache;
+    bool m_operationBusy = false;
     int m_previewSeq = 0;
     bool m_previewBusy = false;
     QString m_previewPath;
