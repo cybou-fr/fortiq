@@ -36,3 +36,9 @@ The binding contract for QML remains [UI SPEC](../UI_SPEC_V1.md), not this marke
 - No automatic checkout/payment CTA until Lemon Squeezy has been integrated and tested.
 
 See [Documentation Authority](../DOCUMENTATION_AUTHORITY.md).
+
+## Logo and native application icons
+
+Website navigation and footer now use `www/assets/fortiq-logo.svg` (light wordmark on dark background), with `fortiq-icon.svg` as scalable favicon and PNG fallback. For white backgrounds use `fortiq-logo-dark.svg`. SVGs are production vector interpretations of the approved logo, not crops from the brand-board collage.
+
+Native executable resources are generated from `assets/branding/fortiq_mark.png` by `tool/generate_brand_assets.py` during CMake configuration. See [branding documentation](../../assets/branding/README.md).

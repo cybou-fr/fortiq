@@ -77,3 +77,9 @@ Qt 6.12.0 MinGW 13.1 x64, Windows 11, DPR=1, 21.10.2026. Средняя абсо
 3. **Шрифт.** Сейчас системный Segoe UI; гарнитура эталона не установлена.
 4. **Планшет/узкий экран** (§4) и проверка на Android не выполнялись.
 5. **Полное приложение** `fortiq` собрано MSVC 2022 + Qt 6.12.0 msvc2022_64 + libssh2 1.11.1 (vcpkg x64-windows), `ctest` проходит, окно запускается и снимается без ошибок QML. SSH-стек проверен живым тестом против WSL (6/6, см. [QT_MIGRATION](QT_MIGRATION.md)); ввод данных в окне Files вручную ещё не проверялся.
+
+## Brand icon integration (21 October 2026, source change)
+
+CMake now generates Windows ICO/RC and Android adaptive/legacy icon resources from a single brand mark. Qt window icons are supplied by `:/branding/fortiq_mark.png`. The website now uses vector FORTIQ lockups.
+
+**Not accepted by this change:** the shell master-screen visual fidelity, Windows Explorer icon extraction from a freshly built EXE, or installed Android launcher mask on a real device. These must be validated separately. The owner's 1536×1024 golden sketch remains unchanged.

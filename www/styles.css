@@ -10,3 +10,9 @@
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
 /* Once the verified owner PNG is imported, show it unchanged over the conceptual CSS scene. */
 .approved-design-reference{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:20;background:#091e3b}
+
+/* Approved FORTIQ identity — scalable wordmark, never rasterized text. */
+.brand img.brand-lockup { display:block; width:168px; height:auto; max-height:52px; object-fit:contain }
+footer .brand img.brand-lockup { width:154px }
+.mock-top strong img { object-fit:contain }
+@media(max-width:420px) { .brand img.brand-lockup { width:128px } }

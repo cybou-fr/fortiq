@@ -7,6 +7,7 @@
 <meta name="description" content="{{description}}">
 <title>{{title}}</title>
 <link rel="icon" type="image/png" href="{{prefix}}assets/fortiq-icon.png">
+<link rel="icon" type="image/svg+xml" href="{{prefix}}assets/fortiq-icon.svg">
 <link rel="stylesheet" href="{{prefix}}styles.css">
 <link rel="alternate" hreflang="en" href="{{prefix}}index.html">
 <link rel="alternate" hreflang="fr" href="{{prefix}}fr/index.html">
@@ -17,7 +18,7 @@
 <a class="skip" href="#main">Skip to content</a>
 <header class="site-header">
  <nav class="nav container" aria-label="Main navigation">
-  <a class="brand" href="#top"><img src="{{prefix}}assets/fortiq-icon.png" width="38" height="38" alt=""><span>FORTIQ</span></a>
+  <a class="brand" href="#top" aria-label="FORTIQ"><img class="brand-lockup" src="{{prefix}}assets/fortiq-logo.svg" width="168" height="38" alt="FORTIQ"></a>
   <div class="nav-links"><a href="#concept">{{navWhy}}</a><a href="#apps">{{navApps}}</a><a href="#architecture">{{navHow}}</a><a href="#progress">{{navProgress}}</a></div>
   <div class="langs"><a href="{{prefix}}index.html" lang="en" {{enCurrent}}>EN</a><a href="{{prefix}}fr/index.html" lang="fr" {{frCurrent}}>FR</a><a href="{{prefix}}ru/index.html" lang="ru" {{ruCurrent}}>RU</a></div>
  </nav>
@@ -37,7 +38,7 @@
     <div class="mountain-scene">
      <div class="sunset"></div><div class="ridge ridge-far"></div><div class="ridge ridge-mid"></div><div class="ridge ridge-near"></div><div class="lake"></div>
     </div>
-    <div class="mock-top"><strong><img src="{{prefix}}assets/fortiq-icon.png" alt=""> FORTIQ</strong><span class="mock-search">⌕ &nbsp; Search files, apps, settings...</span><span>◉ &nbsp; 13:45</span></div>
+    <div class="mock-top"><strong><img src="{{prefix}}assets/fortiq-icon.svg" alt=""> FORTIQ</strong><span class="mock-search">⌕ &nbsp; Search files, apps, settings...</span><span>◉ &nbsp; 13:45</span></div>
     <div class="mock-rail"><span class="selected">▣</span><span>◈</span><span>⌘</span><span>◩</span><span>⚙</span></div>
     <div class="mock-clock"><b>13:45</b><small>Debian / Ubuntu</small><span>☀ 22°</span></div>
     <div class="mock-files">
@@ -92,6 +93,6 @@
   <p class="future-note">{{future}}</p>
  </div></section>
 </main>
-<footer><div class="container footer-inner"><a class="brand" href="#top"><img src="{{prefix}}assets/fortiq-icon.png" alt="" width="32" height="32"><span>FORTIQ</span></a><p>{{footerLine}}</p><small>{{footerNote}}</small></div></footer>
+<footer><div class="container footer-inner"><a class="brand" href="#top" aria-label="FORTIQ"><img class="brand-lockup" src="{{prefix}}assets/fortiq-logo.svg" alt="FORTIQ" width="154" height="35"></a><p>{{footerLine}}</p><small>{{footerNote}}</small></div></footer>
 </body>
 </html>
