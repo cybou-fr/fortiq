@@ -1,3 +1,10 @@
+## Qt rewrite decision — 21 October 2026 (current)
+
+- Active implementation: **C++20 + Qt 6/QML**, same product on **Windows and Android first**. Flutter/Dart is archived at tag `flutter-final`; do **not** resume Flutter development in `main`.
+- Current Qt milestone R0.1: responsive UI, native libssh2 SSH fingerprint pinning, password SSH auth, read-only SFTP Files browser and path tests. **Builds on Windows/Android and native runtime tests are not yet verified.** [Qt migration status](docs/QT_MIGRATION.md) and current [README](README.md) override old Flutter-specific status claims.
+- Next: Windows and Android arm64 verified builds, SSH key auth / credential hardening and persistent session, then Files/Editor end-to-end; do not expand to Docker/Podman dashboards.
+- Keep original server-only work-data and SSH/CLI architectural boundaries. Keep everything on `main`.
+
 # Правила разработки FORTIQ
 
 ## Git workflow: только main

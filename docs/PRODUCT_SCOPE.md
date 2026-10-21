@@ -1,3 +1,5 @@
+> **Migration note (2026-10-21):** Product vision and priorities remain valid, but descriptions of implemented Flutter modules below are **historical**. The current `main` contains a new Qt 6/C++20/QML Windows-and-Android-first client with a read-only SFTP Files milestone. Refer to [QT_MIGRATION.md](QT_MIGRATION.md) and [README](../README.md) for actual Qt functionality. Previous code is preserved at `flutter-final`.
+
 # FORTIQ: назначение и границы продукта
 
 Статус: продуктовая спецификация, 18 октября 2026. Реализации нет (прототип на Flutter удалён,

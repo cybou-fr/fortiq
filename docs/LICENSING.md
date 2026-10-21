@@ -1,3 +1,5 @@
+> **Qt migration (2026-10-21):** Historical Flutter/Windows licensing UI and DPAPI implementation was archived at `flutter-final` and is **not part of current Qt `main`**. The Lemon Squeezy offers and business requirements below are preserved, but purchase/activation/secure storage must be newly implemented and tested in the Windows + Android Qt client. See [QT_MIGRATION.md](QT_MIGRATION.md).
+
 # FORTIQ — Licensing and Lemon Squeezy Integration
 
 **Product:** FORTIQ — Distributed Desktop Software.
