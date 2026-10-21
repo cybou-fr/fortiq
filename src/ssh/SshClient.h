@@ -84,6 +84,16 @@ public:
     SshResult deleteFromTrash(const QString &trashedPath);
     // Permanently deletes everything in Trash/files and Trash/info.
     SshResult emptyTrash();
+    // Safe save of an edited file (SMART_FILES_SPEC: edit/save). The current
+    // server bytes must still hash to expectedSha256 ("conflict" otherwise,
+    // unless force); new bytes go to an exclusive temporary next to the file
+    // with its permissions, are size-checked, the version is re-checked, then
+    // published atomically with posix-rename@openssh.com and read back.
+    // Symlinks are saved through to their target; files owned by another
+    // user are refused (an atomic replace would change their owner).
+    SshResult saveFile(const QString &path, const QByteArray &data, const QByteArray &expectedSha256, bool force);
+    // Writes data as a new file in dir, "name (n).ext" if the name is taken.
+    SshResult saveCopy(const QString &dir, const QString &name, const QByteArray &data);
     QString homeDirectory() const;
     bool isOpen() const;
     void close();

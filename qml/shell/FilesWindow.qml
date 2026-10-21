@@ -828,10 +828,12 @@ Item {
     QtObject {
         id: samplePreview
         readonly property bool previewBusy: false
-        readonly property string previewKind: win.fixturePreview
+        readonly property string previewKind: win.fixturePreview === "editor" ? "text" : win.fixturePreview
         readonly property string previewPath: win.fixturePreview === "image" ? "/home/demo/Montagne.jpg" : "/home/demo/Notes.txt"
         readonly property string previewInfo: win.fixturePreview === "image" ? "2,4 Mo" : "1,8 Ko — 12 lignes"
         readonly property string previewImage: win.fixturePreview === "image" ? Qt.resolvedUrl("../../assets/wallpapers/aurora.jpg") : ""
+        readonly property bool previewEditable: win.fixturePreview === "text" || win.fixturePreview === "editor"
+        readonly property bool saving: false
         readonly property string previewText: "# Notes — exemple de démonstration
 
 Réunion projet CYBOU : 14:00 – 15:00
@@ -851,7 +853,9 @@ Fin.
         x: content.x; y: content.y
         width: content.width; height: content.height + statusBar.height
         z: 10
-        visible: (win.fixture && (win.fixturePreview === "text" || win.fixturePreview === "image")) || (win.connected && win.controller.previewOpen)
+        id: fileViewer
+        visible: (win.fixture && ["text", "image", "editor"].indexOf(win.fixturePreview) >= 0) || (win.connected && win.controller.previewOpen)
+        Component.onCompleted: if (win.fixture && win.fixturePreview === "editor") { startEditing(); dirty = true }
         controller: win.fixture ? samplePreview : (win.connected ? win.controller : null)
         bottomRightRadius: 16
         onClosed: { win.controller.closePreview(); win.view.forceActiveFocus() }

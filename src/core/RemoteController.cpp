@@ -238,7 +238,8 @@ QString humanSize(qint64 bytes) {
 }
 
 void RemoteController::openFile(const QString &path) {
-    if (!m_connected) return;
+    if (!m_connected || m_saving) return;
+    m_editHash.clear();
     const auto clean = cleanAbsolutePath(path);
     if (!clean) return;
     const int seq = ++m_previewSeq;
@@ -296,6 +297,12 @@ void RemoteController::openFile(const QString &path) {
             } else {
                 m_previewKind = QStringLiteral("text");
                 m_previewText = std::move(text);
+                // Only complete files are editable; remember their exact version.
+                if (!r.truncated) {
+                    m_editHash = QCryptographicHash::hash(r.data, QCryptographicHash::Sha256);
+                    m_editCrlf = r.data.contains("\r\n");
+                    m_editBom = r.data.startsWith("\xEF\xBB\xBF");
+                }
                 m_previewInfo = r.truncated
                     ? QStringLiteral("%1 — aperçu du premier Mo").arg(humanSize(r.fileSize))
                     : QStringLiteral("%1 — %2 lignes").arg(humanSize(r.fileSize)).arg(m_previewText.count('\n') + (m_previewText.endsWith('\n') ? 0 : 1));
@@ -320,6 +327,7 @@ void RemoteController::openFile(const QString &path) {
 
 void RemoteController::closePreview() {
     ++m_previewSeq;
+    m_editHash.clear();
     m_previewBusy = false;
     m_previewPath.clear();
     m_previewKind.clear();
@@ -556,8 +564,71 @@ void RemoteController::emptyTrash() {
     runOperation(QStringLiteral("Corbeille vidée."), [](SshSession &s) { return s.emptyTrash(); });
 }
 
+void RemoteController::saveFile(const QString &text, bool force) { runSave(text, force ? 1 : 0); }
+void RemoteController::saveFileCopy(const QString &text) { runSave(text, 2); }
+
+void RemoteController::runSave(const QString &text, int mode) {
+    if (!m_connected || m_saving || !previewEditable()) return;
+    // Keep the file's own conventions: line endings and byte-order mark.
+    QString body = text;
+    body.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
+    if (m_editCrlf) body.replace(QStringLiteral("\n"), QStringLiteral("\r\n"));
+    QByteArray bytes = body.toUtf8();
+    if (m_editBom) bytes.prepend("\xEF\xBB\xBF");
+
+    ConnectionRequest req;
+    req.host = m_host; req.port = m_port; req.user = m_user;
+    req.password = m_password; req.keyPath = m_keyPath;
+    req.expectedHostFingerprint = QSettings{}.value(pinKey()).toString();
+    req.directory = m_currentDirectory;
+    const QString path = m_previewPath;
+    const QByteArray expected = m_editHash;
+    const int token = m_generation;
+    const int seq = m_previewSeq;
+    m_saving = true;
+    emit savingChanged();
+
+    auto slot = m_session;
+    auto *watcher = new QFutureWatcher<SshResult>(this);
+    connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, token, seq, mode, text] {
+        const SshResult r = watcher->result();
+        watcher->deleteLater();
+        if (token != m_generation) return;
+        m_saving = false;
+        emit savingChanged();
+        const bool ok = r.status == SshResult::Status::Ok;
+        if (ok && mode != 2 && seq == m_previewSeq) {
+            // The saved bytes are the new base version for the next save.
+            m_editHash = r.data;
+            m_previewText = text;
+            m_previewInfo = QStringLiteral("%1 — enregistré").arg(humanSize(r.bytes));
+            emit previewChanged();
+        }
+        if (ok) {
+            m_cache.remove(parentPath(r.directory));
+            if (m_currentDirectory == parentPath(r.directory)) refresh();
+        }
+        emit saveFinished(ok, ok ? (mode == 2 ? QStringLiteral("Copie enregistrée : %1").arg(r.directory.section('/', -1))
+                                               : QStringLiteral("Enregistré."))
+                                 : r.message,
+                          r.code, r.directory);
+    });
+    watcher->setFuture(QtConcurrent::run(&m_pool, [slot, req, path, bytes, expected, mode] {
+        if (!*slot) *slot = std::make_unique<SshSession>();
+        SshSession &session = **slot;
+        if (!session.isOpen()) {
+            const SshResult opened = session.open(req); // pin re-checked
+            if (opened.status != SshResult::Status::Ok) return opened;
+        }
+        // Never replayed after a drop: the user decides after "unknown".
+        return mode == 2 ? session.saveCopy(parentPath(path), path.section('/', -1), bytes)
+                         : session.saveFile(path, bytes, expected, mode == 1);
+    }));
+}
+
 void RemoteController::disconnectServer() {
     if (m_operationBusy) { m_operationBusy = false; emit operationBusyChanged(); }
+    if (m_saving) { m_saving = false; emit savingChanged(); }
     // Transfers are bound to this server: stop them, never redirect them.
     for (Transfer &t : m_transfers) {
         if (t.state == "queued" || t.state == "running" || t.state == "conflict") {

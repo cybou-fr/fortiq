@@ -424,6 +424,105 @@ private slots:
         QVERIFY(session.isOpen());
     }
 
+    // Needs, in FORTIQ_IT_UPLOAD_DIR/edit: real.txt (mode 640), link.txt -> real.txt,
+    // root.txt owned by another user but writable (666), crlf.txt with BOM + CRLF.
+    void safeSave() {
+        const QString remoteDir = qEnvironmentVariable("FORTIQ_IT_UPLOAD_DIR");
+        if (remoteDir.isEmpty()) QSKIP("FORTIQ_IT_UPLOAD_DIR not set");
+        const QString dir = remoteDir + "/edit";
+        ConnectionRequest request = base;
+        request.expectedHostFingerprint = fingerprint;
+        if (request.password.isEmpty()) request.keyPath = qEnvironmentVariable("FORTIQ_IT_KEY");
+        fortiq::SshSession session, other;
+        QVERIFY(session.open(request).status == SshResult::Status::Ok);
+        QVERIFY(other.open(request).status == SshResult::Status::Ok);
+        if (!names(session.list(dir)).contains(QStringLiteral("real.txt"))) QSKIP("edit fixtures not present");
+        auto hash = [](const QByteArray &b) { return QCryptographicHash::hash(b, QCryptographicHash::Sha256); };
+        auto entry = [&](const QString &name) {
+            for (const QVariant &v : session.list(dir).entries) if (v.toMap().value("name") == name) return v.toMap();
+            return QVariantMap();
+        };
+
+        // Save keeps permissions, content reads back.
+        const QByteArray v1 = session.readFile(dir + "/real.txt", 4096).data;
+        SshResult r = session.saveFile(dir + "/real.txt", "version 2 — é\n", hash(v1), false);
+        QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(r.message));
+        QCOMPARE(session.readFile(dir + "/real.txt", 4096).data, QByteArray("version 2 — é\n"));
+        QCOMPARE(entry("real.txt").value("mode").toString(), QStringLiteral("-rw-r-----"));
+
+        // Someone else saves meanwhile -> conflict, server version untouched.
+        const QByteArray v2 = "version 2 — é\n";
+        QVERIFY(other.saveFile(dir + "/real.txt", "theirs\n", hash(v2), false).status == SshResult::Status::Ok);
+        r = session.saveFile(dir + "/real.txt", "mine\n", hash(v2), false);
+        QCOMPARE(r.code, QStringLiteral("conflict"));
+        QCOMPARE(session.readFile(dir + "/real.txt", 4096).data, QByteArray("theirs\n"));
+
+        // Keep both: a copy next to it; then an explicit overwrite.
+        r = session.saveCopy(dir, "real.txt", "mine\n");
+        QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(r.message));
+        QVERIFY(r.directory.endsWith(QStringLiteral("real (2).txt")));
+        QCOMPARE(session.readFile(r.directory, 100).data, QByteArray("mine\n"));
+        r = session.saveFile(dir + "/real.txt", "mine\n", hash(v2), true);
+        QVERIFY(r.status == SshResult::Status::Ok);
+        QCOMPARE(session.readFile(dir + "/real.txt", 4096).data, QByteArray("mine\n"));
+
+        // Through a symlink: the target changes, the link stays a link.
+        r = session.saveFile(dir + "/link.txt", "via link\n", hash("mine\n"), false);
+        QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(r.message));
+        QCOMPARE(r.directory, dir + "/real.txt");
+        QCOMPARE(session.readFile(dir + "/real.txt", 4096).data, QByteArray("via link\n"));
+        QVERIFY(entry("link.txt").value("link").toBool());
+
+        // Another user's file is refused and unchanged.
+        const QByteArray rootBefore = session.readFile(dir + "/root.txt", 4096).data;
+        r = session.saveFile(dir + "/root.txt", "hijack\n", hash(rootBefore), false);
+        QVERIFY(r.status == SshResult::Status::Error);
+        QCOMPARE(session.readFile(dir + "/root.txt", 4096).data, rootBefore);
+
+        for (const QString &n : names(session.list(dir))) QVERIFY2(!n.contains(QStringLiteral(".fortiq-")), qPrintable(n));
+    }
+
+    void controllerSaveKeepsLineEndingsAndBom() {
+        const QString remoteDir = qEnvironmentVariable("FORTIQ_IT_UPLOAD_DIR");
+        if (remoteDir.isEmpty()) QSKIP("FORTIQ_IT_UPLOAD_DIR not set");
+        const QString file = remoteDir + "/edit/crlf.txt";
+        fortiq::RemoteController controller;
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        controller.openFile(file);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.previewBusy() && !controller.previewKind().isEmpty(), 10000);
+        if (controller.previewKind() == "error") QSKIP("edit fixtures not present");
+        QVERIFY(controller.previewEditable());
+        QVERIFY(!controller.previewText().contains(QChar(0xFEFF)));
+
+        QSignalSpy saved(&controller, &fortiq::RemoteController::saveFinished);
+        controller.saveFile(controller.previewText().replace("\r\n", "\n") + "ajout\n");
+        QTRY_COMPARE_WITH_TIMEOUT(saved.count(), 1, 15000);
+        QVERIFY2(saved.at(0).at(0).toBool(), qPrintable(saved.at(0).at(1).toString()));
+
+        ConnectionRequest request = base;
+        request.expectedHostFingerprint = fingerprint;
+        if (request.password.isEmpty()) request.keyPath = qEnvironmentVariable("FORTIQ_IT_KEY");
+        fortiq::SshSession session;
+        QVERIFY(session.open(request).status == SshResult::Status::Ok);
+        const QByteArray bytes = session.readFile(file, 4096).data;
+        QVERIFY(bytes.startsWith("\xEF\xBB\xBF"));
+        QVERIFY(bytes.endsWith("ajout\r\n"));
+        QVERIFY(!bytes.contains("\n\n") && !bytes.contains("\r\r"));
+
+        // Second save builds on the saved version (no false conflict).
+        controller.saveFile(controller.previewText() + "encore\n");
+        QTRY_COMPARE_WITH_TIMEOUT(saved.count(), 2, 15000);
+        QVERIFY2(saved.at(1).at(0).toBool(), qPrintable(saved.at(1).at(1).toString()));
+        controller.disconnectServer();
+        settings.remove(pin);
+    }
+
     void controllerOperations() {
         const QString remoteDir = qEnvironmentVariable("FORTIQ_IT_UPLOAD_DIR");
         if (remoteDir.isEmpty()) QSKIP("FORTIQ_IT_UPLOAD_DIR not set");

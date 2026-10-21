@@ -10,6 +10,46 @@ Rectangle {
     property string name: controller ? controller.previewPath.split("/").pop() : ""
     readonly property string kind: controller ? controller.previewKind : ""
     property real zoom: 0 // 0 = fit
+    // Editing state: `dirty` once the text differs from the last loaded/saved one.
+    property bool editing: false
+    property bool dirty: false
+    property string pendingAction: "" // "close" | "stop" | "conflict"
+    readonly property bool editable: controller && controller.previewEditable === true
+    readonly property bool saving: controller && controller.saving === true
+    onEditableChanged: if (!editable) { editing = false; dirty = false }
+
+    function startEditing() {
+        if (!editable) return
+        editing = true
+        textEdit.forceActiveFocus()
+    }
+    function save() { if (editing && dirty && !saving) controller.saveFile(textEdit.text, false) }
+    function requestClose() {
+        if (editing && dirty) {
+            pendingAction = "close"
+            confirm.openWith("Modifications non enregistrées", "Les modifications de « " + name + " » seront perdues.",
+                             "Fermer sans enregistrer", true, false, "")
+            confirm.altText = "Enregistrer"
+            return
+        }
+        closed()
+    }
+    function stopEditing() {
+        if (dirty) {
+            pendingAction = "stop"
+            confirm.openWith("Annuler les modifications ?", "Le texte reviendra à la dernière version enregistrée.",
+                             "Annuler les modifications", true, false, "")
+            confirm.cancelText = "Continuer"
+            return
+        }
+        editing = false
+    }
+    function revert() {
+        editing = false
+        dirty = false
+        textEdit.text = controller ? controller.previewText : ""
+        dirty = false
+    }
     signal closed()
 
     color: "#FA0D1626"
@@ -17,7 +57,13 @@ Rectangle {
     onVisibleChanged: { zoom = 0; if (visible) forceActiveFocus() }
 
     Keys.onPressed: (event) => {
-        if (event.key === Qt.Key_Escape || event.key === Qt.Key_Space) { viewer.closed(); event.accepted = true }
+        if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_S) { viewer.save(); event.accepted = true; return }
+        if (viewer.editing) {
+            if (event.key === Qt.Key_Escape) { viewer.stopEditing(); event.accepted = true }
+            return
+        }
+        if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_E) { viewer.startEditing(); event.accepted = true }
+        else if (event.key === Qt.Key_Escape || event.key === Qt.Key_Space) { viewer.requestClose(); event.accepted = true }
         else if (viewer.kind === "image" && (event.key === Qt.Key_Plus || event.key === Qt.Key_Equal)) { viewer.zoomBy(1.25); event.accepted = true }
         else if (viewer.kind === "image" && event.key === Qt.Key_Minus) { viewer.zoomBy(0.8); event.accepted = true }
         else if (viewer.kind === "image" && event.key === Qt.Key_0) { viewer.zoom = 0; event.accepted = true }
@@ -52,8 +98,12 @@ Rectangle {
             }
             Text {
                 width: parent.width; elide: Text.ElideRight
-                text: viewer.controller ? viewer.controller.previewInfo + "  ·  lecture seule" : ""
-                color: Theme.inkMuted; font.pixelSize: 10; font.family: Theme.fontFamily
+                text: !viewer.controller ? ""
+                    : viewer.saving ? "Enregistrement sûr en cours…"
+                    : viewer.editing ? (viewer.dirty ? "● Modifié — Ctrl+S pour enregistrer" : "Édition — " + viewer.controller.previewInfo)
+                    : viewer.controller.previewInfo + (viewer.editable ? "" : "  ·  lecture seule")
+                color: viewer.editing && viewer.dirty ? "#FCD34D" : Theme.inkMuted
+                font.pixelSize: 10; font.family: Theme.fontFamily
             }
         }
         Row {
@@ -72,7 +122,25 @@ Rectangle {
             ToolButtonGlass { visible: viewer.kind === "image"; glyph: "+"; tip: "Agrandir (+)"; onClicked: viewer.zoomBy(1.25) }
             ToolButtonGlass { visible: viewer.kind === "image"; glyph: "⤢"; tip: "Ajuster (0)"; checked: viewer.zoom === 0; onClicked: viewer.zoom = 0 }
             ToolButtonGlass { visible: viewer.kind === "image"; glyph: "1:1"; tip: "Taille réelle"; onClicked: viewer.zoom = 1 }
-            ToolButtonGlass { glyph: "×"; tip: "Fermer (Échap)"; onClicked: viewer.closed() }
+            Rectangle {
+                visible: viewer.editable && !viewer.editing
+                anchors.verticalCenter: parent.verticalCenter
+                height: 26; radius: 7; width: editLabel.implicitWidth + 20
+                color: editMouse.containsMouse ? Theme.selection : "#802D6FE0"
+                Text { id: editLabel; anchors.centerIn: parent; text: "✎  Modifier"; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
+                MouseArea { id: editMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: viewer.startEditing() }
+            }
+            Rectangle {
+                visible: viewer.editing
+                anchors.verticalCenter: parent.verticalCenter
+                height: 26; radius: 7; width: saveLabel.implicitWidth + 20
+                opacity: viewer.dirty && !viewer.saving ? 1 : 0.45
+                color: saveMouse.containsMouse ? "#16A34A" : "#B315803D"
+                Text { id: saveLabel; anchors.centerIn: parent; text: viewer.saving ? "Enregistrement…" : "Enregistrer  Ctrl+S"; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
+                MouseArea { id: saveMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; enabled: viewer.dirty && !viewer.saving; onClicked: viewer.save() }
+            }
+            ToolButtonGlass { visible: viewer.editing; glyph: "↶"; tip: "Quitter l'édition (Échap)"; enabledState: !viewer.saving; onClicked: viewer.stopEditing() }
+            ToolButtonGlass { glyph: "×"; tip: "Fermer (Échap)"; enabledState: !viewer.saving; onClicked: viewer.requestClose() }
         }
         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: "#1FFFFFFF" }
     }
@@ -125,7 +193,7 @@ Rectangle {
                     x: 10; y: 8
                     text: {
                         if (viewer.kind !== "text" || !viewer.controller) return ""
-                        const t = viewer.controller.previewText
+                        const t = textEdit.text
                         const n = Math.min(t.split("\n").length - (t.endsWith("\n") ? 1 : 0), 50000)
                         let s = ""
                         for (let i = 1; i <= n; ++i) s += i + "\n"
@@ -140,9 +208,20 @@ Rectangle {
             TextEdit {
                 id: textEdit
                 x: gutter.width + 12; y: 8
-                readOnly: true
+                readOnly: !viewer.editing || viewer.saving
                 selectByMouse: true
+                persistentSelection: true
+                tabStopDistance: metrics.averageCharacterWidth * 4
                 text: viewer.controller && (viewer.kind === "text" || viewer.kind === "binary") ? viewer.controller.previewText : ""
+                onTextChanged: if (viewer.editing) viewer.dirty = text !== (viewer.controller ? viewer.controller.previewText : "")
+                // Keep the caret visible while typing.
+                onCursorRectangleChanged: {
+                    const r = cursorRectangle
+                    if (r.y + y < textFlick.contentY) textFlick.contentY = Math.max(0, r.y + y - 8)
+                    else if (r.y + y + r.height > textFlick.contentY + textFlick.height) textFlick.contentY = r.y + y + r.height - textFlick.height + 8
+                    if (r.x + x < textFlick.contentX) textFlick.contentX = Math.max(0, r.x + x - 24)
+                    else if (r.x + x > textFlick.contentX + textFlick.width - 24) textFlick.contentX = r.x + x - textFlick.width + 48
+                }
                 color: "#E4ECF8"; selectionColor: Theme.accent
                 font.family: "Consolas"; font.pixelSize: 12
                 textFormat: TextEdit.PlainText
@@ -207,5 +286,78 @@ Rectangle {
             text: "Format d'image non pris en charge"
             color: Theme.inkMuted; font.pixelSize: 12; font.family: Theme.fontFamily
         }
+    }
+
+    // Accent frame while editing.
+    Rectangle {
+        visible: viewer.editing
+        y: header.height; width: parent.width; height: parent.height - y
+        color: "transparent"
+        border.width: 1; border.color: viewer.dirty ? "#80FCD34D" : "#662F8CFF"
+    }
+
+    GlassDialog {
+        id: confirm
+        anchors.fill: parent
+        bottomRightRadius: 16
+        busy: viewer.saving
+        onAccepted: {
+            visible = false
+            if (viewer.pendingAction === "close") { viewer.revert(); viewer.closed() }
+            else if (viewer.pendingAction === "stop") viewer.revert()
+            else if (viewer.pendingAction === "conflict") viewer.controller.saveFile(textEdit.text, true)
+            else if (viewer.pendingAction === "unknown") viewer.controller.openFile(viewer.controller.previewPath)
+            viewer.pendingAction = ""
+        }
+        onAlternate: {
+            visible = false
+            if (viewer.pendingAction === "close") { viewer.pendingAction = "closeAfterSave"; viewer.save() }
+            else if (viewer.pendingAction === "conflict") { viewer.pendingAction = ""; viewer.controller.saveFileCopy(textEdit.text) }
+        }
+        onRejected: { viewer.pendingAction = ""; textEdit.forceActiveFocus() }
+    }
+
+    Connections {
+        target: viewer.controller
+        ignoreUnknownSignals: true
+        function onSaveFinished(ok, message, code, path) {
+            if (ok) {
+                // A copy leaves the original open and still modified.
+                if (message.indexOf("Copie") !== 0) viewer.dirty = false
+                viewer.notice = message
+                noticeTimer.restart()
+                if (viewer.pendingAction === "closeAfterSave") { viewer.pendingAction = ""; viewer.editing = false; viewer.closed() }
+                return
+            }
+            if (code === "conflict") {
+                viewer.pendingAction = "conflict"
+                confirm.openWith("Conflit : le fichier a changé sur le serveur",
+                    message + " Votre version n'est pas perdue. Écraser remplace la version du serveur ;"
+                    + " « Enregistrer une copie » garde les deux.", "Écraser la version du serveur", true, false, "")
+                confirm.altText = "Enregistrer une copie"
+                confirm.cancelText = "Continuer à éditer"
+            } else if (code === "unknown") {
+                viewer.pendingAction = "unknown"
+                confirm.openWith("État de l'enregistrement inconnu", message
+                    + " Copiez votre texte si besoin, puis rechargez le fichier pour voir la version du serveur.",
+                    "Recharger depuis le serveur", true, false, "")
+                confirm.cancelText = "Continuer à éditer"
+            } else {
+                viewer.pendingAction = ""
+                viewer.notice = message
+                noticeTimer.restart()
+            }
+        }
+    }
+
+    property string notice: ""
+    Timer { id: noticeTimer; interval: 4500; onTriggered: viewer.notice = "" }
+    Rectangle {
+        visible: viewer.notice.length > 0
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom; anchors.bottomMargin: 14
+        width: noticeText.implicitWidth + 24; height: 28; radius: 14
+        color: "#F0101B2E"; border.width: 1; border.color: "#40FFFFFF"
+        Text { id: noticeText; anchors.centerIn: parent; text: viewer.notice; color: Theme.ink; font.pixelSize: 11; font.family: Theme.fontFamily }
     }
 }

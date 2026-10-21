@@ -39,6 +39,9 @@ class RemoteController : public QObject {
     Q_PROPERTY(QString previewText READ previewText NOTIFY previewChanged)
     Q_PROPERTY(QString previewImage READ previewImage NOTIFY previewChanged)
     Q_PROPERTY(QString previewInfo READ previewInfo NOTIFY previewChanged)
+    // Editing: complete UTF-8 text files only (not truncated, not binary).
+    Q_PROPERTY(bool previewEditable READ previewEditable NOTIFY previewChanged)
+    Q_PROPERTY(bool saving READ saving NOTIFY savingChanged)
     // Transfer queue: [{id, upload, name, remote, local, state, done, total, message}]
     // state: queued | running | conflict | done | error | cancelled | unknown
     Q_PROPERTY(QVariantList transfers READ transfers NOTIFY transfersChanged)
@@ -71,6 +74,8 @@ public:
     QString previewText() const { return m_previewText; }
     QString previewImage() const { return m_previewImage; }
     QString previewInfo() const { return m_previewInfo; }
+    bool previewEditable() const { return m_previewKind == QLatin1String("text") && !m_editHash.isEmpty(); }
+    bool saving() const { return m_saving; }
     QVariantList transfers() const;
     int activeTransfers() const;
     QString rememberedHost() const;
@@ -94,6 +99,11 @@ public:
     // image (up to 16 MiB) or a hex dump of the first bytes for binaries.
     Q_INVOKABLE void openFile(const QString &path);
     Q_INVOKABLE void closePreview();
+    // Saves edited text over the open file (force: overwrite a version that
+    // changed on the server, only after the user chose to), or as a copy
+    // "name (n)" next to it. Each ends with saveFinished.
+    Q_INVOKABLE void saveFile(const QString &text, bool force = false);
+    Q_INVOKABLE void saveFileCopy(const QString &text);
     // Transfers run one at a time on a second SSH connection to the same
     // pinned server, so browsing stays responsive.
     Q_INVOKABLE void download(const QString &remotePath, const QUrl &localFile);
@@ -116,6 +126,9 @@ signals:
     void previewChanged();
     void transfersChanged();
     void operationBusyChanged();
+    void savingChanged();
+    // code: "", "conflict" (changed on the server) or "unknown".
+    void saveFinished(bool ok, const QString &message, const QString &code, const QString &path);
     // code: "", "conflict" or "unknown" (outcome not known after a drop).
     void operationFinished(bool ok, const QString &message, const QString &code, const QString &path);
 
@@ -151,6 +164,11 @@ private:
     // RAM-only listing cache for instant back/forward; cleared on disconnect.
     QHash<QString, QVariantList> m_cache;
     bool m_operationBusy = false;
+    bool m_saving = false;
+    QByteArray m_editHash; // SHA-256 of the bytes the editor was opened from
+    bool m_editCrlf = false;
+    bool m_editBom = false;
+    void runSave(const QString &text, int mode);
     int m_previewSeq = 0;
     bool m_previewBusy = false;
     QString m_previewPath;

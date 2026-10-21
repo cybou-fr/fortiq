@@ -7,6 +7,8 @@ Rectangle {
     property string title: ""
     property string message: ""
     property string confirmText: "OK"
+    property string altText: "" // optional middle button
+    property string cancelText: "Annuler"
     property bool danger: false
     property bool withField: false
     property string fieldText: ""
@@ -14,9 +16,10 @@ Rectangle {
     property bool busy: false
     signal accepted(string value)
     signal rejected()
+    signal alternate()
 
     function openWith(t, m, confirm, isDanger, field, initial) {
-        title = t; message = m; confirmText = confirm; danger = isDanger
+        title = t; message = m; confirmText = confirm; danger = isDanger; altText = ""; cancelText = "Annuler"
         withField = field; fieldText = initial; error = ""
         visible = true
         if (field) {
@@ -82,7 +85,9 @@ Rectangle {
                 anchors.right: parent.right
                 spacing: 8
                 Repeater {
-                    model: [ { k: "cancel", t: "Annuler" }, { k: "ok", t: dialog.confirmText } ]
+                    model: dialog.altText.length > 0
+                        ? [ { k: "cancel", t: dialog.cancelText }, { k: "alt", t: dialog.altText }, { k: "ok", t: dialog.confirmText } ]
+                        : [ { k: "cancel", t: dialog.cancelText }, { k: "ok", t: dialog.confirmText } ]
                     Rectangle {
                         required property var modelData
                         height: 30; radius: 8
@@ -95,7 +100,9 @@ Rectangle {
                             id: btn
                             anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                             enabled: !dialog.busy
-                            onClicked: modelData.k === "ok" ? dialog.confirm() : (dialog.visible = false, dialog.rejected())
+                            onClicked: modelData.k === "ok" ? dialog.confirm()
+                                     : modelData.k === "alt" ? dialog.alternate()
+                                     : (dialog.visible = false, dialog.rejected())
                         }
                     }
                 }

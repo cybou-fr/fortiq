@@ -52,7 +52,7 @@
 | APP | GUI-инструмент | Предпочтительный Linux CLI / подсистема | Транспорт | Статус |
 |---|---|---|---|---|
 | APP-01 | **Smart Files** | SFTP read-only, далее проверенные `find`, `stat`, `rg`, `cp`, `mv` | SSH exec; SFTP внутри SSH | **Qt R0.1: исходники SFTP list/navigation, без native acceptance; остальное цель** |
-| APP-02 | Editor | `cat`, `stat`, `mktemp`, `mv`, `sh` | SSH exec/stdin; сохранение на Linux | не начато |
+| APP-02 | Editor | SFTP (OpenSSH `sftp-server`, расширение `posix-rename@openssh.com`) | SFTP внутри SSH: чтение, временный файл, атомарная замена, проверка чтением | текстовые файлы UTF-8 до 1 МиБ в Files, проверено на WSL Debian 13; полноценного приложения Editor нет |
 | APP-03 | Docs/Markdown | CLI файлов; при конвертации `pandoc` / `cmark` | SSH exec/SFTP | не начато |
 | APP-04 | Mail | `mail`, `sendmail`, `notmuch`, `mu`, `mbsync` — по совместимым возможностям | **Только SSH → серверная CLI** | не начато |
 | APP-05 | Browser | SSH `sshd` forwarding; для серверных запросов `curl` | **SSH SOCKS**, без fallback | не начато |
