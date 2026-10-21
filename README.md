@@ -25,6 +25,8 @@
   «оживит» отключённую сессию.
 - Тесты проверки удалённых путей (`tests/RemotePathTest.cpp`).
 
+**Дизайн — новый обязательный эталон, пока не реализован:** UI должен визуально совпасть с предоставленным эскизом 1536×1024 (не просто быть похожим). Нынешний QML — промежуточный и не прошёл visual acceptance. Первые flagship-приложения — **Smart Files и Logs**, после обязательных SSH/сборочных основ.
+
 **Не реализовано:** постоянная SSH-сессия, вход по ключу, переподключение и отмена, открытие и
 сохранение файлов, передачи, несколько серверов, почта, браузер, системные инструменты, подготовка
 сервера, лицензирование, AI. Заявления прежнего README о Flutter-версии к Qt не относятся.
@@ -102,6 +104,9 @@ ctest --test-dir build -C Release --output-on-failure
 | [AI_CLI](docs/AI_CLI.md) | спецификация необязательной серверной команды `ai` |
 | [LICENSING](docs/LICENSING.md), [LICENSING_SETUP](docs/LICENSING_SETUP.md) | тарифы и подключение Lemon Squeezy |
 | [QT_MIGRATION](docs/QT_MIGRATION.md) | план и фактическое состояние перехода на Qt |
+| [UI SPEC v1](docs/UI_SPEC_V1.md) | **точный канонический скетч**: геометрия 1536×1024, материалы, поведение, visual acceptance |
+| [Smart Files](docs/SMART_FILES_SPEC.md) | первый flagship: навигация, интеллектуальный поиск, операции и безопасность |
+| [Logs](docs/LOGS_INTELLIGENCE_SPEC.md) | второй flagship: Linux-журналы, корреляция и проверяемые сводки без AI |
 | [DESKTOP_BLUEPRINT](docs/FORTIQ_DESKTOP_BLUEPRINT.md) | контракт desktop-shell, архитектура, 10 классов, 3 спринта, Windows/Android и стенды Debian |
 | [AGENTS](AGENTS.md) | правила разработки для людей и агентов |
 
