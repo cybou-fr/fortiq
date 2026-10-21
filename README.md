@@ -89,7 +89,17 @@ ctest --test-dir build -C Release --output-on-failure
 cp <vcpkg>/installed/x64-windows/bin/*.dll build/
 ```
 
-Готовые APK или EXE в репозитории пока не собирались.
+Установщик Windows (x64) собирается из Release-сборки одной командой; результат кладётся в
+`build-dist/` и в репозиторий не попадает:
+
+```sh
+python tool/package_windows.py --build build-msvc
+```
+
+Получаются папка приложения, ZIP-архив и установщик Qt Installer Framework (установка для одного
+пользователя в `%LOCALAPPDATA%\Programs\FORTIQ`, без прав администратора, ярлык в «Пуске»,
+деинсталлятор). Подписи кода пока нет: SmartScreen предупредит. Состояние проверок — в
+[QT_MIGRATION](docs/QT_MIGRATION.md). Сборка для Android не делалась.
 
 ## Использование среза R0.1
 
