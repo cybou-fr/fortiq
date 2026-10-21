@@ -208,7 +208,10 @@ def main():
     sizes = (16, 24, 32, 48, 64, 128, 256)
     layers = [(s, png(s, s, render(s, source, w, h, box, tile=True))) for s in sizes]
     (args.output / "fortiq.ico").write_bytes(make_ico(layers))
-    (args.output / "fortiq.rc").write_text('IDI_ICON1 ICON "fortiq.ico"\n', encoding="utf-8")
+    # Absolute forward-slash path works with MSVC RC and MinGW windres when
+    # CMake launches the compiler from a different working directory.
+    ico_path = (args.output / "fortiq.ico").resolve().as_posix()
+    (args.output / "fortiq.rc").write_text('IDI_ICON1 ICON "' + ico_path + '"\n', encoding="utf-8")
     for density, size in (("mdpi", 48), ("hdpi", 72), ("xhdpi", 96),
                           ("xxhdpi", 144), ("xxxhdpi", 192)):
         folder = args.android_output / ("res/mipmap-" + density)

@@ -145,6 +145,12 @@ www/               сайт (HTML, RU/FR)
 
 ## Иконка и брендинг
 
-Исходники знака лежат в `assets/branding/` (`fortiq-icon-source.png`, `fortiq_mark.png`). Скрипт
-раскладки иконок для Flutter удалён; для Qt иконки подготовят заново. Знак рисуется на тёмном
-фоне (`#13141B`).
+**Брендинг Qt/Windows/Android подключён в исходниках сборки.** `assets/branding/fortiq_mark.png`
+используется генератором `tool/generate_brand_assets.py` при CMake configure (без Pillow и ImageMagick).
+Он создаёт Windows `.ico` (16–256 px) и `.rc`, ресурс `QIcon` для Qt-окна, Android mipmap и
+adaptive launcher icon. `QT_ANDROID_APP_ICON` применяется на Qt **6.9+**; Android-пакет
+`fr.cybou.fortiq`. Для сайта есть SVG-логотип и favicon в `www/assets/`.
+
+Интеграция исходников — **не подтверждение готовых EXE/APK**: иконки ещё необходимо проверить
+после реальной сборки Windows и установки Android APK. Контракт:
+[assets/branding/README.md](assets/branding/README.md).

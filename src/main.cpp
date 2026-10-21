@@ -5,6 +5,7 @@
 #include <QCommandLineParser>
 #include <QDir>
 #include <QGuiApplication>
+#include <QIcon>
 #include <QImage>
 #include <QQmlApplicationEngine>
 #include <QQmlExtensionPlugin>
@@ -30,6 +31,11 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     QCoreApplication::setOrganizationName("CYBOU");
     QCoreApplication::setApplicationName("FORTIQ");
+    // Included with qt_add_resources in both the app and shell preview.
+    // This is the Qt window/taskbar icon; the Windows EXE icon separately
+    // comes from the generated Win32 .rc + .ico resource.
+    const QIcon fortiqIcon(QStringLiteral(":/branding/fortiq_mark.png"));
+    QGuiApplication::setWindowIcon(fortiqIcon);
     QQuickStyle::setStyle("Fusion");
 
     QCommandLineParser parser;
@@ -63,6 +69,8 @@ int main(int argc, char *argv[])
 #endif
     engine.loadFromModule("Fortiq.App", "Main");
     if (engine.rootObjects().isEmpty()) return 1;
+    if (auto *rootWindow = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst()))
+        rootWindow->setIcon(fortiqIcon);
 
     if (parser.isSet(screenshotOption)) {
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());
