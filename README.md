@@ -1,421 +1,63 @@
-# Fortiq
+# FORTIQ — Distributed Desktop (Qt rebuild)
 
-**FORTIQ — Distributed Desktop Software: исключительно GUI-слой визуализации
-над Linux-сервером через SSH.** Linux — **единственный backend**:
-хранилище рабочих данных и настроек, исполнитель вычислений и CLI-команд.
-Вся предметная логика работает на сервере. FORTIQ показывает результат,
-собирает ввод и отправляет команды. По умолчанию используем **готовые зрелые
-консольные инструменты Linux**, а не пишем свой backend.
+**One Linux workspace, on Windows and Android.** FORTIQ is a native client for an existing Linux server. The Linux host performs work and stores persistent working data; FORTIQ displays results and requests operations through **SSH/SFTP**.
 
-**Обязательная архитектура:** `FORTIQ GUI → SSH → Linux console utility → результат → GUI`.
-Файлы можно передавать через SFTP **внутри SSH**. Browser отображается локальным
-WebView2, но весь доступ к сайтам направляется через SSH SOCKS-forwarding;
-`sshd` на сервере обеспечивает этот режим, а операции CLI — `curl`/серверные утилиты.
-**Mail никогда не соединяется с SMTP/IMAP напрямую из FORTIQ:** чтение/отправка
-выполняются серверной консольной почтовой утилитой через SSH.
+> **Current source status (Qt milestone R0.1):** new C++20 / Qt 6 / QML project and a limited SSH/SFTP Files vertical slice. This is **not** a complete port of the former Flutter application, not a published Android/Windows build and not a security-qualified release. The final Flutter sources remain available at tag `flutter-final`; the active `main` contains only the new implementation and documentation. See [QT_MIGRATION](docs/QT_MIGRATION.md).
 
-Локально допускаются только отображение/ввод, необходимый минимум SSH-bootstrap
-(адрес сервера, проверенные host keys, защищённый ключ входа), лицензирование
-Lemon Squeezy и **несохранённый буфер в оперативной памяти**. Все постоянные
-рабочие данные, черновики, конфигурации серверных инструментов, вычисления
-и настройки workspace должны находиться на Linux. Без SSH предметных действий
-нет и локальная копия backend не создаётся.
+## Current Qt implementation
 
-**Шифрование серверных данных и настроек в покое — будущая задача**, не
-блокирующая текущую архитектуру. Сейчас SSH защищает передачу, но сам по
-себе не шифрует серверный диск. Смену SSH на другой транспорт не планируем
-без конкретной доказанной необходимости.
+- One Qt Quick Controls application using C++20, the same QML UI and native SSH/SFTP adapter on Windows and Android.
+- Responsive desktop navigation rail and compact mobile bottom navigation.
+- Linux server address, port, username and password fields (password is **RAM-only**, never stored to settings).
+- SSH host-key **SHA-256 fingerprint pinning**. On first connection, the user must verify the displayed fingerprint **through an independent trusted channel** and explicitly pin it before password authentication. Changed host keys are blocked. Host/port/user and pinned fingerprints are the only locally persisted bootstrap values.
+- Actual SFTP directory listing, navigation into directories, parent navigation and refresh with filenames and type. No fake local filesystem or direct network fallback. No mutations or file uploads are implemented yet.
+- Work in a background thread to avoid blocking the QML event loop. Responses are tied to the request generation so a late result cannot reopen a disconnected session.
+- Tests for remote path validation; no implicit shell command execution or automatic server setup in this milestone.
 
-**Блокирующий архитектурный контракт:
-[SSH_FRONTEND_CONTRACT](docs/SSH_FRONTEND_CONTRACT.md).**
-Стриминг удалённого экрана и произвольные удалённые GUI пока не реализованы.
-README описывает текущее устройство, запуск и ограничения;
-[PRODUCT_SCOPE](docs/PRODUCT_SCOPE.md) — назначение и границы продукта;
-[ARCHITECTURE](docs/ARCHITECTURE.md) — целевые контракты;
-[DEVELOPMENT_MATRIX](docs/DEVELOPMENT_MATRIX.md) — задачи, очередность и критерии;
-[LICENSING](docs/LICENSING.md) — Intro, Pro и платежи Lemon Squeezy;
-[SSH_FRONTEND_CONTRACT](docs/SSH_FRONTEND_CONTRACT.md) — обязательное правило SSH/CLI.
-Планируемые функции не входят в список текущих возможностей ниже.
+**Not implemented in the Qt version:** persistent SSH session, private-key authentication, reconnect/cancel, file open/edit/save and transfers, multi-server windows, mail, browser, system tools, server setup, licensing, AI and server-side workspace persistence. The historical Flutter README and prior test claims **do not apply to Qt**.
 
-Окна принадлежат «домену»: серверу с цветом, который выбирает сам пользователь
-(цвет ничего не значит для программы, это только ваша метка).
+## Build prerequisites
 
-> **Статус: прототип.** Основной сценарий работает на Windows. Android, Linux и macOS
-> пока не поддерживаются, подробности в разделе [Платформы](#платформы).
+- Qt **6.8 or newer** with Qt Quick, Quick Controls, Network, Concurrent and Qt Test (if `BUILD_TESTING=ON`). Use a matching C++20 toolchain and CMake 3.21+.
+- **libssh2** compiled for the **same target architecture/ABI**. OpenSSL or another configured crypto backend and the TLS/dependency libraries must be included according to the selected libssh2 build. No SSH binaries, Termux or platform-specific shell calls are used.
+- On Windows: Qt MSVC 2022 x64 (or matching MinGW), a suitable CMake libssh2 package (e.g. a vcpkg-installed target for the same toolchain), and the Qt Windows deployment tool.
+- On Android: Qt for Android and matching SDK/NDK/JDK kits, plus a libssh2 build for **arm64-v8a** (and its crypto dependencies). If shared libraries are used, they must be packaged with the APK. Prefer a static cross-compiled libssh2 bundle with its required dependencies resolved.
 
-## Принцип производительности и развития
+Example CMake configuration (adjust installation prefixes, Qt kit and vcpkg toolchain to your environment):
 
-FORTIQ создаёт **минимум собственного кода бизнес-логики** и использует
-возможности Linux. Сервер выполняет тяжёлую обработку, индексирование,
-рендеринг/конвертацию по необходимости, хранение и конфигурацию.
-Клиент выполняет только неизбежные задачи отображения, декодирования и
-взаимодействия с пользователем. Это снижает объём разработки и
-сопровождения; безопасность обеспечивается проверкой версий, прав и
-результатов зрелых Linux-команд, а не одним фактом их существования.
-
-В текущем коде `shared_preferences` ещё содержит локальные параметры
-подключения и некоторые GUI-настройки. Это **текущее исключение для bootstrap**,
-а не образец для переноса серверных настроек на клиент.
-
-## Экспериментальный AI-советник (CLI и GUI-срез реализованы; не готов к выпуску)
-
-В Logs и Services добавлена экспериментальная кнопка **Explain with AI**.
-FORTIQ через SSH вызывает на выбранном **Linux-сервере** короткую
-CLI-команду **`ai`** над проверенным CPU-runtime **llama.cpp** и
-компактной GGUF-моделью. Модель запускается по запросу, **без
-постоянной службы и открытого AI-порта**; предложения никогда
-автоматически не выполняются.
-
-Для экономии ресурсов VPS `ai` сможет **кешировать на Linux точные
-вопросы и ответы**: тот же вопрос с тем же контекстом и моделью
-возвращается без нового inference. Кеш ограничен сроками/объёмом;
-чувствительные данные сохраняются только с согласием; GUI отмечает
-кешированные ответы и их возраст. Кеш не заменяет проверку состояния Linux.
-
-Серверная CLI-обёртка уже реализована в `tool/ai/ai`, но установщик и
-готовая GGUF-модель **ещё не поставляются**: перед запуском требуется
-явная ручная установка проверенного llama.cpp и GGUF на Linux.
-[Инструкция](tool/ai/README.md). На слабом VPS AI отключается, не затрагивая
-основные инструменты. CPU-only модель будет утверждена по замерам.
-Новые тарифы и API не требуются. [AI_CLI](docs/AI_CLI.md), R2/P2.
-
-## Лицензирование FORTIQ — план коммерческого выпуска
-
-FORTIQ распространяется через Lemon Squeezy как единый платный программный продукт
-с двумя вариантами срока действия. Доступ подтверждается лицензионным ключом,
-который выдаёт Lemon Squeezy после покупки:
-
-| Тариф | Оплата | Возможности |
-|---|---|---|
-| **Intro** | **2 € разово**, доступ на 14 дней, один раз на покупателя, **без автопродления** | Полный FORTIQ |
-| **Pro** | **39,90 € в год**, подписка с ежегодным продлением | Полный FORTIQ |
-
-Intro не переходит автоматически в Pro. Отмена Pro прекращает будущие списания,
-сохраняя доступ до конца уже оплаченного срока. Активация, проверка и восстановление
-ключа должны работать без SSH. Срок действия подписки не влияет на сохранность
-локальных данных пользователя. Для правила «Intro один раз на покупателя» потребуется
-отдельная проверка: выдача ключей сама по себе не запрещает повторную покупку.
-
-**Акции:** промокоды необязательны, применяются только к Pro в штатном Lemon Squeezy.
-По умолчанию скидка действует лишь на первый год; последующие продления по
-обычной цене **39,90 € в год**. Intro не дисконтируется. Цены должны быть
-окончательными для покупателя, с включёнными применимыми налогами
-(tax-inclusive pricing).
-
-**Текущий статус:** экран Intro/Pro, клиент License API, активация и защищённое
-хранение лицензии в Windows реализованы в коде. Нужны реальные ID/ссылки магазина,
-проверка Test Mode, Windows CI/VM и выпуск. См. [LICENSING](docs/LICENSING.md)
-и [LICENSING_SETUP](docs/LICENSING_SETUP.md).
-
-## Возможности
-
-Категории ниже организуют существующий набор; это не утверждение о новом реестре
-приложений в коде. **Все рабочие инструменты привязаны к серверному CLI через SSH.**
-
-| Категория | Окно | Что работает в текущем коде | Сервер / транспорт |
-|---|---|---|---|
-| Workspace | **Files** | Каталоги, создание, удаление, открытие файлов | `ls`, `mkdir`, `rm`, `cat` |
-| Workspace | **Editor** | Текст, Ctrl+S, dirty, подтверждение Reload и закрытия | stdin; атомарная замена при доступном файле и каталоге |
-| Workspace | **Docs & Notes** | Markdown с предпросмотром | файловый сервис, как Editor |
-| Workspace | **Mailbox** | Чтение системной почты и запуск отправки на Linux | `/var/mail`, серверные `mail`/`sendmail` через SSH; отправка только через доступный Linux MTA; неизвестный результат не выдаётся за доставку |
-| Workspace | **Browser** | Адресная строка и просмотр страниц | WebView2 + SOCKS5 внутри SSH, серверный `sshd`; для CLI-запросов `curl` |
-| Workspace | **Media Viewer** | Изображения, масштаб и поворот | `base64` по SSH |
-| System | **Terminal** | xterm, восстановление при наличии tmux | `tmux` или обычный SSH PTY |
-| System | **Processes** | Ограниченный список процессов, завершение | `ps`, `kill` |
-| System | **Services** | Ограниченный список служб systemd, start/stop/restart | `systemctl` |
-| System | **System Logs** | Журналы, текстовые фильтры | `journalctl`, `/var/log` |
-| System | **Firewall & Ports** | TCP-порты, UFW, интерфейсы | `ss`, `ufw`, `ip` |
-| Tools | **Search Hub** | Поиск файлов по имени и содержимому | `find`, `grep` |
-
-### Только Linux-сервер по SSH
-
-Каждое рабочее окно привязано к выбранному Linux-серверу (`serverId`) и его
-CLI-исполнителю. `Remote` — серверные файлы и процессы; `Account` (в будущем) —
-учётная запись, которой управляет **CLI-программа на этом же сервере**.
-`Local` означает лишь настройки GUI, защищённые ключи, временные черновики и
-состояние окон, а не параллельный backend документов или почты.
-
-Flutter не открывает SMTP, IMAP и другие прямые соединения с рабочими ресурсами.
-После отключения SSH окна показывают недоступность сервера и могут удерживать
-несохранённый текст **только в оперативной памяти до закрытия приложения**.
-Сохранение документа, отправка почты и другие операции возобновляются
-по SSH после явного действия пользователя; локального дискового fallback нет.
-
-Для каждого APP-01…APP-14 утилита и способ исполнения указаны в
-[SSH_FRONTEND_CONTRACT](docs/SSH_FRONTEND_CONTRACT.md).
-
-Дополнительно:
-
-- **Подготовка и защита сервера при подключении.** Fortiq проверяет сервер (чтение), а
-  затем сам делает всё, что нашёл, шаг за шагом, **в модальном окне с живым логом**:
-  обязательные пакеты (`tmux`, `procps`, `iproute2`), системные обновления,
-  автоматические обновления безопасности (`unattended-upgrades`), защита от подбора
-  паролей (`fail2ban`, адрес, с которого вы подключились, не банится), защита SSH
-  (вход только по ключу, без парольного входа для root) и файрвол (`ufw`: входящие
-  закрыты, кроме SSH и портов, которые слушают сейчас). Если делать нечего, окна нет,
-  только значок «Server ready» в панели. Нажатие на значок открывает шаги и лог.
-- **Страховка от потери доступа.** После изменения SSH и файрвола Fortiq проверяет,
-  что можно войти **вторым, новым соединением**; если нельзя, изменение
-  откатывается само. Шаг SSH доступен только при входе по ключу. Цепочка шагов
-  останавливается на первой ошибке; «Stop after this step» останавливает вручную.
-  Разрыв связи посреди шага даёт статус «unknown» (результат неизвестен), шаг не
-  повторяется вслепую.
-- **Автопереподключение.** При потере связи рабочий стол остаётся на экране,
-  сверху появляется полоса с обратным отсчётом. Терминалы возвращаются к своим
-  tmux-сессиям, браузерный туннель поднимается заново.
-
-## Требования
-
-### Клиент (ваш компьютер)
-
-- Windows 10/11 x64.
-- [Flutter SDK](https://docs.flutter.dev/get-started/install) с Dart `^3.13.5`.
-- Visual Studio 2022 с компонентом «Разработка классических приложений на C++».
-- [Microsoft WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)
-  (нужен окну Browser; в Windows 11 уже установлен).
-
-### Сервер
-
-- **Debian или Ubuntu.** Другие дистрибутивы не поддерживаются.
-- SSH-доступ по ключу или паролю.
-- `root` либо пользователь с `sudo` **без пароля** (`sudo -n`). Это нужно для
-  установки пакетов, управления службами, UFW и завершения чужих процессов.
-  Без этих прав Fortiq работает, но показывает, чего не хватает, и подсказывает команду
-  для администратора.
-- Необходимые зависимости (`tmux`, `procps`, `iproute2`) Fortiq устанавливает
-  при наличии административных прав; без них требуется помощь администратора.
-
-Не выдавайте приложению неограниченный `NOPASSWD:ALL` как стандартную настройку.
-Для просмотра используйте обычную учётную запись; административные операции
-зависят от политики доступа вашего сервера. Текущая обёртка использует
-`sudo -n sh -c`, поэтому её нельзя считать готовой системой ограничения прав
-по отдельным действиям. Целевая политика описана в
-[контракте безопасности](docs/ARCHITECTURE.md#безопасность-операций).
-
-### Подготовка сервера: что проверено
-
-Шаги подготовки и откат проверены тестами с подставным сервером (разбор проверки,
-порядок шагов, откат при потере входа, остановка, обрыв посреди шага, синтаксис всех
-скриптов настоящей оболочкой `sh`) и тестом окна. **На реальном сервере и на
-отдельной виртуальной машине они ещё не запускались**: до этого не включайте
-подготовку на сервере, который нельзя безболезненно перенастроить
-([APP-14 и CORE-10](docs/DEVELOPMENT_MATRIX.md)).
-
-## Запуск
-
-```bash
-flutter pub get
-flutter run -d windows
+```sh
+cmake -S . -B build -DCMAKE_PREFIX_PATH=/path/to/Qt/6.x/kit -DBUILD_TESTING=ON
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
 ```
 
-Сборка релиза:
+Qt Creator: open `CMakeLists.txt`, select **Desktop Qt** or **Android arm64-v8a** kit, configure the target libssh2 dependency, and build/run. `qt_add_executable` uses a regular executable for Windows and Android packaging for the Android kit. The manifest must contain `android.permission.INTERNET`; the CMake code registers it with Qt 6.9+ and Qt Network also contributes its permission requirements. **Inspect the generated merged manifest before Android installation.**
 
-```bash
-flutter build windows
+Qt 6.8 builds require verifying how that kit generates the INTERNET manifest entry. No APK or EXE has been built in this repository session.
+
+## Using the R0.1 slice
+
+1. Enter the Linux SSH host, port, username and password (the Linux server must permit password authentication and SFTP). This first milestone does **not** yet support private-key-only servers.
+2. On a new host, compare the offered `SHA256:` fingerprint to the server's known fingerprint from its trusted console. Example on Linux server: `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256` (the server might negotiate a different host-key algorithm; compare the exact negotiated key).
+3. Accept only after independent verification; connect and open **Files** to browse. Remote data is only visible with SSH. No file writes are offered.
+4. Disconnect to clear the password kept in the controller's RAM. Session and request cancellation remain next-stage work; ongoing individual requests have transport timeouts.
+
+Security caveat: a native SSH client has substantial untested attack surface. First-use pinning is not a substitute for out-of-band verification, and the Qt app is currently an engineering prototype.
+
+## Architecture and scope
+
+```text
+Windows / Android
+ └── FORTIQ Qt 6/QML UI
+      ├── RemoteController (server context, request generation, UI state)
+      ├── SshClient (libssh2: SSH host key check, password auth, SFTP)
+      └── UI bootstrap settings (host, port, user, verified fingerprint)
+              │ SSH encrypted channel
+              ▼
+         Existing Linux sshd / SFTP service
+              └── Files (read-only first); Linux CLI adapters later
 ```
 
-Готовый файл: `build\windows\x64\runner\Release\fortiq.exe`.
+The original product rules remain binding: **universal desktop, not DevOps-only; all business operations over SSH to Linux; no proprietary server daemon, no direct IMAP/SMTP; existing Linux tools first; AI optional**. Product planning is in [PRODUCT_SCOPE](docs/PRODUCT_SCOPE.md), [SSH_FRONTEND_CONTRACT](docs/SSH_FRONTEND_CONTRACT.md), and the migration plan in [QT_MIGRATION](docs/QT_MIGRATION.md). These long-form documents contain older Flutter-specific implementation notes; consult the Qt migration document for the new actual state.
 
-## Первое подключение
-
-1. Введите адрес сервера, порт, пользователя и выберите цвет домена.
-2. Укажите приватный ключ (на Windows Fortiq ищет `id_ed25519` или `id_rsa`
-   в `%USERPROFILE%\.ssh`)
-   либо пароль.
-3. При первом подключении Fortiq покажет отпечаток ключа сервера. Сверьте его,
-   если можете, и подтвердите. При ручном подключении изменившийся ключ вызывает
-   красное предупреждение и требует явного доверия новому ключу. При автоматическом
-   переподключении несовпадение ключа останавливает повторы.
-4. Профиль можно сохранить. Пароль не сохраняется никогда.
-
-Ключи с парольной фразой (passphrase) пока не поддерживаются.
-
-На телефоне и планшете нет `~/.ssh`, поэтому ключ импортируется кнопкой «Import key file…» или
-вставляется текстом («Paste key…»). После сохранения профиля он лежит в приватной папке приложения
-(на Android она изолирована от других приложений). Отдельного шифрования поверх этого нет.
-
-## Безопасность
-
-- **Проверка ключа сервера** по принципу «доверие при первом подключении».
-  Отпечатки хранятся локально. При автопереподключении изменившийся ключ никогда
-  не принимается автоматически.
-- **Секреты:** пароль не сохраняется на диск. Ключ, прочитанный по внешнему пути,
-  не копируется при сохранении профиля; импортированный через файл или вставку
-  ключ сохраняется `PrivateKeyStore` в каталоге данных приложения без отдельного
-  шифрования. В профиле хранятся путь и признак импортированного ключа.
-  Параметры текущего соединения остаются в памяти для переподключения; при
-  отключении ссылки освобождаются, что не гарантирует обнуления строк в памяти.
-  Системное защищённое хранилище токенов и ключей ещё не реализовано.
-- **Команды на сервере** составляются с экранированием (`shQuote`), имена файлов
-  и поисковые запросы передаются как буквальные аргументы. SSH-сервис проверяет код
-  возврата и stderr; часть методов ещё скрывает ошибки чтения за пустыми результатами.
-- **Запись файлов.** Для существующего доступного файла в доступном для записи
-  каталоге используется временный файл с проверкой размера и атомарной заменой.
-  Права копируются, восстановление владельца выполняется по возможности; ACL и
-  дополнительные атрибуты не копируются. Новые файлы и файлы в недоступном для
-  записи каталоге пишутся на месте. Для существующего файла интерфейс предупреждает
-  о неатомарной записи; обрыв такой записи может оставить неполный файл.
-- **Браузер.** WebView2 настроен на SOCKS5 поверх проверенного SSH-соединения,
-  включая проксирование `localhost`; задан запрет WebRTC UDP вне прокси.
-  Прямого соединения как запасного варианта в коде нет. Индикатор «VPS TUNNEL»
-  отражает состояние SSH и SOCKS-listener. Проверка маршрута HTTP/DNS, отсутствия
-  обхода туннеля и поведения WebRTC входит в интеграционные критерии матрицы;
-  наличие настроек само по себе не подтверждает их выполнение во всех сценариях.
-
-Какие данные сохраняются локально (через `shared_preferences`): профили серверов
-(имя, адрес, порт, пользователь, путь к ключу, признак сохранённого ключа, цвет),
-отпечатки ключей серверов и настройка автоустановки обновлений. Импортированные
-ключи хранятся отдельно в каталоге данных приложения, а не в `shared_preferences`.
-
-## Устойчивость к обрывам
-
-- Потеря связи обнаруживается за секунды: каждые 10 с проверяется ответ сервера.
-- Повторы идут через 1, 2, 4, 8, 15 и затем каждые 30 с, пока вы не нажмёте
-  «Disconnect». Остановка происходит при неверных учётных данных или изменившемся
-  ключе сервера.
-- Терминал один, его сессия называется `fortiq-1` и живёт в tmux на сервере: после
-  обрыва он подключается к той же сессии. **Закрытие окна терминала завершает его
-  сессию, а отключение или выход из Fortiq оставляет её работать.** Новый запуск
-  приложения снова подключается к `fortiq-1`. Если оболочка завершилась сама
-  (`exit`, закрытая или отсоединённая tmux-сессия), это отличается от потери
-  соединения: появляется «[session ended]» и кнопка «Start new session».
-- При закрытии окна с несохранёнными правками и при отключении Fortiq спрашивает
-  подтверждение.
-
-## Платформы
-
-| Платформа | Состояние |
-|---|---|
-| Windows | Основная, проверяется |
-| Android | В основном манифесте уже есть `INTERNET`. Предыдущая проверка: сборка Debug-APK; в рамках обновления документации сборка не повторялась. Импорт ключей есть в коде. **Браузер отключён**, пока нет WebView с проверенным принудительным прокси. Проверки на устройстве и эмуляторе не зафиксированы |
-| Linux, macOS | Не проверялись; окно Browser там недоступно |
-| iOS | Не проверялась |
-
-## Известные ограничения
-
-- Файлы читаются и пишутся командами оболочки, SFTP пока нет. Большие файлы и
-  изображения передаются медленно.
-- Вывод `ls`, `ps`, `systemctl`, `ss` разбирается как текст. Необычные имена файлов
-  (несколько пробелов подряд) и символические ссылки отображаются неточно, UDP-порты
-  не показываются.
-- Терминал один по решению проекта: повторное нажатие открывает то же окно.
-- Несохранённые правки не переживают закрытие приложения (черновики на диск пока
-  не пишутся).
-- Раскладка окон не сохраняется между запусками.
-- Нет ключей с passphrase и ssh-agent.
-- Полноценного **серверного CLI для почты/MIME**, приложения управления дисками,
-  PDF-просмотра и медиаплеера пока нет. Прямого IMAP/SMTP-клиента в Flutter
-  **не будет**; расширенная почта должна выполняться Linux CLI через SSH.
-- Рабочий стол пока зависит от активной SSH-сессии. В перспективе экран
-  подключения и лицензирование работают без SSH, несохранённый ввод можно
-  удерживать только в RAM; рабочие действия и постоянные черновики — только Linux.
-- Рекомендуется не открывать приложение дважды на одном компьютере одновременно:
-  порт браузерного прокси выбирается один раз на запуск.
-
-## Структура проекта
-
-```
-lib/
-  main.dart                  окно подключения, профили, диалог ключа сервера
-  models/                    ServerProfile и модели данных Linux
-  services/
-    ssh_service.dart         транспорт: соединение, переподключение, проверка живости, туннель
-    shell.dart               shQuote, asRoot, ошибка команды, интерфейс RemoteShell
-    file_service.dart        файлы: обзор, чтение, атомарная запись, поиск
-    system_service.dart      процессы, службы systemd, метрики, журналы
-    network_service.dart     порты, UFW, интерфейсы
-    terminal_service.dart    оболочка и tmux-сессии
-    mail_service.dart        локальная почта сервера
-    server_setup_service.dart  проверка сервера, установка пакетов, обновления
-    known_hosts_service.dart отпечатки ключей серверов
-    profile_service.dart     сохранение профилей
-    private_key_store.dart   хранение импортированных ключей без отдельного шифрования
-  widgets/
-    desktop_workspace.dart   рабочий стол: окна, док, верхняя панель
-    qubes_window_frame.dart  рамка главного окна приложения
-    terminal_view.dart, file_explorer.dart, file_editor.dart, markdown_studio.dart,
-    process_manager.dart, service_manager.dart, log_viewer.dart,
-    network_inspector.dart, spotlight_search.dart, browser_window.dart,
-    mailbox_viewer.dart, media_viewer.dart, server_status.dart
-test/                        модульные тесты
-docs/
-  PRODUCT_SCOPE.md           назначение, категории и границы продукта
-  ARCHITECTURE.md            целевые контракты и безопасность операций
-  DEVELOPMENT_MATRIX.md      состояние инструментов и план развития
-```
-
-## Иконка и брендинг
-
-Все иконки получаются из одного исходника `assets/branding/fortiq-icon-source.png` (знак на
-прозрачном фоне) скриптом [tool/generate_icons.py](tool/generate_icons.py):
-
-```bash
-pip install pillow
-python tool/generate_icons.py
-```
-
-Скрипт обновляет иконку Windows (`app_icon.ico`), иконки Android (обычные, адаптивные с отдельным
-слоем и монохромный слой для тем Android 13), заставку Android, набор `AppIcon` для iOS и знак
-внутри приложения (`assets/branding/fortiq_mark.png`). Иконка это знак на тёмном фоне приложения
-(`#13141B`), поэтому она одинаково читается на светлых и тёмных панелях задач и рабочих столах.
-После смены исходника перегенерируйте иконки и пересоберите приложение. Linux и macOS в проекте
-пока нет, для них иконки не создаются.
-
-## Разработка
-
-```bash
-flutter analyze        # статический анализ
-flutter test           # модульные тесты
-```
-
-Все Linux-операции живут в отдельных сервисах поверх интерфейса `RemoteShell`, поэтому
-их можно проверять с подставным сервером без SSH (`test/services_test.dart`). Тесты
-покрывают экранирование команд, `sudo`-обёртку, команду tmux, разбор списка обновлений,
-файлов, процессов и правил UFW. Живое SSH-подключение автоматически не проверяется.
-
-При горячей перезагрузке (hot restart) браузер может перестать загружать страницы,
-потому что порт туннеля меняется. Перезапустите приложение целиком.
-
-## Развитие
-
-Все текущие приложения сохраняются. Разработка ориентируется на
-**законченные действия**, а не на число новых окон:
-**Files → Editor → Save → Verify** и
-**Services → Logs → Editor → Validate → Restart → Verify**,
-всегда на выбранном Linux-сервере через SSH. Первый успешный SSH-сеанс
-должен понятным образом привести к обзору состояния сервера и полезному
-действию, не обходя Server Setup и его защиту.
-
-**Коммерческая гипотеза:** первым покупателям — Windows-разработчикам и
-небольшим студиям с Linux VPS — FORTIQ экономит время на повседневных
-задачах и снижает количество ошибок переключения контекста. Это
-требует проверки на реальных пользователях, а не заявляется доказанным
-фактом. Для пилота проверяем удобство первого подключения, выполнение
-полезного действия, возврат в течение Intro и добровольный переход на Pro.
-Сырой SSH-трафик, файлы и содержимое команд в аналитику не отправляем.
-
-Этап завершается проверкой безопасного сквозного сценария, а не
-количеством новых экранов. Порядок и критерии: VALUE-01…06, FLOW-11/12
-в [DEVELOPMENT_MATRIX](docs/DEVELOPMENT_MATRIX.md).
-
-| Поставка | Основной результат |
-|---|---|
-| **R0 — Paid Windows Foundation** | Lemon Squeezy Intro/Pro, активация без SSH, безопасное хранение ключей, проверка подготовки сервера на VM, жизненный цикл SSH/задач, CI и Windows-релиз |
-| R1 — SSH Connected Desktop | Контекст SSH-хоста, SFTP внутри SSH, один качественный терминал, защита правок и серверные диагностические CLI |
-| R2 — Server CLI Workspace | Серверные CLI для Mail/MIME, PDF и поиска, хранение документов и постоянных черновиков на Linux, восстановление workspace через SSH |
-| R3 — Integration | Несколько серверов, уведомления, история и резервное копирование; Containers/Jobs после проверки потребности |
-| R4 — Advanced | Операции с разделами, расширенные медиа, дополнительные платформы и опциональные функции |
-
-Windows остаётся основной платформой. Android, прежде всего планшеты, развивается
-отдельным направлением: замена Windows-only компонентов и проверка
-сенсорных сценариев. Планируемая поддержка не меняет текущий статус платформ.
-
-Коммерческий выпуск: цены Intro и Pro утверждены; требуется определить оставшиеся параметры
-лицензирования и пройти Lemon Squeezy Test Mode, интегрировать выдаваемые
-платформой ключи и проверку License API и собрать проверенный Windows-пакет. Сайт `www/` обновляется
-при готовности реального checkout; тестовые ссылки не публикуются как рабочая покупка.
-
-Полный перечень задач, зависимости и критерии приёмки — в
-[матрице развития](docs/DEVELOPMENT_MATRIX.md). Она определяет состав поставок;
-README обновляется по мере реализации и проверки. Это этапы готовности, не
-календарные обещания.
+Private repository; no change to the product's commercial licensing policy is implied.

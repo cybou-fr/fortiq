@@ -52,3 +52,38 @@ test/integration/.keys/
 
 # Per-store local build configuration (IDs are public, but do not check in customer setup).
 /config/lemon_squeezy.local.json
+
+# Qt/C++ migration additions
+# C++ Qt / CMake build products
+/build/
+/build-*/
+/cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+*.user
+*.user.*
+*.qmlc
+*.jsc
+
+# Android packaging / generated signing material
+/android-build/
+/android-build-*/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# IDE, OS, runtime credentials and logs
+.vs/
+.idea/
+.vscode/
+*.log
+*.tmp
+*.key
+*.pem
+.env
+.env.*
+.DS_Store
+Thumbs.db
