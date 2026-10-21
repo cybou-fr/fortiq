@@ -1,8 +1,6 @@
-> **Qt migration (2026-10-21):** Existing Linux-side `tool/ai/ai` may remain as an optional server CLI, but all Flutter UI integration descriptions below are historical and **not available in Qt R0.1**. AI remains nonblocking and optional; keep R0 Files/Editor development ahead of AI. See [QT_MIGRATION.md](QT_MIGRATION.md).
-
 # FORTIQ AI — серверная консольная команда `ai` на llama.cpp
 
-**Статус: спецификация, НЕ реализовано (18.10.2026).** Серверная команда и окна клиента, созданные в прототипе на Flutter, удалены вместе с ним (тег `flutter-final`); код надо писать заново.
+**Статус: спецификация, НЕ реализовано (18.10.2026).** Серверная команда и окна клиента, созданные в прототипе на Flutter, удалены вместе с ним (тег `flutter-final`); код надо писать заново. В клиенте Qt R0.1 интеграции AI нет; разработка Files/Editor (R0) идёт раньше AI.
 Выбран готовый llama.cpp, но реальную GGUF-модель и установщик не выбирали; релизные CPU, память и скорость до испытаний не обещаются. AI — опциональный R2/P2, не блокирует R0/R1 и коммерческий релиз.
 
 ## 1. Простая архитектура без сервера AI

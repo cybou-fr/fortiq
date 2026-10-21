@@ -1,10 +1,3 @@
-## Qt rewrite decision — 21 October 2026 (current)
-
-- Active implementation: **C++20 + Qt 6/QML**, same product on **Windows and Android first**. Flutter/Dart is archived at tag `flutter-final`; do **not** resume Flutter development in `main`.
-- Current Qt milestone R0.1: responsive UI, native libssh2 SSH fingerprint pinning, password SSH auth, read-only SFTP Files browser and path tests. **Builds on Windows/Android and native runtime tests are not yet verified.** [Qt migration status](docs/QT_MIGRATION.md) and current [README](README.md) override old Flutter-specific status claims.
-- Next: Windows and Android arm64 verified builds, SSH key auth / credential hardening and persistent session, then Files/Editor end-to-end; do not expand to Docker/Podman dashboards.
-- Keep original server-only work-data and SSH/CLI architectural boundaries. Keep everything on `main`.
-
 # Правила разработки FORTIQ
 
 ## Git workflow: только main
@@ -24,8 +17,14 @@
 - Клиент разрабатывается на **C++20 с Qt 6.12** (CMake). Прежняя реализация на Flutter/Dart
   удалена 18.10.2026; её последнее состояние — git-тег `flutter-final`. Flutter и Dart больше не
   используются, новый код на них не пишется.
-- Реализации пока нет: README и документация описывают цели и контракты, а не готовые функции.
-  Открытые технические решения перечислены в `docs/ARCHITECTURE.md`.
+- Текущее состояние — инженерный прототип **R0.1** (21.10.2026): QML-интерфейс, закрепление
+  отпечатка ключа хоста (libssh2), вход по паролю, просмотр каталогов по SFTP только для чтения,
+  тесты удалённых путей. Сборки для Windows/Android и проверки на устройствах ещё не выполнялись.
+  Фактический статус — [QT_MIGRATION](docs/QT_MIGRATION.md) и [README](README.md); остальное в
+  документации — цели и контракты, а не готовые функции.
+- Платформы в приоритете: Windows и Android arm64. Следующие шаги: проверенные сборки, вход по
+  ключу и защита учётных данных, постоянная сессия, затем Files/Editor от начала до конца.
+- Открытые технические решения перечислены в `docs/ARCHITECTURE.md`.
 
 ## Product direction: универсальный desktop
 

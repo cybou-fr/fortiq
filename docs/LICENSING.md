@@ -1,10 +1,8 @@
-> **Qt migration (2026-10-21):** Historical Flutter/Windows licensing UI and DPAPI implementation was archived at `flutter-final` and is **not part of current Qt `main`**. The Lemon Squeezy offers and business requirements below are preserved, but purchase/activation/secure storage must be newly implemented and tested in the Windows + Android Qt client. See [QT_MIGRATION.md](QT_MIGRATION.md).
-
 # FORTIQ — Licensing and Lemon Squeezy Integration
 
 **Product:** FORTIQ — Distributed Desktop Software.
 **Decision:** Lemon Squeezy is the checkout, subscription and software-license provider.
-**Status:** Windows desktop purchase/activation UI, Lemon Squeezy License API client, Windows DPAPI persistence and unit tests are implemented in `main`. Store products, live checkout URLs, end-to-end payments and release approval remain outstanding. See [LICENSING_SETUP.md](LICENSING_SETUP.md).
+**Status (21.10.2026):** not implemented in the Qt client. The Flutter-era purchase/activation UI, License API client and Windows DPAPI storage were removed with the prototype (tag `flutter-final`). The Lemon Squeezy offers and business requirements below remain valid; purchase, activation and secure storage must be implemented anew and tested in the Windows and Android Qt client. Store products and live checkout URLs are still outstanding. See [LICENSING_SETUP.md](LICENSING_SETUP.md) and [QT_MIGRATION.md](QT_MIGRATION.md).
 
 ## Architecture boundary: SSH data plane vs. license control plane
 
