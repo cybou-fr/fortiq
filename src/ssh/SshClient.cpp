@@ -232,6 +232,51 @@ SshResult SshSession::list(const QString &remoteDir)
     return result;
 }
 
+SshResult SshSession::readFile(const QString &path, qint64 maxBytes)
+{
+    if (!isOpen()) return fail(QStringLiteral("SSH session is not open."));
+    if (!path.startsWith('/') || maxBytes <= 0) return fail(QStringLiteral("Invalid remote file."));
+    const QByteArray pathUtf8 = path.toUtf8();
+    LIBSSH2_SFTP_ATTRIBUTES attr{};
+    if (libssh2_sftp_stat_ex(d->sftp, pathUtf8.constData(), static_cast<unsigned int>(pathUtf8.size()),
+            LIBSSH2_SFTP_STAT, &attr) != 0) {
+        if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
+            d->close();
+            return fail(QStringLiteral("SSH connection lost."));
+        }
+        return fail(QStringLiteral("Cannot read file (permission or path error)."));
+    }
+    if ((attr.flags & LIBSSH2_SFTP_ATTR_PERMISSIONS) && !LIBSSH2_SFTP_S_ISREG(attr.permissions))
+        return fail(QStringLiteral("Not a regular file."));
+    // Read-only open: the viewer never creates, truncates or locks the file.
+    LIBSSH2_SFTP_HANDLE *file = libssh2_sftp_open_ex(d->sftp, pathUtf8.constData(),
+        static_cast<unsigned int>(pathUtf8.size()), LIBSSH2_FXF_READ, 0, LIBSSH2_SFTP_OPENFILE);
+    if (!file) return fail(QStringLiteral("Cannot open file (permission error)."));
+
+    SshResult result;
+    result.fileSize = (attr.flags & LIBSSH2_SFTP_ATTR_SIZE) ? static_cast<qint64>(attr.filesize) : -1;
+    QByteArray data;
+    data.reserve(static_cast<qsizetype>(std::min<qint64>(maxBytes, result.fileSize >= 0 ? result.fileSize : maxBytes)));
+    char buffer[65536];
+    while (data.size() < maxBytes) {
+        const size_t want = static_cast<size_t>(std::min<qint64>(sizeof(buffer), maxBytes - data.size()));
+        const auto n = libssh2_sftp_read(file, buffer, want);
+        if (n == 0) break;
+        if (n < 0) {
+            libssh2_sftp_close(file);
+            return fail(QStringLiteral("Remote file read failed."));
+        }
+        data.append(buffer, static_cast<qsizetype>(n));
+    }
+    libssh2_sftp_close(file);
+    result.truncated = result.fileSize > data.size() || (result.fileSize < 0 && data.size() >= maxBytes);
+    result.status = SshResult::Status::Ok;
+    result.directory = path;
+    result.data = std::move(data);
+    result.message = QStringLiteral("%1 bytes read").arg(result.data.size());
+    return result;
+}
+
 SshResult SshClient::list(const ConnectionRequest &request)
 {
     SshSession session;

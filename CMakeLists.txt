@@ -50,6 +50,7 @@ set(FORTIQ_SHELL_QML
     qml/shell/FolderGlyph.qml
     qml/shell/FileThumb.qml
     qml/shell/FileIcon.qml
+    qml/shell/FileViewer.qml
     qml/shell/ToolButtonGlass.qml
     qml/shell/ToolTipLite.qml
     qml/shell/TopBar.qml
@@ -182,8 +183,9 @@ if(BUILD_TESTING)
     add_test(NAME fortiq_remote_path COMMAND fortiq_tests)
     # Live SSH check; skips itself unless FORTIQ_IT_* variables are set.
     qt_add_executable(fortiq_ssh_it tests/SshIntegrationTest.cpp
-        src/ssh/SshClient.cpp src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h)
+        src/ssh/SshClient.cpp src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h
+        src/core/RemoteController.cpp src/core/RemoteController.h)
     target_include_directories(fortiq_ssh_it PRIVATE src)
-    target_link_libraries(fortiq_ssh_it PRIVATE Qt6::Core Qt6::Network Qt6::Test ${FORTIQ_SSH_TARGET})
+    target_link_libraries(fortiq_ssh_it PRIVATE Qt6::Core Qt6::Network Qt6::Concurrent Qt6::Test ${FORTIQ_SSH_TARGET})
     add_test(NAME fortiq_ssh_integration COMMAND fortiq_ssh_it)
 endif()

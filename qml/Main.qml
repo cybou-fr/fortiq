@@ -20,6 +20,7 @@ Window {
         id: shell
         controller: remote
         fixture: shellFixture
+        fixturePreview: shellFixturePreview
         wallpaperSource: shellWallpaper
         wallpaperName: shellWallpaperName
         transformOrigin: Item.TopLeft

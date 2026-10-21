@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QByteArray>
 #include <QString>
 #include <QVariantList>
 
@@ -24,6 +25,9 @@ struct SshResult {
     QString directory;
     QString home;
     QVariantList entries;
+    QByteArray data;      // readFile(): bytes read, never written to disk
+    qint64 fileSize = -1; // readFile(): full size reported by the server
+    bool truncated = false;
 };
 
 // One authenticated SSH connection with an SFTP channel, reused for every
@@ -41,6 +45,8 @@ public:
     SshResult open(const ConnectionRequest &req);
     // Lists an absolute directory on the open session.
     SshResult list(const QString &directory);
+    // Reads at most maxBytes of a regular file, read-only (SFTP READ open).
+    SshResult readFile(const QString &path, qint64 maxBytes);
     bool isOpen() const;
     void close();
 

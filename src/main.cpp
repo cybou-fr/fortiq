@@ -46,11 +46,16 @@ int main(int argc, char *argv[])
         "Render 1536x1024 at DPR=1, save PNG to <path> and exit.", "path");
     QCommandLineOption wallpaperOption("wallpaper",
         "Bundled wallpaper (aurora, desert, city), 'none' for the placeholder, or an image file.", "name|path");
-    parser.addOptions({ fixtureOption, screenshotOption, wallpaperOption });
+    QCommandLineOption fixturePreviewOption("fixture-preview",
+        "With --reference-fixture: show the file viewer with sample text or image.", "text|image");
+    parser.addOptions({ fixtureOption, screenshotOption, wallpaperOption, fixturePreviewOption });
     parser.process(app);
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("shellFixture", parser.isSet(fixtureOption));
+    const QString fixturePreview = parser.value(fixturePreviewOption);
+    engine.rootContext()->setContextProperty("shellFixturePreview",
+        parser.isSet(fixtureOption) && (fixturePreview == "text" || fixturePreview == "image") ? fixturePreview : QString());
     const QString wallpaper = parser.value(wallpaperOption);
     const bool bundled = !parser.isSet(wallpaperOption)
         || QStringList{ "aurora", "desert", "city", "none" }.contains(wallpaper);

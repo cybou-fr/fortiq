@@ -12,6 +12,8 @@ Item {
     property Item backdrop
     property var controller: null
     property bool fixture: false
+    // Fixture only: "text" or "image" shows the viewer with sample content.
+    property string fixturePreview: ""
     signal closeRequested()
 
     property string viewMode: "grid"
@@ -82,6 +84,7 @@ Item {
         if (!entry || fixture || !connected) return
         // A symbolic link may point to a folder; the server answers on open.
         if (entry.directory || entry.link) { filterText = ""; controller.navigate(entry.path) }
+        else controller.openFile(entry.path)
     }
     function crumbs() {
         if (location.length === 0) return []
@@ -125,6 +128,7 @@ Item {
         else if ((alt && event.key === Qt.Key_Up) || event.key === Qt.Key_Backspace) { controller.goUp(); event.accepted = true }
         else if (alt && event.key === Qt.Key_Home) { controller.goHome(); event.accepted = true }
         else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) { win.open(win.selected); event.accepted = true }
+        else if (event.key === Qt.Key_Space && win.selected && !win.selected.directory) { controller.openFile(win.selected.path); event.accepted = true }
         else if (event.key === Qt.Key_Escape) { win.filterText = ""; win.editingPath = false; event.accepted = true }
         else if (event.text.length === 1 && event.text.trim().length === 1 && !ctrl && !alt) {
             // Type-to-filter, like a desktop file manager.
@@ -566,6 +570,38 @@ Item {
                 color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
             }
         }
+    }
+
+    QtObject {
+        id: samplePreview
+        readonly property bool previewBusy: false
+        readonly property string previewKind: win.fixturePreview
+        readonly property string previewPath: win.fixturePreview === "image" ? "/home/demo/Montagne.jpg" : "/home/demo/Notes.txt"
+        readonly property string previewInfo: win.fixturePreview === "image" ? "2,4 Mo" : "1,8 Ko — 12 lignes"
+        readonly property string previewImage: win.fixturePreview === "image" ? Qt.resolvedUrl("../../assets/wallpapers/aurora.jpg") : ""
+        readonly property string previewText: "# Notes — exemple de démonstration
+
+Réunion projet CYBOU : 14:00 – 15:00
+- vérifier les journaux de nginx
+- mettre à jour /etc/fortiq/notes.conf
+
+Привет, это тест UTF-8 ✓
+
+TODO:
+  1. Smart Files : aperçu
+  2. Logs : filtres
+Fin.
+"
+    }
+
+    FileViewer {
+        x: content.x; y: content.y
+        width: content.width; height: content.height + statusBar.height
+        z: 10
+        visible: (win.fixture && win.fixturePreview.length > 0) || (win.connected && win.controller.previewOpen)
+        controller: win.fixture ? samplePreview : (win.connected ? win.controller : null)
+        bottomRightRadius: 16
+        onClosed: { win.controller.closePreview(); win.view.forceActiveFocus() }
     }
 
     ConnectPane {

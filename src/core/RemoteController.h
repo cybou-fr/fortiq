@@ -25,6 +25,14 @@ class RemoteController : public QObject {
     Q_PROPERTY(bool canGoBack READ canGoBack NOTIFY changed)
     Q_PROPERTY(bool canGoForward READ canGoForward NOTIFY changed)
     Q_PROPERTY(int lastLatencyMs READ lastLatencyMs NOTIFY changed)
+    // File viewer (RAM only; nothing is written to the device).
+    Q_PROPERTY(bool previewOpen READ previewOpen NOTIFY previewChanged)
+    Q_PROPERTY(bool previewBusy READ previewBusy NOTIFY previewChanged)
+    Q_PROPERTY(QString previewPath READ previewPath NOTIFY previewChanged)
+    Q_PROPERTY(QString previewKind READ previewKind NOTIFY previewChanged)
+    Q_PROPERTY(QString previewText READ previewText NOTIFY previewChanged)
+    Q_PROPERTY(QString previewImage READ previewImage NOTIFY previewChanged)
+    Q_PROPERTY(QString previewInfo READ previewInfo NOTIFY previewChanged)
     Q_PROPERTY(QString rememberedHost READ rememberedHost CONSTANT)
     Q_PROPERTY(QString rememberedUser READ rememberedUser CONSTANT)
     Q_PROPERTY(int rememberedPort READ rememberedPort CONSTANT)
@@ -44,6 +52,13 @@ public:
     bool canGoBack() const { return !m_back.isEmpty(); }
     bool canGoForward() const { return !m_forward.isEmpty(); }
     int lastLatencyMs() const { return m_latencyMs; }
+    bool previewOpen() const { return !m_previewPath.isEmpty(); }
+    bool previewBusy() const { return m_previewBusy; }
+    QString previewPath() const { return m_previewPath; }
+    QString previewKind() const { return m_previewKind; }
+    QString previewText() const { return m_previewText; }
+    QString previewImage() const { return m_previewImage; }
+    QString previewInfo() const { return m_previewInfo; }
     QString rememberedHost() const;
     QString rememberedUser() const;
     int rememberedPort() const;
@@ -61,9 +76,14 @@ public:
     Q_INVOKABLE void goHome();
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void disconnectServer();
+    // Opens a remote file read-only in the viewer: text (first 1 MiB),
+    // image (up to 16 MiB) or a hex dump of the first bytes for binaries.
+    Q_INVOKABLE void openFile(const QString &path);
+    Q_INVOKABLE void closePreview();
 
 signals:
     void changed();
+    void previewChanged();
 
 private:
     enum class Kind { Open, List };
@@ -92,5 +112,12 @@ private:
     QStringList m_forward;
     // RAM-only listing cache for instant back/forward; cleared on disconnect.
     QHash<QString, QVariantList> m_cache;
+    int m_previewSeq = 0;
+    bool m_previewBusy = false;
+    QString m_previewPath;
+    QString m_previewKind;
+    QString m_previewText;
+    QString m_previewImage;
+    QString m_previewInfo;
 };
 }

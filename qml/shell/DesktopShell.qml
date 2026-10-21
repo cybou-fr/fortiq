@@ -8,6 +8,7 @@ Item {
     id: shell
     property var controller: null
     property bool fixture: false
+    property string fixturePreview: ""
     property url wallpaperSource: ""
     // Owner-supplied wallpapers bundled with the shell. Choice is RAM-only;
     // right-click the desktop to cycle. An explicit file overrides it.
@@ -67,6 +68,7 @@ Item {
         backdrop: wallpaper
         controller: shell.controller
         fixture: shell.fixture
+        fixturePreview: shell.fixturePreview
         onCloseRequested: shell.filesOpen = false
     }
 
