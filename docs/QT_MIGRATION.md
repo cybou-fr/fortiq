@@ -26,6 +26,10 @@
 - `--reference-fixture` (visual-only sample scene) and `--screenshot <png>` (1536×1024, DPR=1); `fortiq_shell_preview` builds without libssh2; `tool/compare_shell_screenshot.py` produces diff/overlay/report.
 - Not accepted: placeholder wallpaper, placeholder icons/font, no §4 tablet/narrow layouts, no Android run. Details and metrics: [SHELL_FIDELITY](SHELL_FIDELITY.md).
 
+## Live SSH evidence (21.10.2026, WSL `fortiq-test`)
+
+`tests/SshIntegrationTest.cpp` (`fortiq_ssh_it`, skipped unless `FORTIQ_IT_HOST/PORT/USER/PASSWORD/FINGERPRINT` are set) ran against Debian 13 / OpenSSH 10.0 in WSL on `127.0.0.1:2222`, MSVC 2022 + Qt 6.12.0 + libssh2 1.11.1 (vcpkg): **6/6 passed** — unknown host returns trust-required with the fingerprint read independently on the server, a wrong pin blocks before authentication, a wrong password fails, the pinned host lists the home directory including `Mes documents` and `Notes été.txt`. libssh2 negotiated the **ECDSA** host key, not ED25519: compare against all `ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub -E sha256` lines. The GUI path (typing into the Files window) has not been driven automatically. WSL stops an idle distro, which kills sshd; keep it running during the test.
+
 ## Vertical slices to deliver (updated binding priorities)
 
 | Milestone | User value | Engineering acceptance |

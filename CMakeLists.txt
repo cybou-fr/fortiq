@@ -123,4 +123,10 @@ if(BUILD_TESTING)
     qt_add_executable(fortiq_tests tests/RemotePathTest.cpp src/core/RemotePath.cpp src/core/RemotePath.h)
     target_link_libraries(fortiq_tests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME fortiq_remote_path COMMAND fortiq_tests)
+    # Live SSH check; skips itself unless FORTIQ_IT_* variables are set.
+    qt_add_executable(fortiq_ssh_it tests/SshIntegrationTest.cpp
+        src/ssh/SshClient.cpp src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h)
+    target_include_directories(fortiq_ssh_it PRIVATE src)
+    target_link_libraries(fortiq_ssh_it PRIVATE Qt6::Core Qt6::Network Qt6::Test ${FORTIQ_SSH_TARGET})
+    add_test(NAME fortiq_ssh_integration COMMAND fortiq_ssh_it)
 endif()
