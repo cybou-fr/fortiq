@@ -1,3 +1,4 @@
+import QtCore
 import QtQuick
 
 // The master composition at its native 1536×1024 coordinates
@@ -21,8 +22,16 @@ Item {
     property bool browserOpen: fixture && fixturePreview !== "logs" && fixturePreview !== "incident"
     property bool logsOpen: fixture && (fixturePreview === "logs" || fixturePreview === "incident" || fixturePreview === "service")
     property date now: new Date()
-    // One app panel, left or bottom (owner decision 22.10.2026). RAM only.
-    property string panelEdge: fixture && fixturePreview === "panelleft" ? "left" : "bottom"
+    // One app panel, left or bottom (owner decision 22.10.2026). The choice is
+    // a display preference remembered on this device (owner decision); the
+    // reference fixture neither reads nor writes it.
+    Settings {
+        id: displaySettings
+        category: "display"
+        property string panelEdge: "bottom"
+    }
+    property string panelEdge: fixture ? (fixturePreview === "panelleft" ? "left" : "bottom")
+                                       : (displaySettings.panelEdge === "left" ? "left" : "bottom")
     property bool serversOpen: false
 
     width: Theme.canvasWidth
@@ -135,7 +144,10 @@ Item {
         height: edge === "left" ? parent.height - 59 - 8 : 70
         running: ({ files: shell.filesOpen, logs: shell.logsOpen, launcher: shell.launcherOpen })
         onLaunch: (app) => shell.launch(app)
-        onMoveTo: (edge) => shell.panelEdge = edge
+        onMoveTo: (edge) => {
+            shell.panelEdge = edge
+            if (!shell.fixture) displaySettings.panelEdge = edge
+        }
     }
 
     TopBar {

@@ -62,7 +62,7 @@ FORTIQ brand icon and selected server label on left (do not literally label it �
 
 ### Owner decisions, 22.10.2026 (override the master where they differ)
 
-- **One application panel** instead of the master's left rail *and* bottom dock. It docks either on the left or at the bottom (right-click the panel → "Ancrer à gauche / en bas"; default bottom). Unavailable apps stay visible but dimmed ("bientôt"); open apps show a running dot; the server Trash sits at the end of the panel.
+- **One application panel** instead of the master's left rail *and* bottom dock. It docks either on the left or at the bottom (right-click the panel → "Ancrer à gauche / en bas"; default bottom; remembered on the device). Unavailable apps stay visible but dimmed ("bientôt"); open apps show a running dot; the server Trash sits at the end of the panel.
 - **SSH connection is global, not part of Files.** The top bar shows the connection state and server name; clicking it opens the **server manager** (saved servers, connect / disconnect, add / edit / remove, first-use host-key verification). It opens by itself at start when no server is connected. Files and Logs only ask the user to choose a server when offline.
 
 ### RAIL + DOCK
