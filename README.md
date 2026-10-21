@@ -81,6 +81,14 @@ cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
 
+Перед запуском на Windows положить рядом с `fortiq.exe` библиотеки Qt и libssh2/OpenSSL, иначе
+появится ошибка «Qt6Quick.dll was not found»:
+
+```sh
+<Qt>/msvc2022_64/bin/windeployqt --release --qmldir qml build/fortiq.exe
+cp <vcpkg>/installed/x64-windows/bin/*.dll build/
+```
+
 Готовые APK или EXE в репозитории пока не собирались.
 
 ## Использование среза R0.1
