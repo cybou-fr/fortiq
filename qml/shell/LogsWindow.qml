@@ -16,6 +16,7 @@ Item {
     property bool fixtureService: false  // fixture only: show the service sample
     readonly property bool unitSelected: lc && (lc.source === "unit" || lc.source === "userunit")
     signal closeRequested()
+    signal requestServers()
 
     property string view: fixtureService ? "service" : "timeline" // "timeline" | "patterns" | "service"
     property string textFilter: ""
@@ -568,7 +569,7 @@ Item {
             spacing: 6
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: !win.connected ? "Connectez un serveur dans Fichiers pour lire ses journaux."
+                text: !win.connected ? "Aucun serveur connecté : choisissez-en un en haut à gauche."
                     : (win.lc && win.lc.events.length > 0 ? "Aucun événement ne correspond au filtre." : "Aucun événement dans cette période.")
                 color: Theme.ink; font.pixelSize: 13; font.family: Theme.fontFamily
             }

@@ -890,6 +890,58 @@ private slots:
         settings.remove(pin);
     }
 
+    void savedServers() {
+        fortiq::RemoteController controller;
+        QSettings settings;
+        settings.remove("servers/profiles");
+        settings.remove("bootstrap"); // no migration of a previous single server here
+        // Validation: no host / user / bad port / spaces -> refused.
+        QVERIFY(controller.saveServer({ { "host", "" }, { "port", 22 }, { "user", "u" } }).isEmpty());
+        QVERIFY(controller.saveServer({ { "host", "h" }, { "port", 70000 }, { "user", "u" } }).isEmpty());
+        QVERIFY(controller.saveServer({ { "host", "a b" }, { "port", 22 }, { "user", "u" } }).isEmpty());
+
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        const QString id = controller.saveServer({ { "name", "Test WSL" }, { "host", base.host }, { "port", base.port },
+                                                   { "user", base.user }, { "keyPath", key }, { "password", "must-not-be-stored" } });
+        QVERIFY(!id.isEmpty());
+        QCOMPARE(controller.servers().size(), 1);
+        QVariantMap p = controller.servers().first().toMap();
+        QCOMPARE(p.value("name").toString(), QStringLiteral("Test WSL"));
+        QVERIFY(!p.contains("password"));
+        QVERIFY(!settings.value("servers/profiles").toByteArray().contains("must-not-be-stored"));
+        // Edit keeps the id; a second server is added.
+        QCOMPARE(controller.saveServer({ { "id", id }, { "name", "Renamed" }, { "host", base.host }, { "port", base.port },
+                                         { "user", base.user }, { "keyPath", key } }), id);
+        const QString other = controller.saveServer({ { "host", "example.invalid" }, { "port", 2200 }, { "user", "x" } });
+        QCOMPARE(controller.servers().size(), 2);
+        QCOMPARE(controller.servers().first().toMap().value("name").toString(), QStringLiteral("Renamed"));
+
+        // Connect through the profile; the trust step stays mandatory.
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.remove(pin);
+        controller.connectTo(id, key.isEmpty() ? base.password : QString());
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.pendingFingerprint().isEmpty(), 15000);
+        QCOMPARE(controller.pendingFingerprint(), fingerprint);
+        QVERIFY(!controller.connected());
+        controller.trustHost();
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        QCOMPARE(controller.activeServerId(), id);
+        bool activeFlag = false, pinnedFlag = false;
+        for (const QVariant &v : controller.servers())
+            if (v.toMap().value("id") == id) { activeFlag = v.toMap().value("active").toBool(); pinnedFlag = v.toMap().value("pinned").toBool(); }
+        QVERIFY(activeFlag && pinnedFlag);
+
+        // Removing the active server disconnects; removing the other keeps one.
+        controller.removeServer(id);
+        QVERIFY(!controller.connected());
+        QCOMPARE(controller.servers().size(), 1);
+        controller.removeServer(other);
+        QVERIFY(controller.servers().isEmpty());
+        settings.remove(pin);
+        settings.remove("servers/profiles");
+    }
+
     void controllerOperations() {
         const QString remoteDir = qEnvironmentVariable("FORTIQ_IT_UPLOAD_DIR");
         if (remoteDir.isEmpty()) QSKIP("FORTIQ_IT_UPLOAD_DIR not set");

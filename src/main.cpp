@@ -48,7 +48,7 @@ int main(int argc, char *argv[])
     QCommandLineOption wallpaperOption("wallpaper",
         "Bundled wallpaper (aurora, desert, city), 'none' for the placeholder, or an image file.", "name|path");
     QCommandLineOption fixturePreviewOption("fixture-preview",
-        "With --reference-fixture: show the file viewer (text, image) or the transfer queue with samples.", "text|image|editor|transfers|trash|trashview|search|logs|incident|service");
+        "With --reference-fixture: show the file viewer (text, image) or the transfer queue with samples.", "text|image|editor|transfers|trash|trashview|search|logs|incident|service|panelleft");
     parser.addOptions({ fixtureOption, screenshotOption, wallpaperOption, fixturePreviewOption });
     parser.process(app);
 
@@ -56,7 +56,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("shellFixture", parser.isSet(fixtureOption));
     const QString fixturePreview = parser.value(fixturePreviewOption);
     engine.rootContext()->setContextProperty("shellFixturePreview",
-        parser.isSet(fixtureOption) && QStringList{ "text", "image", "editor", "transfers", "trash", "trashview", "search", "logs", "incident", "service" }.contains(fixturePreview) ? fixturePreview : QString());
+        parser.isSet(fixtureOption) && QStringList{ "text", "image", "editor", "transfers", "trash", "trashview", "search", "logs", "incident", "service", "panelleft" }.contains(fixturePreview) ? fixturePreview : QString());
     const QString wallpaper = parser.value(wallpaperOption);
     const bool bundled = !parser.isSet(wallpaperOption)
         || QStringList{ "aurora", "desert", "city", "none" }.contains(wallpaper);

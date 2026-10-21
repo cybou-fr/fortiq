@@ -55,6 +55,10 @@ class RemoteController : public QObject {
     Q_PROPERTY(QString searchScope READ searchScope NOTIFY searchChanged)
     Q_PROPERTY(QString searchInfo READ searchInfo NOTIFY searchChanged)
     Q_PROPERTY(QVariantList searchResults READ searchResults NOTIFY searchChanged)
+    // Saved servers: bootstrap only (name, host, port, user, key path). No
+    // password, no working data. Pins stay keyed by host:port.
+    Q_PROPERTY(QVariantList servers READ servers NOTIFY serversChanged)
+    Q_PROPERTY(QString activeServerId READ activeServerId NOTIFY changed)
     Q_PROPERTY(QString rememberedHost READ rememberedHost CONSTANT)
     Q_PROPERTY(QString rememberedUser READ rememberedUser CONSTANT)
     Q_PROPERTY(int rememberedPort READ rememberedPort CONSTANT)
@@ -90,6 +94,8 @@ public:
     bool previewEditable() const { return m_previewKind == QLatin1String("text") && !m_editHash.isEmpty(); }
     bool saving() const { return m_saving; }
     QVariantList transfers() const;
+    QVariantList servers() const;
+    QString activeServerId() const { return m_activeServerId; }
     bool searchActive() const { return m_searchActive; }
     bool searchBusy() const { return m_searchBusy; }
     QString searchQuery() const { return m_searchQuery; }
@@ -106,6 +112,12 @@ public:
     // keyPath empty = password auth; otherwise `password` is the key passphrase (may be empty).
     Q_INVOKABLE void connectServer(QString host, int port, QString user, QString password, QString keyPath = {});
     Q_INVOKABLE void trustHost();
+    // Adds or updates a saved server; returns its id, or "" when invalid.
+    Q_INVOKABLE QString saveServer(const QVariantMap &profile);
+    Q_INVOKABLE void removeServer(const QString &id);
+    // Connects to a saved server; password is the SSH password, or the key
+    // passphrase when the profile has a key path (may be empty).
+    Q_INVOKABLE void connectTo(const QString &id, const QString &password);
     // Any clean absolute folder; the server enforces permissions.
     Q_INVOKABLE void navigate(const QString &path);
     Q_INVOKABLE void openDirectory(const QString &path) { navigate(path); }
@@ -151,6 +163,7 @@ signals:
     void transfersChanged();
     void operationBusyChanged();
     void savingChanged();
+    void serversChanged();
     void searchChanged();
     // code: "", "conflict" (changed on the server) or "unknown".
     void saveFinished(bool ok, const QString &message, const QString &code, const QString &path);
@@ -166,6 +179,8 @@ private:
     void startTransfer(int id, int policy);
     Transfer *findTransfer(int id);
     QString pinKey() const;
+    QVariantList loadProfiles() const;
+    void storeProfiles(const QVariantList &profiles);
 
     QThreadPool m_pool; // one persistent worker: the SSH socket lives there
     std::shared_ptr<std::unique_ptr<SshSession>> m_session;
@@ -189,6 +204,7 @@ private:
     // RAM-only listing cache for instant back/forward; cleared on disconnect.
     QHash<QString, QVariantList> m_cache;
     bool m_operationBusy = false;
+    QString m_activeServerId;
     bool m_saving = false;
     QByteArray m_editHash; // SHA-256 of the bytes the editor was opened from
     bool m_editCrlf = false;

@@ -21,6 +21,9 @@ Item {
     property bool browserOpen: fixture && fixturePreview !== "logs" && fixturePreview !== "incident"
     property bool logsOpen: fixture && (fixturePreview === "logs" || fixturePreview === "incident" || fixturePreview === "service")
     property date now: new Date()
+    // One app panel, left or bottom (owner decision 22.10.2026). RAM only.
+    property string panelEdge: fixture && fixturePreview === "panelleft" ? "left" : "bottom"
+    property bool serversOpen: false
 
     width: Theme.canvasWidth
     height: Theme.canvasHeight
@@ -41,6 +44,11 @@ Item {
         else if (app === "launcher") launcherOpen = !launcherOpen
         else if (app === "browser") browserOpen = !browserOpen
         else if (app === "logs") { logsOpen = true; launcherOpen = false }
+        else if (app === "trash") {
+            filesOpen = true
+            if (controller && controller.connected && controller.trashDirectory.length > 0) controller.navigate(controller.trashDirectory)
+            else serversOpen = true
+        }
     }
 
     Wallpaper {
@@ -73,6 +81,7 @@ Item {
         fixture: shell.fixture
         fixturePreview: shell.fixturePreview
         onCloseRequested: shell.filesOpen = false
+        onRequestServers: shell.serversOpen = true
     }
 
     BrowserWindow {
@@ -93,6 +102,7 @@ Item {
         fixtureIncident: shell.fixture && shell.fixturePreview === "incident"
         fixtureService: shell.fixture && shell.fixturePreview === "service"
         onCloseRequested: shell.logsOpen = false
+        onRequestServers: shell.serversOpen = true
     }
 
     LauncherPanel {
@@ -115,16 +125,17 @@ Item {
         backdrop: wallpaper
     }
 
-    AppRail {
-        x: 4; y: 63; width: 84; height: 875
+    AppPanel {
+        id: appPanel
         backdrop: wallpaper
+        edge: shell.panelEdge
+        x: edge === "left" ? 4 : (parent.width - width) / 2
+        y: edge === "left" ? 59 : parent.height - height - 8
+        width: edge === "left" ? 84 : 560
+        height: edge === "left" ? parent.height - 59 - 8 : 70
+        running: ({ files: shell.filesOpen, logs: shell.logsOpen, launcher: shell.launcherOpen })
         onLaunch: (app) => shell.launch(app)
-    }
-
-    Dock {
-        x: 384; y: 948
-        backdrop: wallpaper
-        onLaunch: (app) => shell.launch(app)
+        onMoveTo: (edge) => shell.panelEdge = edge
     }
 
     TopBar {
@@ -133,9 +144,20 @@ Item {
             : (shell.controller && shell.controller.connected ? shell.controller.serverLabel : "Aucun serveur")
         clockText: shell.barClock
         connected: shell.controller !== null && shell.controller.connected
+        onServerClicked: if (!shell.fixture) shell.serversOpen = true
         MouseArea {
             x: 1100; width: 380; height: parent.height
             onClicked: shell.controlOpen = !shell.controlOpen
         }
     }
+
+    ServerManager {
+        anchors.fill: parent
+        z: 100
+        visible: shell.serversOpen
+        backdrop: wallpaper
+        controller: shell.controller
+        onClosed: shell.serversOpen = false
+    }
+    Component.onCompleted: if (!fixture && controller && !controller.connected) serversOpen = true
 }

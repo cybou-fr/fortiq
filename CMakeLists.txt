@@ -57,18 +57,17 @@ set(FORTIQ_SHELL_QML
     qml/shell/LogsWindow.qml
     qml/shell/IncidentInspector.qml
     qml/shell/ServicePanel.qml
+    qml/shell/ServerManager.qml
+    qml/shell/AppPanel.qml
     qml/shell/ToolButtonGlass.qml
     qml/shell/ToolTipLite.qml
     qml/shell/TopBar.qml
-    qml/shell/AppRail.qml
     qml/shell/ClockWidget.qml
-    qml/shell/ConnectPane.qml
     qml/shell/FilesWindow.qml
     qml/shell/LauncherPanel.qml
     qml/shell/BrowserWindow.qml
     qml/shell/ControlCenter.qml
     qml/shell/WorkspaceSwitcher.qml
-    qml/shell/Dock.qml
     qml/shell/DesktopShell.qml
 )
 set_source_files_properties(qml/shell/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)

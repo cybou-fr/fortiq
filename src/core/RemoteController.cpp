@@ -6,6 +6,9 @@
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QFutureWatcher>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QUuid>
 #include <QPointer>
 #include <QLocale>
 #include <QStringDecoder>
@@ -57,6 +60,79 @@ ConnectionRequest RemoteController::connectionRequest() const {
     return req;
 }
 
+QVariantList RemoteController::loadProfiles() const {
+    QSettings settings;
+    QVariantList list = QJsonDocument::fromJson(settings.value("servers/profiles").toByteArray()).array().toVariantList();
+    // First run after the server manager appeared: keep the last server.
+    if (list.isEmpty() && !settings.contains("servers/profiles") && !rememberedHost().isEmpty()) {
+        list << QVariantMap {
+            { "id", QUuid::createUuid().toString(QUuid::WithoutBraces) }, { "name", rememberedHost() },
+            { "host", rememberedHost() }, { "port", rememberedPort() }, { "user", rememberedUser() },
+            { "keyPath", rememberedKeyPath() } };
+    }
+    return list;
+}
+
+void RemoteController::storeProfiles(const QVariantList &profiles) {
+    QSettings{}.setValue("servers/profiles", QJsonDocument(QJsonArray::fromVariantList(profiles)).toJson(QJsonDocument::Compact));
+    emit serversChanged();
+}
+
+QVariantList RemoteController::servers() const {
+    QVariantList out;
+    QSettings settings;
+    for (const QVariant &v : loadProfiles()) {
+        QVariantMap p = v.toMap();
+        const auto bytes = (p.value("host").toString().toLower() + ':' + QString::number(p.value("port").toInt())).toUtf8();
+        const QString key = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
+        p.insert("pinned", settings.contains(key));
+        p.insert("fingerprint", settings.value(key).toString());
+        p.insert("active", m_connected && p.value("id").toString() == m_activeServerId);
+        out << p;
+    }
+    return out;
+}
+
+QString RemoteController::saveServer(const QVariantMap &profile) {
+    const QString host = profile.value("host").toString().trimmed();
+    const QString user = profile.value("user").toString().trimmed();
+    const int port = profile.value("port").toInt();
+    if (host.isEmpty() || user.isEmpty() || port < 1 || port > 65535 || host.contains(' ') || user.contains(' ')) return {};
+    QString key = profile.value("keyPath").toString().trimmed();
+    if (QUrl(key).isLocalFile()) key = QUrl(key).toLocalFile();
+    QString id = profile.value("id").toString();
+    if (id.isEmpty()) id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const QString name = profile.value("name").toString().trimmed();
+    const QVariantMap stored { { "id", id }, { "name", name.isEmpty() ? host : name }, { "host", host },
+                               { "port", port }, { "user", user }, { "keyPath", key } };
+    QVariantList list = loadProfiles();
+    bool replaced = false;
+    for (QVariant &v : list) if (v.toMap().value("id") == id) { v = stored; replaced = true; }
+    if (!replaced) list << stored;
+    storeProfiles(list);
+    return id;
+}
+
+void RemoteController::removeServer(const QString &id) {
+    QVariantList list = loadProfiles();
+    list.removeIf([&](const QVariant &v) { return v.toMap().value("id").toString() == id; });
+    storeProfiles(list);
+    if (id == m_activeServerId && m_connected) disconnectServer();
+}
+
+void RemoteController::connectTo(const QString &id, const QString &password) {
+    for (const QVariant &v : loadProfiles()) {
+        const QVariantMap p = v.toMap();
+        if (p.value("id").toString() != id) continue;
+        connectServer(p.value("host").toString(), p.value("port").toInt(), p.value("user").toString(),
+                      password, p.value("keyPath").toString());
+        m_activeServerId = id;
+        emit changed();
+        emit serversChanged();
+        return;
+    }
+}
+
 QString RemoteController::rememberedHost() const {
     return QSettings{}.value("bootstrap/lastHost").toString();
 }
@@ -82,6 +158,7 @@ void RemoteController::scrubPassword() {
 void RemoteController::connectServer(QString host, int port, QString user, QString password, QString keyPath) {
     if (m_busy) return;
     disconnectServer();
+    m_activeServerId.clear();
     m_host = host.trimmed();
     m_port = port;
     m_user = user.trimmed();
@@ -103,6 +180,7 @@ void RemoteController::trustHost() {
     // checks the pinned bytes again BEFORE sending any password.
     QSettings{}.setValue(pinKey(), m_pendingFingerprint);
     m_pendingFingerprint.clear();
+    emit serversChanged();
     m_status = QStringLiteral("SSH host pinned. Authenticating...");
     request(Kind::Open, {}, false);
 }
@@ -150,6 +228,7 @@ void RemoteController::request(Kind kind, const QString &directory, bool record)
                 m_back.push_back(previous);
                 m_forward.clear();
             }
+            if (!m_connected) emit serversChanged();
             m_connected = true;
             m_pendingFingerprint.clear();
             m_currentDirectory = result.directory;
@@ -758,6 +837,7 @@ void RemoteController::disconnectServer() {
     m_forward.clear();
     m_cache.clear();
     scrubPassword();
+    emit serversChanged();
     m_status = QStringLiteral("Disconnected. Working data is not stored on this device.");
     emit changed();
 }

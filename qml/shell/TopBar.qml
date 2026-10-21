@@ -8,6 +8,7 @@ Rectangle {
     property string serverLabel: "Linux"
     property string clockText: ""
     property bool connected: false
+    signal serverClicked()
     color: Theme.topBar
     height: 47
 
@@ -28,8 +29,21 @@ Rectangle {
         mipmap: true
         asynchronous: false
     }
+    // Connection state + server name: opens the server manager.
+    Rectangle {
+        x: 58; anchors.verticalCenter: parent.verticalCenter
+        width: serverText.implicitWidth + 34; height: 30; radius: 15
+        color: serverMouse.containsMouse ? "#26FFFFFF" : "transparent"
+        Rectangle {
+            x: 10; anchors.verticalCenter: parent.verticalCenter
+            width: 8; height: 8; radius: 4
+            color: bar.connected ? "#4ADE80" : "#94A3B8"
+        }
+        MouseArea { id: serverMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: bar.serverClicked() }
+    }
     Text {
-        x: 64; anchors.verticalCenter: parent.verticalCenter
+        id: serverText
+        x: 82; anchors.verticalCenter: parent.verticalCenter
         text: bar.serverLabel
         color: Theme.ink
         font.pixelSize: 15; font.weight: Font.DemiBold; font.family: Theme.fontFamily

@@ -60,6 +60,11 @@ The following values are **composited RGB samples from the rendered screenshot**
 ### TOP: app/system bar
 FORTIQ brand icon and selected server label on left (do not literally label it “Linux” when multiple servers exist unless this is its chosen name). Search centered with magnifier and French placeholder as shown; right has connection/network status, notifications, clock, profile. **Only display live host toggles for capabilities that FORTIQ can actually inspect/control locally; avoid fake Bluetooth/Wi-Fi actions.** All local OS statuses are explicitly identified as local; server state is named as remote.
 
+### Owner decisions, 22.10.2026 (override the master where they differ)
+
+- **One application panel** instead of the master's left rail *and* bottom dock. It docks either on the left or at the bottom (right-click the panel → "Ancrer à gauche / en bas"; default bottom). Unavailable apps stay visible but dimmed ("bientôt"); open apps show a running dot; the server Trash sits at the end of the panel.
+- **SSH connection is global, not part of Files.** The top bar shows the connection state and server name; clicking it opens the **server manager** (saved servers, connect / disconnect, add / edit / remove, first-use host-key verification). It opens by itself at start when no server is connected. Files and Logs only ask the user to choose a server when offline.
+
 ### RAIL + DOCK
 App rail visually matches screenshot order/spacing and hover/selection. Use original/licensed icons for Files, Browser, Terminal, Editor, Documents, Media, Logs, Settings. The screenshot shows a dock containing a mixture of pinned/running apps; support this without duplicating navigation responsibilities. Unknown/unimplemented apps are clearly disabled/`Coming later` and must not pretend to launch.
 

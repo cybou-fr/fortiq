@@ -17,6 +17,7 @@ Item {
     // Fixture only: "text" or "image" shows the viewer with sample content.
     property string fixturePreview: ""
     signal closeRequested()
+    signal requestServers()
 
     property string viewMode: "grid"
     property string sortKey: "name"
@@ -925,11 +926,22 @@ Fin.
         onClosed: { win.controller.closePreview(); win.view.forceActiveFocus() }
     }
 
-    ConnectPane {
+    // No connection: the server manager is global, not part of Files.
+    Column {
         visible: !win.fixture && !win.connected
-        x: sidebar.width + 24; y: toolbar.height + 16
-        width: parent.width - x - 24; height: parent.height - y - 16
-        controller: win.controller
+        x: sidebar.width; y: toolbar.height
+        width: parent.width - x
+        topPadding: 70
+        spacing: 12
+        Text { anchors.horizontalCenter: parent.horizontalCenter; text: "Aucun serveur connecté"; color: Theme.ink; font.pixelSize: 16; font.family: Theme.fontFamily }
+        Text { anchors.horizontalCenter: parent.horizontalCenter; text: "Les fichiers affichés sont ceux du serveur Linux choisi."; color: Theme.inkMuted; font.pixelSize: 12; font.family: Theme.fontFamily }
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            height: 34; radius: 9; width: chooseLabel.implicitWidth + 30
+            color: chooseMouse.containsMouse ? Theme.selection : "#992D6FE0"
+            Text { id: chooseLabel; anchors.centerIn: parent; text: "Choisir un serveur…"; color: "white"; font.pixelSize: 13; font.family: Theme.fontFamily }
+            MouseArea { id: chooseMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.requestServers() }
+        }
     }
 
     // ── status bar ─────────────────────────────────────────────────────
