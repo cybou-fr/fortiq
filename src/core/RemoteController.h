@@ -46,6 +46,14 @@ class RemoteController : public QObject {
     // state: queued | running | conflict | done | error | cancelled | unknown
     Q_PROPERTY(QVariantList transfers READ transfers NOTIFY transfersChanged)
     Q_PROPERTY(int activeTransfers READ activeTransfers NOTIFY transfersChanged)
+    // Server-side search (third SSH connection, so browsing stays live).
+    Q_PROPERTY(bool searchActive READ searchActive NOTIFY searchChanged)
+    Q_PROPERTY(bool searchBusy READ searchBusy NOTIFY searchChanged)
+    Q_PROPERTY(QString searchQuery READ searchQuery NOTIFY searchChanged)
+    Q_PROPERTY(QString searchMode READ searchMode NOTIFY searchChanged)
+    Q_PROPERTY(QString searchScope READ searchScope NOTIFY searchChanged)
+    Q_PROPERTY(QString searchInfo READ searchInfo NOTIFY searchChanged)
+    Q_PROPERTY(QVariantList searchResults READ searchResults NOTIFY searchChanged)
     Q_PROPERTY(QString rememberedHost READ rememberedHost CONSTANT)
     Q_PROPERTY(QString rememberedUser READ rememberedUser CONSTANT)
     Q_PROPERTY(int rememberedPort READ rememberedPort CONSTANT)
@@ -77,6 +85,13 @@ public:
     bool previewEditable() const { return m_previewKind == QLatin1String("text") && !m_editHash.isEmpty(); }
     bool saving() const { return m_saving; }
     QVariantList transfers() const;
+    bool searchActive() const { return m_searchActive; }
+    bool searchBusy() const { return m_searchBusy; }
+    QString searchQuery() const { return m_searchQuery; }
+    QString searchMode() const { return m_searchMode; }
+    QString searchScope() const { return m_searchScope; }
+    QString searchInfo() const { return m_searchInfo; }
+    QVariantList searchResults() const { return m_searchResults; }
     int activeTransfers() const;
     QString rememberedHost() const;
     QString rememberedUser() const;
@@ -120,6 +135,10 @@ public:
     Q_INVOKABLE void restoreEntry(const QString &trashedPath, bool keepBoth = false);
     Q_INVOKABLE void deletePermanently(const QString &trashedPath);
     Q_INVOKABLE void emptyTrash();
+    // mode: "name" or "content"; searches below the current folder.
+    Q_INVOKABLE void startSearch(const QString &query, const QString &mode);
+    Q_INVOKABLE void cancelSearch();
+    Q_INVOKABLE void clearSearch();
 
 signals:
     void changed();
@@ -127,6 +146,7 @@ signals:
     void transfersChanged();
     void operationBusyChanged();
     void savingChanged();
+    void searchChanged();
     // code: "", "conflict" (changed on the server) or "unknown".
     void saveFinished(bool ok, const QString &message, const QString &code, const QString &path);
     // code: "", "conflict" or "unknown" (outcome not known after a drop).
@@ -192,6 +212,17 @@ private:
     QList<Transfer> m_transfers;
     int m_nextTransferId = 1;
     QThreadPool m_transferPool;
+    QThreadPool m_searchPool;
+    std::shared_ptr<std::unique_ptr<SshSession>> m_searchSession;
+    std::shared_ptr<std::atomic_bool> m_searchCancel = std::make_shared<std::atomic_bool>(false);
+    int m_searchSeq = 0;
+    bool m_searchActive = false;
+    bool m_searchBusy = false;
+    QString m_searchQuery;
+    QString m_searchMode;
+    QString m_searchScope;
+    QString m_searchInfo;
+    QVariantList m_searchResults;
     std::shared_ptr<std::unique_ptr<SshSession>> m_transferSession;
 };
 }

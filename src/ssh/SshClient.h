@@ -94,6 +94,16 @@ public:
     SshResult saveFile(const QString &path, const QByteArray &data, const QByteArray &expectedSha256, bool force);
     // Writes data as a new file in dir, "name (n).ext" if the name is taken.
     SshResult saveCopy(const QString &dir, const QString &name, const QByteArray &data);
+    // Server-side search below `dir` (SMART_FILES_SPEC: remote search).
+    // mode "name": GNU find, case-insensitive substring of the name;
+    // mode "content": rg if installed, else grep -rIF, up to 3 lines per file.
+    // The query is data: rejected if it holds NUL or a line break, otherwise
+    // single-quoted into a POSIX sh script sent on stdin to `sh -s`.
+    // Stops after `limit` results or when `keepGoing` returns false.
+    // Entries: {path, name, directory, size, mtime, line, text}; `code` holds
+    // the tool used ("find", "rg", "grep"); `truncated` = limit reached.
+    SshResult search(const QString &dir, const QString &query, const QString &mode, int limit,
+                     const std::function<bool(int found)> &keepGoing);
     QString homeDirectory() const;
     bool isOpen() const;
     void close();

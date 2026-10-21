@@ -523,6 +523,96 @@ private slots:
         settings.remove(pin);
     }
 
+    // Needs FORTIQ_IT_UPLOAD_DIR/search with: "Rapport été 2026.txt" (contains
+    // "Bonjour le Monde"), "star*name.txt", "starXname.txt", sub/deep-rapport.md,
+    // .hidden-rapport, 30 files many-N.txt and a binary blob.bin containing "Monde".
+    void serverSearch() {
+        const QString remoteDir = qEnvironmentVariable("FORTIQ_IT_UPLOAD_DIR");
+        if (remoteDir.isEmpty()) QSKIP("FORTIQ_IT_UPLOAD_DIR not set");
+        const QString dir = remoteDir + "/search";
+        ConnectionRequest request = base;
+        request.expectedHostFingerprint = fingerprint;
+        if (request.password.isEmpty()) request.keyPath = qEnvironmentVariable("FORTIQ_IT_KEY");
+        fortiq::SshSession session;
+        QVERIFY(session.open(request).status == SshResult::Status::Ok);
+        if (!names(session.list(dir)).contains(QStringLiteral("star*name.txt"))) QSKIP("search fixtures not present");
+        const auto all = [](int) { return true; };
+        auto found = [](const SshResult &r) {
+            QStringList out;
+            for (const QVariant &v : r.entries) out << v.toMap().value("name").toString();
+            out.sort();
+            return out;
+        };
+
+        // Name: case-insensitive substring, recursive, hidden files included, Unicode.
+        SshResult r = session.search(dir, QStringLiteral("RAPPORT"), "name", 500, all);
+        QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(r.message));
+        QCOMPARE(found(r), (QStringList{ ".hidden-rapport", "Rapport été 2026.txt", "deep-rapport.md" }));
+        QVERIFY(r.code.startsWith(QStringLiteral("find")));
+        QCOMPARE(found(session.search(dir, QStringLiteral("été 2026"), "name", 500, all)).size(), 1);
+        // Glob characters are literal: "*" matches only the real asterisk.
+        QCOMPARE(found(session.search(dir, QStringLiteral("star*name"), "name", 500, all)), QStringList{ "star*name.txt" });
+
+        // Content: line number and text; binary files skipped.
+        r = session.search(dir, QStringLiteral("monde"), "content", 500, all);
+        QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(r.message));
+        QCOMPARE(found(r), QStringList{ "Rapport été 2026.txt" });
+        QCOMPARE(r.entries.first().toMap().value("line").toInt(), 2);
+        QVERIFY(r.entries.first().toMap().value("text").toString().contains(QStringLiteral("Bonjour le Monde")));
+        qInfo("content search tool: %s", qPrintable(r.code));
+
+        // Bounded and cancellable.
+        r = session.search(dir, QStringLiteral("many-"), "name", 10, all);
+        QVERIFY(r.status == SshResult::Status::Ok);
+        QCOMPARE(r.entries.size(), 10);
+        QVERIFY(r.truncated);
+        r = session.search(QStringLiteral("/"), QStringLiteral("e"), "name", 500000, [](int) { return false; });
+        QCOMPARE(r.code, QStringLiteral("cancelled"));
+        QVERIFY(session.isOpen());
+
+        // Hostile queries are data, never code.
+        for (const QString &q : { QStringLiteral("'; touch /tmp/fortiq-pwned; '"), QStringLiteral("$(touch /tmp/fortiq-pwned)"),
+                                  QStringLiteral("`touch /tmp/fortiq-pwned`"), QStringLiteral("\"; touch /tmp/fortiq-pwned; \"") }) {
+            QVERIFY(session.search(dir, q, "name", 10, all).status == SshResult::Status::Ok);
+            QVERIFY(session.search(dir, q, "content", 10, all).status == SshResult::Status::Ok);
+        }
+        QVERIFY(session.search(dir, QStringLiteral("a\nb"), "name", 10, all).status == SshResult::Status::Error);
+        QVERIFY(session.search(QStringLiteral("/tmp"), QStringLiteral("fortiq-pwned"), "name", 10, all).entries.isEmpty());
+        QVERIFY(session.list(dir).status == SshResult::Status::Ok); // SFTP still fine after exec channels
+    }
+
+    void controllerSearch() {
+        const QString remoteDir = qEnvironmentVariable("FORTIQ_IT_UPLOAD_DIR");
+        if (remoteDir.isEmpty()) QSKIP("FORTIQ_IT_UPLOAD_DIR not set");
+        fortiq::RemoteController controller;
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        controller.navigate(remoteDir + "/search");
+        QTRY_VERIFY_WITH_TIMEOUT(controller.currentDirectory() == remoteDir + "/search" && !controller.busy(), 15000);
+
+        controller.startSearch(QStringLiteral("monde"), QStringLiteral("content"));
+        QVERIFY(controller.searchActive());
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.searchBusy(), 15000);
+        QCOMPARE(controller.searchResults().size(), 1);
+        QCOMPARE(controller.searchScope(), remoteDir + "/search");
+        // Browsing works while the search connection exists.
+        controller.navigate(remoteDir);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.currentDirectory() == remoteDir && !controller.busy(), 15000);
+
+        controller.startSearch(QStringLiteral("e"), QStringLiteral("name"));
+        controller.cancelSearch();
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.searchBusy(), 15000);
+        controller.clearSearch();
+        QVERIFY(!controller.searchActive());
+        controller.disconnectServer();
+        settings.remove(pin);
+    }
+
     void controllerOperations() {
         const QString remoteDir = qEnvironmentVariable("FORTIQ_IT_UPLOAD_DIR");
         if (remoteDir.isEmpty()) QSKIP("FORTIQ_IT_UPLOAD_DIR not set");

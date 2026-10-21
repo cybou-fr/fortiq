@@ -148,6 +148,11 @@ Item {
             "Mettre à la corbeille", true, false, "")
     }
 
+    function serverSearch(mode) {
+        if (!connected || filterText.trim().length === 0) return
+        controller.startSearch(filterText, mode)
+    }
+
     function askDownload(entry) {
         if (!entry || entry.directory || !connected) return
         downloadDialog.entry = entry
@@ -426,11 +431,13 @@ Item {
                     clip: true
                     Keys.onEscapePressed: { win.filterText = ""; win.forceActiveFocus() }
                     Keys.onDownPressed: { win.view.forceActiveFocus(); if (win.view.currentIndex < 0) win.view.currentIndex = 0 }
-                    Keys.onReturnPressed: { win.view.forceActiveFocus(); if (win.view.currentIndex < 0) win.view.currentIndex = 0 }
+                    // Enter: server search by name; Ctrl+Enter: by content.
+                    Keys.onReturnPressed: (e) => win.serverSearch(e.modifiers & Qt.ControlModifier ? "content" : "name")
+                    Keys.onEnterPressed: (e) => win.serverSearch(e.modifiers & Qt.ControlModifier ? "content" : "name")
                     Text {
                         visible: parent.text.length === 0
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "Filtrer ce dossier"
+                        text: "Filtrer / chercher"
                         color: "#7F93B5"; font.pixelSize: 12; font.family: Theme.fontFamily
                     }
                 }
@@ -814,6 +821,63 @@ Item {
     }
 
     Timer { id: noticeTimer; interval: 4500; onTriggered: win.notice = "" }
+
+    // Hint under the search field: the filter is local, Enter searches the server.
+    Rectangle {
+        visible: win.connected && search.activeFocus && win.filterText.trim().length > 0
+        z: 11
+        anchors.right: parent.right; anchors.rightMargin: 12
+        y: toolbar.height - 4
+        width: hintRow.implicitWidth + 20; height: 34; radius: 10
+        color: "#F5101B2E"; border.width: 1; border.color: "#40FFFFFF"
+        Row {
+            id: hintRow
+            x: 10; anchors.verticalCenter: parent.verticalCenter
+            spacing: 8
+            Text { anchors.verticalCenter: parent.verticalCenter; text: "Rechercher « " + win.filterText.trim() + " » dans ce dossier et ses sous-dossiers :"; color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily }
+            Repeater {
+                model: [ { m: "name", t: "Nom  ↵" }, { m: "content", t: "Contenu  Ctrl+↵" } ]
+                Rectangle {
+                    required property var modelData
+                    height: 22; radius: 6; width: chip.implicitWidth + 14
+                    color: chipMouse.containsMouse ? Theme.selection : "#33FFFFFF"
+                    Text { id: chip; anchors.centerIn: parent; text: modelData.t; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
+                    MouseArea { id: chipMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.serverSearch(modelData.m) }
+                }
+            }
+        }
+    }
+
+    QtObject {
+        id: sampleSearch
+        readonly property bool searchActive: true
+        readonly property bool searchBusy: false
+        readonly property string searchQuery: "rapport"
+        readonly property string searchMode: "content"
+        readonly property string searchScope: "/home/demo"
+        readonly property string searchInfo: "3 résultats  ·  rg"
+        readonly property var searchResults: [
+            { name: "Rapport été 2026.txt", path: "/home/demo/Documents/Rapport été 2026.txt", line: 2, text: "Voir le rapport mensuel joint, section 3." },
+            { name: "notes.md", path: "/home/demo/Projets/fortiq/notes.md", line: 14, text: "- envoyer le rapport à l'équipe avant vendredi" },
+            { name: "deploy.log", path: "/home/demo/Travail/logs/deploy.log", line: 188, text: "[INFO] rapport de déploiement écrit dans /var/tmp" }
+        ]
+        function cancelSearch() {}
+    }
+
+    SearchResults {
+        x: content.x; y: content.y
+        width: content.width; height: content.height + statusBar.height
+        z: 9
+        bottomRightRadius: 16
+        visible: (win.fixture && win.fixturePreview === "search") || (win.connected && win.controller.searchActive)
+        controller: win.fixture ? sampleSearch : (win.connected ? win.controller : null)
+        onOpenEntry: (entry) => {
+            if (entry.directory) { win.controller.clearSearch(); win.filterText = ""; win.controller.navigate(entry.path) }
+            else win.controller.openFile(entry.path)
+        }
+        onOpenLocation: (folder) => { win.controller.clearSearch(); win.filterText = ""; win.controller.navigate(folder) }
+        onClosed: { if (win.connected) win.controller.clearSearch(); win.view.forceActiveFocus() }
+    }
 
     TransferPanel {
         anchors.right: parent.right; anchors.rightMargin: 12
