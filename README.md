@@ -62,8 +62,8 @@
 ## Стек
 
 C++20, Qt 6 (целевая 6.12, минимум в CMake — 6.8), CMake 3.21+, libssh2. Открытые вопросы — в
-[ARCHITECTURE](docs/ARCHITECTURE.md#открытые-решения): подход к стилю «Windows 13», лицензия Qt
-для закрытого продукта, терминальный движок, веб-движок браузера.
+[ARCHITECTURE](docs/ARCHITECTURE.md#открытые-решения): лицензия Qt для закрытого продукта,
+терминальный движок, безопасный веб-движок. Qt Quick/QML и **точный визуальный эталон уже утверждены**.
 
 ## Сборка
 
@@ -107,6 +107,7 @@ ctest --test-dir build -C Release --output-on-failure
 | [UI SPEC v1](docs/UI_SPEC_V1.md) | **точный канонический скетч**: геометрия 1536×1024, материалы, поведение, visual acceptance |
 | [Smart Files](docs/SMART_FILES_SPEC.md) | первый flagship: навигация, интеллектуальный поиск, операции и безопасность |
 | [Logs](docs/LOGS_INTELLIGENCE_SPEC.md) | второй flagship: Linux-журналы, корреляция и проверяемые сводки без AI |
+| [Documentation Authority](docs/DOCUMENTATION_AUTHORITY.md) | иерархия контрактов, решения, выявленные риски и способ проверки согласованности |
 | [DESKTOP_BLUEPRINT](docs/FORTIQ_DESKTOP_BLUEPRINT.md) | контракт desktop-shell, архитектура, 10 классов, 3 спринта, Windows/Android и стенды Debian |
 | [AGENTS](AGENTS.md) | правила разработки для людей и агентов |
 

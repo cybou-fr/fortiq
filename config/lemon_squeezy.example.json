@@ -1,0 +1,9 @@
+{
+  "store_id": null,
+  "intro_variant_id": null,
+  "pro_variant_id": null,
+  "intro_checkout_url": null,
+  "pro_checkout_url": null,
+  "store_slug": null,
+  "_note": "EXAMPLE ONLY. No Qt license client or checkout integration exists yet. Never put API/webhook secrets here."
+}
