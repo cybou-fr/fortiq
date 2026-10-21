@@ -67,6 +67,8 @@ App rail visually matches screenshot order/spacing and hover/selection. Use orig
 Big time + date + weather block with white lettering. Actual weather requires an explicitly permitted server-side Linux provider through SSH, so until implemented show **time/date only or clearly labeled unavailable weather**; no direct external weather API from FORTIQ client. Client-local time is a display feature, not remote data processing.
 
 ### FILES window
+**Owner decision, 21.10.2026:** all application windows (Files, Browser and future apps) use the **dark frosted glass** material of the rail/launcher/control center instead of the master's white Files body. Geometry, sidebar placement, window controls and blue folder glyphs stay as in the master; the white-body colour samples in §2 no longer apply to Files. The original rule below is kept for history:
+
 Match high-contrast **white content** and dark sidebar, light top toolbar, blue square folder glyphs, 4-column folder grid and file examples where present in reference. Names, counts and metadata come from the remote server; screenshot example labels are sample data only. Toolbar: back/forward/breadcrumb/search/view and safe selected-file actions. Window controls sit at the *upper-left of dark sidebar* in the sketch; preserve placement, not host-OS default titlebar.
 
 ### LAUNCHER

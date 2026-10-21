@@ -11,14 +11,17 @@ ScrollView {
     readonly property bool pending: controller !== null && controller.pendingFingerprint.length > 0
     clip: true
     contentWidth: availableWidth
-    // Light paper surface regardless of the host's dark-mode palette.
-    palette.base: "#FFFFFF"
-    palette.text: "#1C2333"
-    palette.window: "#F2F4F9"
-    palette.windowText: "#1C2333"
-    palette.button: "#E3E7EF"
-    palette.buttonText: "#1C2333"
-    palette.placeholderText: "#8A93A6"
+    // Dark glass surface, independent of the host's palette.
+    palette.base: "#33101C30"
+    palette.text: "#F5F9FF"
+    palette.window: "#1A2740"
+    palette.windowText: "#F5F9FF"
+    palette.button: "#2D6FE0"
+    palette.buttonText: "#FFFFFF"
+    palette.highlight: "#2F8CFF"
+    palette.placeholderText: "#8FA0BC"
+    palette.mid: "#40FFFFFF"
+    palette.dark: "#40FFFFFF"
 
     ColumnLayout {
         width: pane.availableWidth
@@ -26,12 +29,12 @@ ScrollView {
 
         Text {
             text: "Connexion au serveur Linux (SSH / SFTP)"
-            color: Theme.paperInk
+            color: Theme.ink
             font.pixelSize: 16; font.bold: true; font.family: Theme.fontFamily
         }
         Text {
             text: "Seuls l'adresse et l'empreinte vérifiée de l'hôte sont mémorisées. Le mot de passe reste en mémoire."
-            color: "#5A6478"; font.pixelSize: 11; wrapMode: Text.WordWrap
+            color: "#B9C6DA"; font.pixelSize: 11; wrapMode: Text.WordWrap
             Layout.fillWidth: true
         }
         GridLayout {
@@ -68,7 +71,7 @@ ScrollView {
         }
         Text {
             text: pane.controller ? pane.controller.statusText : "Contrôleur SSH indisponible."
-            color: "#5A6478"; font.pixelSize: 11; wrapMode: Text.WordWrap
+            color: "#B9C6DA"; font.pixelSize: 11; wrapMode: Text.WordWrap
             Layout.fillWidth: true
         }
         Rectangle {

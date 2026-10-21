@@ -14,11 +14,21 @@ Item {
         color: "#66000814"
     }
 
-    Rectangle {
+    Glass {
+        id: chrome
         anchors.fill: parent
+        backdrop: win.backdrop
         radius: 14
-        color: Theme.browserChrome
-        border.width: 1; border.color: "#3A5C8C"
+        shadow: false
+        tint: "#B3121C30"
+        blurAmount: 0.9
+    }
+    onXChanged: { chrome.syncOrigin(); page.syncOrigin() }
+    onYChanged: { chrome.syncOrigin(); page.syncOrigin() }
+    MouseArea {
+        width: parent.width; height: 36
+        drag.target: win
+        drag.minimumY: 47
     }
 
     // Scenic page: the same wallpaper slice, unblurred, inside the frame.
@@ -28,10 +38,11 @@ Item {
         width: parent.width - 2; height: parent.height - 73
         sourceItem: win.backdrop
         live: true
-        Component.onCompleted: {
+        function syncOrigin() {
             const p = page.mapToItem(win.backdrop, 0, 0)
             sourceRect = Qt.rect(p.x, p.y, width, height)
         }
+        Component.onCompleted: syncOrigin()
         layer.enabled: true
         layer.effect: MultiEffect {
             maskEnabled: true
@@ -53,7 +64,7 @@ Item {
         }
     }
     Rectangle {
-        x: 83; y: 6; width: 158; height: 28; radius: 8; color: "#25406A"
+        x: 83; y: 6; width: 158; height: 28; radius: 8; color: "#26FFFFFF"
         Text { x: 34; anchors.verticalCenter: parent.verticalCenter; text: "Nouvel onglet"; color: Theme.ink; font.pixelSize: 11; font.family: Theme.fontFamily }
         Text { x: 136; anchors.verticalCenter: parent.verticalCenter; text: "×"; color: Theme.ink; font.pixelSize: 15 }
     }
@@ -68,7 +79,7 @@ Item {
         Repeater { model: ["←", "→", "⟳"]; Text { required property string modelData; text: modelData; color: Theme.ink; font.pixelSize: 15 } }
     }
     Rectangle {
-        x: 108; y: 39; width: 390; height: 26; radius: 13; color: "#2A4774"
+        x: 108; y: 39; width: 390; height: 26; radius: 13; color: "#1AFFFFFF"
         Text { x: 10; anchors.verticalCenter: parent.verticalCenter; text: "⌕"; color: Theme.ink; font.pixelSize: 14 }
         Text { x: 34; anchors.verticalCenter: parent.verticalCenter; text: "Rechercher ou entrer une adresse web"; color: "#D7E1F0"; font.pixelSize: 11; font.family: Theme.fontFamily }
     }

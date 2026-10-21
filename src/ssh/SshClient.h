@@ -3,6 +3,8 @@
 #include <QString>
 #include <QVariantList>
 
+#include <memory>
+
 namespace fortiq {
 struct ConnectionRequest {
     QString host;
@@ -20,14 +22,36 @@ struct SshResult {
     QString message;
     QString fingerprint;
     QString directory;
+    QString home;
     QVariantList entries;
+};
+
+// One authenticated SSH connection with an SFTP channel, reused for every
+// listing. Blocking by design: all calls must come from ONE worker thread
+// (the controller's single-thread pool), because the TCP socket lives there.
+class SshSession {
+public:
+    SshSession();
+    ~SshSession();
+    SshSession(const SshSession &) = delete;
+    SshSession &operator=(const SshSession &) = delete;
+
+    // Handshake, host-key pin check BEFORE authentication, auth, SFTP, then
+    // lists req.directory (or home). On TrustRequired/Error the session is closed.
+    SshResult open(const ConnectionRequest &req);
+    // Lists an absolute directory on the open session.
+    SshResult list(const QString &directory);
+    bool isOpen() const;
+    void close();
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> d;
 };
 
 class SshClient {
 public:
-    // A blocking call by design: always invoked in QtConcurrent's worker pool.
-    // The initial milestone reconnects per listing; persistent channels,
-    // cancellability and key-based auth are deliberately still pending.
+    // One-shot connect + list + close (used by tests and simple checks).
     static SshResult list(const ConnectionRequest &request);
 };
 }

@@ -13,6 +13,16 @@ private slots:
         QVERIFY(!fortiq::safeChildPath("/home", "").has_value());
         QVERIFY(!fortiq::safeChildPath("relative", "ok").has_value());
     }
+    void cleanAbsolute() {
+        QCOMPARE(fortiq::cleanAbsolutePath("/var//log/").value(), QString("/var/log"));
+        QCOMPARE(fortiq::cleanAbsolutePath("/").value(), QString("/"));
+        QCOMPARE(fortiq::cleanAbsolutePath(QString::fromUtf8("/home/u/Mes documents/été")).value(),
+                 QString::fromUtf8("/home/u/Mes documents/été"));
+        QVERIFY(!fortiq::cleanAbsolutePath("/etc/../root").has_value());
+        QVERIFY(!fortiq::cleanAbsolutePath("/./x").has_value());
+        QVERIFY(!fortiq::cleanAbsolutePath("var/log").has_value());
+        QVERIFY(!fortiq::cleanAbsolutePath(QString("/a") + QChar::Null).has_value());
+    }
     void parent() {
         QCOMPARE(fortiq::parentPath("/home/user/docs"), QString("/home/user"));
         QCOMPARE(fortiq::parentPath("/home"), QString("/"));

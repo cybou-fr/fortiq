@@ -32,6 +32,8 @@
 
 **Private-key login (21.10.2026):** `libssh2_userauth_publickey_fromfile_ex` with a local OpenSSH key path (passphrase from the RAM-only password field; only the path is remembered). Verified: WSL `fortiq-test` with a generated ED25519 key (7/7) and a real OVH Debian VPS with the owner's ED25519 key (host-key trust prompt + key login + home listing). No ssh-agent / Pageant, no encrypted-key test yet.
 
+**Persistent session + Smart Files window (21.10.2026):** `SshSession` keeps one authenticated SSH connection and SFTP channel on a single persistent worker thread; listings reuse it, a dropped connection is reopened once with the host pin re-checked, and a RAM-only listing cache makes back/forward instant (cleared on disconnect). Entries carry size, mtime, mode and owner (from the display-only longentry); symlinks are not stat'ed per entry and resolve on open. Measured: WSL — 3 listings in 11 ms; OVH VPS — 3 listings (/, /etc 150 entries, home) in 673 ms, down from 4.6 s with per-link stat. Integration test 8/8 on WSL. Files window: glass, places sidebar, history, clickable/typed breadcrumb, live filter and type-to-filter, grid/list with sortable columns, hidden files toggle, status bar with latency, keyboard shortcuts, drag/maximize/resize. The interactive GUI has not been driven automatically; file opening, preview and writes are not implemented.
+
 ## Vertical slices to deliver (updated binding priorities)
 
 | Milestone | User value | Engineering acceptance |

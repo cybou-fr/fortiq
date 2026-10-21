@@ -49,6 +49,9 @@ set(FORTIQ_SHELL_QML
     qml/shell/AppIcon.qml
     qml/shell/FolderGlyph.qml
     qml/shell/FileThumb.qml
+    qml/shell/FileIcon.qml
+    qml/shell/ToolButtonGlass.qml
+    qml/shell/ToolTipLite.qml
     qml/shell/TopBar.qml
     qml/shell/AppRail.qml
     qml/shell/ClockWidget.qml

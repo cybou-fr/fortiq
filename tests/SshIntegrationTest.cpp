@@ -6,6 +6,7 @@
 // environment and are never printed.
 #include "ssh/SshClient.h"
 
+#include <QElapsedTimer>
 #include <QtTest>
 
 using fortiq::ConnectionRequest;
@@ -61,6 +62,31 @@ private slots:
         request.keyPath = qEnvironmentVariable("FORTIQ_IT_KEY");
         const SshResult result = SshClient::list(request);
         QVERIFY2(result.status == SshResult::Status::Ok, qPrintable(result.message));
+    }
+
+    void persistentSessionNavigates() {
+        ConnectionRequest request = base;
+        request.expectedHostFingerprint = fingerprint;
+        if (request.password.isEmpty()) request.keyPath = qEnvironmentVariable("FORTIQ_IT_KEY");
+        fortiq::SshSession session;
+        const SshResult home = session.open(request);
+        QVERIFY2(home.status == SshResult::Status::Ok, qPrintable(home.message));
+        QVERIFY(!home.home.isEmpty());
+        QElapsedTimer timer;
+        timer.start();
+        const SshResult root = session.list(QStringLiteral("/"));
+        QVERIFY2(root.status == SshResult::Status::Ok, qPrintable(root.message));
+        QVERIFY(names(root).contains(QStringLiteral("etc")));
+        QVERIFY(session.list(QStringLiteral("/etc")).status == SshResult::Status::Ok);
+        const SshResult back = session.list(home.home);
+        QVERIFY(back.status == SshResult::Status::Ok);
+        qInfo("3 listings on one session: %lld ms", static_cast<long long>(timer.elapsed()));
+        // A missing folder is an SFTP error, not a lost connection.
+        QVERIFY(session.list(QStringLiteral("/nonexistent-fortiq")).status == SshResult::Status::Error);
+        QVERIFY(session.isOpen());
+        // Entries carry metadata for the list view.
+        const QVariantMap first = back.entries.constFirst().toMap();
+        QVERIFY(first.contains("mtime") && first.contains("mode") && first.contains("size"));
     }
 
     void pinnedHostListsHomeWithUnicodeNames() {

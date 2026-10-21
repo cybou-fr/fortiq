@@ -9,4 +9,7 @@ namespace fortiq {
 // by this first slice and skipped by the SSH adapter rather than corrupted.
 std::optional<QString> safeChildPath(const QString &parent, const QString &name);
 QString parentPath(const QString &path);
+// A user-typed or bookmarked folder: absolute, no NUL, no "." / ".." segments.
+// Returns the path without duplicate or trailing slashes.
+std::optional<QString> cleanAbsolutePath(const QString &path);
 }
