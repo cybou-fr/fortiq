@@ -14,7 +14,7 @@
 - **Same C++ backend on Windows x64 and Android arm64.** Same declarative QML component library with *different responsive compositions*, rather than forcing draggable desktop windows onto narrow portrait mobile screens.
 - **AI optional and offline from product-critical flow.** No extra AI agent/API/daemon. This is not a developer-only console.
 
-**Visual reference:** user-provided futuristic Linux desktop sketch (21 Oct 2026). Use it as layout/atmosphere guidance, not as a literal replica of third-party OS UI or third-party icons. Original FORTIQ branding must remain.
+**BINDING VISUAL REFERENCE:** the user's **exact 1536×1024 master sketch** (21 Oct 2026), formalized with coordinates, sampled colors, layering and visual acceptance in [UI SPEC v1](UI_SPEC_V1.md). **Not merely inspiration.** Reproduce shown appearance faithfully; complement only missing details. Keep original FORTIQ branding and respect third-party artwork rights. The golden PNG is supplied in conversation and not yet committed to the repo.
 
 ### Honest product limits
 
@@ -22,18 +22,18 @@ Only apps implemented by FORTIQ are visualized. A remote Linux package does not 
 
 ## 1. Visual system and responsive behavior
 
-**Design tokens (to tune visually):** midnight navy `#081B35`, glass panel `#112B4BCC`, light panel `#F7FAFF`, ink `#EFF6FF`, bright blue `#2487F5`, soft 14–20 px corners, subtle borders, controlled shadow; wallpaper landscape with dim overlay for contrast. Blur where performant, translucent fallback when not. Respect Android performance, motion reduction and accessibility contrast.
+**Only [UI SPEC v1](UI_SPEC_V1.md) controls geometry/color/glass.** Screenshot actual composite pixels are documented there. Values in earlier blueprints were tentative and **must not override the screenshot**. Android performance and accessibility require faithful fallbacks, not an unrelated theme.
 
-**Desktop >= 1100 logical dp (Windows or large Android tablet):**
-- Top bar (40–52dp): FORTIQ/server identity, global action/search, compact indicators, clock.
-- Left app rail (64–76dp): visible icons for Files, Terminal, Editor, Browser placeholder, Settings. The rail is the launcher shortcut area.
+**Desktop >= 1280 logical dp (Windows or large Android tablet):**
+- Top bar matched to screenshot y=0–47 at the reference 1536×1024 canvas: FORTIQ/server identity, centered search, compact indicators and clock.
+- Left app rail matched to screenshot x=4–88 (about 84px including glass border), visible Files, Terminal, Editor, Logs and planned-app placeholders. No arbitrary redesign.
 - Desktop canvas + wallpaper + unobtrusive time/status widgets; server identity obvious.
 - Floating local application surfaces (Files first) with bounds, focus, z-order, close/minimize; never confuse an OS window with a remote desktop stream.
 - Right control center overlay: Wi-Fi, connection state, volume only when locally available, transfers/tasks, account; unavailable OS-level toggles must not pretend to control host.
 - Bottom dock for *running/favorite apps*, not a duplicate of the left app rail; decide duplicates deliberately (one persistent primary nav).
 - Workspace strip is optional **after** multi-window state is reliable.
 
-**700–1099dp:** use split-screen/tablet layout, with app window maximizing by default; side rail collapsible, desktop overview retained, touch targets >= 44dp.
+**700–1279dp:** tablet adaptations as specified in [UI SPEC v1](UI_SPEC_V1.md): 900–1279 landscape retains recognizable shell; 700–899 maximizes app surfaces. Touch targets >=44dp.
 
 **< 700dp:** one app surface at a time, app stack and bottom navigation; top bar compact; control center sheet; never show tiny resizable overlapping windows. Keyboard/IME and Android back semantics supported.
 
@@ -79,6 +79,8 @@ No QML view may build arbitrary shell strings, hold long-lived credentials, or d
 **Existing objects remain useful:** migrate `SshClient::list()` incrementally into `RemoteSession/SshTransport/FileService`; `RemoteController` becomes a thin compatibility facade or is replaced after contract tests. Keep `RemotePath` and its tests. Avoid duplicating public APIs for the same job.
 
 **Security caveat:** libssh2 is blocking in the current implementation; a cancellable worker owning a session is preferable to one `QtConcurrent::run` and one new SSH handshake per folder. A terminal channel must not starve file I/O. Design channel scheduling or a separate authenticated terminal session deliberately. Do not send secrets through shell argv, process logs or QML persistent state.
+
+**Second flagship:** `LogsService`/`LogEventModel` are introduced with Sprint 3 (not counted in the first 10 foundation classes). Log parsing/aggregation is executed by approved Linux CLI via SSH. Read-only UI summaries must cite source events. [Logs contract](LOGS_INTELLIGENCE_SPEC.md).
 
 ## 4. Suggested source tree
 
@@ -143,19 +145,19 @@ Create directories/files only at the milestone where a real feature uses them. N
 
 ## 5. Roadmap: three deliverable sprints (order, not calendar promises)
 
-### Sprint 1 — Bootable shell + persistent remote session, both target platforms
+### Sprint 1 — EXACT sketch shell + persistent SSH, on both platforms
 
 **Build and package:** pin Qt version/kit and libssh2 ABI, Windows x64 executable and Android arm64 debug APK. Record hashes/environment. Fix actual build errors. Verify merged Android permission `INTERNET` and packaging of native libraries.
 
 **SSH:** move from per-listing handshake to worker-owned persistent authenticated session; never report `connected` solely because an old listing succeeded. Preserve out-of-band verified host-key pins, explicit key-change rejection and password-free logging. Add clean disconnect, generation IDs, stale-result suppression, cancellation/timeout. Keep password auth in this milestone; do not silently weaken server SSH settings.
 
-**UI:** split `qml/Main.qml` into DesktopScene, AppDock, Launcher, ConnectionView and FilesView; implement desktop/large-tablet vs phone layouts. Use real data for server/file status; while disconnected display honest empty state. Provide explicit visual style comparable to the design reference.
+**UI:** split `qml/Main.qml` into DesktopScene, TopBar, AppDock, Launcher, ControlCenter, WindowLayer, ConnectionView and FilesView; **reconstruct** the exact master screenshot geometry/materials as defined by [UI SPEC v1](UI_SPEC_V1.md). Preserve screenshot's bright Files body + dark sidebar and exact panel layering. Include controlled visual-only reference fixture. No fake working toggles or browser.
 
 **Exit:** one verified Debian test account reachable from Windows; one reachable from Android (same VPS or explicitly reachable test WSL host). Launch, connect, list, navigate, disconnect and reconnect on both. Test wrong fingerprint, wrong password, Unicode/spaces, lost network, background/resume on Android. Record logs and test versions.
 
-### Sprint 2 — Daily Files, Terminal and task state
+### Sprint 2 — Smart Files flagship + TaskManager, supporting Terminal
 
-**Files:** list with QAbstractListModel and paging/limits; download/upload via SFTP with progress; restart/cancel semantics; atomic remote-temp + rename for writes; conflict detection (remote stat/version before overwrite). Show transferred bytes and source server. No remote-write retry after ambiguous disconnect.
+**Smart Files:** [full feature contract](SMART_FILES_SPEC.md): reference-exact white content and dark sidebar, remote collections/search, context preview, properties, user-configured favorites, read-only inspection and SFTP transfers. Use `QAbstractListModel`/pagination/limits, progress, remote temp + verified conflict-safe publish. Never silently retry writes or fake “recently opened” from mtime.
 
 **Terminal:** run native SSH PTY with user-visible stream and resize. Use or evaluate existing permissively licensed terminal component; do not casually create a fully fledged VT/xterm parser. tmux attach is optional and capability-checked. Terminal always tied to visible ServerId.
 
@@ -163,15 +165,17 @@ Create directories/files only at the milestone where a real feature uses them. N
 
 **Exit:** on both devices: navigate folders, upload, download, interrupt transfer, resume app and observe truthful operation states. Terminal runs `pwd` / `uname -a` and keyboard/IME input without freezing Files. Test names containing spaces, Unicode and denied permissions.
 
-### Sprint 3 — Daily desktop workflow + usability and real test demo
+### Sprint 3 — Logs intelligence flagship + System/Services and quality
 
-**System Overview:** Linux release, hostname, uptime, CPU/memory/disk (guarded, locale-neutral CLI/parser), available tool discovery, network/server status. Refresh without suspending UI.
+**Logs:** implement scoped `journalctl -o json` over SSH with source links, time/priority/unit filters, live follow, permission handling, repeat grouping and a *deterministic* evidence-linked incident synopsis. See [Logs spec](LOGS_INTELLIGENCE_SPEC.md); no required AI.
 
-**Windowed workflow:** overlapping/focus/minimize/restore on desktop; task switching and full-screen app views on narrow Android. Server-specific app context and overview, notifications, real no-server placeholders. Add Editor *read-only open* only if existing Files/Terminal/System acceptances are green; don't slip a full editor into this sprint.
+**Supporting System/Services:** Linux release, hostname, uptime, CPU/memory/disk via guarded CLI, service status for selected log source. Refresh without blocking UI.
+
+**Windowed workflow:** maintain exact sketch UI while opening Files and Logs side by side, with overlapping/focus/minimize/restore on desktop and task switching on Android. Source ServerId remains immutable. Editor remains deferred; do not replace Logs with unrelated utilities.
 
 **UX polish:** keyboard navigation, touch gestures, reduced motion, accessibility contrast, saved wallpaper/theme preference only (local UI setting), connection onboarding including fingerprint help. Put licensing/payments, server setup mutation, mail and browser behind later explicit gates.
 
-**Exit:** first-run user on Windows and Android can connect to fresh Debian/Ubuntu, inspect home folder, transfer a test file, run a terminal command, see system state, disconnect/reconnect, with zero false success states. Capture actual app screenshots and evidence. No claim of finished product or qualified security release.
+**Exit:** first-run Windows and Android can connect to Debian/Ubuntu, use Smart Files, run basic terminal/system checks, inspect one service's actual journal, group repeat events and obtain a source-backed synopsis **without AI**. Capture real app screenshots **against the master golden visual**. No claim of finished product or qualified security release.
 
 ## 6. Debian fixture and reproducible testing
 
@@ -211,4 +215,4 @@ Mail/MIME, WebView proxy routing, full document/PDF pipeline, CPU AI/llama, comm
 - Windows mouse/keyboard and Android tablet/touch demonstrated with screenshots and interaction.
 - README and `docs/QT_MIGRATION.md` updated to match only verified reality; tests executed with logs, not just test names.
 
-**Next engineering instruction:** implement Sprint 1 on `main` only and do not port every Flutter screen. The target is an honest, beautiful, usable remote Linux desktop shell, not a collection of mockups.
+**Next engineering instruction:** implement Sprint 1 on `main` only, with exact [UI SPEC](UI_SPEC_V1.md) visual fidelity. Then Smart Files, then Logs. Never mistake docs/mockups or historical Flutter checks for tested Qt functionality.
