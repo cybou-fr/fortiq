@@ -17,6 +17,7 @@ class RemoteController : public QObject {
     Q_PROPERTY(QString rememberedHost READ rememberedHost CONSTANT)
     Q_PROPERTY(QString rememberedUser READ rememberedUser CONSTANT)
     Q_PROPERTY(int rememberedPort READ rememberedPort CONSTANT)
+    Q_PROPERTY(QString rememberedKeyPath READ rememberedKeyPath CONSTANT)
 
 public:
     explicit RemoteController(QObject *parent = nullptr);
@@ -30,8 +31,10 @@ public:
     QString rememberedHost() const;
     QString rememberedUser() const;
     int rememberedPort() const;
+    QString rememberedKeyPath() const;
 
-    Q_INVOKABLE void connectServer(QString host, int port, QString user, QString password);
+    // keyPath empty = password auth; otherwise `password` is the key passphrase (may be empty).
+    Q_INVOKABLE void connectServer(QString host, int port, QString user, QString password, QString keyPath = {});
     Q_INVOKABLE void trustHost();
     Q_INVOKABLE void openDirectory(const QString &path);
     Q_INVOKABLE void goUp();
@@ -53,6 +56,7 @@ private:
     QString m_host;
     QString m_user;
     QString m_password;
+    QString m_keyPath;
     QString m_pendingFingerprint;
     QString m_status = QStringLiteral("No Linux server connected.");
     QString m_currentDirectory;

@@ -30,6 +30,8 @@
 
 `tests/SshIntegrationTest.cpp` (`fortiq_ssh_it`, skipped unless `FORTIQ_IT_HOST/PORT/USER/PASSWORD/FINGERPRINT` are set) ran against Debian 13 / OpenSSH 10.0 in WSL on `127.0.0.1:2222`, MSVC 2022 + Qt 6.12.0 + libssh2 1.11.1 (vcpkg): **6/6 passed** — unknown host returns trust-required with the fingerprint read independently on the server, a wrong pin blocks before authentication, a wrong password fails, the pinned host lists the home directory including `Mes documents` and `Notes été.txt`. libssh2 negotiated the **ECDSA** host key, not ED25519: compare against all `ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub -E sha256` lines. The GUI path (typing into the Files window) has not been driven automatically. WSL stops an idle distro, which kills sshd; keep it running during the test.
 
+**Private-key login (21.10.2026):** `libssh2_userauth_publickey_fromfile_ex` with a local OpenSSH key path (passphrase from the RAM-only password field; only the path is remembered). Verified: WSL `fortiq-test` with a generated ED25519 key (7/7) and a real OVH Debian VPS with the owner's ED25519 key (host-key trust prompt + key login + home listing). No ssh-agent / Pageant, no encrypted-key test yet.
+
 ## Vertical slices to deliver (updated binding priorities)
 
 | Milestone | User value | Engineering acceptance |
@@ -49,7 +51,7 @@ Qt WebEngine and Windows WebView2 do not provide a single browser component suit
 
 ### Credential limitations in R0.1
 
-- Password authentication only; no private-key auth yet. Password remains only in process RAM until disconnect; no persistent work data/cache is written.
+- Password or local private-key file (unencrypted or passphrase); no ssh-agent yet. Password remains only in process RAM until disconnect; no persistent work data/cache is written.
 - A new host requires explicit SHA-256 fingerprint acceptance *after independent verification*. Only a pin is written to QSettings; changed pins are not silently reset. No known_hosts migration yet.
 - Each folder listing makes a short SSH/SFTP connection, so throughput/latency is not production-grade. Persistent authenticated SSH and cancellation are R0.2.
 - Non-UTF8 SFTP names are skipped instead of sent as lossy Qt paths; arbitrary-byte filename support needs a byte-safe path identity.

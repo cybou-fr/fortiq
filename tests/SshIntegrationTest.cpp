@@ -1,7 +1,8 @@
 // Live SSH/SFTP check against a disposable test server (e.g. the WSL
 // `fortiq-test` distro). Skipped unless FORTIQ_IT_HOST, FORTIQ_IT_PORT,
 // FORTIQ_IT_USER, FORTIQ_IT_PASSWORD and FORTIQ_IT_FINGERPRINT (the host key
-// read independently on the server) are set. Secrets come only from the
+// read independently on the server) are set; FORTIQ_IT_KEY adds an unencrypted
+// private-key login check. Secrets come only from the
 // environment and are never printed.
 #include "ssh/SshClient.h"
 
@@ -50,6 +51,16 @@ private slots:
         request.expectedHostFingerprint = fingerprint;
         request.password += QStringLiteral("-wrong");
         QCOMPARE(SshClient::list(request).status, SshResult::Status::Error);
+    }
+
+    void privateKeyAuthenticates() {
+        if (qEnvironmentVariableIsEmpty("FORTIQ_IT_KEY")) QSKIP("FORTIQ_IT_KEY not set");
+        ConnectionRequest request = base;
+        request.expectedHostFingerprint = fingerprint;
+        request.password.clear();
+        request.keyPath = qEnvironmentVariable("FORTIQ_IT_KEY");
+        const SshResult result = SshClient::list(request);
+        QVERIFY2(result.status == SshResult::Status::Ok, qPrintable(result.message));
     }
 
     void pinnedHostListsHomeWithUnicodeNames() {

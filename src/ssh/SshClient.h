@@ -8,7 +8,8 @@ struct ConnectionRequest {
     QString host;
     int port = 22;
     QString user;
-    QString password; // RAM only, never persisted or logged
+    QString password; // RAM only, never persisted or logged; key passphrase when keyPath is set
+    QString keyPath;  // local OpenSSH private key file; empty = password auth
     QString expectedHostFingerprint;
     QString directory; // empty = remote SFTP home
 };

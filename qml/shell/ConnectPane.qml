@@ -46,15 +46,23 @@ ScrollView {
                 validator: IntValidator { bottom: 1; top: 65535 }
             }
             TextField { id: userInput; Layout.fillWidth: true; placeholderText: "Utilisateur"; text: pane.controller ? pane.controller.rememberedUser : ""; enabled: pane.controller && !pane.controller.busy }
-            TextField { id: passwordInput; Layout.preferredWidth: 160; echoMode: TextInput.Password; placeholderText: "Mot de passe"; enabled: pane.controller && !pane.controller.busy }
+            TextField { id: passwordInput; Layout.preferredWidth: 160; echoMode: TextInput.Password; placeholderText: keyInput.text.length > 0 ? "Phrase de passe (option)" : "Mot de passe"; enabled: pane.controller && !pane.controller.busy }
+            TextField {
+                id: keyInput
+                Layout.fillWidth: true
+                placeholderText: "Clé privée, ex. C:/Users/vous/.ssh/id_ed25519 (vide = mot de passe)"
+                text: pane.controller ? pane.controller.rememberedKeyPath : ""
+                enabled: pane.controller && !pane.controller.busy
+            }
+            Item { Layout.preferredWidth: 160 }
         }
         RowLayout {
             Button {
                 text: "Se connecter"
                 highlighted: true
                 enabled: pane.controller && !pane.controller.busy && hostInput.text.trim().length > 0
-                         && userInput.text.trim().length > 0 && passwordInput.text.length > 0
-                onClicked: pane.controller.connectServer(hostInput.text, Number(portInput.text), userInput.text, passwordInput.text)
+                         && userInput.text.trim().length > 0 && (passwordInput.text.length > 0 || keyInput.text.trim().length > 0)
+                onClicked: pane.controller.connectServer(hostInput.text, Number(portInput.text), userInput.text, passwordInput.text, keyInput.text)
             }
             BusyIndicator { running: pane.controller && pane.controller.busy; visible: running; implicitWidth: 26; implicitHeight: 26 }
         }

@@ -2,6 +2,7 @@
 #include "../core/RemotePath.h"
 
 #include <QCryptographicHash>
+#include <QFile>
 #include <QTcpSocket>
 #include <QByteArray>
 #include <QVariantMap>
@@ -42,8 +43,8 @@ SshResult fail(const QString &reason) {
 SshResult SshClient::list(const ConnectionRequest &req)
 {
     if (req.host.trimmed().isEmpty() || req.user.trimmed().isEmpty() ||
-        req.port < 1 || req.port > 65535 || req.password.isEmpty()) {
-        return fail(QStringLiteral("Provide host, port, user and password."));
+        req.port < 1 || req.port > 65535 || (req.password.isEmpty() && req.keyPath.isEmpty())) {
+        return fail(QStringLiteral("Provide host, port, user and a password or private key."));
     }
     if (!req.directory.isEmpty() && !req.directory.startsWith('/'))
         return fail(QStringLiteral("Invalid remote directory."));
@@ -86,11 +87,23 @@ SshResult SshClient::list(const ConnectionRequest &req)
     }
 
     const QByteArray user = req.user.toUtf8();
-    const QByteArray password = req.password.toUtf8();
-    if (libssh2_userauth_password_ex(session.handle, user.constData(),
-           static_cast<unsigned int>(user.size()), password.constData(),
-           static_cast<unsigned int>(password.size()), nullptr) != 0)
-        return fail(QStringLiteral("SSH authentication failed (password)."));
+    QByteArray password = req.password.toUtf8();
+    if (!req.keyPath.isEmpty()) {
+        // The key is read by libssh2 from disk; FORTIQ never copies it.
+        const QByteArray keyFile = QFile::encodeName(req.keyPath);
+        const int rc = libssh2_userauth_publickey_fromfile_ex(session.handle, user.constData(),
+            static_cast<unsigned int>(user.size()), nullptr, keyFile.constData(),
+            password.isEmpty() ? nullptr : password.constData());
+        password.fill(char(0));
+        if (rc != 0)
+            return fail(QStringLiteral("SSH authentication failed (private key). Check the key file, its passphrase and authorized_keys."));
+    } else {
+        const int rc = libssh2_userauth_password_ex(session.handle, user.constData(),
+            static_cast<unsigned int>(user.size()), password.constData(),
+            static_cast<unsigned int>(password.size()), nullptr);
+        password.fill(char(0));
+        if (rc != 0) return fail(QStringLiteral("SSH authentication failed (password)."));
+    }
 
     session.sftp = libssh2_sftp_init(session.handle);
     if (!session.sftp) return fail(sshError(session.handle, QStringLiteral("SFTP unavailable")));

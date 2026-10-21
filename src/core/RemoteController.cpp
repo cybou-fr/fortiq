@@ -5,6 +5,7 @@
 #include <QCryptographicHash>
 #include <QFutureWatcher>
 #include <QSettings>
+#include <QUrl>
 #include <QtConcurrentRun>
 
 namespace fortiq {
@@ -29,7 +30,11 @@ void RemoteController::scrubPassword() {
     m_password.clear();
 }
 
-void RemoteController::connectServer(QString host, int port, QString user, QString password) {
+QString RemoteController::rememberedKeyPath() const {
+    return QSettings{}.value("bootstrap/lastKeyPath").toString();
+}
+
+void RemoteController::connectServer(QString host, int port, QString user, QString password, QString keyPath) {
     if (m_busy) return;
     ++m_generation;
     scrubPassword();
@@ -37,12 +42,13 @@ void RemoteController::connectServer(QString host, int port, QString user, QStri
     m_port = port;
     m_user = user.trimmed();
     m_password = std::move(password);
+    m_keyPath = QUrl(keyPath.trimmed()).isLocalFile() ? QUrl(keyPath.trimmed()).toLocalFile() : keyPath.trimmed();
     m_pendingFingerprint.clear();
     m_connected = false;
     m_currentDirectory.clear();
     m_entries.clear();
-    if (m_host.isEmpty() || m_user.isEmpty() || m_password.isEmpty() || port < 1 || port > 65535) {
-        m_status = QStringLiteral("Host, port, user and password are required.");
+    if (m_host.isEmpty() || m_user.isEmpty() || (m_password.isEmpty() && m_keyPath.isEmpty()) || port < 1 || port > 65535) {
+        m_status = QStringLiteral("Host, port, user and a password or private key are required.");
         emit changed();
         return;
     }
@@ -70,6 +76,7 @@ void RemoteController::beginRequest(const QString &directory) {
     req.port = m_port;
     req.user = m_user;
     req.password = m_password;
+    req.keyPath = m_keyPath;
     req.expectedHostFingerprint = QSettings{}.value(pinKey()).toString();
     req.directory = directory;
     const int token = m_generation;
@@ -95,6 +102,7 @@ void RemoteController::beginRequest(const QString &directory) {
             settings.setValue("bootstrap/lastHost", m_host);
             settings.setValue("bootstrap/lastPort", m_port);
             settings.setValue("bootstrap/lastUser", m_user);
+            settings.setValue("bootstrap/lastKeyPath", m_keyPath); // path only, never key bytes
         } else if (!m_connected) {
             m_entries.clear();
             m_currentDirectory.clear();
