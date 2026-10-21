@@ -10,11 +10,7 @@ The original PNG is **not present in the repository until an authorized binary u
 Import both documentation reference and website copy with:
 
 ```sh
-python3 tool/install_master_reference.py "/path/to/fortiq-shell-master.png"
-python3 tool/check_docs_consistency.py
-git add docs/design/reference/fortiq-shell-master.png www/assets/fortiq-shell-master.png www/index.html www/fr/index.html www/ru/index.html
-git commit -m "design: add exact approved master desktop image"
-git push origin main
+python3 tool/publish_master_reference.py "/path/to/FORTIQ_Master_Reference_Import.zip"
 ```
 
 The installer validates dimensions and hash before copying and regenerates the three static pages. The website will then show the exact master PNG as a **design reference**, never a falsely represented executable screenshot.
