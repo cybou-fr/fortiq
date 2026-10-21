@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocale>
 #include <QPointer>
 #include <QRegularExpression>
 #include <QSet>
@@ -404,7 +405,7 @@ void LogsController::runInspector() {
     const qint64 to = static_cast<qint64>(at / 1000.0) + m_inspectorWindow + 1;
     QByteArray args = "--no-pager -o json -n " + QByteArray::number(kMaxEvents) + " -p 0..6"
         " --since=@" + QByteArray::number(from) + " --until=@" + QByteArray::number(to);
-    if (m_source == "user") args += " --user";
+    if (m_source == "user" || m_source == "userunit") args += " --user";
     const QByteArray script = "command -v journalctl >/dev/null 2>&1 || { echo 'FORTIQ:missing' >&2; exit 3; }\n"
                               "exec journalctl " + args + "\n";
     const ConnectionRequest req = m_remote->connectionRequest();
@@ -469,11 +470,143 @@ QString LogsController::inspectorReport() const {
     return out;
 }
 
+QVariantMap LogsController::parseServiceShow(const QByteArray &text) {
+    QHash<QString, QString> kv;
+    for (const QByteArray &line : text.split('\n')) {
+        const int eq = line.indexOf('=');
+        if (eq > 0) kv.insert(QString::fromUtf8(line.left(eq)), QString::fromUtf8(line.mid(eq + 1)).trimmed());
+    }
+    auto ts = [&](const QString &key) -> double {
+        const QString v = kv.value(key);
+        return v.startsWith('@') ? v.mid(1).toDouble() * 1000.0 : 0;
+    };
+    const double since = kv.value("ActiveState") == "active" ? ts("ActiveEnterTimestamp") : ts("InactiveEnterTimestamp");
+    const QString mem = kv.value("MemoryCurrent");
+    const QString cpu = kv.value("CPUUsageNSec");
+    const bool memSet = !mem.isEmpty() && mem[0].isDigit() && mem.size() < 19;
+    const bool cpuSet = !cpu.isEmpty() && cpu[0].isDigit() && cpu.size() < 19;
+    return QVariantMap {
+        { "id", kv.value("Id") }, { "description", kv.value("Description") },
+        { "load", kv.value("LoadState") }, { "active", kv.value("ActiveState") }, { "sub", kv.value("SubState") },
+        { "enabled", kv.value("UnitFileState") }, { "result", kv.value("Result") },
+        { "pid", kv.value("MainPID") == "0" ? QString() : kv.value("MainPID") },
+        { "restarts", kv.value("NRestarts").toInt() }, { "restartPolicy", kv.value("Restart") },
+        { "exitStatus", kv.value("ExecMainStatus") }, { "fragment", kv.value("FragmentPath") },
+        { "since", since }, { "sinceText", timeText(since) },
+        { "memory", memSet ? QLocale(QLocale::French).formattedDataSize(mem.toLongLong(), 1, QLocale::DataSizeTraditionalFormat) : QString() },
+        { "cpu", cpuSet ? QStringLiteral("%1 s").arg(cpu.toDouble() / 1e9, 0, 'f', 1) : QString() },
+        { "tasks", kv.value("TasksCurrent").size() < 10 && !kv.value("TasksCurrent").isEmpty() && kv.value("TasksCurrent")[0].isDigit()
+                     ? kv.value("TasksCurrent") : QString() } };
+}
+
+QVariantList LogsController::lifecycleHistory(const QVariantList &events) {
+    QVariantList out;
+    for (const QVariant &v : events) {
+        const QVariantMap e = v.toMap();
+        const auto l = lifecycleOf(e);
+        if (!l) continue;
+        static const QHash<QString, QString> labels {
+            { "started", "Démarré" }, { "stopped", "Arrêté" }, { "exited", "Processus terminé" },
+            { "failed", "Échec" }, { "restart", "Redémarrage programmé" }, { "gaveup", "Redémarrages abandonnés" } };
+        out.push_front(QVariantMap {
+            { "time", e.value("time") }, { "timeText", e.value("timeText") }, { "kind", l->kind },
+            { "label", labels.value(l->kind) }, { "detail", l->detail }, { "message", e.value("message") } });
+    }
+    return out;
+}
+
+QVariantList LogsController::dailyCounts(const QVariantList &history, qint64 nowMs) {
+    // Seven local days ending today: starts, failures, restarts.
+    const QDate today = QDateTime::fromMSecsSinceEpoch(nowMs).date();
+    QVariantList days;
+    for (int back = 6; back >= 0; --back) {
+        const QDate d = today.addDays(-back);
+        int starts = 0, failures = 0, restarts = 0;
+        for (const QVariant &v : history) {
+            const QVariantMap h = v.toMap();
+            if (QDateTime::fromMSecsSinceEpoch(static_cast<qint64>(h.value("time").toDouble())).date() != d) continue;
+            const QString k = h.value("kind").toString();
+            if (k == "started") ++starts;
+            else if (k == "failed" || k == "gaveup") ++failures;
+            else if (k == "restart") ++restarts;
+        }
+        days << QVariantMap { { "label", d.toString(QStringLiteral("dd/MM")) }, { "starts", starts },
+                              { "failures", failures }, { "restarts", restarts } };
+    }
+    return days;
+}
+
+void LogsController::loadService() {
+    if (!m_remote->connected() || (m_source != "unit" && m_source != "userunit") || m_target.isEmpty()) return;
+    const int seq = ++m_serviceSeq;
+    m_serviceBusy = true;
+    m_serviceError.clear();
+    emit serviceChanged();
+    const QByteArray scope = m_source == "userunit" ? " --user" : "";
+    const QByteArray props = "Id,Description,LoadState,ActiveState,SubState,UnitFileState,Result,MainPID,NRestarts,Restart,"
+                             "ExecMainStatus,FragmentPath,ActiveEnterTimestamp,InactiveEnterTimestamp,MemoryCurrent,CPUUsageNSec,TasksCurrent";
+    const QByteArray script = "u=" + SshSession::shellQuote(m_target) + "\n"
+        "[ -n \"$XDG_RUNTIME_DIR\" ] || export XDG_RUNTIME_DIR=/run/user/$(id -u)\n"
+        "command -v systemctl >/dev/null 2>&1 || { echo 'FORTIQ:missing' >&2; exit 3; }\n"
+        "echo '#show'\n"
+        "systemctl" + scope + " show \"$u\" --no-pager --timestamp=unix -p " + props + " 2>/dev/null"
+        " || systemctl" + scope + " show \"$u\" --no-pager -p " + props + "\n"
+        "echo '#journal'\n"
+        "echo \"FORTIQ:id $(id -u) $(id -nG)\" >&2\n"
+        "command -v journalctl >/dev/null 2>&1 && exec journalctl" + scope + " --no-pager -o json -u \"$u\" --since=-7d -n 5000 -p 0..6\n";
+    const ConnectionRequest req = m_remote->connectionRequest();
+    const bool userScope = m_source == "userunit";
+    auto slot = m_session;
+    auto *watcher = new QFutureWatcher<SshResult>(this);
+    connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, seq, userScope] {
+        const SshResult r = watcher->result();
+        watcher->deleteLater();
+        if (seq != m_serviceSeq) return;
+        m_serviceBusy = false;
+        if (r.status != SshResult::Status::Ok || r.message.contains("FORTIQ:missing")) {
+            m_serviceError = r.message.contains("FORTIQ:missing") ? QStringLiteral("systemctl n'est pas disponible sur ce serveur.") : r.message;
+            emit serviceChanged();
+            return;
+        }
+        const int show = r.data.indexOf("#show\n"), journal = r.data.indexOf("#journal\n");
+        const QByteArray showText = show >= 0 ? r.data.mid(show + 6, (journal > show ? journal : r.data.size()) - show - 6) : QByteArray();
+        m_serviceInfo = parseServiceShow(showText);
+        QVariantList events;
+        if (journal >= 0)
+            for (const QByteArray &line : r.data.mid(journal + 9).split('\n'))
+                if (!line.isEmpty()) if (QVariantMap e = parseJournalLine(line); !e.isEmpty()) events << e;
+        m_serviceHistory = lifecycleHistory(events);
+        m_serviceDays = dailyCounts(m_serviceHistory, QDateTime::currentMSecsSinceEpoch());
+        bool full = true;
+        for (const QString &line : r.message.split('\n'))
+            if (line.startsWith(QStringLiteral("FORTIQ:id "))) {
+                const QStringList f = line.mid(10).split(' ', Qt::SkipEmptyParts);
+                full = !f.isEmpty() && (f[0] == "0" || f.contains("adm") || f.contains("systemd-journal") || f.contains("wheel"));
+            }
+        m_serviceInfo.insert("historyLimited", !userScope && !full);
+        m_serviceInfo.insert("eventsRead", events.size());
+        m_serviceInfo.insert("userScope", userScope);
+        if (m_serviceInfo.value("load").toString() == "not-found")
+            m_serviceError = QStringLiteral("Cette unité n'existe pas sur le serveur.");
+        emit serviceChanged();
+    });
+    watcher->setFuture(QtConcurrent::run(&m_pool, [slot, req, script] {
+        if (!*slot) *slot = std::make_unique<SshSession>();
+        if (!(*slot)->isOpen()) {
+            const SshResult opened = (*slot)->open(req);
+            if (opened.status != SshResult::Status::Ok) return opened;
+        }
+        return (*slot)->runScript(script, 16 * 1024 * 1024);
+    }));
+}
+
 void LogsController::loadSources() {
     if (!m_remote->connected()) return;
     const QByteArray script =
         "systemctl list-units --type=service --all --no-legend --plain --no-pager 2>/dev/null"
         " | awk '{print \"U\\t\" $1 \"\\t\" $3 \"\\t\" $4}'\n"
+        "systemctl --user list-units --type=service --all --no-legend --plain --no-pager 2>/dev/null"
+        " | awk '{print \"V\\t\" $1 \"\\t\" $3 \"\\t\" $4}'\n"
         "find /var/log -maxdepth 2 -type f ! -name '*.gz' ! -name '*.xz' ! -name '*.zst' ! -name '*.journal' ! -name '*.journal~'"
         " \\( -readable -printf 'F\\tr\\t%s\\t%p\\n' -o -printf 'F\\tn\\t%s\\t%p\\n' \\) 2>/dev/null | head -n 400\n";
     const ConnectionRequest req = m_remote->connectionRequest();
@@ -486,8 +619,9 @@ void LogsController::loadSources() {
         QVariantList units, files;
         for (const QByteArray &line : r.data.split('\n')) {
             const QList<QByteArray> f = line.split('\t');
-            if (f.size() >= 4 && f[0] == "U" && f[1].endsWith(".service"))
-                units.push_back(QVariantMap { { "name", QString::fromUtf8(f[1]) }, { "active", QString::fromUtf8(f[2]) }, { "sub", QString::fromUtf8(f[3]) } });
+            if (f.size() >= 4 && (f[0] == "U" || f[0] == "V") && f[1].endsWith(".service"))
+                units.push_back(QVariantMap { { "name", QString::fromUtf8(f[1]) }, { "active", QString::fromUtf8(f[2]) },
+                                              { "sub", QString::fromUtf8(f[3]) }, { "user", f[0] == "V" } });
             else if (f.size() >= 4 && f[0] == "F")
                 files.push_back(QVariantMap { { "path", QString::fromUtf8(f[3]) }, { "name", QString::fromUtf8(f[3]).mid(9) },
                                               { "readable", f[1] == "r" }, { "size", f[2].toDouble() } });
@@ -517,6 +651,11 @@ void LogsController::loadSources() {
 void LogsController::select(const QString &source, const QString &target) {
     m_source = source;
     m_target = target;
+    m_serviceInfo.clear();
+    m_serviceHistory.clear();
+    m_serviceDays.clear();
+    m_serviceError.clear();
+    emit serviceChanged();
     if (source == "file") m_maxPriority = 7; // plain files carry no priority
     reload();
 }
@@ -543,8 +682,8 @@ void LogsController::poll() {
 
 QByteArray LogsController::journalScript(bool append) const {
     QByteArray args = "--no-pager -o json -n " + QByteArray::number(kMaxEvents);
-    if (m_source == "user") args += " --user";
-    if (m_source == "unit" && !m_target.isEmpty()) args += " -u " + SshSession::shellQuote(m_target);
+    if (m_source == "user" || m_source == "userunit") args += " --user";
+    if ((m_source == "unit" || m_source == "userunit") && !m_target.isEmpty()) args += " -u " + SshSession::shellQuote(m_target);
     if (m_maxPriority < 7) args += " -p 0.." + QByteArray::number(m_maxPriority);
     if (append && !m_cursor.isEmpty()) args += " --after-cursor=" + SshSession::shellQuote(m_cursor);
     else if (m_range == "boot") args += " -b";
@@ -673,7 +812,7 @@ void LogsController::apply(const SshResult &r, bool append, int seq) {
             const QStringList f = line.mid(10).split(' ', Qt::SkipEmptyParts);
             fullAccess = !f.isEmpty() && (f[0] == "0" || f.contains("adm") || f.contains("systemd-journal") || f.contains("wheel"));
         }
-        if (m_source != "user" && (!fullAccess || err.contains(QStringLiteral("not seeing messages from other users")))) {
+        if (m_source != "user" && m_source != "userunit" && (!fullAccess || err.contains(QStringLiteral("not seeing messages from other users")))) {
             m_state = QStringLiteral("limited");
             m_stateText = QStringLiteral("Accès limité : seuls les messages de votre utilisateur sont visibles. "
                                          "Les membres des groupes adm ou systemd-journal voient tout le journal.");

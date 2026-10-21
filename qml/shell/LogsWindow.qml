@@ -13,9 +13,11 @@ Item {
     property var remote: null        // RemoteController, for connection state
     property bool fixture: false
     property bool fixtureIncident: false // fixture only: show the inspector sample
+    property bool fixtureService: false  // fixture only: show the service sample
+    readonly property bool unitSelected: lc && (lc.source === "unit" || lc.source === "userunit")
     signal closeRequested()
 
-    property string view: "timeline" // "timeline" | "patterns"
+    property string view: fixtureService ? "service" : "timeline" // "timeline" | "patterns" | "service"
     property string textFilter: ""
     property string patternKey: ""
     property string patternLabel: ""
@@ -46,11 +48,15 @@ Item {
         if (lc.source === "journal") return "Journal système"
         if (lc.source === "user") return "Mon journal utilisateur"
         if (lc.source === "unit") return "Service " + lc.target
+        if (lc.source === "userunit") return "Service utilisateur " + lc.target
         return lc.target
     }
     function choose(source, target) {
         patternKey = ""; patternLabel = ""; expanded = -1
         if (!fixture && logs) logs.select(source, target)
+        // A service opens on its status; other sources on the timeline.
+        if (source === "unit" || source === "userunit") { view = "service"; if (!fixture && logs) logs.loadService() }
+        else if (view === "service") view = "timeline"
     }
 
     onConnectedChanged: if (connected && !fixture && logs) { logs.loadSources(); logs.reload() }
@@ -100,10 +106,28 @@ Item {
                 { text: "Élargir la fenêtre à ±15 min", refs: [], action: "widen", arg: "900" }
             ]
         })
+        readonly property bool serviceBusy: false
+        readonly property string serviceError: ""
+        readonly property var serviceInfo: ({ id: "php-fpm.service", description: "The PHP 8.3 FastCGI Process Manager", active: "active", sub: "running",
+            sinceText: "18/10 13:42:21", enabled: "enabled", result: "success", restarts: 3, restartPolicy: "on-failure", pid: "4182",
+            memory: "48,2 Mo", cpu: "312.4 s", tasks: "7", exitStatus: "0", fragment: "/usr/lib/systemd/system/php8.3-fpm.service", historyLimited: false })
+        readonly property var serviceDays: [ { label: "12/10", starts: 1, failures: 0, restarts: 0 }, { label: "13/10", starts: 0, failures: 0, restarts: 0 },
+            { label: "14/10", starts: 2, failures: 1, restarts: 1 }, { label: "15/10", starts: 0, failures: 0, restarts: 0 },
+            { label: "16/10", starts: 1, failures: 0, restarts: 0 }, { label: "17/10", starts: 0, failures: 0, restarts: 0 },
+            { label: "18/10", starts: 3, failures: 1, restarts: 2 } ]
+        readonly property var serviceHistory: [
+            { timeText: "18/10 13:42:21", kind: "started", label: "Démarré", detail: "" },
+            { timeText: "18/10 13:42:20", kind: "restart", label: "Redémarrage programmé", detail: "1" },
+            { timeText: "18/10 13:42:19", kind: "exited", label: "Processus terminé", detail: "9/KILL" },
+            { timeText: "18/10 09:12:04", kind: "started", label: "Démarré", detail: "" },
+            { timeText: "18/10 09:12:03", kind: "restart", label: "Redémarrage programmé", detail: "1" },
+            { timeText: "18/10 09:12:02", kind: "failed", label: "Échec", detail: "exit-code" },
+            { timeText: "14/10 22:30:11", kind: "failed", label: "Échec", detail: "timeout" }
+        ]
         function setInspectorWindow(s) {}
         function inspectorReport() { return "" }
         readonly property string source: "unit"
-        readonly property string target: "nginx.service"
+        readonly property string target: win.fixtureService ? "php8.3-fpm.service" : "nginx.service"
         readonly property string range: "1h"
         readonly property int maxPriority: 6
         readonly property bool busy: false
@@ -210,7 +234,7 @@ Item {
             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
             delegate: Rectangle {
                 required property var modelData
-                readonly property bool active: win.lc && win.lc.source === "unit" && win.lc.target === modelData.name
+                readonly property bool active: win.lc && (win.lc.source === "unit" || win.lc.source === "userunit") && win.lc.target === modelData.name
                 width: unitList.width; height: 24; radius: 6
                 color: active ? Theme.selection : (uMouse.containsMouse ? "#1AFFFFFF" : "transparent")
                 Rectangle {
@@ -218,10 +242,15 @@ Item {
                     color: modelData.sub === "failed" ? "#F87171" : (modelData.sub === "running" ? "#4ADE80" : "#64748B")
                 }
                 Text {
-                    x: 24; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 30; elide: Text.ElideRight
+                    x: 24; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 30 - (modelData.user ? 40 : 0); elide: Text.ElideRight
                     text: modelData.name.replace(/\.service$/, ""); color: Theme.ink; font.pixelSize: 11; font.family: Theme.fontFamily
                 }
-                MouseArea { id: uMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.choose("unit", modelData.name) }
+                Text {
+                    visible: modelData.user === true
+                    anchors.right: parent.right; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter
+                    text: "utilisateur"; color: "#7F93B5"; font.pixelSize: 8; font.family: Theme.fontFamily
+                }
+                MouseArea { id: uMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.choose(modelData.user ? "userunit" : "unit", modelData.name) }
             }
         }
 
@@ -332,7 +361,7 @@ Item {
             anchors.right: parent.right; anchors.rightMargin: 12; y: 8
             spacing: 6
             Rectangle {
-                width: 130; height: 24; radius: 12; color: "#1AFFFFFF"
+                width: 110; height: 24; radius: 12; color: "#1AFFFFFF"
                 border.width: 1; border.color: filterInput.activeFocus ? Theme.accent : "#1FFFFFFF"
                 TextInput {
                     id: filterInput
@@ -345,13 +374,21 @@ Item {
             }
             Row {
                 Repeater {
-                    model: [ { k: "timeline", t: "Chronologie" }, { k: "patterns", t: "Répétitions" } ]
+                    model: win.unitSelected
+                        ? [ { k: "service", t: "Service" }, { k: "timeline", t: "Chronologie" }, { k: "patterns", t: "Répétitions" } ]
+                        : [ { k: "timeline", t: "Chronologie" }, { k: "patterns", t: "Répétitions" } ]
                     Rectangle {
                         required property var modelData
                         height: 24; radius: 6; width: vt.implicitWidth + 14
                         color: win.view === modelData.k ? Theme.selection : (vm.containsMouse ? "#26FFFFFF" : "transparent")
                         Text { id: vt; anchors.centerIn: parent; text: modelData.t; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
-                        MouseArea { id: vm; anchors.fill: parent; hoverEnabled: true; onClicked: win.view = modelData.k }
+                        MouseArea {
+                            id: vm; anchors.fill: parent; hoverEnabled: true
+                            onClicked: {
+                                win.view = modelData.k
+                                if (modelData.k === "service" && !win.fixture && win.logs && Object.keys(win.logs.serviceInfo).length === 0) win.logs.loadService()
+                            }
+                        }
                     }
                 }
             }
@@ -518,8 +555,15 @@ Item {
             }
         }
 
+        ServicePanel {
+            anchors.fill: parent
+            visible: win.view === "service" && win.unitSelected
+            lc: win.lc
+            onShowJournal: win.view = "timeline"
+        }
+
         Column {
-            visible: win.lc && !win.lc.busy && (win.view === "timeline" ? win.shownEvents.length === 0 : win.lc.patterns.length === 0)
+            visible: win.view !== "service" && win.lc && !win.lc.busy && (win.view === "timeline" ? win.shownEvents.length === 0 : win.lc.patterns.length === 0)
             anchors.centerIn: parent
             spacing: 6
             Text {

@@ -806,6 +806,90 @@ private slots:
         settings.remove(pin);
     }
 
+    void serviceParsing() {
+        using fortiq::LogsController;
+        const QVariantMap info = LogsController::parseServiceShow(
+            "Id=php.service\nActiveState=active\nSubState=running\nUnitFileState=enabled\nResult=success\n"
+            "MainPID=812\nNRestarts=3\nRestart=on-failure\nActiveEnterTimestamp=@1760788800\n"
+            "MemoryCurrent=50540544\nCPUUsageNSec=312400000000\nTasksCurrent=18446744073709551615\n");
+        QCOMPARE(info.value("id").toString(), QStringLiteral("php.service"));
+        QCOMPARE(info.value("restarts").toInt(), 3);
+        QCOMPARE(info.value("pid").toString(), QStringLiteral("812"));
+        QCOMPARE(info.value("since").toDouble(), 1760788800000.0);
+        QCOMPARE(info.value("cpu").toString(), QStringLiteral("312.4 s"));
+        QVERIFY(!info.value("memory").toString().isEmpty());
+        QVERIFY(info.value("tasks").toString().isEmpty()); // "unset" sentinel is not shown as a number
+        QVERIFY(LogsController::parseServiceShow("MainPID=0\n").value("pid").toString().isEmpty());
+
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        auto e = [&](qint64 agoMs, const QString &msg) {
+            return QVariant(QVariantMap { { "time", double(now - agoMs) }, { "message", msg }, { "subject", "php.service" }, { "unit", "systemd" } });
+        };
+        const QVariantList events { e(3 * 86400000LL, "Started php.service - PHP."), e(5000, "php.service: Failed with result 'exit-code'."),
+                                    e(4000, "php.service: Scheduled restart job, restart counter is at 1."), e(3000, "Started php.service - PHP."),
+                                    e(2000, "unrelated line") };
+        const QVariantList history = LogsController::lifecycleHistory(events);
+        QCOMPARE(history.size(), 4);
+        QCOMPARE(history.first().toMap().value("kind").toString(), QStringLiteral("started")); // newest first
+        QCOMPARE(history.at(1).toMap().value("kind").toString(), QStringLiteral("restart"));
+        const QVariantList days = LogsController::dailyCounts(history, now);
+        QCOMPARE(days.size(), 7);
+        const QVariantMap today = days.last().toMap();
+        QVERIFY(today.value("starts").toInt() >= 1 && today.value("failures").toInt() >= 1 && today.value("restarts").toInt() >= 1);
+    }
+
+    // Uses FORTIQ_IT_CRASH_UNIT (failing user service, see incidentInspectorOnRealRestart).
+    void serviceView() {
+        const QString unit = qEnvironmentVariable("FORTIQ_IT_CRASH_UNIT");
+        if (unit.isEmpty()) QSKIP("FORTIQ_IT_CRASH_UNIT not set");
+        fortiq::RemoteController controller;
+        fortiq::LogsController logs(&controller);
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+
+        QSignalSpy sources(&logs, &fortiq::LogsController::sourcesChanged);
+        logs.loadSources();
+        QTRY_VERIFY_WITH_TIMEOUT(sources.count() == 1, 15000);
+        bool userListed = false;
+        for (const QVariant &u : logs.units())
+            userListed |= u.toMap().value("user").toBool() && u.toMap().value("name").toString() == unit;
+        QVERIFY2(userListed, "the failing user service is not listed");
+
+        // The failing user service: failed state, restarts and give-up in its history.
+        logs.select(QStringLiteral("userunit"), unit);
+        logs.loadService();
+        QTRY_VERIFY_WITH_TIMEOUT(!logs.serviceBusy() && !logs.serviceInfo().isEmpty(), 20000);
+        const QVariantMap info = logs.serviceInfo();
+        QCOMPARE(info.value("id").toString(), unit);
+        QCOMPARE(info.value("active").toString(), QStringLiteral("failed"));
+        QCOMPARE(info.value("result").toString(), QStringLiteral("exit-code"));
+        QVERIFY(!info.value("historyLimited").toBool());
+        QStringList kinds;
+        for (const QVariant &h : logs.serviceHistory()) kinds << h.toMap().value("kind").toString();
+        QVERIFY2(kinds.contains("restart") && kinds.contains("failed") && kinds.contains("gaveup") && kinds.contains("started"),
+                 qPrintable(kinds.join(',')));
+        QVERIFY(logs.serviceDays().last().toMap().value("failures").toInt() >= 1);
+
+        // A system service as an unprivileged user: status readable, history marked limited.
+        logs.select(QStringLiteral("unit"), QStringLiteral("ssh.service"));
+        logs.loadService();
+        QTRY_VERIFY_WITH_TIMEOUT(!logs.serviceBusy() && !logs.serviceInfo().isEmpty(), 20000);
+        QCOMPARE(logs.serviceInfo().value("active").toString(), QStringLiteral("active"));
+        QVERIFY(logs.serviceInfo().value("historyLimited").toBool());
+
+        logs.select(QStringLiteral("unit"), QStringLiteral("no-such-fortiq.service"));
+        logs.loadService();
+        QTRY_VERIFY_WITH_TIMEOUT(!logs.serviceBusy() && !logs.serviceInfo().isEmpty(), 20000);
+        QVERIFY(!logs.serviceError().isEmpty());
+        controller.disconnectServer();
+        settings.remove(pin);
+    }
+
     void controllerOperations() {
         const QString remoteDir = qEnvironmentVariable("FORTIQ_IT_UPLOAD_DIR");
         if (remoteDir.isEmpty()) QSKIP("FORTIQ_IT_UPLOAD_DIR not set");
