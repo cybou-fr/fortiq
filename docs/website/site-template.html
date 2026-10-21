@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="{{lang}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#061831">
+<meta name="description" content="{{description}}">
+<title>{{title}}</title>
+<link rel="icon" type="image/png" href="{{prefix}}assets/fortiq-icon.png">
+<link rel="stylesheet" href="{{prefix}}styles.css">
+<link rel="alternate" hreflang="en" href="{{prefix}}index.html">
+<link rel="alternate" hreflang="fr" href="{{prefix}}fr/index.html">
+<link rel="alternate" hreflang="ru" href="{{prefix}}ru/index.html">
+<link rel="alternate" hreflang="x-default" href="{{prefix}}index.html">
+</head>
+<body id="top">
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+ <nav class="nav container" aria-label="Main navigation">
+  <a class="brand" href="#top"><img src="{{prefix}}assets/fortiq-icon.png" width="38" height="38" alt=""><span>FORTIQ</span></a>
+  <div class="nav-links"><a href="#concept">{{navWhy}}</a><a href="#apps">{{navApps}}</a><a href="#architecture">{{navHow}}</a><a href="#progress">{{navProgress}}</a></div>
+  <div class="langs"><a href="{{prefix}}index.html" lang="en" {{enCurrent}}>EN</a><a href="{{prefix}}fr/index.html" lang="fr" {{frCurrent}}>FR</a><a href="{{prefix}}ru/index.html" lang="ru" {{ruCurrent}}>RU</a></div>
+ </nav>
+</header>
+<main id="main">
+ <section id="concept" class="hero container">
+  <div class="hero-content">
+   <p class="eyebrow"><span class="pulse"></span>{{eyebrow}}</p>
+   <h1>{{{heroTitle}}}</h1>
+   <p class="hero-lead">{{heroDescription}}</p>
+   <div class="hero-actions"><a class="button-primary" href="#apps">{{heroPrimary}} <span aria-hidden="true">↗</span></a><a class="text-link" href="#architecture">{{heroSecondary}} →</a></div>
+   <p class="status-note"><span class="status-dot"></span>{{heroStatus}}</p>
+   <div class="hero-chips"><span>{{heroChip1}}</span><span>{{heroChip2}}</span><span>{{heroChip3}}</span></div>
+  </div>
+  <div class="hero-art">
+   <div class="art-frame" role="img" aria-label="{{visualTitle}}">
+    <div class="mountain-scene">
+     <div class="sunset"></div><div class="ridge ridge-far"></div><div class="ridge ridge-mid"></div><div class="ridge ridge-near"></div><div class="lake"></div>
+    </div>
+    <div class="mock-top"><strong><img src="{{prefix}}assets/fortiq-icon.png" alt=""> FORTIQ</strong><span class="mock-search">⌕ &nbsp; Search files, apps, settings...</span><span>◉ &nbsp; 13:45</span></div>
+    <div class="mock-rail"><span class="selected">▣</span><span>◈</span><span>⌘</span><span>◩</span><span>⚙</span></div>
+    <div class="mock-clock"><b>13:45</b><small>Debian / Ubuntu</small><span>☀ 22°</span></div>
+    <div class="mock-files">
+      <aside><div class="mock-dots">● ● ●</div><p class="sel">⌂ &nbsp; {{home}}</p><p>▰ &nbsp; {{documents}}</p><p>▤ &nbsp; {{projects}}</p><p>⬇ &nbsp; {{downloads}}</p></aside>
+      <section><header>‹ &nbsp; › &nbsp; ◧ &nbsp; {{filesWindow}} <span>⌕ &nbsp; ▦</span></header>
+      <div class="folder-grid"><div><i>📁</i>{{documents}}</div><div><i>📁</i>{{projects}}</div><div><i>📁</i>{{downloads}}</div><div><i>📁</i>Media</div><div><i>📄</i>notes.txt</div><div><i>📄</i>report.pdf</div><div><i>📁</i>work</div><div><i>📁</i>archive</div></div></section>
+    </div>
+    <div class="mock-logs"><header>● &nbsp; {{logsWindow}} <span>− &nbsp; ×</span></header><small>{{logsService}}</small><p><i class="ok"></i>{{logLine1}}</p><p><i class="warn"></i>{{logLine2}}</p><p><i class="info"></i>{{logLine3}}</p></div>
+    <div class="mock-control"><div>◉ &nbsp; Wi-Fi</div><div>ᛒ &nbsp; Bluetooth</div><div>☾ &nbsp; Mode</div><div>🔊 &nbsp; Audio</div><div class="mock-slider"><span></span></div></div>
+    <div class="mock-dock">▦ &nbsp; ▣ &nbsp; ◉ &nbsp; ◈ &nbsp; ▤ &nbsp; ⚙</div>
+   </div>
+   <p class="visual-caption"><strong>{{visualTitle}}</strong> · {{visualNote}}</p>
+  </div>
+ </section>
+ <section id="apps" class="apps section">
+  <div class="container">
+   <p class="eyebrow">{{sect1Eyebrow}}</p>
+   <h2>{{{sect1Title}}}</h2>
+   <p class="section-lead">{{sect1Sub}}</p>
+   <div class="feature-grid">
+    <article class="feature feature-files">
+     <p class="feature-index">{{filesLabel}}</p><h3>{{{filesTitle}}}</h3><p>{{filesCopy}}</p>
+     <div class="tag-list"><span>{{filesTag0}}</span><span>{{filesTag1}}</span><span>{{filesTag2}}</span></div>
+     <div class="feature-art files-art" aria-hidden="true"><div class="fa-side"><b>⌂ &nbsp; Home</b><span>▰ &nbsp; Documents</span><span>◈ &nbsp; Projects</span></div><div class="fa-body"><div>‹ &nbsp; › &nbsp; Personal folder <span>⌕ &nbsp; ▦</span></div><div class="fa-icons"><span>📁<small>Projects</small></span><span>📁<small>Documents</small></span><span>📁<small>Downloads</small></span><span>📄<small>Readme</small></span></div></div></div>
+     <p class="availability">{{filesPlanned}}</p>
+    </article>
+    <article class="feature feature-logs">
+     <p class="feature-index">{{logsLabel}}</p><h3>{{{logsTitle}}}</h3><p>{{logsCopy}}</p>
+     <div class="tag-list"><span>{{logsTag0}}</span><span>{{logsTag1}}</span><span>{{logsTag2}}</span></div>
+     <div class="feature-art logs-art" aria-hidden="true"><div class="log-tools">◉ &nbsp; nginx.service &nbsp; ▾ <span>Last 30 min</span></div><div class="log-event"><i class="dot ok"></i><span>13:40</span><b>Session started</b></div><div class="log-event"><i class="dot warn"></i><span>13:41</span><b>Repeated warning ×12</b></div><div class="log-event"><i class="dot blue"></i><span>13:43</span><b>Service restarted</b></div><div class="log-summary">↗ &nbsp; 3 observed patterns · 12 repeated events</div></div>
+     <p class="availability">{{logsPlanned}}</p>
+    </article>
+   </div>
+  </div>
+ </section>
+ <section id="architecture" class="section architecture"><div class="container architecture-grid">
+  <div><p class="eyebrow">{{howEyebrow}}</p><h2>{{{howTitle}}}</h2><p class="section-lead">{{howCopy}}</p><p class="small-note">{{howNote}}</p></div>
+  <div class="architecture-diagram">
+    <div class="diagram-box"><span>▣ &nbsp; {{client}}</span><strong>Qt 6 · C++20 · QML</strong><small>{{clientSub}}</small></div>
+    <div class="diagram-line"><span>⇅</span><b>{{transport}}</b></div>
+    <div class="diagram-box"><span>▤ &nbsp; {{server}}</span><strong>SSH · SFTP · CLI</strong><small>{{serverSub}}</small></div>
+  </div>
+ </div></section>
+ <section id="progress" class="section progress"><div class="container">
+  <p class="eyebrow">{{statusEyebrow}}</p><h2>{{statusTitle}}</h2><p class="section-lead">{{statusCopy}}</p>
+  <div class="progress-grid">
+   <div><b>{{statusA}}</b><span>{{statusA2}}</span><i class="progress-line one"></i></div>
+   <div><b>{{statusB}}</b><span>{{statusB2}}</span><i class="progress-line two"></i></div>
+   <div><b>{{statusC}}</b><span>{{statusC2}}</span><i class="progress-line two"></i></div>
+   <div><b>{{statusD}}</b><span>{{statusD2}}</span><i class="progress-line two"></i></div>
+  </div>
+  <p class="future-note">{{future}}</p>
+ </div></section>
+</main>
+<footer><div class="container footer-inner"><a class="brand" href="#top"><img src="{{prefix}}assets/fortiq-icon.png" alt="" width="32" height="32"><span>FORTIQ</span></a><p>{{footerLine}}</p><small>{{footerNote}}</small></div></footer>
+</body>
+</html>
