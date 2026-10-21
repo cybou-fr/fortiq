@@ -20,6 +20,12 @@
 - Tests for rejecting ambiguous remote path segments.
 - Builds depend on **target-ABI-compatible libssh2** with crypto dependencies; Windows and Android validation has not been completed. Do not report these platforms as tested.
 
+## R0.2 Desktop Shell slice (in source, not accepted)
+
+- `Fortiq.Shell` QML module reproduces every UI_SPEC §1 region at master coordinates; the Files window hosts the R0.1 connect/fingerprint flow and real SFTP listing.
+- `--reference-fixture` (visual-only sample scene) and `--screenshot <png>` (1536×1024, DPR=1); `fortiq_shell_preview` builds without libssh2; `tool/compare_shell_screenshot.py` produces diff/overlay/report.
+- Not accepted: placeholder wallpaper, placeholder icons/font, no §4 tablet/narrow layouts, no Android run. Details and metrics: [SHELL_FIDELITY](SHELL_FIDELITY.md).
+
 ## Vertical slices to deliver (updated binding priorities)
 
 | Milestone | User value | Engineering acceptance |

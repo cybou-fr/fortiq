@@ -107,6 +107,8 @@ Design matching supplementary overlay in same blue/navy-glass language: onboardi
 5. Run Android tablet and narrow screen QML snapshot/accessibility checks, plus native interaction with mock vs real SSH (separate evidence).
 6. Do not claim `pixel perfect` or accepted fidelity before independently reviewing actual side-by-side screenshots. The *goal* is exactness; a specification alone is not proof.
 
+Tooling for steps 2–3 exists: `--reference-fixture --screenshot` and `tool/compare_shell_screenshot.py`; current results and blockers are in [SHELL_FIDELITY](SHELL_FIDELITY.md).
+
 ## 7. Implementation priority
 
 **Sprint 1:** master reference scene + QML component decomposition + connection/Files window + persistent SSH; Windows/Android build proofs.  

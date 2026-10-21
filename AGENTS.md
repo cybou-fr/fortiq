@@ -30,7 +30,7 @@
 
 - FORTIQ — универсальный удалённый Linux desktop, а не DevOps dashboard
   и не продукт исключительно для разработчиков.
-- **UI — строго по скетчу владельца, не «примерно так».** Канонический эталон 1536×1024 и правила адаптации: [UI SPEC v1](docs/UI_SPEC_V1.md). Геометрия, цвета, стекло, окно Files, dock, rail и control center из изображения неизменяемы без решения владельца. Текущий `qml/Main.qml` не соответствует финальному эталону.
+- **UI — строго по скетчу владельца, не «примерно так».** Канонический эталон 1536×1024 и правила адаптации: [UI SPEC v1](docs/UI_SPEC_V1.md). Геометрия, цвета, стекло, окно Files, dock, rail и control center из изображения неизменяемы без решения владельца. Первый срез оболочки (`qml/shell/`) визуально ещё не принят; сверка — `tool/compare_shell_screenshot.py`, статус — [SHELL_FIDELITY](docs/SHELL_FIDELITY.md).
 - **Приоритеты:** точный Desktop Shell + SSH → Smart Files → Logs (сводки и корреляция **без AI**) → поддерживающие Terminal/System → Editor/Docs → Mail → Browser/Media → необязательный AI. [Smart Files](docs/SMART_FILES_SPEC.md), [Logs](docs/LOGS_INTELLIGENCE_SPEC.md). Не превращать FORTIQ в DevOps-панель.
 - Новые Docker/Podman/DevOps-модули не считать обязательным следующим этапом.
 - Каждый повседневный инструмент обязан работать без AI. AI только помогает

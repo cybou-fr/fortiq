@@ -3,7 +3,7 @@
 Статус на 21.10.2026: **Qt R0.1 существует в исходниках, но не квалифицирован на Windows/Android**.
 Есть CMake, QML-каркас, libssh2 с fingerprint pinning, парольный SSH, read-only SFTP list,
 тест `RemotePath`. Никакие остальные функции ниже не считаются реализованными без фактических тестов.
-Визуально существующий `Main.qml` не соответствует нормативному скетчу из [UI SPEC v1](UI_SPEC_V1.md).
+Первый срез Desktop Shell (`qml/shell/`) повторяет композицию [UI SPEC v1](UI_SPEC_V1.md), но визуально не принят; расхождения — [SHELL_FIDELITY](SHELL_FIDELITY.md).
 Историческая Flutter-версия — git-тег `flutter-final`.
 
 ## 1. Приложения и исполнители
@@ -39,7 +39,7 @@
 | 03 | SessionManager / постоянное SSH соединение | **не реализовано**; текущий SFTP листинг переподключается |
 | 04 | TaskManager / операции / §unknown§ | не реализовано |
 | 05 | ResourceLocation / FileService | частично: SFTP список и пути; типизированная multi-server модель не реализована |
-| 06 | QML Desktop Shell, окна, dock, launcher | **только черновой §Main.qml§**; **эталон не реализован** |
+| 06 | QML Desktop Shell, окна, dock, launcher | **срез R0.2 в исходниках:** все регионы эталона, фикстура, захват и diff; **не принят** (обои, иконки, шрифт, §4 адаптации) |
 | 07 | Secure credentials | не реализовано (пароль в RAM) |
 | 08 | WorkspaceState только на Linux | не реализовано |
 | 09 | Лицензирование Lemon Squeezy | не реализовано в Qt |
