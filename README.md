@@ -28,7 +28,8 @@
   оригинала в backup. Проверяются размер, режим доступа, владелец/группа, flush и close
   временного файла; неподдерживаемая атомарная замена завершается ошибкой.
   Проверка SHA-256 редактора остаётся оптимистической, без атомарного compare-and-swap.
-- [Terminal](docs/TERMINAL.md): первый интерактивный SSH PTY с libvterm, Ctrl+C и resize;
+- [Terminal](docs/TERMINAL.md): интерактивный SSH PTY с libvterm, Ctrl+C, resize,
+  автозапуском при открытии на подключённом сервере и read-only историей Bash слева;
   без повтора команд. Полная Android IME/TUI-квалификация и scrollback ещё впереди.
 - [Logs](docs/LOGS_INTELLIGENCE_SPEC.md): journald и файлы, фильтры, повторы, инспектор инцидентов
   и read-only service view. Файлы читаются порциями до 256 КиБ с учётом фактических байтов;

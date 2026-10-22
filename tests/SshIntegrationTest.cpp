@@ -114,16 +114,25 @@ private slots:
         {
             fortiq::RemoteController remote;
             fortiq::TerminalController terminal(&remote);
+            terminal.setWindowActive(true); // opening without SSH waits for server selection
+            QVERIFY(!terminal.running());QVERIFY(!terminal.busy());
             QSignalSpy output(&terminal,&fortiq::TerminalController::output),reset(&terminal,&fortiq::TerminalController::resetScreen);
             remote.connectServer(base.host,base.port,base.user,base.password,qEnvironmentVariable("FORTIQ_IT_KEY"));
             QTRY_VERIFY_WITH_TIMEOUT(!remote.busy(),20000);
             QCOMPARE(remote.pendingFingerprint(),fingerprint);remote.trustHost();
             QTRY_VERIFY_WITH_TIMEOUT(remote.connected(),20000);
-            terminal.start();QTRY_VERIFY_WITH_TIMEOUT(terminal.running(),20000);
+            QTRY_VERIFY_WITH_TIMEOUT(terminal.running(),20000); // auto-opens after SSH connects
+            QVERIFY(terminal.historyStatus().startsWith("~/.bash_history"));
+            QVERIFY(!terminal.history().isEmpty()); // fixture Bash has saved history
             terminal.send("stty -echo; printf '\\nFQ_CONTROLLER\\n'\r");
             auto received=[&]{QByteArray data;for(const auto &entry:output)data+=entry.first().toByteArray();return data;};
             QTRY_VERIFY_WITH_TIMEOUT(received().contains("\r\nFQ_CONTROLLER\r\n"),6000);
+            terminal.setWindowActive(false);terminal.setWindowActive(true); // reuse the existing shell
+            terminal.stop();remote.changed();QTest::qWait(150);QVERIFY(!terminal.running());
+            terminal.setWindowActive(false);terminal.setWindowActive(true);
+            QTRY_VERIFY_WITH_TIMEOUT(terminal.running(),20000); // window reopen starts once
             remote.disconnectServer();QVERIFY(!terminal.running());QVERIFY(reset.size()>=2);
+            QVERIFY(terminal.history().isEmpty());
             const auto count=output.size();terminal.send("must-not-send\r");QTest::qWait(200);QCOMPARE(output.size(),count);
         }
         QSettings::setDefaultFormat(oldFormat);QCoreApplication::setOrganizationName(oldOrg);QCoreApplication::setApplicationName(oldApp);

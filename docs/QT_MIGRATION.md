@@ -1,7 +1,8 @@
 # FORTIQ — Qt 6 / C++20 migration, Windows & Android first
 
 22 October follow-up: [Terminal](TERMINAL.md) now has an interactive SSH PTY, a libvterm screen,
-explicit start/stop and server-generation isolation. Shared WindowDragArea serves Files/Logs/
+auto-start on an opened window's connected source, explicit stop and server-generation isolation.
+The regular window layout now includes read-only saved Bash history. Shared WindowDragArea serves Files/Logs/
 Browser/Terminal. Windows/Android builds, 37 layout cases and two live PTY/controller cases passed
 (4 live QtTest passes including init/cleanup). Full Android IME/TUI qualification is still pending.
 

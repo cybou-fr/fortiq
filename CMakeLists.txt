@@ -212,6 +212,10 @@ if(BUILD_TESTING)
           --output "${FORTIQ_BRAND_OUTPUT}"
           --android-output "${FORTIQ_ANDROID_PACKAGE_OUTPUT}")
     find_package(Qt6 6.8 REQUIRED COMPONENTS Test)
+    qt_add_executable(fortiq_terminal_history_tests tests/TerminalHistoryTest.cpp)
+    target_include_directories(fortiq_terminal_history_tests PRIVATE src)
+    target_link_libraries(fortiq_terminal_history_tests PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME fortiq_terminal_history COMMAND fortiq_terminal_history_tests -o "${CMAKE_CURRENT_BINARY_DIR}/terminal-history-results.txt,txt" -o "-,txt")
     qt_add_executable(fortiq_tests tests/RemotePathTest.cpp src/core/RemotePath.cpp src/core/RemotePath.h src/core/LocalDocument.cpp src/core/LocalDocument.h)
     target_link_libraries(fortiq_tests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME fortiq_remote_path COMMAND fortiq_tests -o "${CMAKE_CURRENT_BINARY_DIR}/remote-path-results.txt,txt" -o "-,txt")
@@ -257,7 +261,7 @@ if(BUILD_TESTING)
         file(TO_CMAKE_PATH "$ENV{WINDIR}/Fonts" FORTIQ_TEST_FONT_DIR)
         set_property(TEST fortiq_layout APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=${FORTIQ_TEST_FONT_DIR}")
         # Developer tests need the matching Qt Test runtime, absent from the app package.
-        set_tests_properties(fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_publication fortiq_documents fortiq_layout PROPERTIES
+        set_tests_properties(fortiq_terminal_history fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_publication fortiq_documents fortiq_layout PROPERTIES
             ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:$<TARGET_FILE_DIR:${FORTIQ_SSH_TARGET}>")
     endif()
 endif()

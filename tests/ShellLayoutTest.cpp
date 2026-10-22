@@ -140,7 +140,14 @@ private slots:
             QVERIFY(term->isVisible());
             QVERIFY(term->x()>=0 && term->y()>=47);
             QVERIFY(term->x()+term->width()<=shell->width());
+            auto *sidebar=term->findChild<QQuickItem *>("terminalSidebar");QVERIFY(sidebar);
+            QCOMPARE(sidebar->isVisible(),!term->property("drawer").toBool());
+            auto *connectButton=term->findChild<QQuickItem *>("terminalConnectButton");QVERIFY(connectButton);
+            QVERIFY(connectButton->isVisible());
+            QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,connectButton->mapToScene(QPointF(connectButton->width()/2,connectButton->height()/2)).toPoint());
+            QTRY_VERIFY(shell->property("serversOpen").toBool());shell->setProperty("serversOpen",false);
             auto *surface=term->findChild<QQuickItem *>("terminalSurface");QVERIFY(surface);
+            surface->setVisible(true); // exercise VT input independently of a real SSH fixture
             surface->setProperty("inputEnabled",true);
             QSignalSpy bytes(surface,SIGNAL(bytes(QByteArray)));
             QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,QByteArray("\033[2J\033[HHELLO\r\n\033[31mRED\033[0m"))));

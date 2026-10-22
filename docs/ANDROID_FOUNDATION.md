@@ -174,6 +174,12 @@ The [Terminal slice](TERMINAL.md) also built and installed/launched on FortiqTab
 APK startup, not interactive Android terminal IME/TUI acceptance. Live PTY and controller tests
 ran on Windows against isolated WSL Debian. The disposable public key was revoked and its local
 private/public files removed after testing; no production account was used.
+The next Terminal revision adds automatic start on an available source, the Files-style server
+chooser without SSH, and a history sidebar/drawer. Windows and Android builds passed and the APK
+was installed/launched again. CTest **8/8** includes **37 layout passes** and **4 history-parser
+passes** with init/cleanup. Separate live PTY/controller checks **4 passed**: auto-start, saved
+history read, reuse/reopen, manual-stop suppression, disconnect cleanup and late-input rejection.
+The additional disposable key was revoked/deleted. These are not full Android IME/TUI acceptance.
 
 On physical Lenovo hardware still verify installation/launch,
 rotation and real DPR, safe areas/predictive Back, IME/selection, tap/long press, readable touch controls,
