@@ -155,6 +155,21 @@ private slots:
             QVERIFY(text.contains("HELLO") && text.contains("RED") && !text.contains(QChar(27)));
             surface->forceActiveFocus();QTest::keyClick(window,Qt::Key_C,Qt::ControlModifier);
             QVERIFY(!bytes.isEmpty());QCOMPARE(bytes.last().first().toByteArray(),QByteArray(1,char(3)));
+            bytes.clear();
+            const QString command=QString::fromUtf8("printf 'été Привет'");
+            auto *history=term->findChild<QQuickItem *>("terminalHistory");QVERIFY(history);
+            history->setProperty("model",QVariantList{QVariantMap{{"text",command}}});
+            term->setProperty("navigationOpen",true);QTest::qWait(30);
+            QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,history->mapToScene(QPointF(30,12)).toPoint());
+            QByteArray typed;for(const auto &event:bytes)typed+=event.first().toByteArray();
+            QCOMPARE(typed,command.toUtf8());QVERIFY(surface->hasActiveFocus());
+            for(const QString &unsafe:QStringList{QString("pwd\nexit"),QString("pwd\rexit"),QString(QChar(27))+"[A",QString(QChar::Null),QString(16001,'x')}) {
+                bytes.clear();QVERIFY(QMetaObject::invokeMethod(surface,"insertHistory",Q_ARG(QString,unsafe)));QVERIFY(bytes.isEmpty());
+            }
+            surface->setProperty("inputEnabled",false);bytes.clear();
+            QVERIFY(QMetaObject::invokeMethod(surface,"insertHistory",Q_ARG(QString,command)));QVERIFY(bytes.isEmpty());
+            surface->setProperty("inputEnabled",true);
+
             QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,QByteArray("\033[?1049hALT\033[?1049l"))));
             QVERIFY(QMetaObject::invokeMethod(surface,"screenText",Q_RETURN_ARG(QString,text)));QVERIFY(text.contains("HELLO"));
         }

@@ -7,6 +7,7 @@
 #include <QInputMethod>
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <QQuickWindow>
 
 TerminalView::TerminalView(QQuickItem *parent) : QQuickPaintedItem(parent), m_vt(vterm_new(24, 80)) {
     setFlag(ItemAcceptsInputMethod, true); setAcceptedMouseButtons(Qt::LeftButton);
@@ -14,13 +15,32 @@ TerminalView::TerminalView(QQuickItem *parent) : QQuickPaintedItem(parent), m_vt
     const QFontMetricsF fm(m_font); m_cellWidth = fm.horizontalAdvance('M'); m_cellHeight = fm.height(); m_ascent = fm.ascent();
     vterm_set_utf8(m_vt, 1); m_screen = vterm_obtain_screen(m_vt);
     vterm_screen_enable_altscreen(m_screen, 1);
+    static const VTermScreenCallbacks callbacks = [] {
+        VTermScreenCallbacks cb{};
+        cb.settermprop = [](VTermProp prop, VTermValue *value, void *user) {
+            auto *view = static_cast<TerminalView *>(user);
+            if (prop == VTERM_PROP_CURSORVISIBLE) view->m_cursorVisible = value->boolean;
+            return 1;
+        };
+        return cb;
+    }();
+    vterm_screen_set_callbacks(m_screen, &callbacks, this);
     vterm_output_set_callback(m_vt, [](const char *s, size_t n, void *p) {
         auto *view = static_cast<TerminalView *>(p);
         if (view->m_inputEnabled) emit view->bytes(QByteArray(s, n));
     }, this);
     reset();
-    connect(this, &QQuickItem::activeFocusChanged, this, [this] { update(); });
+    m_cursorTimer.setInterval(500);
+    connect(&m_cursorTimer, &QTimer::timeout, this, [this] {
+        if (isVisible() && m_inputEnabled) { m_cursorOn = !m_cursorOn; update(); }
+    });
+    m_cursorTimer.start();
+    connect(this, &QQuickItem::activeFocusChanged, this, [this] { m_cursorOn = true; update(); });
+    connect(this, &QQuickItem::windowChanged, this, [this](QQuickWindow *w) {
+        if (w) connect(w, &QWindow::activeChanged, this, [this] { m_cursorOn = true; update(); });
+    });
 }
+bool TerminalView::terminalFocused() const { return hasActiveFocus() && window() && window()->isActive(); }
 TerminalView::~TerminalView() { vterm_free(m_vt); }
 void TerminalView::reset() {
     vterm_screen_reset(m_screen, 1);
@@ -28,6 +48,7 @@ void TerminalView::reset() {
     vterm_screen_set_default_colors(m_screen, &fg, &bg); update();
 }
 void TerminalView::feed(const QByteArray &data) {
+    m_cursorOn = true;
     vterm_input_write(m_vt, data.constData(), data.size()); vterm_screen_flush_damage(m_screen); update();
 }
 void TerminalView::geometryChange(const QRectF &n, const QRectF &o) { QQuickPaintedItem::geometryChange(n, o); sizeGrid(); }
@@ -52,9 +73,12 @@ void TerminalView::paint(QPainter *p) {
             p->setFont(font); p->setPen(f); p->drawText(QPointF(col*m_cellWidth,row*m_cellHeight+m_ascent),text);
         }
     }
-    if (hasActiveFocus() && m_inputEnabled) {
+    if (m_inputEnabled && m_cursorVisible && (!terminalFocused() || m_cursorOn)) {
         VTermPos pos; vterm_state_get_cursorpos(vterm_obtain_state(m_vt), &pos);
-        p->setPen(QColor("#8DBEFF")); p->drawRect(QRectF(pos.col*m_cellWidth,pos.row*m_cellHeight,m_cellWidth,m_cellHeight));
+        const QRectF cursor(pos.col*m_cellWidth,pos.row*m_cellHeight,m_cellWidth,m_cellHeight);
+        p->setPen(QColor("#8DBEFF"));
+        if (terminalFocused()) p->fillRect(cursor.adjusted(0,0,0,-1), QColor(141,190,255,150));
+        else p->drawRect(cursor.adjusted(0.5,0.5,-0.5,-0.5));
     }
 }
 QString TerminalView::screenText() const {
@@ -67,10 +91,16 @@ void TerminalView::paste(const QString &text) {
     if (!m_inputEnabled || text.toUtf8().size() > 16000 || text.contains(QChar::Null)) return;
     vterm_keyboard_start_paste(m_vt); textInput(text); vterm_keyboard_end_paste(m_vt);
 }
+void TerminalView::insertHistory(const QString &text) {
+    if (!m_inputEnabled || text.toUtf8().size() > 16000) return;
+    for (QChar c : text) if (c.unicode() < 32 || c.unicode() == 127 || c == QChar(0x2028) || c == QChar(0x2029)) return;
+    textInput(text); forceActiveFocus();
+}
 void TerminalView::control(int code) { if (m_inputEnabled && code >= 1 && code <= 26) emit bytes(QByteArray(1,char(code))); }
-void TerminalView::textInput(const QString &text) { for (auto cp : text.toUcs4()) vterm_keyboard_unichar(m_vt, cp, VTERM_MOD_NONE); }
+void TerminalView::textInput(const QString &text) { m_cursorOn = true; update(); for (auto cp : text.toUcs4()) vterm_keyboard_unichar(m_vt, cp, VTERM_MOD_NONE); }
 void TerminalView::keyPressEvent(QKeyEvent *e) {
     if (!m_inputEnabled) { e->ignore(); return; }
+    m_cursorOn = true; update();
     const auto mods = e->modifiers();
     if ((mods & Qt::ControlModifier) && (mods & Qt::ShiftModifier) && e->key() == Qt::Key_C) { copyScreen(); return; }
     if ((mods & Qt::ControlModifier) && (mods & Qt::ShiftModifier) && e->key() == Qt::Key_V) { emit pasteRequested(); return; }

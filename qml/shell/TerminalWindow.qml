@@ -70,18 +70,23 @@ Item {
         ListView {
             objectName: "terminalHistory"
             x:8;y:130;width:parent.width-16;height:Math.max(0,parent.height-y-12)
-            clip:true;spacing:4;interactive:count>0
+            clip:true;spacing:1;interactive:count>0
             model:win.terminal ? win.terminal.history : []
             ScrollBar.vertical: ScrollBar { policy:ScrollBar.AsNeeded }
             delegate: Rectangle {
                 required property var modelData
-                width:ListView.view.width;height:Math.min(78,entry.implicitHeight+18);radius:7;color:"#181B3658"
+                width:ListView.view.width;height:Math.max(win.adaptive ? 40 : 24,entry.implicitHeight+8);radius:5
+                color:historyMouse.containsMouse ? "#443E80C4" : "#181B3658"
                 Text {
                     id:entry
-                    x:10;y:9;width:parent.width-20
+                    x:10;anchors.verticalCenter:parent.verticalCenter;width:parent.width-20
                     text:modelData.text;textFormat:Text.PlainText
-                    wrapMode:Text.WrapAnywhere;maximumLineCount:3;elide:Text.ElideRight
+                    wrapMode:Text.WrapAnywhere;maximumLineCount:2;elide:Text.ElideRight
                     color:Theme.ink;font.pixelSize:11;font.family:Theme.fontFamily
+                }
+                MouseArea {
+                    id:historyMouse;anchors.fill:parent;hoverEnabled:true;enabled:surface.inputEnabled
+                    onClicked:{win.navigationOpen=false;surface.insertHistory(modelData.text.replace(/\t/g," "))}
                 }
             }
         }
@@ -101,13 +106,12 @@ Item {
             anchors.right:parent.right;anchors.rightMargin:8;anchors.verticalCenter:parent.verticalCenter;spacing:4
             Action { text:"Copier";enabled:surface.visible;onClicked:surface.copyScreen() }
             Action { text:"Coller…";enabled:surface.inputEnabled;onClicked:surface.pasteRequested() }
-            Action { visible:win.terminal!==null && win.terminal.running;text:"Arrêter";onClicked:win.terminal.stop() }
         }
     }
     TerminalView {
         id:surface
         objectName:"terminalSurface"
-        x:win.contentLeft+12;y:52;width:Math.max(32,parent.width-x-12);height:Math.max(32,parent.height-y-64)
+        x:win.contentLeft+12;y:52;width:Math.max(32,parent.width-x-12);height:Math.max(32,parent.height-y-28)
         visible:win.connected && win.terminal!==null && win.terminal.running
         inputEnabled:win.terminal!==null && win.terminal.running
         onBytes:data=>{if(win.terminal)win.terminal.send(data)}
@@ -117,7 +121,7 @@ Item {
     }
     Item {
         visible:!surface.visible
-        x:win.contentLeft;y:48;width:parent.width-x;height:parent.height-y-64
+        x:win.contentLeft;y:48;width:parent.width-x;height:parent.height-y-28
         Column {
             anchors.centerIn:parent;width:Math.max(40,parent.width-32);spacing:16
             Text { width:parent.width;text:win.connected?(win.terminal?win.terminal.status:"Terminal indisponible."):"Aucun serveur connecté";textFormat:Text.PlainText;wrapMode:Text.WordWrap;horizontalAlignment:Text.AlignHCenter;color:Theme.ink;font.pixelSize:15;font.family:Theme.fontFamily }
@@ -137,11 +141,10 @@ Item {
         function onResetScreen(){surface.reset()}
         function onChanged(){if(win.terminal.running && win.visible)surface.forceActiveFocus()}
     }
-    Row {
-        x:win.contentLeft+12;anchors.bottom:parent.bottom;anchors.bottomMargin:24;spacing:6
-        Action { text:"Ctrl+C";enabled:surface.inputEnabled;onClicked:surface.control(3) }
-        Action { text:"Ctrl+D";enabled:surface.inputEnabled;onClicked:surface.control(4) }
-        Text { width:Math.max(20,win.width-win.contentLeft-210);elide:Text.ElideRight;anchors.verticalCenter:parent.verticalCenter;text:win.terminal?win.terminal.status:"Déconnecté";color:Theme.inkMuted;font.pixelSize:11 }
+    Text {
+        x:win.contentLeft+12;anchors.bottom:parent.bottom;anchors.bottomMargin:8
+        width:Math.max(20,win.width-x-12);elide:Text.ElideRight
+        text:win.terminal?win.terminal.status:"Déconnecté";color:Theme.inkMuted;font.pixelSize:11
     }
     Dialog {
         id:pasteDialog

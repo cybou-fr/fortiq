@@ -1,6 +1,7 @@
 #pragma once
 #include <QQuickPaintedItem>
 #include <QFont>
+#include <QTimer>
 #include <QtQml/qqmlregistration.h>
 #include <vterm.h>
 
@@ -22,6 +23,7 @@ public:
     Q_INVOKABLE QString clipboardText() const;
     Q_INVOKABLE void copyScreen();
     Q_INVOKABLE void paste(const QString &text);
+    Q_INVOKABLE void insertHistory(const QString &text);
     Q_INVOKABLE void control(int code);
 signals:
     void bytes(const QByteArray &data);
@@ -38,6 +40,9 @@ protected:
 private:
     void sizeGrid();
     void textInput(const QString &text);
+    bool terminalFocused() const;
+    QTimer m_cursorTimer;
+    bool m_cursorOn = true, m_cursorVisible = true;
     VTerm *m_vt;
     VTermScreen *m_screen;
     QFont m_font;
