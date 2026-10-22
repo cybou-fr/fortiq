@@ -6,18 +6,18 @@ import QtQuick
 Glass {
     id: cc
     property bool fixture: false
-    // Production desktop: the panel is flush against the right edge, square
-    // corners, full height below the top bar. The reference fixture keeps the
-    // floating card at master coordinates.
+    // Production desktop: the floating card sits against the right edge and
+    // spans from below the top bar to the bottom (it holds the wallpaper
+    // section). The reference fixture keeps the card at master coordinates.
     property bool docked: false
     // The wallpaper choice lives in this panel (owner decision 23.10.2026).
     property var wallpapers: []
     property string wallpaperName: ""
     signal wallpaperSelected(string name)
     readonly property var wallpaperLabels: ({ aurora: "Aurora", desert: "Désert", city: "Ville" })
-    radius: docked ? 0 : 18
+    radius: 18
     // Match the Logs window material; the shared workspace tint is lighter.
-    tint: docked ? "#D9101A2E" : "#B3121C30"
+    tint: docked ? "#C4121C30" : "#B3121C30"
     blurAmount: 0.9
 
     component Tile: Rectangle {

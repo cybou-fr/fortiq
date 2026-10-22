@@ -141,7 +141,7 @@ private slots:
             shell->setProperty("controlOpen", true);
             QTest::qWait(50);
             auto *control = shell->findChild<QQuickItem *>("controlCenter"); QVERIFY(control);
-            QCOMPARE(control->x() + control->width(), shell->width());   // flush to the right edge
+            QCOMPARE(control->x() + control->width(), shell->width() - 8);   // floating card against the right edge
             auto *switcher = shell->findChild<QQuickItem *>("backgroundSwitcher"); QVERIFY(switcher);
             QVERIFY(switcher->isVisible());
             QVERIFY(control->isAncestorOf(switcher));                    // the choice is part of the panel

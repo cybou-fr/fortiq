@@ -229,10 +229,10 @@ Item {
         z: 10
         visible: shell.controlOpen
         docked: !shell.fixture && !shell.adaptive
-        x: shell.adaptive ? shell.width - width - 8 : (docked ? shell.width - width : 1215)
-        y: docked ? 47 : 64
+        x: shell.adaptive ? shell.width - width - 8 : (docked ? shell.width - width - 8 : 1215)
+        y: docked ? 59 : 64
         width: Math.min(310, shell.width - 16)
-        height: shell.adaptive ? Math.min(679, shell.height - 144) : (docked ? shell.height - 47 : 679)
+        height: shell.adaptive ? Math.min(679, shell.height - 144) : (docked ? shell.height - 59 - 8 : 679)
         backdrop: wallpaper
         fixture: shell.fixture
         wallpapers: shell.wallpapers
