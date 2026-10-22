@@ -174,5 +174,9 @@ Ctrl+F remains shell input. New output/resize invalidates matches; reset clears 
 Disks uses the same glass and drag behavior, mounted-volumes/device sidebar, server chooser
 without SSH, and an adaptive drawer. Its read-only content comes from lsblk/findmnt; mounted
 paths open in Files. The production app panel and launcher expose it; the canonical fixture is unchanged.
+MDok shares glass, drag, source chooser and activation. Desktop shows Markdown source/preview
+side by side; adaptive layouts switch panes and use a sidebar drawer. Dirty documents require
+a decision before replacement/close/ordinary app quit. The production panel grows to fit new apps,
+and its left layout scrolls when needed; the canonical fixture remains unchanged.
 This is not a new visual approval, nor proof of complete Android touch/accessibility or GPU fidelity.
 See [Android foundation](ANDROID_FOUNDATION.md) for screenshots, build evidence and device gates.

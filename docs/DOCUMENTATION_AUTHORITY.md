@@ -39,6 +39,7 @@
 | Logs | journal/files, following, patterns, inspector, service view | journal + file logs, live tail, evidence-linked synthesis | real Debian service logs, failure and rights coverage |
 | Terminal/Services | first SSH PTY/libvterm and read-only service view; [Terminal](TERMINAL.md) | support flagship workflows | live PTY/controller tests passed; full platform/TUI qualification pending |
 | Disks | [read-only lsblk/findmnt overview](DISKS.md) | everyday storage inspection | WSL SSH checked; full platform qualification pending |
+| MDok | [first Markdown editor](MDOK.md), SFTP safe save/copy, RAM draft | Markdown/PDF document workflows | PDF pending; full platform qualification pending |
 | Mail/Browser/AI/Licenses | none in Qt | future gated additions | separately qualified |
 
 ## Documentation maintenance rule

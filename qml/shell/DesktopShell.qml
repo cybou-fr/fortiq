@@ -19,6 +19,8 @@ Item {
     property bool terminalOpen: false
     property var disksController: null
     property bool disksOpen: false
+    property var documentsController:null
+    property bool documentsOpen:false
     property bool fixture: false
     property string fixturePreview: ""
     property url wallpaperSource: ""
@@ -45,7 +47,7 @@ Item {
     property string panelEdge: fixture ? (fixturePreview === "panelleft" ? "left" : "bottom")
                                        : (displaySettings.panelEdge === "left" ? "left" : "bottom")
     property bool serversOpen: false
-    property var windowOrder: ["files", "browser", "logs", "terminal", "disks"]
+    property var windowOrder: ["files", "browser", "logs", "terminal", "disks", "docs"]
     function raiseApp(app) {
         windowOrder = windowOrder.filter(key => key !== app).concat([app])
         foregroundApp = app
@@ -72,6 +74,7 @@ Item {
         else if (app === "servers") serversOpen = true
         else if (app === "logs") { raiseApp("logs"); logsOpen = true; launcherOpen = false }
         else if (app === "terminal") { terminalOpen = true; raiseApp("terminal"); launcherOpen = false }
+        else if (app === "docs") { documentsOpen=true;raiseApp("docs");launcherOpen=false }
         else if (app === "disks") { disksOpen=true;raiseApp("disks");launcherOpen=false }
         else if (app === "trash") {
             filesOpen = true; raiseApp("files")
@@ -116,6 +119,7 @@ Item {
         fixturePreview: shell.fixturePreview
         onCloseRequested: { shell.filesOpen = false; if (shell.adaptive && shell.logsOpen) shell.foregroundApp = "logs" }
         onRequestServers: shell.serversOpen = true
+        onRequestDocuments:path=>{shell.documentsOpen=true;shell.raiseApp("docs");documentsWindow.request("open",path)}
     }
 
     BrowserWindow {
@@ -173,6 +177,24 @@ Item {
         onOpenPath:path=>{if(shell.controller && shell.controller.connected){shell.controller.navigate(path);shell.filesOpen=true;shell.raiseApp("files")}}
     }
 
+    DocumentsWindow {
+        id:documentsWindow
+        visible:shell.documentsOpen && (!shell.adaptive || shell.foregroundApp==="docs")
+        adaptive:shell.adaptive
+        x:shell.adaptive?8:280;y:shell.adaptive?shell.appTop:90
+        width:shell.adaptive?shell.width-16:1020;height:shell.adaptive?shell.appHeight:680
+        z:shell.windowOrder.indexOf("docs")+1
+        backdrop:wallpaper;documents:shell.documentsController;remote:shell.controller
+        onCloseRequested:{shell.documentsOpen=false;if(shell.adaptive){shell.foregroundApp="files";shell.filesOpen=true}}
+        onRequestServers:shell.serversOpen=true
+    }
+    function allowAppClose(){
+        if(documentsController && (documentsController.dirty || documentsController.busy)){
+            documentsOpen=true;raiseApp("docs");return documentsWindow.allowAppClose()
+        }
+        return true
+    }
+
     // Observe a press above app windows, then reject it so the same event
     // continues to the actual button, field or drag handle underneath.
     MouseArea {
@@ -180,7 +202,7 @@ Item {
         z: 9
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         onPressed: mouse => {
-            const windows = [{key: "files", item: filesWindow}, {key: "browser", item: browserWindow}, {key: "logs", item: logsWindow}, {key: "terminal", item: terminalWindow}, {key:"disks",item:disksWindow}]
+            const windows = [{key: "files", item: filesWindow}, {key: "browser", item: browserWindow}, {key: "logs", item: logsWindow}, {key: "terminal", item: terminalWindow}, {key:"disks",item:disksWindow}, {key:"docs",item:documentsWindow}]
             windows.sort((a, b) => b.item.z - a.item.z)
             for (const entry of windows) {
                 const p = entry.item.mapFromItem(shell, mouse.x, mouse.y)
@@ -231,9 +253,9 @@ Item {
         edge: shell.panelEdge
         x: edge === "left" ? 4 : (parent.width - width) / 2
         y: edge === "left" ? 59 : parent.height - height - 8
-        width: edge === "left" ? 84 : 560
+        width: edge === "left" ? 84 : (shell.fixture?560:Math.min(parent.width-16,appPanel.apps.length*60+84))
         height: edge === "left" ? parent.height - 59 - 8 : 70
-        running: ({ files: shell.filesOpen, logs: shell.logsOpen, terminal: shell.terminalOpen, disks:shell.disksOpen, launcher: shell.launcherOpen })
+        running: ({ files: shell.filesOpen, logs: shell.logsOpen, terminal: shell.terminalOpen, disks:shell.disksOpen, docs:shell.documentsOpen, launcher: shell.launcherOpen })
         onLaunch: (app) => shell.launch(app)
         onMoveTo: (edge) => {
             shell.panelEdge = edge
@@ -287,6 +309,7 @@ Item {
         if (serversOpen) { serverManager.back(); return true }
         if (launcherOpen || controlOpen) { launcherOpen = false; controlOpen = false; return true }
         if (foregroundApp === "files" && filesWindow.handleBack()) return true
+        if(foregroundApp==="docs")return documentsWindow.handleBack()
         if (foregroundApp === "disks") {
             if(disksWindow.handleBack())return true
             foregroundApp="files";filesOpen=true;return true

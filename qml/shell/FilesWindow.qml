@@ -27,6 +27,7 @@ Item {
     property bool fixture: false
     // Fixture only: "text" or "image" shows the viewer with sample content.
     property string fixturePreview: ""
+    signal requestDocuments(string path)
     signal closeRequested()
     signal requestServers()
 
@@ -105,6 +106,7 @@ Item {
         if (!entry || fixture || !connected) return
         // A symbolic link may point to a folder; the server answers on open.
         if (entry.directory || entry.link) { filterText = ""; controller.navigate(entry.path) }
+        else if(/\.(md|markdown)$/i.test(entry.path))requestDocuments(entry.path)
         else controller.openFile(entry.path)
     }
     // ── file operations ────────────────────────────────────────────────

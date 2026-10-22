@@ -53,6 +53,7 @@ set(FORTIQ_SHELL_QML
     qml/shell/WindowDragArea.qml
     qml/shell/TerminalWindow.qml
     qml/shell/DisksWindow.qml
+    qml/shell/DocumentsWindow.qml
     qml/shell/AppIcon.qml
     qml/shell/FolderGlyph.qml
     qml/shell/FileThumb.qml
@@ -90,13 +91,14 @@ qt_add_qml_module(fortiq_shell
     OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/qml/Fortiq/Shell
     QML_FILES ${FORTIQ_SHELL_QML}
     SOURCES src/terminal/TerminalView.cpp src/terminal/TerminalView.h
+        src/documents/MarkdownPreview.cpp src/documents/MarkdownPreview.h
     RESOURCES
         assets/wallpapers/aurora.jpg
         assets/wallpapers/desert.jpg
         assets/wallpapers/city.jpg
 )
 target_link_libraries(fortiq_shell PRIVATE Qt6::Quick fortiq_vterm)
-target_include_directories(fortiq_shell PRIVATE src/terminal)
+target_include_directories(fortiq_shell PRIVATE src/terminal src/documents)
 
 qt_add_executable(fortiq_shell_preview src/main.cpp)
 target_compile_definitions(fortiq_shell_preview PRIVATE FORTIQ_NO_SSH)
@@ -154,6 +156,8 @@ qt_add_executable(fortiq
     src/core/TerminalController.h
     src/core/DisksController.cpp
     src/core/DisksController.h
+    src/core/DocumentsController.cpp
+    src/core/DocumentsController.h
     src/ssh/SshClient.cpp
     src/ssh/SshClient.h
 )
@@ -219,6 +223,10 @@ if(BUILD_TESTING)
     target_include_directories(fortiq_terminal_history_tests PRIVATE src)
     target_link_libraries(fortiq_terminal_history_tests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME fortiq_terminal_history COMMAND fortiq_terminal_history_tests -o "${CMAKE_CURRENT_BINARY_DIR}/terminal-history-results.txt,txt" -o "-,txt")
+    qt_add_executable(fortiq_markdown_tests tests/MarkdownDataTest.cpp)
+    target_include_directories(fortiq_markdown_tests PRIVATE src)
+    target_link_libraries(fortiq_markdown_tests PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME fortiq_markdown COMMAND fortiq_markdown_tests -o "${CMAKE_CURRENT_BINARY_DIR}/markdown-results.txt,txt" -o "-,txt")
     qt_add_executable(fortiq_disk_tests tests/DiskInfoTest.cpp)
     target_include_directories(fortiq_disk_tests PRIVATE src)
     target_link_libraries(fortiq_disk_tests PRIVATE Qt6::Core Qt6::Test)
@@ -230,6 +238,7 @@ if(BUILD_TESTING)
     qt_add_executable(fortiq_ssh_it tests/SshIntegrationTest.cpp
         src/core/TerminalController.cpp src/core/TerminalController.h
         src/core/DisksController.cpp src/core/DisksController.h
+        src/core/DocumentsController.cpp src/core/DocumentsController.h
         src/ssh/SshClient.cpp src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h
         src/core/LocalDocument.cpp src/core/LocalDocument.h
         src/core/RemoteController.cpp src/core/RemoteController.h
@@ -269,7 +278,7 @@ if(BUILD_TESTING)
         file(TO_CMAKE_PATH "$ENV{WINDIR}/Fonts" FORTIQ_TEST_FONT_DIR)
         set_property(TEST fortiq_layout APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=${FORTIQ_TEST_FONT_DIR}")
         # Developer tests need the matching Qt Test runtime, absent from the app package.
-        set_tests_properties(fortiq_disks fortiq_terminal_history fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_publication fortiq_documents fortiq_layout PROPERTIES
+        set_tests_properties(fortiq_markdown fortiq_disks fortiq_terminal_history fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_publication fortiq_documents fortiq_layout PROPERTIES
             ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:$<TARGET_FILE_DIR:${FORTIQ_SSH_TARGET}>")
     endif()
 endif()

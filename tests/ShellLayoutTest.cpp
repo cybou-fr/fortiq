@@ -10,16 +10,27 @@
 #include <QDir>
 #include <QQmlExtensionPlugin>
 #include "../src/core/BackNavigationFilter.h"
+#ifndef Q_MOC_RUN
+#include "../src/documents/MarkdownPreview.h"
+#endif
 Q_IMPORT_QML_PLUGIN(Fortiq_ShellPlugin)
 
 class ShellLayoutTest : public QObject {
     Q_OBJECT
 private slots:
-    void initTestCase() { QCoreApplication::setOrganizationName("CYBOU-tests"); QCoreApplication::setApplicationName("fortiq-layout"); }
+    void initTestCase() {
+        QCoreApplication::setOrganizationName("CYBOU-tests"); QCoreApplication::setApplicationName("fortiq-layout");
+        QTemporaryDir temp;QVERIFY(temp.isValid());QImage pixel(4,4,QImage::Format_ARGB32);pixel.fill(Qt::red);
+        const auto path=temp.filePath("resource.png");QVERIFY(pixel.save(path));
+        SafeMarkdownDocument doc;
+        QVERIFY(!doc.resource(QTextDocument::ImageResource,QUrl::fromLocalFile(path)).isValid());
+        QVERIFY(!doc.resource(QTextDocument::ImageResource,QUrl("https://example.invalid/image.png")).isValid());
+        QVERIFY(!doc.resource(QTextDocument::ImageResource,QUrl("data:image/png;base64,AA==")).isValid());
+    }
     void viewport_data() {
         QTest::addColumn<QSize>("size"); QTest::addColumn<QString>("preview");
         for (const QSize size : {QSize(1536,1024), QSize(1600,950), QSize(1024,768), QSize(768,1024), QSize(390,844)})
-            for (const QString &preview : {QString(), QString("logs"), QString("editor"), QString("incident"), QString("service"), QString("servers"), QString("terminal"), QString("disks")})
+            for (const QString &preview : {QString(), QString("logs"), QString("editor"), QString("incident"), QString("service"), QString("servers"), QString("terminal"), QString("disks"), QString("docs")})
                 QTest::newRow(qPrintable(QString("%1x%2-%3").arg(size.width()).arg(size.height()).arg(preview.isEmpty() ? "files" : preview))) << size << preview;
     }
     void viewport() {
@@ -37,6 +48,7 @@ private slots:
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first()); QVERIFY(window);
         window->resize(size); QTest::qWait(200);
         auto *shell = window->findChild<QQuickItem *>("desktopShell"); QVERIFY(shell);
+        if(preview=="docs") { shell->setProperty("documentsOpen",true);shell->setProperty("foregroundApp","docs"); }
         if(preview=="disks") { shell->setProperty("disksOpen",true);shell->setProperty("foregroundApp","disks"); }
         if(preview=="terminal") { shell->setProperty("terminalOpen",true);shell->setProperty("foregroundApp","terminal"); }
         fortiq::BackNavigationFilter back(window, [shell] {
@@ -60,7 +72,7 @@ private slots:
                 QVERIFY(item->x() + item->width() <= shell->width());
                 QVERIFY(item->y() + item->height() <= shell->height() - 68);
             }
-            QCOMPARE(files->isVisible(), !logApp && preview!="terminal" && preview!="disks");
+            QCOMPARE(files->isVisible(), !logApp && preview!="terminal" && preview!="disks" && preview!="docs");
             QCOMPARE(logs->isVisible(), logApp);
         } else {
             QCOMPARE(files->x(), 471.0); QCOMPARE(files->y(), 72.0);
@@ -138,6 +150,59 @@ private slots:
             auto *title = logs->findChild<QQuickItem *>("incidentTitle"); QVERIFY(title);
             auto *controls = logs->findChild<QQuickItem *>("incidentControls"); QVERIFY(controls);
             QVERIFY(title->y() + title->height() <= controls->y());
+        }
+        if(preview=="docs") {
+            auto *doc=shell->findChild<QQuickItem *>("documentsWindow");QVERIFY(doc);QVERIFY(doc->isVisible());
+            QVERIFY(doc->x()>=0 && doc->y()>=47);QVERIFY(doc->x()+doc->width()<=shell->width());
+            auto *button=doc->findChild<QQuickItem *>("documentsConnectButton");QVERIFY(button);QVERIFY(button->isVisible());
+            QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,button->mapToScene(QPointF(button->width()/2,button->height()/2)).toPoint());
+            QTRY_VERIFY(shell->property("serversOpen").toBool());shell->setProperty("serversOpen",false);
+            QQmlComponent component(&engine);
+            component.setData(R"(import QtQml
+                QtObject {
+                    property bool connected:true
+                    property string currentDirectory:"/home/fixture"
+                    property string serverLabel:"fixture"
+                    property bool busy:false
+                    property bool hasDocument:true
+                    property bool isNew:false
+                    property bool canSave:true
+                    property string path:"/home/fixture/notes.md"
+                    property string base:"# Title\n**bold** and [link](https://example.invalid)\n"
+                    property string text:base
+                    readonly property bool dirty:text!==base
+                    property string sourceLabel:"fixture"
+                    property string status:"UTF-8"
+                    signal loaded()
+                    signal saved(string path)
+                    function discardDraft(){text=base;loaded()}
+                    function save(){base=text;saved(path)}
+                    function saveAs(p){save()}
+                    function open(p){}
+                    function createNew(){}
+                    function copyDraft(){}
+                })",QUrl());
+            auto *fixture=component.create();QVERIFY2(fixture,qPrintable(component.errorString()));fixture->setParent(window);
+            shell->setProperty("documentsController",QVariant::fromValue(fixture));doc->setProperty("remote",QVariant::fromValue(fixture));
+            auto *editor=doc->findChild<QQuickItem *>("documentsEditor");QVERIFY(editor);
+            auto *render=doc->findChild<QQuickItem *>("documentsPreview");QVERIFY(render);
+            QTest::qWait(220);QString rendered;
+            QVERIFY(QMetaObject::invokeMethod(render,"plainText",Q_RETURN_ARG(QString,rendered)));QVERIFY(rendered.contains("Title") && rendered.contains("bold") && !rendered.contains("**bold**"));
+            render->setProperty("source",QString(64001,'x'));QVERIFY(render->property("limited").toBool());
+            editor->setProperty("text",QString::fromUtf8("# Modifié\nПривет **texte**\n"));QVERIFY(fixture->property("dirty").toBool());
+            editor->forceActiveFocus();QTest::keyClick(window,Qt::Key_S,Qt::ControlModifier);QVERIFY(!fixture->property("dirty").toBool());
+            editor->setProperty("text",QString("unsaved"));QVERIFY(fixture->property("dirty").toBool());
+            QVERIFY(QMetaObject::invokeMethod(doc,"request",Q_ARG(QVariant,QVariant("close")),Q_ARG(QVariant,QVariant(""))));
+            auto *dialog=doc->findChild<QQuickItem *>("documentsUnsavedDialog");QVERIFY(dialog);QVERIFY(dialog->isVisible());
+            QTest::keyClick(window,Qt::Key_Escape);QVERIFY(!dialog->isVisible());QVERIFY(doc->isVisible());
+            QCOMPARE(shell->property("foregroundApp").toString(),QString("docs"));
+            QVariant allowed;QVERIFY(QMetaObject::invokeMethod(shell,"allowAppClose",Q_RETURN_ARG(QVariant,allowed)));QVERIFY(!allowed.toBool());QVERIFY(dialog->isVisible());
+            QTest::keyClick(window,Qt::Key_Escape);QVERIFY(!dialog->isVisible());
+            editor->setProperty("text",QString::fromUtf8("# Projet Été\n\n**Objectif** : Bonjour Привет.\n\n- Document serveur\n- Enregistrement sûr\n\n> Note de travail\n"));
+            fixture->setProperty("base",fixture->property("text"));
+            if(adaptive)doc->setProperty("previewMode",true);
+            QTest::qWait(220);
+            QVERIFY(window->grabWindow().save(QString("layout-captures/%1-mdok.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
         }
         if(preview=="disks") {
             auto *disk=shell->findChild<QQuickItem *>("disksWindow");QVERIFY(disk);QVERIFY(disk->isVisible());

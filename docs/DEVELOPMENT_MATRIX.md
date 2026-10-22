@@ -21,7 +21,7 @@ Android arm64 debug APK прошёл базовые SSH/SFTP, поворот/IME
 | 10 | Services / System Overview (поддержка) | §systemctl§/§uname§/§free§/§df§, обнаружение возможностей | R1–R1.5 | не реализовано |
 | 07 | Search | §find§/§grep§/§rg§ (серверное) | R1 | не реализовано |
 | 02 | Editor | §cat§/§stat§/§mktemp§/§mv§ | R2 | не реализовано |
-| 03 | Docs / Markdown | серверные файлы; §pandoc§ при наличии | R2 | не реализовано |
+| 03 | MDok / Markdown | SFTP, существующие safe-save primitives Files; Qt Markdown preview | R2 | [первый Markdown-срез](MDOK.md), PDF не реализован |
 | 04 | Mail | проверенная серверная CLI, §sendmail§/§mail§ | R2+ | не реализовано |
 | 05 | Browser | в будущем WebView с доказанным SSH SOCKS-only | R3+ | не реализовано, Android proxy пока не доказан |
 | 06 | Viewer | §file§/§pdfinfo§/§pdftoppm§/SFTP | R2 | не реализовано |

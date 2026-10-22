@@ -23,7 +23,7 @@ Item {
         { app: "editor", kind: "editor", label: "Éditeur", ready: false },
         { app: "browser", kind: "browser", label: "Navigateur", ready: false },
         { app: "settings", kind: "settings", label: "Paramètres", ready: false }
-    ].concat(fixture?[]:[{app:"disks",kind:"disks",label:"Disques",ready:true}])
+    ].concat(fixture?[]:[{app:"disks",kind:"disks",label:"Disques",ready:true},{app:"docs",kind:"docs",label:"MDok",ready:true}])
     readonly property int cell: vertical ? 74 : 60
 
     Glass {
@@ -44,10 +44,14 @@ Item {
         onClicked: (m) => edgeMenu.popup()
     }
 
+    Flickable {
+        anchors.fill:parent;anchors.bottomMargin:panel.vertical?90:0
+        clip:true;interactive:panel.vertical
+        contentWidth:width;contentHeight:panel.vertical?grid.height+24:height
     Grid {
         id: grid
         x: panel.vertical ? (parent.width - width) / 2 : 12
-        y: panel.vertical ? 12 : (parent.height - height) / 2
+        y: panel.vertical ? 12 : (panel.height - height) / 2
         columns: panel.vertical ? 1 : panel.apps.length + 2
         spacing: panel.vertical ? 4 : 6
 
@@ -106,6 +110,8 @@ Item {
                 }
             }
         }
+    }
+
     }
 
     // Trash at the far end of the panel.

@@ -1,5 +1,8 @@
 # FORTIQ — Qt 6 / C++20 migration, Windows & Android first
 
+23 October MDok: [first Markdown editor](MDOK.md), independent RAM document, pinned SFTP,
+existing safe-save/copy primitives, protected draft and Qt preview without resource loading. PDF pending.
+
 22 October Disks slice: [read-only storage overview](DISKS.md), lsblk/findmnt JSON over pinned SSH,
 partial-source errors and server-generation isolation. No partition/mount mutation or health reporting.
 

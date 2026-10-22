@@ -8,6 +8,8 @@
 #include "core/RemoteController.h"
 #include "core/TerminalController.h"
 #include "core/DisksController.h"
+#include "core/DocumentsController.h"
+#include "core/MarkdownData.h"
 #include "core/DiskInfo.h"
 #include "ssh/SshClient.h"
 
@@ -136,6 +138,44 @@ private slots:
             remote.disconnectServer();QVERIFY(!terminal.running());QVERIFY(reset.size()>=2);
             QVERIFY(terminal.history().isEmpty());
             const auto count=output.size();terminal.send("must-not-send\r");QTest::qWait(200);QCOMPARE(output.size(),count);
+        }
+        QSettings::setDefaultFormat(oldFormat);QCoreApplication::setOrganizationName(oldOrg);QCoreApplication::setApplicationName(oldApp);
+    }
+
+    void markdownDocumentsRoundTripConflictAndDisconnect() {
+        auto req=base;req.expectedHostFingerprint=fingerprint;if(req.password.isEmpty())req.keyPath=qEnvironmentVariable("FORTIQ_IT_KEY");
+        fortiq::SshSession session;const auto opened=session.open(req);QVERIFY2(opened.status==SshResult::Status::Ok,qPrintable(opened.message));
+        const auto initial=fortiq::encodeMarkdown(QString::fromUtf8("# Été\nПривет\n"),true,true);
+        const auto created=session.saveCopy(opened.home,QString::fromUtf8("mdok-test été espace.md"),initial);QVERIFY2(created.status==SshResult::Status::Ok,qPrintable(created.message));
+        const QString original=created.directory;QString copy;
+        QTemporaryDir settings;QVERIFY(settings.isValid());
+        const auto oldOrg=QCoreApplication::organizationName(),oldApp=QCoreApplication::applicationName();const auto oldFormat=QSettings::defaultFormat();
+        QCoreApplication::setOrganizationName("CYBOU-tests");QCoreApplication::setApplicationName("mdok-live");
+        QSettings::setDefaultFormat(QSettings::IniFormat);QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,settings.path());
+        {
+            fortiq::RemoteController remote;fortiq::DocumentsController docs(&remote);
+            remote.connectServer(base.host,base.port,base.user,base.password,qEnvironmentVariable("FORTIQ_IT_KEY"));
+            QTRY_VERIFY_WITH_TIMEOUT(!remote.busy(),20000);if(!remote.connected()){QCOMPARE(remote.pendingFingerprint(),fingerprint);remote.trustHost();}
+            QTRY_VERIFY_WITH_TIMEOUT(remote.connected(),20000);
+            docs.open(original);QTRY_VERIFY_WITH_TIMEOUT(!docs.busy(),20000);QCOMPARE(docs.path(),original);QVERIFY(docs.canSave());
+            QCOMPARE(docs.text(),QString::fromUtf8("# Été\nПривет\n"));
+            docs.setText(QString::fromUtf8("# Modifié\nBonjour Привет\n"));QVERIFY(docs.dirty());docs.save();
+            QTRY_VERIFY_WITH_TIMEOUT(!docs.busy(),20000);QVERIFY2(!docs.dirty(),qPrintable(docs.status()));
+            const auto savedBytes=fortiq::encodeMarkdown(docs.text(),true,true);
+            QCOMPARE(session.readFile(original,262144).data,savedBytes);
+            const auto external=QByteArray("# External\r\n");
+            QVERIFY(session.saveFile(original,external,QCryptographicHash::hash(savedBytes,QCryptographicHash::Sha256),false).status==SshResult::Status::Ok);
+            docs.setText("# Draft must survive\n");docs.save();QTRY_VERIFY_WITH_TIMEOUT(!docs.busy(),20000);
+            QVERIFY(docs.dirty());QVERIFY(docs.status().contains("Conflit"));QCOMPARE(session.readFile(original,262144).data,external);
+            docs.saveAs(original);QTRY_VERIFY_WITH_TIMEOUT(!docs.busy(),20000);QVERIFY(!docs.dirty());copy=docs.path();QVERIFY(copy!=original);
+            QCOMPARE(session.readFile(copy,262144).data,fortiq::encodeMarkdown(docs.text(),true,true));
+            docs.setText("# Offline draft\n");docs.save();remote.disconnectServer();
+            QVERIFY(!docs.canSave());QVERIFY(!docs.busy());QVERIFY(docs.dirty());QCOMPARE(docs.text(),QString("# Offline draft\n"));
+            docs.saveAs(original);QVERIFY(!docs.busy());QCOMPARE(docs.path(),copy);
+        }
+        for(const auto &path:QStringList{original,copy})if(!path.isEmpty()) {
+            const auto quoted=QByteArray("'")+path.toUtf8().replace("'","'\\''")+"'";
+            const auto removed=session.runScript("rm -- "+quoted+"\n",1024);QCOMPARE(removed.code,QString("exit:0"));
         }
         QSettings::setDefaultFormat(oldFormat);QCoreApplication::setOrganizationName(oldOrg);QCoreApplication::setApplicationName(oldApp);
     }
