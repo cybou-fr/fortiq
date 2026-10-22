@@ -123,6 +123,29 @@ The GFXSTREAM GL 0x502 warning observed in the first run and occasional brand-te
 remain GPU/fidelity follow-up items; these functional checks do not qualify performance or visuals.
 The key picker itself was not exercised with a real private-key provider URI in this run.
 
+### Emulator window recovery (22 October 2026)
+
+The Windows emulator window later showed a small guest image in its upper-left corner with large
+black margins. The Android framebuffer itself had no such margins. A cold restart restored the host
+window; this is emulator presentation evidence, not a QML layout fix. The local `FortiqTablet` AVD
+now uses `hw.initialOrientation=landscape`, `hw.gpu.enabled=yes`, `hw.gpu.mode=host` for its
+2560×1600 screen. The previous configuration was backed up under ignored `build-dist/`.
+
+With the AVD stopped, the verified development launch is:
+
+```powershell
+& "$env:LOCALAPPDATA/Android/Sdk/emulator/emulator.exe" -avd FortiqTablet -no-snapshot -gpu host
+```
+
+Wait for the previous emulator process to exit before restarting. This avoids loading/saving Quick
+Boot state and preserves userdata; do not wipe the AVD. Native Windows window captures verified
+the corrected bounds and portrait/landscape rotation using the emulator toolbar. An ADB-only
+rotation changes the guest orientation without rotating the host window and can temporarily leave
+the image sideways. Allow the sensor/Qt relayout to settle after using the toolbar.
+An experimental cold run with `-gpu swiftshader` produced severe triangular texture corruption;
+it was reverted. Host GPU restored the normal scene, but the existing GPU/fidelity qualification
+items above remain open. No application code or APK changed for this recovery.
+
 The emulator remains available for further testing. On physical Lenovo hardware still verify installation/launch,
 rotation and real DPR, safe areas/predictive Back, IME/selection, tap/long press, readable touch controls,
 native key/upload/save pickers, provider metadata/unknown size, expired grants and restart persistence,
