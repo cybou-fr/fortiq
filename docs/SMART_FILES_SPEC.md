@@ -69,3 +69,11 @@ Premium, fast, touch-capable **remote file manager that feels local**. The conte
   this slice. A disconnected pre-publication operation may leave its owned hidden temporary.
 
 Executed tests and repeatable fixture requirements: [Qt migration](QT_MIGRATION.md#file-publication-reliability-slice--22102026).
+
+### Android document integration snapshot, 22.10.2026
+
+Files now has an adaptive foreground layout and opaque SAF URI handling. Keys are loaded via
+QFile into bounded RAM for authentication; uploads stream provider content using actual bytes
+when reported length is unknown. Downloads stage completely before provider publication, which
+is explicitly non-atomic and reports possible partial results on interruption. No broad storage
+permissions or direct network fallback are introduced. [Implementation and pending Android tests](ANDROID_FOUNDATION.md).

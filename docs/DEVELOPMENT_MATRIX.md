@@ -3,7 +3,8 @@
 Статус на 22.10.2026: **инженерный Qt R0.1, публичная квалификация Windows/Android не завершена**.
 В исходниках — SSH по паролю/ключу, постоянные сессии, менеджер серверов, файловые операции и Logs.
 Сборка Windows MSVC / Qt 6.12, регрессии Logs и файловая публикация через тестовый WSL SSH/SFTP проверены локально; APK на устройстве и чистая
-Windows-машина не проверены. Факты и ограничения — [QT_MIGRATION](QT_MIGRATION.md).
+Windows-машина не проверены. Android arm64 debug APK собран; адаптация и SAF-адаптер в исходниках,
+проверка на устройстве остаётся обязательной — [Android foundation](ANDROID_FOUNDATION.md). Факты и ограничения — [QT_MIGRATION](QT_MIGRATION.md).
 Первый срез Desktop Shell (`qml/shell/`) повторяет композицию [UI SPEC v1](UI_SPEC_V1.md), но визуально не принят; расхождения — [SHELL_FIDELITY](SHELL_FIDELITY.md).
 Историческая Flutter-версия — git-тег `flutter-final`.
 

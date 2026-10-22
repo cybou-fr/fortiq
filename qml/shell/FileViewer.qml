@@ -6,6 +6,7 @@ import QtQuick.Controls
 // Content stays in RAM; nothing is saved on this device.
 Rectangle {
     id: viewer
+    property bool adaptive: false
     property var controller: null
     property string name: controller ? controller.previewPath.split("/").pop() : ""
     readonly property string kind: controller ? controller.previewKind : ""
@@ -83,7 +84,7 @@ Rectangle {
     // Header
     Item {
         id: header
-        width: parent.width; height: 40
+        width: parent.width; height: viewer.adaptive ? 56 : 40
         FileIcon {
             x: 12; anchors.verticalCenter: parent.verticalCenter
             size: 22; name: viewer.name
@@ -111,7 +112,7 @@ Rectangle {
             anchors.right: parent.right; anchors.rightMargin: 8
             anchors.verticalCenter: parent.verticalCenter
             spacing: 2
-            ToolButtonGlass { visible: viewer.kind === "image"; glyph: "−"; tip: "Réduire (−)"; onClicked: viewer.zoomBy(0.8) }
+            ToolButtonGlass { touch: viewer.adaptive; visible: viewer.kind === "image"; glyph: "−"; tip: "Réduire (−)"; onClicked: viewer.zoomBy(0.8) }
             Text {
                 visible: viewer.kind === "image"
                 anchors.verticalCenter: parent.verticalCenter
@@ -119,9 +120,9 @@ Rectangle {
                 text: Math.round((viewer.zoom === 0 ? viewer.fitScale() : viewer.zoom) * 100) + " %"
                 color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
             }
-            ToolButtonGlass { visible: viewer.kind === "image"; glyph: "+"; tip: "Agrandir (+)"; onClicked: viewer.zoomBy(1.25) }
-            ToolButtonGlass { visible: viewer.kind === "image"; glyph: "⤢"; tip: "Ajuster (0)"; checked: viewer.zoom === 0; onClicked: viewer.zoom = 0 }
-            ToolButtonGlass { visible: viewer.kind === "image"; glyph: "1:1"; tip: "Taille réelle"; onClicked: viewer.zoom = 1 }
+            ToolButtonGlass { touch: viewer.adaptive; visible: viewer.kind === "image"; glyph: "+"; tip: "Agrandir (+)"; onClicked: viewer.zoomBy(1.25) }
+            ToolButtonGlass { touch: viewer.adaptive; visible: viewer.kind === "image"; glyph: "⤢"; tip: "Ajuster (0)"; checked: viewer.zoom === 0; onClicked: viewer.zoom = 0 }
+            ToolButtonGlass { touch: viewer.adaptive; visible: viewer.kind === "image"; glyph: "1:1"; tip: "Taille réelle"; onClicked: viewer.zoom = 1 }
             Rectangle {
                 visible: viewer.editable && !viewer.editing
                 anchors.verticalCenter: parent.verticalCenter
@@ -139,8 +140,8 @@ Rectangle {
                 Text { id: saveLabel; anchors.centerIn: parent; text: viewer.saving ? "Enregistrement…" : "Enregistrer  Ctrl+S"; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
                 MouseArea { id: saveMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; enabled: viewer.dirty && !viewer.saving; onClicked: viewer.save() }
             }
-            ToolButtonGlass { visible: viewer.editing; glyph: "↶"; tip: "Quitter l'édition (Échap)"; enabledState: !viewer.saving; onClicked: viewer.stopEditing() }
-            ToolButtonGlass { glyph: "×"; tip: "Fermer (Échap)"; enabledState: !viewer.saving; onClicked: viewer.requestClose() }
+            ToolButtonGlass { touch: viewer.adaptive; visible: viewer.editing; glyph: "↶"; tip: "Quitter l'édition (Échap)"; enabledState: !viewer.saving; onClicked: viewer.stopEditing() }
+            ToolButtonGlass { touch: viewer.adaptive; glyph: "×"; tip: "Fermer (Échap)"; enabledState: !viewer.saving; onClicked: viewer.requestClose() }
         }
         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: "#1FFFFFFF" }
     }
@@ -297,7 +298,9 @@ Rectangle {
     }
 
     GlassDialog {
+        touchMode: viewer.adaptive
         id: confirm
+        objectName: "unsavedDialog"
         anchors.fill: parent
         bottomRightRadius: 16
         busy: viewer.saving

@@ -2,7 +2,9 @@
 
 Статус: архитектурная спецификация, обновление фактов 22.10.2026. В Qt R0.1 есть
 SSH по паролю/ключу, постоянные сессии, файловые операции, серверные профили и первый Logs.
-Windows MSVC / Qt 6.12 собирается локально; чистая Windows-машина и Android не квалифицированы.
+Windows MSVC и Android arm64 / Qt 6.12 собираются локально (включая debug APK);
+чистая Windows-машина и работа на Android-устройстве не квалифицированы.
+Адаптация и URI/экспорт — [Android foundation](ANDROID_FOUNDATION.md).
 История испытаний и ограничения — [QT_MIGRATION](QT_MIGRATION.md). Остальные контракты ниже
 в основном **целевые**. Последний Flutter-прототип — тег `flutter-final`. Обязательная модель «клиент — GUI, Linux — backend» задана
 в [SSH_FRONTEND_CONTRACT](SSH_FRONTEND_CONTRACT.md) и имеет приоритет над этим файлом.

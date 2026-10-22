@@ -8,6 +8,13 @@ import QtQuick.Dialogs
 // memory for the session and are never written.
 Item {
     id: mgr
+    objectName: "serverManager"
+    property bool adaptive: false
+    property Item focusedInput: null
+    function back() {
+        if (editingId.length > 0) editingId = ""
+        else { secret = ""; connectingId = ""; closed() }
+    }
     property Item backdrop
     property var controller: null
     signal closed()
@@ -56,12 +63,20 @@ Item {
 
     Item {
         id: card
-        width: 640; height: Math.min(parent.height - 120, column.implicitHeight + 40)
+        width: Math.min(640, parent.width - 16); height: Math.min(parent.height - (mgr.adaptive ? 16 : 120), column.implicitHeight + 40)
         anchors.centerIn: parent
         Glass { anchors.fill: parent; backdrop: mgr.backdrop; radius: 18; tint: "#D9101A2E"; blurAmount: 0.9 }
         MouseArea { anchors.fill: parent } // keep clicks inside the card
 
         Flickable {
+            id: formFlick
+            function reveal(item) {
+                if (!item) return
+                const top = item.mapToItem(contentItem, 0, 0).y
+                if (top < contentY) contentY = Math.max(0, top - 12)
+                else if (top + item.height > contentY + height) contentY = Math.max(0, Math.min(contentHeight - height, top + item.height - height + 12))
+            }
+            onHeightChanged: Qt.callLater(() => reveal(mgr.focusedInput))
             anchors.fill: parent; anchors.margins: 20
             contentHeight: column.implicitHeight
             clip: true
@@ -76,7 +91,7 @@ Item {
                 Item {
                     width: parent.width; height: 30
                     Text { anchors.verticalCenter: parent.verticalCenter; text: "Serveurs"; color: Theme.ink; font.pixelSize: 18; font.weight: Font.DemiBold; font.family: Theme.fontFamily }
-                    ToolButtonGlass { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; glyph: "×"; tip: "Fermer (Échap)"; onClicked: mgr.closed() }
+                    ToolButtonGlass { touch: mgr.adaptive; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; glyph: "×"; tip: "Fermer (Échap)"; onClicked: mgr.closed() }
                 }
                 Text {
                     width: parent.width; wrapMode: Text.WordWrap
@@ -193,8 +208,8 @@ Item {
                                     }
                                 }
                             }
-                            ToolButtonGlass { glyph: "✎"; tip: "Modifier"; enabledState: !row.modelData.active; onClicked: mgr.startEdit(row.modelData) }
-                            ToolButtonGlass {
+                            ToolButtonGlass { touch: mgr.adaptive; glyph: "✎"; tip: "Modifier"; enabledState: !row.modelData.active; onClicked: mgr.startEdit(row.modelData) }
+                            ToolButtonGlass { touch: mgr.adaptive;
                                 glyph: mgr.confirmRemoveId === row.modelData.id ? "✓" : "🗑"
                                 tip: mgr.confirmRemoveId === row.modelData.id ? "Confirmer la suppression de ce serveur de la liste" : "Retirer de la liste"
                                 onClicked: {
@@ -207,7 +222,7 @@ Item {
                             visible: row.open
                             x: 32; y: 60; spacing: 8
                             Rectangle {
-                                width: 300; height: 32; radius: 8; color: "#1AFFFFFF"
+                                width: 300; height: mgr.adaptive ? 44 : 32; radius: 8; color: "#1AFFFFFF"
                                 border.width: 1; border.color: secretField.activeFocus ? Theme.accent : "#33FFFFFF"
                                 TextInput {
                                     id: secretField
@@ -226,7 +241,7 @@ Item {
                                 }
                             }
                             Rectangle {
-                                height: 32; radius: 8; width: gl.implicitWidth + 24
+                                height: mgr.adaptive ? 44 : 32; radius: 8; width: gl.implicitWidth + 24
                                 color: gm.containsMouse ? Theme.selection : "#992D6FE0"
                                 opacity: mgr.busy ? 0.5 : 1
                                 Text { id: gl; anchors.centerIn: parent; text: mgr.busy ? "Connexion…" : "Connexion"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
@@ -238,7 +253,7 @@ Item {
 
                 Rectangle {
                     visible: mgr.editingId === ""
-                    height: 32; radius: 8; width: al.implicitWidth + 26
+                    height: mgr.adaptive ? 44 : 32; radius: 8; width: al.implicitWidth + 26
                     color: am.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
                     Text { id: al; anchors.centerIn: parent; text: "+  Ajouter un serveur"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
                     MouseArea { id: am; anchors.fill: parent; hoverEnabled: true; onClicked: mgr.startEdit(null) }
@@ -257,12 +272,13 @@ Item {
                         property string hint: ""
                         height: 46; radius: 8; color: "#14FFFFFF"
                         border.width: 1; border.color: input.activeFocus ? Theme.accent : "#2BFFFFFF"
-                        Text { x: 10; y: 5; text: parent.label; color: "#8FA2C2"; font.pixelSize: 9; font.family: Theme.fontFamily }
+                        Text { x: 10; y: 5; width: parent.width - 20; elide: Text.ElideRight; text: parent.label; color: "#8FA2C2"; font.pixelSize: 9; font.family: Theme.fontFamily }
                         TextInput {
                             id: input
                             x: 10; y: 20; width: parent.width - 20
                             color: Theme.ink; font.pixelSize: 13; font.family: Theme.fontFamily; clip: true
                             selectByMouse: true
+                            onActiveFocusChanged: if (activeFocus) { mgr.focusedInput = parent; Qt.callLater(() => formFlick.reveal(parent)) }
                             onAccepted: mgr.saveEdit()
                             Text { visible: parent.text.length === 0; text: parent.parent.hint; color: "#5F7395"; font.pixelSize: 13; font.family: Theme.fontFamily }
                         }
@@ -279,7 +295,7 @@ Item {
                     }
                     Row {
                         spacing: 8
-                        Field { id: keyField; width: column.width - 108; label: "CLÉ PRIVÉE OPENSSH (VIDE = MOT DE PASSE)"; hint: "C:/Users/vous/.ssh/id_ed25519" }
+                        Field { id: keyField; width: column.width - 108; label: "CLÉ PRIVÉE OPENSSH (VIDE = MOT DE PASSE)"; hint: Qt.platform.os === "android" ? "Choisir via Parcourir…" : "C:/Users/vous/.ssh/id_ed25519" }
                         Rectangle {
                             width: 100; height: 46; radius: 8; color: bm.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
                             Text { anchors.centerIn: parent; text: "Parcourir…"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
@@ -290,13 +306,13 @@ Item {
                     Row {
                         spacing: 8
                         Rectangle {
-                            height: 32; radius: 8; width: sl.implicitWidth + 26
+                            height: mgr.adaptive ? 44 : 32; radius: 8; width: sl.implicitWidth + 26
                             color: sm.containsMouse ? Theme.selection : "#992D6FE0"
                             Text { id: sl; anchors.centerIn: parent; text: "Enregistrer"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
                             MouseArea { id: sm; anchors.fill: parent; hoverEnabled: true; onClicked: mgr.saveEdit() }
                         }
                         Rectangle {
-                            height: 32; radius: 8; width: xl.implicitWidth + 26
+                            height: mgr.adaptive ? 44 : 32; radius: 8; width: xl.implicitWidth + 26
                             color: xm.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
                             Text { id: xl; anchors.centerIn: parent; text: "Annuler"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
                             MouseArea { id: xm; anchors.fill: parent; hoverEnabled: true; onClicked: mgr.editingId = "" }
@@ -312,8 +328,8 @@ Item {
         title: "Choisir la clé privée OpenSSH"
         fileMode: FileDialog.OpenFile
         onAccepted: {
-            const s = selectedFile.toString()
-            keyField.text = decodeURIComponent(s.replace(/^file:\/{2,3}/, ""))
+            // Keep SAF document identifiers opaque, including encoded slashes.
+            keyField.text = selectedFile.toString()
         }
     }
 

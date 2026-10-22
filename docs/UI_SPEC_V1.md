@@ -129,3 +129,12 @@ Do not build a fake Wi-Fi toggle, “working” browser mock, remote calendar, s
 The owner approved the **new cyan/blue/violet FORTIQ monogram** and requested native executable integration. In the reference screenshot, the 25px top-left circle is now replaced by the approved F mark while preserving **the same top-bar position, scale, surrounding layout and material**. No other reference-visible geometry, colors or window structure is authorized to change because of branding.
 
 Native assets are generated from the source in `assets/branding/fortiq_mark.png`; CMake integrates them into Windows EXE/Qt windows/Android launcher. See [Branding](../assets/branding/README.md). Windows/Android runtime visual acceptance still needs actual builds and device checks.
+
+## Adaptation implementation snapshot (22 October 2026, acceptance pending)
+
+Section 4 now has a first source implementation: below 1280 logical pixels or in portrait,
+one foreground Files/Logs surface uses viewport units, with a single scrollable app panel,
+collapsed sidebars and touch-sized primary controls. Window/editor instances survive resizing;
+Back preserves unsaved text. The reference desktop geometry remains under tests at 1536×1024.
+This is not a new visual approval, nor proof of complete Android touch/accessibility or GPU fidelity.
+See [Android foundation](ANDROID_FOUNDATION.md) for screenshots, build evidence and device gates.

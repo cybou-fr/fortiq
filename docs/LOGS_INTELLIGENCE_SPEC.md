@@ -87,3 +87,10 @@ service requests also have independent sequence numbers; disconnect invalidates 
 server-specific sidebars/status. Source changes invalidate service/inspector requests. A successful
 SSH transport does not by itself mean a successful remote command. Tests and platform evidence:
 [Qt migration reliability slice](QT_MIGRATION.md#reliability-slice--22102026).
+
+### Adaptive view snapshot, 22.10.2026
+
+Logs maximizes as one foreground app on narrow/portrait screens, with source drawer, horizontally
+scrollable filters and narrow incident synopsis/events tabs. Server/data semantics are unchanged.
+This is an offscreen-tested layout, not device touch/accessibility/GPU acceptance; see
+[Android foundation](ANDROID_FOUNDATION.md).

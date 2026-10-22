@@ -2,6 +2,24 @@
 
 **Decision:** single C++20 + Qt Quick/QML codebase for Windows and Android. Linux server remains the sole application backend. **Git workflow:** update `main` only; preserved Flutter sources at tag `flutter-final`. This is an implementation plan with a truthful snapshot of the Qt progress.
 
+## Android foundation slice — 22.10.2026
+
+Adaptive shell uses real viewport units below 1280 logical pixels or in portrait: one Files/Logs
+foreground surface, touch toolbar, drawers, scrollable app/filter panels, narrow incident tabs,
+Back/IME handling and retained editor state. Desktop reference geometry remains at 1536×1024.
+Local document URIs stay encoded; QFile reads selected keys into bounded RAM for libssh2 memory
+key auth, with no disk key copy. SAF downloads finish a private temporary before opening the provider;
+non-atomic provider failure/cancellation after opening is explicitly `unknown`. Native downloads
+retain QSaveFile. The manifest omits broad storage permission requests.
+
+**Actual builds:** Windows MSVC and Android arm64 (Qt 6.12, NDK 28.2, JDK 21, SDK 36, min API 28).
+OpenSSL/libssh2/zlib were built for Android; a debug-signed APK was produced and signature/manifest/ABI
+checked. Device installation/runtime is **not verified**: no device was attached. Layout QtTest
+26/26 and local-document QtTest 9/9 passed; screenshots include four viewport sizes and six views,
+plus rotation and Back/unsaved-edit checks. These are Windows offscreen tests, not Android provider,
+IME, GPU or touch acceptance. Detailed evidence, commands and pending device checks:
+[Android foundation](ANDROID_FOUNDATION.md).
+
 ## File publication reliability slice — 22.10.2026
 
 Upload Replace no longer moves the old pathname to a backup: it publishes with one

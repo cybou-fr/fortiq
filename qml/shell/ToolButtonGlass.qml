@@ -8,8 +8,9 @@ Rectangle {
     property string tip: ""
     property bool checked: false
     property bool enabledState: true
+    property bool touch: false
     signal clicked()
-    width: 30; height: 28; radius: 8
+    width: touch ? 44 : 30; height: touch ? 44 : 28; radius: 8
     color: checked ? "#592F8CFF" : (mouse.containsMouse && enabledState ? "#26FFFFFF" : "transparent")
     border.width: checked ? 1 : 0
     border.color: "#802F8CFF"

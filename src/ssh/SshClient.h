@@ -13,7 +13,7 @@ struct ConnectionRequest {
     int port = 22;
     QString user;
     QString password; // RAM only, never persisted or logged; key passphrase when keyPath is set
-    QString keyPath;  // local OpenSSH private key file; empty = password auth
+    QString keyPath;  // local OpenSSH key path or opaque Android content URI; empty = password auth
     QString expectedHostFingerprint;
     QString directory; // empty = remote SFTP home
 };
@@ -30,7 +30,7 @@ struct SshResult {
     qint64 fileSize = -1; // readFile(): full size reported by the server
     bool truncated = false;
     // Transfers: "conflict", "cancelled", "unknown" (outcome on the server not
-    // known after a drop), or empty. `directory` holds the final path on Ok.
+    // known after a drop, or local document publication incomplete), or empty. `directory` holds the final path on Ok.
     QString code;
     qint64 bytes = 0;
 };
@@ -57,7 +57,9 @@ public:
     // Reads at most maxBytes of a regular file, read-only (SFTP READ open).
     SshResult readFile(const QString &path, qint64 maxBytes);
     // Remote regular file -> local file. Written through QSaveFile (local
-    // temporary + atomic commit), size verified before commit.
+    // temporary + atomic commit), size verified before commit. Android content
+    // URIs stage first, then copy to the provider non-atomically; failure after
+    // opening the provider is "unknown" and may leave a partial document.
     SshResult download(const QString &remotePath, const QString &localPath, const TransferProgress &progress);
     // Local file -> remoteDir/name. Exclusive unique temporary on the server,
     // size verified, then published without silently replacing: Fail reports

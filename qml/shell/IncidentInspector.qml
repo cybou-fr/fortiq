@@ -7,6 +7,9 @@ import QtQuick.Controls
 // log string is rendered as plain text.
 Rectangle {
     id: insp
+    readonly property bool narrow: width < 650
+    property bool showEvents: false
+    readonly property real bodyTop: header.height + (narrow ? 44 : 0)
     property var lc: null            // LogsController or fixture sample
     property var priorityColor: function(p) { return "#64748B" }
     signal openUnit(string unit)
@@ -26,6 +29,7 @@ Rectangle {
     function scrollToAnchor() { if (anchor >= 0) eventList.positionViewAtIndex(anchor, ListView.Center) }
     function selectRefs(refs) {
         selectedRefs = refs
+        if (narrow) showEvents = true
         if (refs.length > 0) eventList.positionViewAtIndex(refs[0], ListView.Center)
     }
     function copyReport() {
@@ -39,10 +43,11 @@ Rectangle {
     // ── header ─────────────────────────────────────────────────────────
     Item {
         id: header
-        width: parent.width; height: 44
+        width: parent.width; height: insp.narrow ? 100 : 44
         Column {
-            x: 14; anchors.verticalCenter: parent.verticalCenter
-            width: parent.width - 28 - controls.width
+            objectName: "incidentTitle"
+            x: 14; y: insp.narrow ? 8 : (parent.height - height) / 2
+            width: insp.narrow ? parent.width - 28 : parent.width - 28 - controls.width
             Text {
                 width: parent.width; elide: Text.ElideRight
                 textFormat: Text.PlainText
@@ -62,15 +67,16 @@ Rectangle {
         }
         Row {
             id: controls
+            objectName: "incidentControls"
             anchors.right: parent.right; anchors.rightMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
+            y: insp.narrow ? 48 : (parent.height - height) / 2
             spacing: 4
             Repeater {
                 model: [ { s: 60, t: "±1 min" }, { s: 300, t: "±5 min" }, { s: 900, t: "±15 min" } ]
                 Rectangle {
                     required property var modelData
                     anchors.verticalCenter: parent.verticalCenter
-                    height: 24; radius: 6; width: wl.implicitWidth + 14
+                    height: insp.narrow ? 44 : 24; radius: 6; width: wl.implicitWidth + 14
                     color: insp.lc && insp.lc.inspectorWindow === modelData.s ? Theme.selection : (wm.containsMouse ? "#26FFFFFF" : "transparent")
                     Text { id: wl; anchors.centerIn: parent; text: modelData.t; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
                     MouseArea { id: wm; anchors.fill: parent; hoverEnabled: true; onClicked: if (insp.lc.setInspectorWindow) insp.lc.setInspectorWindow(modelData.s) }
@@ -78,7 +84,7 @@ Rectangle {
             }
             Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
-                height: 24; radius: 6; width: cl.implicitWidth + 16
+                height: insp.narrow ? 44 : 24; radius: 6; width: cl.implicitWidth + 16
                 color: cm.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
                 Text { id: cl; anchors.centerIn: parent; text: "Copier le rapport"; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
                 MouseArea { id: cm; anchors.fill: parent; hoverEnabled: true; onClicked: insp.copyReport() }
@@ -90,15 +96,21 @@ Rectangle {
                     Text { id: ct; anchors.centerIn: parent; text: "Copié"; color: "#86EFAC"; font.pixelSize: 10 }
                 }
             }
-            ToolButtonGlass { glyph: "×"; tip: "Fermer (Échap)"; onClicked: insp.closed() }
+            ToolButtonGlass { touch: insp.narrow; glyph: "×"; tip: "Fermer (Échap)"; onClicked: insp.closed() }
         }
         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: "#1FFFFFFF" }
     }
 
+    Row {
+        visible: insp.narrow; y: header.height; width: parent.width
+        Button { width: parent.width / 2; height: 44; palette.button: "#1F3354"; palette.buttonText: Theme.ink; text: "Synthèse"; onClicked: insp.showEvents = false }
+        Button { width: parent.width / 2; height: 44; palette.button: "#1F3354"; palette.buttonText: Theme.ink; text: "Événements"; onClicked: insp.showEvents = true }
+    }
     // ── synopsis ───────────────────────────────────────────────────────
     Flickable {
         id: synFlick
-        y: header.height; width: parent.width * 0.5; height: parent.height - y
+        visible: !insp.narrow || !insp.showEvents
+        y: insp.bodyTop; width: insp.narrow ? parent.width : parent.width * 0.5; height: parent.height - y
         contentHeight: synCol.height + 20
         clip: true
         boundsBehavior: Flickable.StopAtBounds
@@ -182,12 +194,13 @@ Rectangle {
         }
     }
 
-    Rectangle { x: synFlick.width; y: header.height; width: 1; height: parent.height - y; color: "#1FFFFFFF" }
+    Rectangle { visible: !insp.narrow; x: synFlick.width; y: header.height; width: 1; height: parent.height - y; color: "#1FFFFFFF" }
 
     // ── events of the window ───────────────────────────────────────────
     ListView {
         id: eventList
-        x: synFlick.width + 6; y: header.height + 4
+        visible: !insp.narrow || insp.showEvents
+        x: insp.narrow ? 0 : synFlick.width + 6; y: insp.bodyTop + 4
         width: parent.width - x - 6; height: parent.height - y - 4
         model: insp.events
         clip: true

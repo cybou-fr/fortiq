@@ -7,6 +7,12 @@ import QtQuick
 // launcher and control center open. It is never production data.
 Item {
     id: shell
+    objectName: "desktopShell"
+    property bool adaptive: false
+    readonly property bool narrow: adaptive && width < 700
+    property string foregroundApp: fixture && logsOpen ? "logs" : "files"
+    readonly property real appTop: adaptive ? 56 : 0
+    readonly property real appHeight: Math.max(44, height - appTop - (Qt.inputMethod.visible ? 8 : 76))
     property var controller: null
     property var logsController: null
     property bool fixture: false
@@ -16,8 +22,8 @@ Item {
     // right-click the desktop to cycle. An explicit file overrides it.
     readonly property var wallpapers: ["aurora", "desert", "city"]
     property string wallpaperName: "aurora"
-    property bool launcherOpen: fixture && fixturePreview !== "logs" && fixturePreview !== "incident" && fixturePreview !== "service" && fixturePreview !== "service"
-    property bool controlOpen: fixture
+    property bool launcherOpen: fixture && !adaptive && fixturePreview !== "logs" && fixturePreview !== "incident" && fixturePreview !== "service" && fixturePreview !== "service"
+    property bool controlOpen: fixture && !adaptive
     property bool filesOpen: true
     property bool browserOpen: fixture && fixturePreview !== "logs" && fixturePreview !== "incident"
     property bool logsOpen: fixture && (fixturePreview === "logs" || fixturePreview === "incident" || fixturePreview === "service")
@@ -49,12 +55,13 @@ Item {
     Timer { running: !shell.fixture; repeat: true; interval: 15000; onTriggered: shell.now = new Date() }
 
     function launch(app) {
-        if (app === "files") filesOpen = true
+        if (app === "files") { filesOpen = true; foregroundApp = "files" }
         else if (app === "launcher") launcherOpen = !launcherOpen
         else if (app === "browser") browserOpen = !browserOpen
-        else if (app === "logs") { logsOpen = true; launcherOpen = false }
+        else if (app === "servers") serversOpen = true
+        else if (app === "logs") { foregroundApp = "logs"; logsOpen = true; launcherOpen = false }
         else if (app === "trash") {
-            filesOpen = true
+            filesOpen = true; foregroundApp = "files"
             if (controller && controller.connected && controller.trashDirectory.length > 0) controller.navigate(controller.trashDirectory)
             else serversOpen = true
         }
@@ -76,6 +83,7 @@ Item {
     }
 
     ClockWidget {
+        visible: !shell.adaptive
         x: 119; y: 70
         timeText: shell.timeText
         dateText: shell.dateText
@@ -83,40 +91,48 @@ Item {
     }
 
     FilesWindow {
-        visible: shell.filesOpen
-        x: 471; y: 72; width: 717; height: 403
+        id: filesWindow
+        visible: shell.filesOpen && (!shell.adaptive || shell.foregroundApp === "files")
+        adaptive: shell.adaptive
+        x: shell.adaptive ? 8 : 471; y: shell.adaptive ? shell.appTop : 72
+        width: shell.adaptive ? shell.width - 16 : 717
+        height: shell.adaptive ? shell.appHeight : 403
         backdrop: wallpaper
         controller: shell.controller
         fixture: shell.fixture
         fixturePreview: shell.fixturePreview
-        onCloseRequested: shell.filesOpen = false
+        onCloseRequested: { shell.filesOpen = false; if (shell.adaptive && shell.logsOpen) shell.foregroundApp = "logs" }
         onRequestServers: shell.serversOpen = true
     }
 
     BrowserWindow {
-        visible: shell.browserOpen
+        visible: shell.browserOpen && !shell.adaptive
         x: 554; y: 512; width: 650; height: 400
         backdrop: wallpaper
         fixture: shell.fixture
     }
 
     LogsWindow {
-        visible: shell.logsOpen
-        x: 300; y: 130
-        width: 900; height: 640
+        id: logsWindow
+        visible: shell.logsOpen && (!shell.adaptive || shell.foregroundApp === "logs")
+        adaptive: shell.adaptive
+        x: shell.adaptive ? 8 : 300; y: shell.adaptive ? shell.appTop : 130
+        width: shell.adaptive ? shell.width - 16 : 900
+        height: shell.adaptive ? shell.appHeight : 640
         backdrop: wallpaper
         logs: shell.logsController
         remote: shell.controller
         fixture: shell.fixture
         fixtureIncident: shell.fixture && shell.fixturePreview === "incident"
         fixtureService: shell.fixture && shell.fixturePreview === "service"
-        onCloseRequested: shell.logsOpen = false
+        onCloseRequested: { shell.logsOpen = false; if (shell.adaptive) { shell.filesOpen = true; shell.foregroundApp = "files" } }
         onRequestServers: shell.serversOpen = true
     }
 
     LauncherPanel {
         visible: shell.launcherOpen
-        x: 98; y: 497; width: 438; height: 443
+        x: shell.adaptive ? 8 : 98; y: shell.adaptive ? Math.max(56, shell.height - height - 80) : 497
+        width: shell.adaptive ? Math.min(438, shell.width - 16) : 438; height: shell.adaptive ? Math.min(443, shell.height - 140) : 443
         backdrop: wallpaper
         fixture: shell.fixture
         onLaunch: (app) => shell.launch(app)
@@ -124,18 +140,21 @@ Item {
 
     ControlCenter {
         visible: shell.controlOpen
-        x: 1215; y: 64; width: 310; height: 679
+        x: shell.adaptive ? shell.width - width - 8 : 1215; y: 64
+        width: Math.min(310, shell.width - 16); height: shell.adaptive ? Math.min(679, shell.height - 144) : 679
         backdrop: wallpaper
         fixture: shell.fixture
     }
 
     WorkspaceSwitcher {
+        visible: !shell.adaptive
         x: 1215; y: 765; width: 310; height: 129
         backdrop: wallpaper
     }
 
     AppPanel {
         id: appPanel
+        visible: !shell.adaptive
         backdrop: wallpaper
         edge: shell.panelEdge
         x: edge === "left" ? 4 : (parent.width - width) / 2
@@ -150,7 +169,16 @@ Item {
         }
     }
 
+    CompactAppPanel {
+        apps: appPanel.apps
+        visible: shell.adaptive && !Qt.inputMethod.visible
+        x: 8; y: parent.height - height - 4; width: parent.width - 16; height: 68
+        currentApp: shell.foregroundApp
+        onLaunch: app => shell.launch(app)
+    }
+
     TopBar {
+        compact: shell.adaptive
         width: parent.width
         serverLabel: shell.fixture ? "Linux"
             : (shell.controller && shell.controller.connected ? shell.controller.serverLabel : "Aucun serveur")
@@ -158,18 +186,40 @@ Item {
         connected: shell.controller !== null && shell.controller.connected
         onServerClicked: if (!shell.fixture) shell.serversOpen = true
         MouseArea {
-            x: 1100; width: 380; height: parent.height
+            x: shell.adaptive ? parent.width - 44 : 1100; width: shell.adaptive ? 44 : 380; height: parent.height
             onClicked: shell.controlOpen = !shell.controlOpen
         }
     }
 
     ServerManager {
+        id: serverManager
+        adaptive: shell.adaptive
         anchors.fill: parent
         z: 100
         visible: shell.serversOpen
         backdrop: wallpaper
         controller: shell.controller
         onClosed: shell.serversOpen = false
+    }
+    states: State {
+        name: "adaptive"; when: shell.adaptive
+        PropertyChanges { target: filesWindow; x: 8; y: shell.appTop; width: shell.width - 16; height: shell.appHeight }
+        PropertyChanges { target: logsWindow; x: 8; y: shell.appTop; width: shell.width - 16; height: shell.appHeight }
+    }
+    focus: true
+    function handleBack() {
+        if (Qt.inputMethod.visible) { Qt.inputMethod.hide(); return true }
+        if (serversOpen) { serverManager.back(); return true }
+        if (launcherOpen || controlOpen) { launcherOpen = false; controlOpen = false; return true }
+        if (foregroundApp === "files" && filesWindow.handleBack()) return true
+        if (foregroundApp === "logs") {
+            if (logsWindow.handleBack()) return true
+            foregroundApp = "files"; filesOpen = true; return true
+        }
+        return false
+    }
+    Keys.onReleased: event => {
+        if (shell.adaptive && (event.key === Qt.Key_Back || event.key === Qt.Key_Escape)) event.accepted = shell.handleBack()
     }
     Component.onCompleted: if (!fixture && controller && !controller.connected) serversOpen = true
 }

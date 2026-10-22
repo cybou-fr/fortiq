@@ -14,6 +14,7 @@ Rectangle {
     property string fieldText: ""
     property string error: ""
     property bool busy: false
+    property bool touchMode: false
     signal accepted(string value)
     signal rejected()
     signal alternate()
@@ -50,21 +51,24 @@ Rectangle {
 
     Rectangle {
         anchors.centerIn: parent
-        width: Math.min(parent.width - 40, 380)
-        height: column.implicitHeight + 32
+        width: Math.min(parent.width - 16, 380)
+        height: Math.min(parent.height - 16, column.implicitHeight + 32)
         radius: 14
         color: "#F5101B2E"
         border.width: 1; border.color: "#40FFFFFF"
 
+        Flickable {
+            anchors.fill: parent; anchors.leftMargin: 18; anchors.rightMargin: 18; anchors.topMargin: 16; anchors.bottomMargin: 16
+            contentHeight: column.implicitHeight; clip: true
         Column {
             id: column
-            x: 18; y: 16; width: parent.width - 36
+            width: parent.width
             spacing: 10
             Text { width: parent.width; text: dialog.title; color: Theme.ink; font.pixelSize: 15; font.weight: Font.DemiBold; wrapMode: Text.WordWrap; font.family: Theme.fontFamily }
             Text { visible: text.length > 0; width: parent.width; text: dialog.message; color: Theme.inkMuted; font.pixelSize: 12; wrapMode: Text.WordWrap; font.family: Theme.fontFamily }
             Rectangle {
                 visible: dialog.withField
-                width: parent.width; height: 32; radius: 8
+                width: parent.width; height: dialog.touchMode ? 44 : 32; radius: 8
                 color: "#1AFFFFFF"
                 border.width: 1; border.color: input.activeFocus ? Theme.accent : "#33FFFFFF"
                 TextInput {
@@ -81,8 +85,8 @@ Rectangle {
                 }
             }
             Text { visible: dialog.error.length > 0; width: parent.width; text: dialog.error; color: "#FCA5A5"; font.pixelSize: 11; wrapMode: Text.WordWrap; font.family: Theme.fontFamily }
-            Row {
-                anchors.right: parent.right
+            Flow {
+                width: parent.width
                 spacing: 8
                 Repeater {
                     model: dialog.altText.length > 0
@@ -90,7 +94,7 @@ Rectangle {
                         : [ { k: "cancel", t: dialog.cancelText }, { k: "ok", t: dialog.confirmText } ]
                     Rectangle {
                         required property var modelData
-                        height: 30; radius: 8
+                        height: dialog.touchMode ? 44 : 30; radius: 8
                         width: label.implicitWidth + 24
                         opacity: dialog.busy ? 0.5 : 1
                         color: modelData.k === "ok" ? (dialog.danger ? "#C2410C" : Theme.selection)
@@ -108,5 +112,6 @@ Rectangle {
                 }
             }
         }
+    }
     }
 }

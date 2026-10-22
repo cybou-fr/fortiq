@@ -1,4 +1,5 @@
 #include "RemoteController.h"
+#include "LocalDocument.h"
 #include "RemotePath.h"
 #include "../ssh/SshClient.h"
 
@@ -99,7 +100,11 @@ QString RemoteController::saveServer(const QVariantMap &profile) {
     const int port = profile.value("port").toInt();
     if (host.isEmpty() || user.isEmpty() || port < 1 || port > 65535 || host.contains(' ') || user.contains(' ')) return {};
     QString key = profile.value("keyPath").toString().trimmed();
-    if (QUrl(key).isLocalFile()) key = QUrl(key).toLocalFile();
+    if (!key.isEmpty()) {
+        const QUrl url = QUrl::fromUserInput(key);
+        key = localDocumentPath(url);
+        if (key.isEmpty()) return {};
+    }
     QString id = profile.value("id").toString();
     if (id.isEmpty()) id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     const QString name = profile.value("name").toString().trimmed();
@@ -163,7 +168,12 @@ void RemoteController::connectServer(QString host, int port, QString user, QStri
     m_port = port;
     m_user = user.trimmed();
     m_password = std::move(password);
-    m_keyPath = QUrl(keyPath.trimmed()).isLocalFile() ? QUrl(keyPath.trimmed()).toLocalFile() : keyPath.trimmed();
+    m_keyPath = keyPath.trimmed().isEmpty() ? QString() : localDocumentPath(QUrl::fromUserInput(keyPath.trimmed()));
+    if (!keyPath.trimmed().isEmpty() && m_keyPath.isEmpty()) {
+        scrubPassword();
+        m_status = QStringLiteral("Choose a local private key or an Android document; this URL type is not supported.");
+        emit changed(); return;
+    }
     if (m_host.isEmpty() || m_user.isEmpty() || (m_password.isEmpty() && m_keyPath.isEmpty()) || port < 1 || port > 65535) {
         m_status = QStringLiteral("Host, port, user and a password or private key are required.");
         emit changed();
@@ -454,7 +464,7 @@ RemoteController::Transfer *RemoteController::findTransfer(int id) {
 
 void RemoteController::download(const QString &remotePath, const QUrl &localFile) {
     const auto clean = cleanAbsolutePath(remotePath);
-    const QString local = localFile.isLocalFile() ? localFile.toLocalFile() : localFile.toString();
+    const QString local = localDocumentPath(localFile);
     if (!m_connected || !clean || local.isEmpty()) return;
     Transfer t;
     t.id = m_nextTransferId++;
@@ -471,12 +481,19 @@ void RemoteController::upload(const QVariantList &localFiles, const QString &rem
     if (!m_connected || !dir) return;
     for (const QVariant &v : localFiles) {
         const QUrl url = v.toUrl();
-        const QString local = url.isLocalFile() ? url.toLocalFile() : v.toString();
+        const QString local = localDocumentPath(url);
         if (local.isEmpty()) continue;
         Transfer t;
         t.id = m_nextTransferId++;
         t.upload = true;
-        t.name = QFileInfo(local).fileName();
+        t.name = localDocumentName(local);
+        if (t.name.isEmpty()) {
+            t.name = QStringLiteral("Document");
+            t.state = QStringLiteral("error");
+            t.message = QStringLiteral("Cannot read the selected document name. Select the file again to renew access.");
+            m_transfers.push_back(t);
+            continue;
+        }
         t.remote = *dir;
         t.local = local;
         m_transfers.push_back(t);
@@ -814,8 +831,11 @@ void RemoteController::disconnectServer() {
     for (Transfer &t : m_transfers) {
         if (t.state == "queued" || t.state == "running" || t.state == "conflict") {
             t.cancel->store(true);
-            t.state = t.state == "running" && t.upload ? QStringLiteral("unknown") : QStringLiteral("cancelled");
-            t.message = QStringLiteral("Déconnecté du serveur.");
+            const bool documentMayBePartial = t.state == "running" && !t.upload && isContentDocument(t.local);
+            t.state = t.state == "running" && (t.upload || documentMayBePartial) ? QStringLiteral("unknown") : QStringLiteral("cancelled");
+            t.message = documentMayBePartial
+                ? QStringLiteral("Déconnecté du serveur. Le document choisi peut être partiel ; vérifiez-le avant de réessayer.")
+                : QStringLiteral("Déconnecté du serveur.");
         }
     }
     auto transferSlot = m_transferSession;

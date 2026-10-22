@@ -8,6 +8,16 @@ import QtQuick.Effects
 // untrusted: always rendered as plain text, never as markup or links.
 Item {
     id: win
+    objectName: "logsWindow"
+    property bool adaptive: false
+    property bool navigationOpen: false
+    readonly property bool drawer: adaptive && width < 900
+    readonly property real contentLeft: drawer ? 0 : 210
+    function handleBack() {
+        if (navigationOpen) { navigationOpen = false; return true }
+        if (logs && logs.inspectorOpen) { logs.closeInspector(); return true }
+        return false
+    }
     property Item backdrop
     property var logs: null          // LogsController (null in the preview build)
     property var remote: null        // RemoteController, for connection state
@@ -53,6 +63,7 @@ Item {
         return lc.target
     }
     function choose(source, target) {
+        navigationOpen = false
         patternKey = ""; patternLabel = ""; expanded = -1
         if (!fixture && logs) logs.select(source, target)
         // A service opens on its status; other sources on the timeline.
@@ -162,7 +173,7 @@ Item {
         property string label
         property bool on
         signal picked()
-        height: 24; radius: 6; width: segText.implicitWidth + 14
+        height: win.adaptive ? 44 : 24; radius: 6; width: segText.implicitWidth + 14
         color: on ? Theme.selection : (segMouse.containsMouse ? "#26FFFFFF" : "transparent")
         Text { id: segText; anchors.centerIn: parent; text: parent.label; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
         MouseArea { id: segMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: parent.picked() }
@@ -174,6 +185,8 @@ Item {
     // ── sidebar ────────────────────────────────────────────────────────
     Rectangle {
         id: sidebar
+        visible: !win.drawer || win.navigationOpen
+        z: win.drawer ? 40 : 0
         width: 210; height: parent.height
         topLeftRadius: 16; bottomLeftRadius: 16
         color: "#40050B18"
@@ -202,7 +215,7 @@ Item {
                 Rectangle {
                     required property var modelData
                     readonly property bool active: win.lc && win.lc.source === modelData.s
-                    width: parent.width; height: 28; radius: 7
+                    width: parent.width; height: win.adaptive ? 44 : 28; radius: 7
                     color: active ? Theme.selection : (srcMouse.containsMouse ? "#1AFFFFFF" : "transparent")
                     Text { x: 10; anchors.verticalCenter: parent.verticalCenter; text: modelData.g; color: "white"; font.pixelSize: 13 }
                     Text { x: 32; anchors.verticalCenter: parent.verticalCenter; text: modelData.t; color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily }
@@ -236,7 +249,7 @@ Item {
             delegate: Rectangle {
                 required property var modelData
                 readonly property bool active: win.lc && (win.lc.source === "unit" || win.lc.source === "userunit") && win.lc.target === modelData.name
-                width: unitList.width; height: 24; radius: 6
+                width: unitList.width; height: win.adaptive ? 44 : 24; radius: 6
                 color: active ? Theme.selection : (uMouse.containsMouse ? "#1AFFFFFF" : "transparent")
                 Rectangle {
                     x: 10; anchors.verticalCenter: parent.verticalCenter; width: 7; height: 7; radius: 3.5
@@ -267,7 +280,7 @@ Item {
             delegate: Rectangle {
                 required property var modelData
                 readonly property bool active: win.lc && win.lc.source === "file" && win.lc.target === modelData.path
-                width: fileList.width; height: 24; radius: 6
+                width: fileList.width; height: win.adaptive ? 44 : 24; radius: 6
                 color: active ? Theme.selection : (fMouse.containsMouse ? "#1AFFFFFF" : "transparent")
                 opacity: modelData.readable ? 1 : 0.5
                 Text { x: 10; anchors.verticalCenter: parent.verticalCenter; text: modelData.readable ? "▤" : "🔒"; color: "white"; font.pixelSize: 10 }
@@ -281,18 +294,27 @@ Item {
         }
     }
 
+    Rectangle {
+        anchors.fill: parent; visible: win.drawer && win.navigationOpen; z: 35
+        color: "#80000000"
+        MouseArea { anchors.fill: parent; onClicked: win.navigationOpen = false }
+    }
+    ToolButtonGlass {
+        visible: win.drawer; x: 4; y: 2; z: 2; touch: true; glyph: "☰"
+        onClicked: win.navigationOpen = !win.navigationOpen
+    }
     // ── toolbar ────────────────────────────────────────────────────────
     Item {
         id: toolbar
-        x: sidebar.width; width: parent.width - x; height: 48
+        x: win.contentLeft; width: parent.width - x; height: 48
         MouseArea {
             anchors.fill: parent
-            drag.target: win
+            drag.target: win.adaptive ? null : win
             drag.minimumY: 47
         }
         Text {
-            x: 14; anchors.verticalCenter: parent.verticalCenter
-            width: parent.width - tools.width - 40; elide: Text.ElideMiddle
+            x: win.drawer ? 54 : 14; anchors.verticalCenter: parent.verticalCenter
+            width: Math.max(0, parent.width - tools.width - x - 12); elide: Text.ElideMiddle
             text: win.sourceTitle()
             color: Theme.ink; font.pixelSize: 14; font.weight: Font.DemiBold; font.family: Theme.fontFamily
         }
@@ -322,9 +344,16 @@ Item {
     }
 
     // ── counts, state, view switch, text filter ───────────────────────
-    Item {
+    Flickable {
         id: strip
-        x: sidebar.width; y: toolbar.height
+        x: win.contentLeft; y: toolbar.height
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        contentWidth: win.adaptive ? Math.max(width, 680) : width
+        contentHeight: height
+        width: win.width - x; height: (win.adaptive ? 160 : 72) + (banner.visible ? banner.height + 6 : 0)
+        Item {
+            width: strip.contentWidth; height: strip.height
         Row {
             id: rangeRow
             x: 12; y: 8
@@ -343,9 +372,8 @@ Item {
                 Segment { required property var modelData; label: modelData.t; on: win.lc && win.lc.maxPriority === modelData.p; onPicked: if (!win.fixture) win.logs.setMaxPriority(modelData.p) }
             }
         }
-        width: parent.width - x; height: 72 + (banner.visible ? banner.height + 6 : 0)
         Row {
-            x: 12; y: 40; spacing: 6
+            x: 12; y: win.adaptive ? 60 : 40; spacing: 6
             Repeater {
                 model: win.lc ? win.lc.counts : []
                 Rectangle {
@@ -359,7 +387,7 @@ Item {
             }
         }
         Row {
-            anchors.right: parent.right; anchors.rightMargin: 12; y: 8
+            anchors.right: win.adaptive ? undefined : parent.right; anchors.rightMargin: 12; x: win.adaptive ? 12 : 0; y: win.adaptive ? 104 : 8
             spacing: 6
             Rectangle {
                 width: 110; height: 24; radius: 12; color: "#1AFFFFFF"
@@ -380,7 +408,7 @@ Item {
                         : [ { k: "timeline", t: "Chronologie" }, { k: "patterns", t: "Répétitions" } ]
                     Rectangle {
                         required property var modelData
-                        height: 24; radius: 6; width: vt.implicitWidth + 14
+                        height: win.adaptive ? 44 : 24; radius: 6; width: vt.implicitWidth + 14
                         color: win.view === modelData.k ? Theme.selection : (vm.containsMouse ? "#26FFFFFF" : "transparent")
                         Text { id: vt; anchors.centerIn: parent; text: modelData.t; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
                         MouseArea {
@@ -397,7 +425,7 @@ Item {
         Rectangle {
             id: banner
             visible: win.lc && win.lc.stateText.length > 0
-            x: 12; y: 72; width: parent.width - 24
+            x: 12; y: win.adaptive ? 160 : 72; width: win.adaptive ? strip.width - 24 : parent.width - 24
             height: bannerText.implicitHeight + 12; radius: 8
             color: win.lc && (win.lc.state === "limited" || win.lc.state === "rotated") ? "#26FACC15" : "#33F87171"
             border.width: 1; border.color: win.lc && (win.lc.state === "limited" || win.lc.state === "rotated") ? "#66FACC15" : "#66F87171"
@@ -409,18 +437,19 @@ Item {
                 color: Theme.ink; font.pixelSize: 11; font.family: Theme.fontFamily
             }
         }
+        }
     }
 
     // ── content ────────────────────────────────────────────────────────
     Item {
         id: content
-        x: sidebar.width; y: strip.y + strip.height
+        x: win.contentLeft; y: strip.y + strip.height
         width: parent.width - x; height: parent.height - y - statusBar.height
         clip: true
 
         Rectangle {
             visible: win.patternKey.length > 0 && win.view === "timeline"
-            x: 12; y: 2; width: parent.width - 24; height: 24; radius: 6; z: 2
+            x: 12; y: 2; width: parent.width - 24; height: win.adaptive ? 44 : 24; radius: 6; z: 2
             color: "#262F8CFF"
             Text {
                 x: 10; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 120; elide: Text.ElideRight
@@ -578,7 +607,7 @@ Item {
     }
 
     IncidentInspector {
-        x: sidebar.width; y: toolbar.height
+        x: win.contentLeft; y: toolbar.height
         width: parent.width - x; height: parent.height - y
         bottomRightRadius: 16
         z: 20
@@ -592,7 +621,7 @@ Item {
     // ── status bar ─────────────────────────────────────────────────────
     Item {
         id: statusBar
-        x: sidebar.width; y: parent.height - height
+        x: win.contentLeft; y: parent.height - height
         width: parent.width - x; height: 26
         Rectangle { width: parent.width; height: 1; color: "#14FFFFFF" }
         Text {

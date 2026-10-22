@@ -1,5 +1,7 @@
 #include "SshClient.h"
 #include "../core/RemotePath.h"
+#include "../core/LocalDocument.h"
+#include <QTemporaryFile>
 
 #include <QByteArray>
 #include <QCryptographicHash>
@@ -168,11 +170,24 @@ SshResult SshSession::open(const ConnectionRequest &req)
     QByteArray password = req.password.toUtf8();
     int rc = 0;
     if (!req.keyPath.isEmpty()) {
-        // The key is read by libssh2 from disk; FORTIQ never copies it.
-        const QByteArray keyFile = QFile::encodeName(req.keyPath);
-        rc = libssh2_userauth_publickey_fromfile_ex(d->handle, user.constData(),
-            static_cast<unsigned int>(user.size()), nullptr, keyFile.constData(),
-            password.isEmpty() ? nullptr : password.constData());
+        // QFile understands Android SAF grants; libssh2's native fopen does not.
+        // The selected key stays in RAM only and is wiped after authentication.
+        QFile keyFile(req.keyPath);
+        constexpr qint64 maxKeyBytes = 1024 * 1024;
+        if (!keyFile.open(QIODevice::ReadOnly)) {
+            password.fill(char(0)); d->close();
+            return fail(QStringLiteral("Cannot read the selected private key. Select it again if its document permission expired."));
+        }
+        QByteArray key = keyFile.read(maxKeyBytes + 1);
+        const bool complete = keyFile.error() == QFileDevice::NoError && keyFile.atEnd();
+        keyFile.close();
+        if (!complete || key.isEmpty() || key.size() > maxKeyBytes) {
+            key.fill(char(0)); password.fill(char(0)); d->close();
+            return fail(QStringLiteral("Private key is empty, unreadable or larger than 1 MiB."));
+        }
+        rc = libssh2_userauth_publickey_frommemory(d->handle, user.constData(), static_cast<size_t>(user.size()),
+            nullptr, 0, key.constData(), static_cast<size_t>(key.size()), password.isEmpty() ? nullptr : password.constData());
+        key.fill(char(0));
     } else {
         rc = libssh2_userauth_password_ex(d->handle, user.constData(),
             static_cast<unsigned int>(user.size()), password.constData(),
@@ -353,11 +368,15 @@ SshResult SshSession::download(const QString &remotePath, const QString &localPa
         static_cast<unsigned int>(pathUtf8.size()), LIBSSH2_FXF_READ, 0, LIBSSH2_SFTP_OPENFILE);
     if (!file) return transferFail(QStringLiteral("Cannot open remote file (permission error)."));
 
-    QSaveFile out(localPath);
-    if (!out.open(QIODevice::WriteOnly)) {
+    const bool document = isContentDocument(localPath);
+    QSaveFile native(localPath);
+    QTemporaryFile staging;
+    QFileDevice &out = document ? static_cast<QFileDevice &>(staging) : static_cast<QFileDevice &>(native);
+    if (!(document ? staging.open() : native.open(QIODevice::WriteOnly))) {
         libssh2_sftp_close(file);
-        return transferFail(QStringLiteral("Cannot write the local file: %1").arg(out.errorString()));
+        return transferFail(QStringLiteral("Cannot create a private download staging file."));
     }
+    auto cancelLocal = [&] { if (!document) native.cancelWriting(); };
     std::vector<char> buffer(256 * 1024);
     qint64 done = 0;
     while (true) {
@@ -365,28 +384,39 @@ SshResult SshSession::download(const QString &remotePath, const QString &localPa
         if (n == 0) break;
         if (n < 0) {
             libssh2_sftp_close(file);
-            out.cancelWriting();
+            cancelLocal();
             if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) d->close();
             return transferFail(QStringLiteral("Download interrupted; the local file was not created."));
         }
         if (out.write(buffer.data(), n) != n) {
             libssh2_sftp_close(file);
-            out.cancelWriting();
+            cancelLocal();
             return transferFail(QStringLiteral("Local write failed (disk full?)."));
         }
         done += n;
         if (progress && !progress(done, total)) {
             libssh2_sftp_close(file);
-            out.cancelWriting();
+            cancelLocal();
             return transferFail(QStringLiteral("Cancelled; the local file was not created."), QStringLiteral("cancelled"));
         }
     }
     libssh2_sftp_close(file);
     if (total >= 0 && done != total) {
-        out.cancelWriting();
+        cancelLocal();
         return transferFail(QStringLiteral("Size mismatch (%1 of %2 bytes); the local file was not created.").arg(done).arg(total));
     }
-    if (!out.commit()) return transferFail(QStringLiteral("Cannot finalise the local file: %1").arg(out.errorString()));
+    if (document) {
+        if (!staging.flush()) return transferFail(QStringLiteral("Download staging flush failed; the selected document was not opened."));
+        const auto result = exportDocument(staging, [&]() -> std::unique_ptr<QIODevice> {
+            auto destination = std::make_unique<QFile>(localPath);
+            if (!destination->open(QIODevice::WriteOnly | QIODevice::Truncate)) return {};
+            return destination;
+        }, [&] { return !progress || progress(done, done); });
+        if (!result.ok) return transferFail(result.attempted
+            ? QStringLiteral("Document export did not finish. The selected document may contain partial data; check it before retrying.")
+            : QStringLiteral("Download was not exported; the selected document was not opened."),
+            result.attempted ? QStringLiteral("unknown") : (result.cancelled ? QStringLiteral("cancelled") : QString()));
+    } else if (!native.commit()) return transferFail(QStringLiteral("Cannot finalise the local file: %1").arg(native.errorString()));
     SshResult r;
     r.status = SshResult::Status::Ok;
     r.directory = localPath;
@@ -405,8 +435,9 @@ SshResult SshSession::upload(const QString &localPath, const QString &remoteDir,
 
     QFile in(localPath);
     if (!in.open(QIODevice::ReadOnly)) return transferFail(QStringLiteral("Cannot read the local file: %1").arg(in.errorString()));
-    if (!QFileInfo(localPath).isFile()) return transferFail(QStringLiteral("Only regular files can be uploaded."));
-    const qint64 total = in.size();
+    if (!isContentDocument(localPath) && !QFileInfo(localPath).isFile()) return transferFail(QStringLiteral("Only regular files can be uploaded."));
+    const qint64 size = in.size();
+    const qint64 total = isContentDocument(localPath) && (size <= 0 || in.isSequential()) ? -1 : size;
 
     auto exists = [this](const QString &path) {
         const QByteArray p = path.toUtf8();
@@ -517,11 +548,11 @@ SshResult SshSession::upload(const QString &localPath, const QString &remoteDir,
     const bool metadataVerified = (written.flags & required) == required && (written.permissions & 07777) == mode.permissions
         && written.uid == (replacement ? replacement->uid : mine.uid)
         && written.gid == (replacement ? replacement->gid : mine.gid);
-    if (!metadataOk || !metadataVerified || !flushed || !closed || done != total || !statOk || static_cast<qint64>(written.filesize) != total) {
+    if (!metadataOk || !metadataVerified || !flushed || !closed || (total >= 0 && done != total) || !statOk || static_cast<qint64>(written.filesize) != done) {
         removeTemp();
         return transferFail(QStringLiteral("Staging size, metadata, flush or close verification failed; nothing was published."));
     }
-    if (progress && !progress(done, total)) {
+    if (progress && !progress(done, done)) {
         removeTemp();
         return transferFail(QStringLiteral("Cancelled before publication; the destination was not changed."), QStringLiteral("cancelled"));
     }

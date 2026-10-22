@@ -11,6 +11,17 @@ import QtQuick.Effects
 // SSH/SFTP session; `fixture` substitutes the labelled reference sample.
 Item {
     id: win
+    objectName: "filesWindow"
+    property bool adaptive: false
+    property bool navigationOpen: false
+    readonly property bool drawer: adaptive && width < 900
+    readonly property real contentLeft: drawer ? 0 : 172
+    function pickUpload() { uploadDialog.open() }
+    function handleBack() {
+        if (navigationOpen) { navigationOpen = false; return true }
+        if (fileViewer.visible) { fileViewer.requestClose(); return true }
+        return false
+    }
     property Item backdrop
     property var controller: null
     property bool fixture: false
@@ -157,7 +168,11 @@ Item {
     function askDownload(entry) {
         if (!entry || entry.directory || !connected) return
         downloadDialog.entry = entry
-        downloadDialog.selectedFile = downloadDialog.currentFolder + "/" + encodeURIComponent(entry.name)
+        downloadDialog.defaultSuffix = String(entry.name).indexOf(".") >= 0 ? String(entry.name).split(".").pop() : ""
+        // Android's native SaveFile picker uses only the URL basename as its
+        // suggested display name; the accepted result is the provider URI.
+        downloadDialog.selectedFile = Qt.platform.os === "android" ? "file:///" + encodeURIComponent(entry.name)
+            : downloadDialog.currentFolder + "/" + encodeURIComponent(entry.name)
         downloadDialog.open()
     }
     function crumbs() {
@@ -171,6 +186,7 @@ Item {
         return out
     }
     function toggleMaximize() {
+        if (adaptive) return
         if (!maximized) {
             normalGeometry = Qt.rect(x, y, width, height)
             x = 96; y = 54; width = parent.width - 96 - 324; height = parent.height - 54 - 86
@@ -237,12 +253,15 @@ Item {
     // ── sidebar ────────────────────────────────────────────────────────
     Rectangle {
         id: sidebar
-        width: 172; height: parent.height
+        visible: !win.drawer || win.navigationOpen
+        z: win.drawer ? 40 : 0
+        width: win.drawer ? Math.min(260, win.width - 32) : 172; height: parent.height
         topLeftRadius: 16; bottomLeftRadius: 16
         color: "#40050B18"
         Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: "#1FFFFFFF" }
 
         Row {
+            visible: !win.adaptive
             x: 14; y: 17; spacing: 9
             Repeater {
                 model: [ { c: "#FF5F57", a: "close" }, { c: "#FEBC2E", a: "none" }, { c: "#28C840", a: "max" } ]
@@ -277,7 +296,7 @@ Item {
                     readonly property string target: modelData.p === "~" ? win.home
                         : (modelData.p === "trash" ? (win.connected ? win.controller.trashDirectory : "") : modelData.p)
                     readonly property bool active: target.length > 0 && win.location === target
-                    width: parent.width; height: 29; radius: 7
+                    width: parent.width; height: win.adaptive ? 44 : 29; radius: 7
                     color: active ? Theme.selection : (placeMouse.containsMouse ? "#1AFFFFFF" : "transparent")
                     Text { x: 10; anchors.verticalCenter: parent.verticalCenter; text: modelData.g; color: "white"; font.pixelSize: 13; width: 16; horizontalAlignment: Text.AlignHCenter }
                     Text { x: 33; anchors.verticalCenter: parent.verticalCenter; text: modelData.t; color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily }
@@ -286,7 +305,7 @@ Item {
                         anchors.fill: parent; hoverEnabled: true
                         enabled: win.connected
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: { win.filterText = ""; win.controller.navigate(parent.target) }
+                        onClicked: { win.navigationOpen = false; win.filterText = ""; win.controller.navigate(parent.target) }
                     }
                 }
             }
@@ -319,11 +338,11 @@ Item {
     // ── toolbar (also the drag handle) ─────────────────────────────────
     Item {
         id: toolbar
-        x: sidebar.width; width: parent.width - x; height: 48
+        x: win.contentLeft; width: parent.width - x; height: win.adaptive ? adaptiveToolbar.implicitHeight : 48
 
         MouseArea {
             anchors.fill: parent
-            drag.target: win.maximized ? null : win
+            drag.target: win.adaptive || win.maximized ? null : win
             drag.minimumX: -win.width + 120; drag.maximumX: win.parent ? win.parent.width - 120 : 0
             drag.minimumY: 47; drag.maximumY: win.parent ? win.parent.height - 60 : 0
             onDoubleClicked: win.toggleMaximize()
@@ -331,6 +350,7 @@ Item {
 
         Row {
             id: nav
+            visible: !win.adaptive
             x: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 2
             ToolButtonGlass { glyph: "‹"; tip: "Précédent (Alt+←)"; enabledState: win.connected && win.controller.canGoBack; onClicked: win.controller.goBack() }
             ToolButtonGlass { glyph: "›"; tip: "Suivant (Alt+→)"; enabledState: win.connected && win.controller.canGoForward; onClicked: win.controller.goForward() }
@@ -339,6 +359,7 @@ Item {
 
         Rectangle {
             id: pathBar
+            visible: !win.adaptive
             anchors.left: nav.right; anchors.leftMargin: 6
             anchors.right: tools.left; anchors.rightMargin: 8
             anchors.verticalCenter: parent.verticalCenter
@@ -413,6 +434,7 @@ Item {
 
         Row {
             id: tools
+            visible: !win.adaptive
             anchors.right: parent.right; anchors.rightMargin: 10
             anchors.verticalCenter: parent.verticalCenter
             spacing: 2
@@ -482,11 +504,18 @@ Item {
         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: "#1AFFFFFF" }
     }
 
+    Rectangle {
+        anchors.fill: parent; z: 35; visible: win.drawer && win.navigationOpen
+        color: "#80000000"
+        MouseArea { anchors.fill: parent; onClicked: win.navigationOpen = false }
+    }
+    AdaptiveFilesToolbar { id: adaptiveToolbar; x: win.contentLeft; width: parent.width - x; height: implicitHeight; visible: win.adaptive; files: win }
+
     // ── content ────────────────────────────────────────────────────────
     Item {
         id: content
-        x: sidebar.width; y: toolbar.height
-        width: parent.width - x; height: parent.height - y - statusBar.height
+        x: win.contentLeft; y: toolbar.height
+        width: parent.width - x; height: Math.max(0, parent.height - y - statusBar.height)
         clip: true
         visible: win.fixture || win.connected
 
@@ -592,7 +621,9 @@ Item {
                     onClicked: (m) => {
                         grid.currentIndex = cell.index; grid.forceActiveFocus()
                         if (m.button === Qt.RightButton) itemMenu.popup()
+                        else if (win.adaptive) win.open(cell.modelData)
                     }
+                    onPressAndHold: { grid.currentIndex = cell.index; itemMenu.popup() }
                     onDoubleClicked: win.open(cell.modelData)
                 }
             }
@@ -613,9 +644,9 @@ Item {
             highlightMoveDuration: 0
             highlight: Rectangle { radius: 6; color: "#402F8CFF" }
             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-            readonly property real colDate: 132
-            readonly property real colSize: 76
-            readonly property real colMode: 88
+            readonly property real colDate: win.adaptive && win.width < 700 ? 0 : 132
+            readonly property real colSize: win.adaptive ? 68 : 76
+            readonly property real colMode: win.adaptive && win.width < 700 ? 0 : 88
             readonly property real colName: width - colDate - colSize - colMode - 24
             headerPositioning: ListView.OverlayHeader
             header: Rectangle {
@@ -656,7 +687,7 @@ Item {
                 id: row
                 required property var modelData
                 required property int index
-                width: list.width; height: 30
+                width: list.width; height: win.adaptive ? 48 : 30
                 Rectangle {
                     anchors.fill: parent; radius: 6
                     color: rowMouse.containsMouse && list.currentIndex !== row.index ? "#12FFFFFF"
@@ -678,9 +709,9 @@ Item {
                             font.pixelSize: 12; font.family: Theme.fontFamily
                         }
                     }
-                    Text { width: list.colDate; anchors.verticalCenter: parent.verticalCenter; text: win.formatDate(row.modelData.mtime); color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily }
+                    Text { visible: list.colDate > 0; width: list.colDate; anchors.verticalCenter: parent.verticalCenter; text: win.formatDate(row.modelData.mtime); color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily }
                     Text { width: list.colSize; anchors.verticalCenter: parent.verticalCenter; text: row.modelData.directory ? "—" : win.formatSize(row.modelData.size); color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily }
-                    Text { width: list.colMode; anchors.verticalCenter: parent.verticalCenter; text: row.modelData.mode || ""; color: "#8FA2C2"; font.pixelSize: 11; font.family: "Consolas" }
+                    Text { visible: list.colMode > 0; width: list.colMode; anchors.verticalCenter: parent.verticalCenter; text: row.modelData.mode || ""; color: "#8FA2C2"; font.pixelSize: 11; font.family: "Consolas" }
                 }
                 MouseArea {
                     id: rowMouse
@@ -689,7 +720,9 @@ Item {
                     onClicked: (m) => {
                         list.currentIndex = row.index; list.forceActiveFocus()
                         if (m.button === Qt.RightButton) itemMenu.popup()
+                        else if (win.adaptive) win.open(row.modelData)
                     }
+                    onPressAndHold: { list.currentIndex = row.index; itemMenu.popup() }
                     onDoubleClicked: win.open(row.modelData)
                 }
             }
@@ -784,6 +817,7 @@ Item {
     }
 
     GlassDialog {
+        touchMode: win.adaptive
         id: opDialog
         x: content.x; y: 0
         width: content.width; height: parent.height
@@ -915,10 +949,12 @@ Fin.
     }
 
     FileViewer {
+        adaptive: win.adaptive
         x: content.x; y: content.y
         width: content.width; height: content.height + statusBar.height
         z: 10
         id: fileViewer
+        objectName: "fileViewer"
         visible: (win.fixture && ["text", "image", "editor"].indexOf(win.fixturePreview) >= 0) || (win.connected && win.controller.previewOpen)
         Component.onCompleted: if (win.fixture && win.fixturePreview === "editor") { startEditing(); dirty = true }
         controller: win.fixture ? samplePreview : (win.connected ? win.controller : null)
@@ -929,7 +965,7 @@ Fin.
     // No connection: the server manager is global, not part of Files.
     Column {
         visible: !win.fixture && !win.connected
-        x: sidebar.width; y: toolbar.height
+        x: win.contentLeft; y: toolbar.height
         width: parent.width - x
         topPadding: 70
         spacing: 12
@@ -947,7 +983,7 @@ Fin.
     // ── status bar ─────────────────────────────────────────────────────
     Item {
         id: statusBar
-        x: sidebar.width; y: parent.height - height
+        x: win.contentLeft; y: parent.height - height
         width: parent.width - x; height: 26
         visible: win.fixture || win.connected
         Rectangle { width: parent.width; height: 1; color: "#14FFFFFF" }

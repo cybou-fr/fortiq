@@ -18,6 +18,19 @@ class LogsControllerTest : public QObject {
         return r;
     }
 private slots:
+    void documentDownloadDisconnectIsUncertain() {
+        RemoteController remote;
+        remote.m_connected = true;
+        for (const QString &path : {QString("content://provider/document/1"), QString("C:/native.txt")}) {
+            RemoteController::Transfer job;
+            job.local = path; job.state = "running";
+            remote.m_transfers << job;
+        }
+        remote.disconnectServer();
+        QCOMPARE(remote.m_transfers[0].state, QString("unknown"));
+        QVERIFY(remote.m_transfers[0].message.contains("partiel"));
+        QCOMPARE(remote.m_transfers[1].state, QString("cancelled"));
+    }
     void linuxReaderScript() {
 #ifdef Q_OS_WIN
         const QString distro = qEnvironmentVariable("FORTIQ_TEST_WSL");

@@ -8,6 +8,7 @@ Rectangle {
     property string serverLabel: "Linux"
     property string clockText: ""
     property bool connected: false
+    property bool compact: false
     signal serverClicked()
     color: Theme.topBar
     height: 47
@@ -32,7 +33,7 @@ Rectangle {
     // Connection state + server name: opens the server manager.
     Rectangle {
         x: 58; anchors.verticalCenter: parent.verticalCenter
-        width: serverText.implicitWidth + 34; height: 30; radius: 15
+        width: compact ? Math.max(100, bar.width - 108) : serverText.implicitWidth + 34; height: compact ? 44 : 30; radius: 15
         color: serverMouse.containsMouse ? "#26FFFFFF" : "transparent"
         Rectangle {
             x: 10; anchors.verticalCenter: parent.verticalCenter
@@ -44,12 +45,15 @@ Rectangle {
     Text {
         id: serverText
         x: 82; anchors.verticalCenter: parent.verticalCenter
+        width: bar.compact ? Math.max(0, bar.width - 140) : implicitWidth
+        elide: Text.ElideRight
         text: bar.serverLabel
         color: Theme.ink
         font.pixelSize: 15; font.weight: Font.DemiBold; font.family: Theme.fontFamily
     }
 
     Rectangle {
+        visible: !bar.compact
         x: 511; y: 8
         width: 515; height: 31; radius: 15.5
         color: "#33A9C8F0"
@@ -67,6 +71,7 @@ Rectangle {
     }
 
     Row {
+        visible: !bar.compact
         anchors.right: clock.left
         anchors.rightMargin: 22
         anchors.verticalCenter: parent.verticalCenter
@@ -83,6 +88,7 @@ Rectangle {
     }
     Text {
         id: clock
+        visible: !bar.compact
         anchors.right: avatar.left
         anchors.rightMargin: 18
         anchors.verticalCenter: parent.verticalCenter
@@ -92,7 +98,7 @@ Rectangle {
     }
     Rectangle {
         id: avatar
-        x: 1491; y: 10
+        x: bar.compact ? bar.width - 40 : 1491; y: 10
         width: 27; height: 27; radius: 13.5
         color: "#E9EEF5"
         border.width: 2; border.color: "white"

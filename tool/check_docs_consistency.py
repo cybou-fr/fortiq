@@ -37,7 +37,8 @@ for item in MANDATORY:
         errors.append(f"missing normative document: {item}")
 
 for document in ROOT.rglob("*.md"):
-    if any(part in (".git", "build", "node_modules") for part in document.parts):
+    if any(part in (".git", "build", "node_modules") or part.startswith(("build-", "cmake-build-"))
+           for part in document.relative_to(ROOT).parts[:-1]):
         continue
     raw = document.read_text(encoding="utf-8")
     relative_path = document.relative_to(ROOT)
