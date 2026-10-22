@@ -149,8 +149,10 @@ background, without wallpaper. Wallpaper extends beneath the bottom navigation a
 safe insets. The production launcher opens beside the left app panel or directly above its bottom edge;
 its tint is lighter. Frosted wallpaper is blended with the scene underneath so overlapping windows
 remain visible. This is translucent composition, not yet blur of the complete lower-window scene.
-The three production cards select the bundled Aurora, Désert and Ville backgrounds, with previews;
-they do not implement saved remote workspaces. The reference fixture keeps the original cards.
+Owner decision 23.10.2026: in production the right panel (control center) is docked flush to the right edge,
+full height below the top bar, with square corners, and the wallpaper choice is a section of that panel
+(three previews: Aurora, Désert, Ville), not a separate card. They do not implement saved remote workspaces.
+The reference fixture keeps the floating panel and the original workspace cards at master coordinates.
 Clicking or touching an exposed app window raises it above the other app windows; choosing its
 app-panel entry raises it too. Activation observes the press passively so fields, buttons and drag
 handles retain the same gesture. Shell panels and the global server dialog remain above app windows.

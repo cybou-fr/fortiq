@@ -1,5 +1,10 @@
 # FORTIQ — Qt 6 / C++20 migration, Windows & Android first
 
+23 October shell: the production right panel is docked to the right edge and contains the wallpaper switcher
+(owner decision, [UI SPEC](UI_SPEC_V1.md)); layout QtTest 47/47 on Windows MSVC. The layout test source also
+hides one raw string from moc (moc silently generated nothing since the MDok slice) and its launcher
+expectation was updated for the 9-app bottom panel. Not visually accepted by the owner; Android not rebuilt.
+
 23 October MDok: [first Markdown editor](MDOK.md), independent RAM document, pinned SFTP,
 existing safe-save/copy primitives, protected draft and Qt preview without resource loading. PDF pending.
 

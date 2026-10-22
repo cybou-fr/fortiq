@@ -137,11 +137,24 @@ private slots:
             auto *launcher = shell->findChild<QQuickItem *>("launcherPanel"); QVERIFY(launcher);
             QVERIFY(launcher->x() >= 0);
             QVERIFY(launcher->y() + launcher->height() < shell->height() - 70);
-            QCOMPARE(launcher->x(), (shell->width() - 560) / 2);
+            QCOMPARE(launcher->x(), (shell->width() - qMin<qreal>(shell->width() - 16, 9 * 60 + 84)) / 2); // bottom panel: 9 apps outside the fixture
+            shell->setProperty("controlOpen", true);
+            QTest::qWait(50);
+            auto *control = shell->findChild<QQuickItem *>("controlCenter"); QVERIFY(control);
+            QCOMPARE(control->x() + control->width(), shell->width());   // flush to the right edge
             auto *switcher = shell->findChild<QQuickItem *>("backgroundSwitcher"); QVERIFY(switcher);
+            QVERIFY(switcher->isVisible());
+            QVERIFY(control->isAncestorOf(switcher));                    // the choice is part of the panel
             for (int index = 0; index < 3; ++index) {
+                // Repeater delegates are visual children only: walk the item tree.
+                std::function<QQuickItem *(QQuickItem *, const QString &)> find = [&find](QQuickItem *root, const QString &name) -> QQuickItem * {
+                    if (root->objectName() == name) return root;
+                    for (QQuickItem *child : root->childItems()) if (auto *hit = find(child, name)) return hit;
+                    return nullptr;
+                };
+                auto *choice = find(switcher, QString("backgroundChoice%1").arg(index)); QVERIFY(choice);
                 QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
-                    switcher->mapToScene(QPointF(13 + index * 90 + 38, 45)).toPoint());
+                    choice->mapToScene(QPointF(choice->width() / 2, choice->height() / 2)).toPoint());
                 QTRY_COMPARE(shell->property("wallpaperName").toString(), (QStringList{"aurora", "desert", "city"}.at(index)));
             }
             shell->setProperty("fixture", true);
@@ -158,6 +171,7 @@ private slots:
             QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,button->mapToScene(QPointF(button->width()/2,button->height()/2)).toPoint());
             QTRY_VERIFY(shell->property("serversOpen").toBool());shell->setProperty("serversOpen",false);
             QQmlComponent component(&engine);
+#ifndef Q_MOC_RUN // moc cannot parse this raw string
             component.setData(R"(import QtQml
                 QtObject {
                     property bool connected:true
@@ -168,7 +182,7 @@ private slots:
                     property bool isNew:false
                     property bool canSave:true
                     property string path:"/home/fixture/notes.md"
-                    property string base:"# Title\n**bold** and [link](https://example.invalid)\n"
+                    property string base:"# Title\n**bold** and [link](https:\u002f\u002fexample.invalid)\n"
                     property string text:base
                     readonly property bool dirty:text!==base
                     property string sourceLabel:"fixture"
@@ -182,6 +196,7 @@ private slots:
                     function createNew(){}
                     function copyDraft(){}
                 })",QUrl());
+#endif
             auto *fixture=component.create();QVERIFY2(fixture,qPrintable(component.errorString()));fixture->setParent(window);
             shell->setProperty("documentsController",QVariant::fromValue(fixture));doc->setProperty("remote",QVariant::fromValue(fixture));
             auto *editor=doc->findChild<QQuickItem *>("documentsEditor");QVERIFY(editor);

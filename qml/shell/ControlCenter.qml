@@ -6,7 +6,16 @@ import QtQuick
 Glass {
     id: cc
     property bool fixture: false
-    radius: 18
+    // Production desktop: the panel is flush against the right edge, square
+    // corners, full height below the top bar. The reference fixture keeps the
+    // floating card at master coordinates.
+    property bool docked: false
+    // The wallpaper choice lives in this panel (owner decision 23.10.2026).
+    property var wallpapers: []
+    property string wallpaperName: ""
+    signal wallpaperSelected(string name)
+    readonly property var wallpaperLabels: ({ aurora: "Aurora", desert: "Désert", city: "Ville" })
+    radius: docked ? 0 : 18
     // Match the Logs window material; the shared workspace tint is lighter.
     tint: "#B3121C30"
     blurAmount: 0.9
@@ -108,6 +117,53 @@ Glass {
         text: "Agenda non connecté : aucune source d'agenda sur le serveur."
         color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
     }
+    Item {
+        id: backgrounds
+        objectName: "backgroundSwitcher"
+        readonly property real blockHeight: 124
+        x: 0; width: parent.width; height: blockHeight
+        y: Math.max(570, cc.height - blockHeight - 14)
+        visible: !cc.fixture && cc.wallpapers.length > 0 && cc.height >= 570 + blockHeight + 14
+        Rectangle { width: parent.width; height: 1; color: "#26FFFFFF" }
+        Text { x: 22; y: 12; text: "Arrière-plan"; color: "white"; font.pixelSize: 14; font.weight: Font.DemiBold; font.family: Theme.fontFamily }
+        Row {
+            x: 13; y: 40; spacing: 13
+            Repeater {
+                model: cc.wallpapers
+                Item {
+                    id: choice
+                    required property string modelData
+                    required property int index
+                    width: 86; height: 78
+                    Image {
+                        x: 3; y: 3; width: parent.width - 6; height: 50
+                        source: Qt.resolvedUrl("../../assets/wallpapers/" + choice.modelData + ".jpg")
+                        fillMode: Image.PreserveAspectCrop
+                        sourceSize.width: 172
+                        asynchronous: true
+                        clip: true
+                    }
+                    Rectangle {
+                        width: parent.width; height: 56; radius: 6; color: "transparent"
+                        border.width: choice.modelData === cc.wallpaperName ? 2 : 0
+                        border.color: Theme.accent
+                        MouseArea {
+                            objectName: "backgroundChoice" + choice.index
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: cc.wallpaperSelected(choice.modelData)
+                        }
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter; y: 62
+                        text: cc.wallpaperLabels[choice.modelData] || choice.modelData
+                        color: Theme.ink; font.pixelSize: 11; font.family: Theme.fontFamily
+                    }
+                }
+            }
+        }
+    }
+
     Repeater {
         model: cc.fixture ? [
             { h: "14:00", t: "Réunion projet CYBOU", r: "14:00 – 15:00", c: "#2F8CFF" },

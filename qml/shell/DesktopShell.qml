@@ -225,23 +225,30 @@ Item {
     }
 
     ControlCenter {
+        objectName: "controlCenter"
         z: 10
         visible: shell.controlOpen
-        x: shell.adaptive ? shell.width - width - 8 : 1215; y: 64
-        width: Math.min(310, shell.width - 16); height: shell.adaptive ? Math.min(679, shell.height - 144) : 679
+        docked: !shell.fixture && !shell.adaptive
+        x: shell.adaptive ? shell.width - width - 8 : (docked ? shell.width - width : 1215)
+        y: docked ? 47 : 64
+        width: Math.min(310, shell.width - 16)
+        height: shell.adaptive ? Math.min(679, shell.height - 144) : (docked ? shell.height - 47 : 679)
         backdrop: wallpaper
         fixture: shell.fixture
+        wallpapers: shell.wallpapers
+        wallpaperName: shell.wallpaperName
+        onWallpaperSelected: name => { shell.wallpaperSource = ""; shell.wallpaperName = name }
     }
 
+    // Reference workspace cards: visual fixture only. Production wallpaper
+    // choice is part of the control center panel.
     WorkspaceSwitcher {
         z: 10
-        objectName: "backgroundSwitcher"
-        visible: !shell.adaptive
+        objectName: "workspaceSwitcher"
+        visible: !shell.adaptive && shell.fixture
         x: 1215; y: 765; width: 310; height: 129
         backdrop: wallpaper
-        backgroundMode: !shell.fixture
-        current: shell.fixture ? 1 : Math.max(0, shell.wallpapers.indexOf(shell.wallpaperName))
-        onBackgroundSelected: index => { shell.wallpaperSource = ""; shell.wallpaperName = shell.wallpapers[index] }
+        current: 1
     }
 
     AppPanel {
