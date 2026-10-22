@@ -91,7 +91,13 @@ WSL SSH/SFTP fixture also verify the new memory-key path. They do not simulate A
 
 ## Still required on Lenovo / Android
 
-No device was visible to `adb devices -l`; no APK was installed or run. Verify installation/launch,
+On 22 October 2026 the debug arm64 APK was installed successfully on the `FortiqTablet` AVD
+(Android 17 / API 37, x86_64 with arm64 translation, 2560×1600). The shell and Files rendered,
+and tapping the server chooser opened Server Manager. The first translated launch took about
+30 seconds. Screenshots: ignored `build-dist/emulator-launch.png` and `emulator-servers.png`.
+Some symbol icons lack glyphs; logcat also reported a GFXSTREAM GL 0x502 error. This limited
+launch/tap smoke check does not qualify GPU fidelity, native arm64 hardware, SSH or document providers.
+The emulator remains available for further testing. On physical Lenovo hardware still verify installation/launch,
 rotation and real DPR, safe areas/predictive Back, IME/selection, tap/long press, readable touch controls,
 native key/upload/save pickers, provider metadata/unknown size, expired grants and restart persistence,
 SSH disconnect during transfer/export, partial-document warnings, and GPU blur/performance.
