@@ -162,6 +162,8 @@ shows the server chooser action used by Files. Opening Terminal with an availabl
 the PTY automatically; shell input is never replayed. History rows are compact (40 px minimum
 on adaptive touch layouts); clicking returns input focus without sending Enter. The stop and
 bottom Ctrl+C/D buttons are removed; keyboard shortcuts remain. The focused cursor is a blinking
-filled block, the unfocused cursor an outline; server cursor visibility is respected.
+filled block, the unfocused cursor an outline; server cursor visibility is respected. A bounded 1000-line RAM output buffer is accessible
+with wheel, Shift+PageUp/PageDown and a vertical scrollbar (wider on adaptive layouts).
+Shift+End or input returns to live output; the alternate screen has no local scrollback.
 This is not a new visual approval, nor proof of complete Android touch/accessibility or GPU fidelity.
 See [Android foundation](ANDROID_FOUNDATION.md) for screenshots, build evidence and device gates.

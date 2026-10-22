@@ -4,6 +4,7 @@
 #include <QQmlError>
 #include <QQuickWindow>
 #include <QQuickItem>
+#include <QWheelEvent>
 #include <QDir>
 #include <QQmlExtensionPlugin>
 #include "../src/core/BackNavigationFilter.h"
@@ -172,6 +173,60 @@ private slots:
 
             QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,QByteArray("\033[?1049hALT\033[?1049l"))));
             QVERIFY(QMetaObject::invokeMethod(surface,"screenText",Q_RETURN_ARG(QString,text)));QVERIFY(text.contains("HELLO"));
+            QVERIFY(QMetaObject::invokeMethod(surface,"reset"));
+            QByteArray output;
+            const int rows=surface->property("rows").toInt();
+            for(int i=0;i<rows+15;++i)output+=QString("line%1\r\n").arg(i,4,10,QChar('0')).toUtf8();
+            QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,output)));
+            QVERIFY(surface->property("scrollbackLines").toInt()>0);
+            auto *outputScroll=term->findChild<QQuickItem *>("terminalOutputScroll");QVERIFY(outputScroll);
+            QTRY_VERIFY(outputScroll->isVisible());
+            QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,outputScroll->mapToScene(QPointF(outputScroll->width()/2,5)).toPoint());
+            QTRY_VERIFY(surface->property("scrollOffset").toInt()>0);
+            QVERIFY(QMetaObject::invokeMethod(surface,"scrollTo",Q_ARG(int,0)));
+            bytes.clear();QTest::keyClick(window,Qt::Key_PageUp,Qt::ShiftModifier);
+            QVERIFY(surface->property("scrollOffset").toInt()>0);QVERIFY(bytes.isEmpty());
+            QVERIFY(QMetaObject::invokeMethod(surface,"scrollTo",Q_ARG(int,10000)));
+            QVERIFY(QMetaObject::invokeMethod(surface,"screenText",Q_RETURN_ARG(QString,text)));
+            QVERIFY(text.startsWith("line0000\n"));
+            const QString anchored=text;
+            QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,QByteArray("new output\r\n"))));
+            QVERIFY(QMetaObject::invokeMethod(surface,"screenText",Q_RETURN_ARG(QString,text)));QCOMPARE(text,anchored);
+            QTest::keyClick(window,Qt::Key_End,Qt::ShiftModifier);
+            QCOMPARE(surface->property("scrollOffset").toInt(),0);QVERIFY(bytes.isEmpty());
+            const QPointF wheelPosition=surface->mapToScene(QPointF(20,20));
+            QWheelEvent wheel(wheelPosition,window->mapToGlobal(wheelPosition.toPoint()),QPoint(),QPoint(0,120),Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
+            QCoreApplication::sendEvent(window,&wheel);
+            QCOMPARE(surface->property("scrollOffset").toInt(),3);QVERIFY(bytes.isEmpty());
+            QVERIFY(QMetaObject::invokeMethod(surface,"scrollTo",Q_ARG(int,0)));
+            const qreal oldHeight=surface->height();
+            const int beforeResize=surface->property("scrollbackLines").toInt();
+            surface->setHeight(oldHeight+40);
+            QVERIFY(surface->property("scrollbackLines").toInt()<beforeResize);
+            QVERIFY(QMetaObject::invokeMethod(surface,"scrollTo",Q_ARG(int,10000)));
+            QVERIFY(QMetaObject::invokeMethod(surface,"screenText",Q_RETURN_ARG(QString,text)));QVERIFY(text.startsWith("line0000\n"));
+            surface->setHeight(oldHeight);
+            QVERIFY(QMetaObject::invokeMethod(surface,"scrollTo",Q_ARG(int,0)));
+            const int saved=surface->property("scrollbackLines").toInt();
+            QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,QByteArray("\033[?1049hALT\r\n"))));
+            QCOMPARE(surface->property("scrollbackLines").toInt(),0);
+            QVERIFY(QMetaObject::invokeMethod(surface,"scrollTo",Q_ARG(int,10000)));
+            QCOMPARE(surface->property("scrollOffset").toInt(),0);
+            QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,QByteArray("\033[?1049l"))));
+            QCOMPARE(surface->property("scrollbackLines").toInt(),saved);
+            output.clear();for(int i=0;i<1100;++i)output+="bounded output\r\n";
+            QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,output)));
+            QCOMPARE(surface->property("scrollbackLines").toInt(),1000);
+            QVERIFY(QMetaObject::invokeMethod(surface,"scrollTo",Q_ARG(int,10000)));
+            QCOMPARE(surface->property("scrollOffset").toInt(),1000);
+            QVERIFY(QMetaObject::invokeMethod(surface,"insertHistory",Q_ARG(QString,QString("echo typed"))));
+            QCOMPARE(surface->property("scrollOffset").toInt(),0);
+            QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,QByteArray("\033[3J"))));
+            QCOMPARE(surface->property("scrollbackLines").toInt(),0);
+            QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,output)));
+            QVERIFY(QMetaObject::invokeMethod(surface,"reset"));
+            QCOMPARE(surface->property("scrollbackLines").toInt(),0);
+            QCOMPARE(surface->property("scrollOffset").toInt(),0);
         }
         window->resize(QSize(844,390)); QTest::qWait(30);
         window->resize(size); QTest::qWait(30);

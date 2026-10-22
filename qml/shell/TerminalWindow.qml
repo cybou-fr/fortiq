@@ -111,13 +111,29 @@ Item {
     TerminalView {
         id:surface
         objectName:"terminalSurface"
-        x:win.contentLeft+12;y:52;width:Math.max(32,parent.width-x-12);height:Math.max(32,parent.height-y-28)
+        x:win.contentLeft+12;y:52;width:Math.max(32,parent.width-x-(win.adaptive?32:24));height:Math.max(32,parent.height-y-28)
         visible:win.connected && win.terminal!==null && win.terminal.running
         inputEnabled:win.terminal!==null && win.terminal.running
         onBytes:data=>{if(win.terminal)win.terminal.send(data)}
         onGridChanged:(columns,rows)=>{if(win.terminal)win.terminal.resize(columns,rows)}
         onPasteRequested:{win.pasteText=clipboardText();pasteDialog.open()}
         Component.onCompleted:if(win.terminal)win.terminal.resize(columns,rows)
+    }
+    ScrollBar {
+        id:outputScroll
+        objectName:"terminalOutputScroll"
+        visible:surface.visible && surface.scrollbackLines>0
+        x:win.width-width-2;y:surface.y;height:surface.height;width:win.adaptive?28:18
+        orientation:Qt.Vertical;policy:ScrollBar.AlwaysOn;active:true
+        size:surface.rows/(surface.scrollbackLines+surface.rows)
+        minimumSize:Math.min(1,40/Math.max(1,height))
+        stepSize:1/Math.max(1,surface.scrollbackLines+surface.rows)
+        Binding {
+            target:outputScroll;property:"position";when:!outputScroll.pressed
+            value:(surface.scrollbackLines-surface.scrollOffset)/(surface.scrollbackLines+surface.rows)
+            restoreMode:Binding.RestoreNone
+        }
+        onPositionChanged:if(pressed)surface.scrollTo(Math.round(surface.scrollbackLines-position*(surface.scrollbackLines+surface.rows)))
     }
     Item {
         visible:!surface.visible
@@ -144,7 +160,7 @@ Item {
     Text {
         x:win.contentLeft+12;anchors.bottom:parent.bottom;anchors.bottomMargin:8
         width:Math.max(20,win.width-x-12);elide:Text.ElideRight
-        text:win.terminal?win.terminal.status:"Déconnecté";color:Theme.inkMuted;font.pixelSize:11
+        text:surface.scrollOffset>0 ? "Historique de sortie · "+surface.scrollOffset+" lignes au-dessus" : (win.terminal?win.terminal.status:"Déconnecté");color:Theme.inkMuted;font.pixelSize:11
     }
     Dialog {
         id:pasteDialog
