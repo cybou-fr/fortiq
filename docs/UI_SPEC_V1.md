@@ -165,5 +165,8 @@ bottom Ctrl+C/D buttons are removed; keyboard shortcuts remain. The focused curs
 filled block, the unfocused cursor an outline; server cursor visibility is respected. A bounded 1000-line RAM output buffer is accessible
 with wheel, Shift+PageUp/PageDown and a vertical scrollbar (wider on adaptive layouts).
 Shift+End or input returns to live output; the alternate screen has no local scrollback.
+Mouse drag selects visible terminal cells (including scrollback). Copier/Ctrl+Shift+C copy
+the selection, or the visible screen when none is selected. Ctrl+C remains a shell interrupt.
+Selection clears on incoming output, input, scrolling and grid resize; touch handles are pending.
 This is not a new visual approval, nor proof of complete Android touch/accessibility or GPU fidelity.
 See [Android foundation](ANDROID_FOUNDATION.md) for screenshots, build evidence and device gates.

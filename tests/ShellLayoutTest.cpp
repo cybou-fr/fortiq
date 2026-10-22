@@ -5,6 +5,7 @@
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QWheelEvent>
+#include <QClipboard>
 #include <QDir>
 #include <QQmlExtensionPlugin>
 #include "../src/core/BackNavigationFilter.h"
@@ -154,8 +155,26 @@ private slots:
             QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,QByteArray("\033[2J\033[HHELLO\r\n\033[31mRED\033[0m"))));
             QString text; QVERIFY(QMetaObject::invokeMethod(surface,"screenText",Q_RETURN_ARG(QString,text)));
             QVERIFY(text.contains("HELLO") && text.contains("RED") && !text.contains(QChar(27)));
+            const qreal cw=surface->width()/surface->property("columns").toInt();
+            const qreal ch=surface->height()/surface->property("rows").toInt();
+            auto select=[&](qreal x1,qreal y1,qreal x2,qreal y2) {
+                const QPoint from=surface->mapToScene(QPointF(x1*cw,y1*ch)).toPoint();
+                const QPoint to=surface->mapToScene(QPointF(x2*cw,y2*ch)).toPoint();
+                QTest::mousePress(window,Qt::LeftButton,Qt::NoModifier,from);
+                QTest::mouseMove(window,to);
+                QTest::mouseRelease(window,Qt::LeftButton,Qt::NoModifier,to);
+            };
+            select(0.5,0.5,4.5,0.5);
+            QVERIFY(surface->property("hasSelection").toBool());
+            QVERIFY(QMetaObject::invokeMethod(surface,"selectedText",Q_RETURN_ARG(QString,text)));QCOMPARE(text,QString("HELLO"));
+            QTest::keyClick(window,Qt::Key_C,Qt::ControlModifier|Qt::ShiftModifier);
+            QCOMPARE(QGuiApplication::clipboard()->text(),QString("HELLO"));QVERIFY(bytes.isEmpty());
+            select(2.5,1.5,2.5,0.5);
+            QVERIFY(QMetaObject::invokeMethod(surface,"selectedText",Q_RETURN_ARG(QString,text)));QCOMPARE(text,QString("LLO\nRED"));
+            QVERIFY(bytes.isEmpty());
             surface->forceActiveFocus();QTest::keyClick(window,Qt::Key_C,Qt::ControlModifier);
             QVERIFY(!bytes.isEmpty());QCOMPARE(bytes.last().first().toByteArray(),QByteArray(1,char(3)));
+            QVERIFY(!surface->property("hasSelection").toBool());
             bytes.clear();
             const QString command=QString::fromUtf8("printf 'été Привет'");
             auto *history=term->findChild<QQuickItem *>("terminalHistory");QVERIFY(history);
@@ -174,6 +193,13 @@ private slots:
             QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,QByteArray("\033[?1049hALT\033[?1049l"))));
             QVERIFY(QMetaObject::invokeMethod(surface,"screenText",Q_RETURN_ARG(QString,text)));QVERIFY(text.contains("HELLO"));
             QVERIFY(QMetaObject::invokeMethod(surface,"reset"));
+            QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,QString::fromUtf8("été 界é\033[8mSECRET\033[0m").toUtf8())));
+            select(0.5,0.5,6.5,0.5);
+            QVERIFY(QMetaObject::invokeMethod(surface,"selectedText",Q_RETURN_ARG(QString,text)));QCOMPARE(text,QString::fromUtf8("été 界é"));
+            QVERIFY(QMetaObject::invokeMethod(surface,"screenText",Q_RETURN_ARG(QString,text)));QVERIFY(!text.contains("SECRET"));
+            QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,QByteArray("new"))));
+            QVERIFY(!surface->property("hasSelection").toBool());
+            QVERIFY(QMetaObject::invokeMethod(surface,"reset"));
             QByteArray output;
             const int rows=surface->property("rows").toInt();
             for(int i=0;i<rows+15;++i)output+=QString("line%1\r\n").arg(i,4,10,QChar('0')).toUtf8();
@@ -190,8 +216,11 @@ private slots:
             QVERIFY(QMetaObject::invokeMethod(surface,"screenText",Q_RETURN_ARG(QString,text)));
             QVERIFY(text.startsWith("line0000\n"));
             const QString anchored=text;
+            select(0.5,0.5,7.5,0.5);
+            QVERIFY(QMetaObject::invokeMethod(surface,"selectedText",Q_RETURN_ARG(QString,text)));QCOMPARE(text,QString("line0000"));
             QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,QByteArray("new output\r\n"))));
             QVERIFY(QMetaObject::invokeMethod(surface,"screenText",Q_RETURN_ARG(QString,text)));QCOMPARE(text,anchored);
+            QVERIFY(!surface->property("hasSelection").toBool());
             QTest::keyClick(window,Qt::Key_End,Qt::ShiftModifier);
             QCOMPARE(surface->property("scrollOffset").toInt(),0);QVERIFY(bytes.isEmpty());
             const QPointF wheelPosition=surface->mapToScene(QPointF(20,20));

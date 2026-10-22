@@ -3,7 +3,8 @@
 22 October follow-up: [Terminal](TERMINAL.md) now has an interactive SSH PTY, a libvterm screen,
 auto-start on an opened window's connected source and server-generation isolation.
 The primary screen now retains up to 1000 output lines in RAM (wheel, scrollbar, Shift+PageUp/PageDown);
-alternate-screen input remains separate. The regular window layout now includes saved Bash history (click types a command without Enter). Shared WindowDragArea serves Files/Logs/
+alternate-screen input remains separate. Mouse selection and selection-first copying are available;
+selection clears when the displayed grid changes. The regular window layout now includes saved Bash history (click types a command without Enter). Shared WindowDragArea serves Files/Logs/
 Browser/Terminal. Windows/Android builds, 37 layout cases and two live PTY/controller cases passed
 (4 live QtTest passes including init/cleanup). Full Android IME/TUI qualification is still pending.
 

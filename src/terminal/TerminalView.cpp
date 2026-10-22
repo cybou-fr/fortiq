@@ -74,12 +74,14 @@ TerminalView::TerminalView(QQuickItem *parent) : QQuickPaintedItem(parent), m_vt
 bool TerminalView::terminalFocused() const { return hasActiveFocus() && window() && window()->isActive(); }
 TerminalView::~TerminalView() { vterm_free(m_vt); }
 void TerminalView::reset() {
+    clearSelection();
     m_scrollback.clear(); m_scrollOffset = 0; m_wheelRemainder = 0;
     vterm_screen_reset(m_screen, 1);
     VTermColor fg, bg; vterm_color_rgb(&fg, 235, 241, 252); vterm_color_rgb(&bg, 8, 16, 28);
     vterm_screen_set_default_colors(m_screen, &fg, &bg); update(); emit scrollbackChanged();
 }
 void TerminalView::feed(const QByteArray &data) {
+    if (!data.isEmpty()) clearSelection();
     m_cursorOn = true;
     vterm_input_write(m_vt, data.constData(), data.size()); vterm_screen_flush_damage(m_screen); update(); emit scrollbackChanged();
 }
@@ -87,11 +89,13 @@ void TerminalView::geometryChange(const QRectF &n, const QRectF &o) { QQuickPain
 void TerminalView::sizeGrid() {
     const int columns = qBound(2, int(width() / m_cellWidth), 240), rows = qBound(2, int(height() / m_cellHeight), 100);
     if (columns == m_columns && rows == m_rows) return;
+    clearSelection();
     m_columns = columns; m_rows = rows; vterm_set_size(m_vt, rows, columns); update(); emit scrollbackChanged(); emit dimensionsChanged(); emit gridChanged(columns, rows);
 }
 void TerminalView::scrollTo(int offset) {
     const int next = qBound(0, offset, scrollbackLines());
     if (next == m_scrollOffset) return;
+    clearSelection();
     m_scrollOffset = next; update(); emit scrollbackChanged();
 }
 bool TerminalView::viewportCell(int row, int col, VTermScreenCell *cell) const {
@@ -113,6 +117,9 @@ void TerminalView::paint(QPainter *p) {
         if (cell.attrs.reverse) std::swap(f,b);
         if (!VTERM_COLOR_IS_DEFAULT_BG(&cell.bg) || cell.attrs.reverse)
             p->fillRect(QRectF(col*m_cellWidth,row*m_cellHeight,cell.width*m_cellWidth,m_cellHeight),b);
+        const int index = row*m_columns+col;
+        if (hasSelection() && index <= std::max(m_selectionStart,m_selectionEnd) && index+cell.width-1 >= std::min(m_selectionStart,m_selectionEnd))
+            p->fillRect(QRectF(col*m_cellWidth,row*m_cellHeight,cell.width*m_cellWidth,m_cellHeight),QColor(63,120,196,180));
         if (cell.chars[0] && cell.chars[0] != UINT32_MAX && !cell.attrs.conceal) {
             QString text; for (uint32_t cp : cell.chars) { if (!cp || cp == UINT32_MAX) break; const char32_t c = cp; text += QString::fromUcs4(&c,1); }
             auto font = m_font; font.setBold(cell.attrs.bold); font.setItalic(cell.attrs.italic); font.setUnderline(cell.attrs.underline);
@@ -128,30 +135,40 @@ void TerminalView::paint(QPainter *p) {
     }
 }
 QString TerminalView::screenText() const {
-    if (m_scrollOffset) {
+    return textRange(0,m_rows*m_columns-1);
+}
+QString TerminalView::selectedText() const {
+    return hasSelection() ? textRange(std::min(m_selectionStart,m_selectionEnd),std::max(m_selectionStart,m_selectionEnd)) : QString();
+}
+QString TerminalView::textRange(int first, int last) const {
         QStringList lines;
-        for (int row = 0; row < m_rows; ++row) {
+        for (int row = first/m_columns; row <= last/m_columns; ++row) {
             QString line;
-            for (int col = 0; col < m_columns; ++col) {
+            const int start = row == first/m_columns ? first%m_columns : 0;
+            const int end = row == last/m_columns ? last%m_columns : m_columns-1;
+            for (int col = 0; col <= end; ++col) {
                 VTermScreenCell cell{};
-                if (!viewportCell(row,col,&cell)) { line += ' '; continue; }
+                if (!viewportCell(row,col,&cell)) { if(col>=start)line += ' '; continue; }
+                if (col+std::max(1,int(cell.width)) <= start) continue;
                 if (cell.width == 0 || cell.chars[0] == UINT32_MAX) continue;
-                if (!cell.chars[0] || cell.attrs.conceal) { line += ' '; continue; }
+                if (!cell.chars[0] || cell.attrs.conceal) { line += QString(std::max(1,int(cell.width)),' '); continue; }
                 for (uint32_t cp : cell.chars) {
                     if (!cp || cp == UINT32_MAX) break;
                     const char32_t c = cp; line += QString::fromUcs4(&c,1);
                 }
             }
-            while (line.endsWith(' ')) line.chop(1);
+            if(end==m_columns-1)while (line.endsWith(' ')) line.chop(1);
             lines += line;
         }
         return lines.join('\n');
-    }
-    QByteArray text(m_rows*m_columns*24, Qt::Uninitialized);
-    text.resize(vterm_screen_get_text(m_screen,text.data(),text.size(),{0,m_rows,0,m_columns})); return QString::fromUtf8(text);
 }
 QString TerminalView::clipboardText() const { return QGuiApplication::clipboard()->text(); }
-void TerminalView::copyScreen() { QGuiApplication::clipboard()->setText(screenText()); }
+void TerminalView::copyScreen() { QGuiApplication::clipboard()->setText(hasSelection() ? selectedText() : screenText()); }
+void TerminalView::clearSelection() {
+    const bool selected = hasSelection();
+    m_selectionStart = m_selectionEnd = m_selectionAnchor = -1;
+    if (selected) { update(); emit selectionChanged(); }
+}
 void TerminalView::paste(const QString &text) {
     if (!m_inputEnabled || text.toUtf8().size() > 16000 || text.contains(QChar::Null)) return;
     vterm_keyboard_start_paste(m_vt); textInput(text); vterm_keyboard_end_paste(m_vt);
@@ -161,8 +178,8 @@ void TerminalView::insertHistory(const QString &text) {
     for (QChar c : text) if (c.unicode() < 32 || c.unicode() == 127 || c == QChar(0x2028) || c == QChar(0x2029)) return;
     textInput(text); forceActiveFocus();
 }
-void TerminalView::control(int code) { if (m_inputEnabled && code >= 1 && code <= 26) { scrollTo(0); emit bytes(QByteArray(1,char(code))); } }
-void TerminalView::textInput(const QString &text) { if(text.isEmpty())return; scrollTo(0); m_cursorOn = true; update(); for (auto cp : text.toUcs4()) vterm_keyboard_unichar(m_vt, cp, VTERM_MOD_NONE); }
+void TerminalView::control(int code) { if (m_inputEnabled && code >= 1 && code <= 26) { clearSelection(); scrollTo(0); emit bytes(QByteArray(1,char(code))); } }
+void TerminalView::textInput(const QString &text) { if(text.isEmpty())return; clearSelection(); scrollTo(0); m_cursorOn = true; update(); for (auto cp : text.toUcs4()) vterm_keyboard_unichar(m_vt, cp, VTERM_MOD_NONE); }
 void TerminalView::keyPressEvent(QKeyEvent *e) {
     const auto mods = e->modifiers();
     if (e->key() == Qt::Key_Shift || e->key() == Qt::Key_Control || e->key() == Qt::Key_Alt || e->key() == Qt::Key_Meta) { e->accept(); return; }
@@ -174,6 +191,7 @@ void TerminalView::keyPressEvent(QKeyEvent *e) {
     if (!m_inputEnabled) { e->ignore(); return; }
     m_cursorOn = true; update();
     if ((mods & Qt::ControlModifier) && (mods & Qt::ShiftModifier) && e->key() == Qt::Key_V) { emit pasteRequested(); return; }
+    clearSelection();
     scrollTo(0);
     int key = VTERM_KEY_NONE;
     switch (e->key()) {
@@ -192,7 +210,22 @@ void TerminalView::keyPressEvent(QKeyEvent *e) {
     else for(auto cp:e->text().toUcs4())vterm_keyboard_unichar(m_vt,cp,mod);
     e->accept();
 }
-void TerminalView::mousePressEvent(QMouseEvent *e) { forceActiveFocus(); if(m_inputEnabled)QGuiApplication::inputMethod()->show();update();e->accept(); }
+int TerminalView::cellIndex(const QPointF &position) const {
+    return qBound(0,int(position.y()/m_cellHeight),m_rows-1)*m_columns + qBound(0,int(position.x()/m_cellWidth),m_columns-1);
+}
+void TerminalView::extendSelection(const QPointF &position) {
+    if (m_selectionAnchor < 0) return;
+    const int end = cellIndex(position);
+    if (end == m_selectionAnchor && !hasSelection()) return;
+    m_selectionStart = m_selectionAnchor; m_selectionEnd = end;
+    update(); emit selectionChanged();
+}
+void TerminalView::mousePressEvent(QMouseEvent *e) {
+    forceActiveFocus(); clearSelection(); m_selectionAnchor = cellIndex(e->position());
+    if(m_inputEnabled)QGuiApplication::inputMethod()->show();update();e->accept();
+}
+void TerminalView::mouseMoveEvent(QMouseEvent *e) { if(e->buttons() & Qt::LeftButton)extendSelection(e->position()); e->accept(); }
+void TerminalView::mouseReleaseEvent(QMouseEvent *e) { extendSelection(e->position()); m_selectionAnchor = -1; e->accept(); }
 void TerminalView::wheelEvent(QWheelEvent *e) {
     if (m_alternateScreen) { e->ignore(); return; }
     m_wheelRemainder += !e->pixelDelta().isNull() ? e->pixelDelta().y()/m_cellHeight : e->angleDelta().y()/120.0*3;
