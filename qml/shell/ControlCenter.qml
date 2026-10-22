@@ -14,6 +14,8 @@ Glass {
     property var wallpapers: []
     property string wallpaperName: ""
     signal wallpaperSelected(string name)
+    // Height that fits every section, so the card has no empty tail.
+    readonly property real contentHeight: backgrounds.y + backgrounds.blockHeight + 14
     readonly property var wallpaperLabels: ({ aurora: "Aurora", desert: "Désert", city: "Ville" })
     radius: 18
     // Match the Logs window material; the shared workspace tint is lighter.
@@ -122,8 +124,8 @@ Glass {
         objectName: "backgroundSwitcher"
         readonly property real blockHeight: 140
         x: 0; width: parent.width; height: blockHeight
-        y: Math.max(570, cc.height - blockHeight - 14)
-        visible: !cc.fixture && cc.wallpapers.length > 0 && cc.height >= 570 + blockHeight + 14
+        y: 572
+        visible: !cc.fixture && cc.wallpapers.length > 0 && cc.height >= cc.contentHeight
         Rectangle { width: parent.width; height: 1; color: "#26FFFFFF" }
         Text { x: 22; y: 12; text: "Arrière-plan"; color: "white"; font.pixelSize: 14; font.weight: Font.DemiBold; font.family: Theme.fontFamily }
         Row {

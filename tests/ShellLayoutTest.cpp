@@ -158,6 +158,15 @@ private slots:
                     choice->mapToScene(QPointF(choice->width() / 2, choice->height() / 2)).toPoint());
                 QTRY_COMPARE(shell->property("wallpaperName").toString(), (QStringList{"aurora", "desert", "city"}.at(index)));
             }
+            QVERIFY(control->height() < 800);                           // fits its content, no empty tail
+            // Presses inside the panel keep it open; a press elsewhere closes it and the launcher.
+            shell->setProperty("launcherOpen", true);
+            QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, control->mapToScene(QPointF(150, 300)).toPoint());
+            QVERIFY(shell->property("controlOpen").toBool());
+            QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(40, 700));
+            QTRY_VERIFY(!shell->property("controlOpen").toBool());
+            QTRY_VERIFY(!shell->property("launcherOpen").toBool());
+            shell->setProperty("controlOpen", true);
             QTest::qWait(400);
             QVERIFY(window->grabWindow().save(QString("layout-captures/%1-control-selected.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
             shell->setProperty("fixture", true);

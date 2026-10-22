@@ -208,11 +208,25 @@ Item {
                 const p = entry.item.mapFromItem(shell, mouse.x, mouse.y)
                 if (entry.item.visible && entry.item.contains(p)) { shell.raiseApp(entry.key); break }
             }
+            // A press anywhere outside a floating panel closes it. The app
+            // panel (launcher button) and the top-bar toggle accept their own
+            // presses, so they never get here. The reference scene stays open.
+            if (!shell.fixture && !shell.serversOpen) {
+                if (shell.controlOpen && !shell.pressInside(controlPanel, mouse.x, mouse.y)) shell.controlOpen = false
+                if (shell.launcherOpen && !shell.pressInside(launcherItem, mouse.x, mouse.y)
+                    && !shell.pressInside(appPanel, mouse.x, mouse.y) && !shell.pressInside(compactPanel, mouse.x, mouse.y))
+                    shell.launcherOpen = false
+            }
             mouse.accepted = false
         }
     }
+    function pressInside(item, x, y) {
+        if (!item || !item.visible) return false
+        return item.contains(item.mapFromItem(shell, x, y))
+    }
 
     LauncherPanel {
+        id: launcherItem
         z: 10
         objectName: "launcherPanel"
         visible: shell.launcherOpen
@@ -225,6 +239,7 @@ Item {
     }
 
     ControlCenter {
+        id: controlPanel
         objectName: "controlCenter"
         z: 10
         visible: shell.controlOpen
@@ -232,7 +247,7 @@ Item {
         x: shell.adaptive ? shell.width - width - 8 : (docked ? shell.width - width - 8 : 1215)
         y: docked ? 59 : 64
         width: Math.min(310, shell.width - 16)
-        height: shell.adaptive ? Math.min(679, shell.height - 144) : (docked ? shell.height - 59 - 8 : 679)
+        height: shell.adaptive ? Math.min(679, shell.height - 144) : (docked ? Math.min(contentHeight, shell.height - 59 - 8) : 679)
         backdrop: wallpaper
         fixture: shell.fixture
         wallpapers: shell.wallpapers
@@ -271,6 +286,7 @@ Item {
     }
 
     CompactAppPanel {
+        id: compactPanel
         z: 10
         apps: appPanel.apps
         visible: shell.adaptive && !Qt.inputMethod.visible
