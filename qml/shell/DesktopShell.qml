@@ -22,6 +22,8 @@ Item {
     // right-click the desktop to cycle. An explicit file overrides it.
     readonly property var wallpapers: ["aurora", "desert", "city"]
     property string wallpaperName: "aurora"
+    readonly property url wallpaperUrl: wallpaperSource.toString().length > 0 ? wallpaperSource
+        : (wallpaperName.length > 0 ? Qt.resolvedUrl("../../assets/wallpapers/" + wallpaperName + ".jpg") : "")
     property bool launcherOpen: fixture && !adaptive && fixturePreview !== "logs" && fixturePreview !== "incident" && fixturePreview !== "service" && fixturePreview !== "service"
     property bool controlOpen: fixture && !adaptive
     property bool filesOpen: true
@@ -70,8 +72,7 @@ Item {
     Wallpaper {
         id: wallpaper
         anchors.fill: parent
-        source: shell.wallpaperSource.toString().length > 0 ? shell.wallpaperSource
-            : (shell.wallpaperName.length > 0 ? Qt.resolvedUrl("../../assets/wallpapers/" + shell.wallpaperName + ".jpg") : "")
+        source: shell.wallpaperUrl
     }
     MouseArea {
         anchors.fill: parent
@@ -130,8 +131,10 @@ Item {
     }
 
     LauncherPanel {
+        objectName: "launcherPanel"
         visible: shell.launcherOpen
-        x: shell.adaptive ? 8 : 98; y: shell.adaptive ? Math.max(56, shell.height - height - 80) : 497
+        x: shell.adaptive ? 8 : (shell.fixture ? 98 : (shell.panelEdge === "left" ? appPanel.x + appPanel.width + 10 : appPanel.x))
+        y: shell.adaptive ? Math.max(56, shell.height - height - 80) : (shell.fixture ? 497 : (shell.panelEdge === "left" ? Math.max(59, shell.height - height - 80) : appPanel.y - height - 10))
         width: shell.adaptive ? Math.min(438, shell.width - 16) : 438; height: shell.adaptive ? Math.min(443, shell.height - 140) : 443
         backdrop: wallpaper
         fixture: shell.fixture
@@ -147,9 +150,13 @@ Item {
     }
 
     WorkspaceSwitcher {
+        objectName: "backgroundSwitcher"
         visible: !shell.adaptive
         x: 1215; y: 765; width: 310; height: 129
         backdrop: wallpaper
+        backgroundMode: !shell.fixture
+        current: shell.fixture ? 1 : Math.max(0, shell.wallpapers.indexOf(shell.wallpaperName))
+        onBackgroundSelected: index => { shell.wallpaperSource = ""; shell.wallpaperName = shell.wallpapers[index] }
     }
 
     AppPanel {

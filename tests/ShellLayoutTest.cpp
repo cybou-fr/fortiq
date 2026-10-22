@@ -86,6 +86,20 @@ private slots:
             QVERIFY(files->x() > before.x());
             QVERIFY(files->y() > before.y());
             files->setX(before.x()); files->setY(before.y());
+            shell->setProperty("fixture", false);
+            shell->setProperty("launcherOpen", true);
+            QTest::qWait(50);
+            auto *launcher = shell->findChild<QQuickItem *>("launcherPanel"); QVERIFY(launcher);
+            QVERIFY(launcher->x() >= 0);
+            QVERIFY(launcher->y() + launcher->height() < shell->height() - 70);
+            QCOMPARE(launcher->x(), (shell->width() - 560) / 2);
+            auto *switcher = shell->findChild<QQuickItem *>("backgroundSwitcher"); QVERIFY(switcher);
+            for (int index = 0; index < 3; ++index) {
+                QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                    switcher->mapToScene(QPointF(13 + index * 90 + 38, 45)).toPoint());
+                QTRY_COMPARE(shell->property("wallpaperName").toString(), (QStringList{"aurora", "desert", "city"}.at(index)));
+            }
+            shell->setProperty("fixture", true);
         }
         if (preview == "incident" && adaptive && size.width() < 700) {
             auto *title = logs->findChild<QQuickItem *>("incidentTitle"); QVERIFY(title);

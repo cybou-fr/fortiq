@@ -144,5 +144,11 @@ edges at other aspect ratios. Empty space in the Files sidebar is also a drag ha
 mode; navigation rows and window buttons keep their actions. Panels must visibly retain the glass
 material: the backdrop sample follows ancestor movement, and Files/app-panel/workspace tints are
 less opaque following the owner's feedback. This material adjustment still awaits visual acceptance.
+Further owner correction: wallpaper extends beneath Android system bars while controls retain safe
+insets. The production launcher opens beside the left app panel or directly above its bottom edge;
+its tint is lighter. Frosted wallpaper is blended with the scene underneath so overlapping windows
+remain visible. This is translucent composition, not yet blur of the complete lower-window scene.
+The three production cards select the bundled Aurora, Désert and Ville backgrounds, with previews;
+they do not implement saved remote workspaces. The reference fixture keeps the original cards.
 This is not a new visual approval, nor proof of complete Android touch/accessibility or GPU fidelity.
 See [Android foundation](ANDROID_FOUNDATION.md) for screenshots, build evidence and device gates.

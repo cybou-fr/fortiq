@@ -13,7 +13,7 @@ QtObject {
     readonly property color filesBody: "#FEFEFE"
     readonly property color filesToolbar: "#F2F4F9"
     readonly property color filesSidebar: "#C21E2440"
-    readonly property color launcher: "#D9152638"
+    readonly property color launcher: "#99152638"
     readonly property color browserChrome: "#F2132B52"
     readonly property color control: "#99162A4A"
     readonly property color tileLight: "#E6EFF9FE"

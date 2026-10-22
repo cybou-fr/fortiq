@@ -153,6 +153,13 @@ coverage and Files sidebar mouse dragging. The native drag attempt was interrupt
 owner input; automated dragging passed, but that is not an Android touch qualification claim.
 Glass sampling now follows ancestor movement; Files/app-panel/workspace tints are less opaque.
 Owner acceptance of the resulting glass appearance is still pending.
+The next feedback pass adds artwork behind safe insets, launcher anchoring to the app panel,
+a lighter launcher tint, translucent lower-window visibility and three clickable wallpaper previews.
+Full composited blur of lower windows is not implemented: the blur source remains the wallpaper.
+Windows/Android rebuilds passed; the updated APK was installed and launched. Native capture
+confirmed artwork underneath both system bars. Layout QtTest: **32 passed**, now also clicking
+all three background cards and checking the bottom launcher's position. Concurrent owner input
+prevented additional native clicks; the three-card click evidence is QtTest, not an Android gesture run.
 
 The emulator remains available for further testing. On physical Lenovo hardware still verify installation/launch,
 rotation and real DPR, safe areas/predictive Back, IME/selection, tap/long press, readable touch controls,

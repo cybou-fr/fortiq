@@ -59,6 +59,9 @@ Item {
 
     MultiEffect {
         anchors.fill: parent
+        // Blend the frosted wallpaper with the real scene below, so lower
+        // windows remain visible rather than being replaced by an opaque crop.
+        opacity: 0.55
         visible: glass.blurEnabled && glass.backdrop !== null
         source: source
         blurEnabled: true

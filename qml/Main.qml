@@ -13,6 +13,10 @@ ApplicationWindow {
     minimumHeight: 320
     title: "FORTIQ"
     color: "#06152A"
+    // Extend artwork beneath Android system bars; controls stay in safe areas.
+    background: Wallpaper {
+        source: shell.wallpaperUrl
+    }
     onClosing: close => { if ((adaptive || Qt.platform.os === "android") && shell.handleBack()) close.accepted = false }
 
     readonly property real keyboardOverlap: Qt.platform.os === "android" && Qt.inputMethod.visible && Qt.inputMethod.keyboardRectangle.height > 0

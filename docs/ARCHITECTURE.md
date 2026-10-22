@@ -30,6 +30,7 @@ Qt-клиент (Windows, Android)         SSH            Linux-сервер (De
 - **Smart Files** — первый: SFTP и серверные Linux CLI, поиск, операции, версии, конфликты и безопасные передачи. Визуально — *белое содержимое и тёмная левая боковая панель* ровно как на скетче. [Smart Files](SMART_FILES_SPEC.md).
 - **Logs** — второй: `journalctl` и разрешённые серверные log files, данные с указанием происхождения, группировка событий, объяснимые временные связи и сводки без AI. Стиль окна комплементарен Files, поскольку окно Logs на скетче не показано. [Logs](LOGS_INTELLIGENCE_SPEC.md).
 - Shell — top bar, rail, desktop wallpaper, floating windows, launcher, control center, dock и workspaces из [UI SPEC v1](UI_SPEC_V1.md). Пока нет реального провайдера Wi-Fi/Bluetooth/media/calendar/browser, UI не симулирует доступные функции.
+  Три карточки в рабочем режиме выбирают локальные обои Aurora/Désert/Ville; сохранённые удалённые workspaces ещё не реализованы. Glass смешивает размытую подложку обоев с нижележащей сценой; полного blur нижних окон пока нет.
 
 ## 2. ResourceLocation и ResourceService
 
