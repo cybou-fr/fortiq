@@ -43,6 +43,7 @@ ApplicationWindow {
         controller: remote
         logsController: logs
         terminalController: typeof terminal !== "undefined" ? terminal : null
+        disksController: typeof disks !== "undefined" ? disks : null
         fixture: shellFixture
         fixturePreview: shellFixturePreview
         wallpaperSource: shellWallpaper

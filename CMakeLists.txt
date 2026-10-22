@@ -52,6 +52,7 @@ set(FORTIQ_SHELL_QML
     qml/shell/Glass.qml
     qml/shell/WindowDragArea.qml
     qml/shell/TerminalWindow.qml
+    qml/shell/DisksWindow.qml
     qml/shell/AppIcon.qml
     qml/shell/FolderGlyph.qml
     qml/shell/FileThumb.qml
@@ -151,6 +152,8 @@ qt_add_executable(fortiq
     src/core/LogsController.h
     src/core/TerminalController.cpp
     src/core/TerminalController.h
+    src/core/DisksController.cpp
+    src/core/DisksController.h
     src/ssh/SshClient.cpp
     src/ssh/SshClient.h
 )
@@ -216,12 +219,17 @@ if(BUILD_TESTING)
     target_include_directories(fortiq_terminal_history_tests PRIVATE src)
     target_link_libraries(fortiq_terminal_history_tests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME fortiq_terminal_history COMMAND fortiq_terminal_history_tests -o "${CMAKE_CURRENT_BINARY_DIR}/terminal-history-results.txt,txt" -o "-,txt")
+    qt_add_executable(fortiq_disk_tests tests/DiskInfoTest.cpp)
+    target_include_directories(fortiq_disk_tests PRIVATE src)
+    target_link_libraries(fortiq_disk_tests PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME fortiq_disks COMMAND fortiq_disk_tests -o "${CMAKE_CURRENT_BINARY_DIR}/disk-results.txt,txt" -o "-,txt")
     qt_add_executable(fortiq_tests tests/RemotePathTest.cpp src/core/RemotePath.cpp src/core/RemotePath.h src/core/LocalDocument.cpp src/core/LocalDocument.h)
     target_link_libraries(fortiq_tests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME fortiq_remote_path COMMAND fortiq_tests -o "${CMAKE_CURRENT_BINARY_DIR}/remote-path-results.txt,txt" -o "-,txt")
     # Live SSH check; skips itself unless FORTIQ_IT_* variables are set.
     qt_add_executable(fortiq_ssh_it tests/SshIntegrationTest.cpp
         src/core/TerminalController.cpp src/core/TerminalController.h
+        src/core/DisksController.cpp src/core/DisksController.h
         src/ssh/SshClient.cpp src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h
         src/core/LocalDocument.cpp src/core/LocalDocument.h
         src/core/RemoteController.cpp src/core/RemoteController.h
@@ -261,7 +269,7 @@ if(BUILD_TESTING)
         file(TO_CMAKE_PATH "$ENV{WINDIR}/Fonts" FORTIQ_TEST_FONT_DIR)
         set_property(TEST fortiq_layout APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=${FORTIQ_TEST_FONT_DIR}")
         # Developer tests need the matching Qt Test runtime, absent from the app package.
-        set_tests_properties(fortiq_terminal_history fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_publication fortiq_documents fortiq_layout PROPERTIES
+        set_tests_properties(fortiq_disks fortiq_terminal_history fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_publication fortiq_documents fortiq_layout PROPERTIES
             ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:$<TARGET_FILE_DIR:${FORTIQ_SSH_TARGET}>")
     endif()
 endif()

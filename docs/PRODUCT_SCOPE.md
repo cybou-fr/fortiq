@@ -5,7 +5,8 @@
 файловые операции и первый Logs; факты и ограничения — [QT_MIGRATION](QT_MIGRATION.md).
 Описания ниже остаются целями там, где нет подтверждённой реализации и испытаний.
 Уточнение владельца 22.10.2026: сейчас общий drag окон и [Terminal](TERMINAL.md);
-далее Disks, MDok (.md/PDF) и Mail. Эти три приложения пока остаются целями.
+[Disks](DISKS.md) получил первый обзор хранения только для чтения; далее MDok (.md/PDF)
+и Mail. Последние два приложения пока остаются целями.
 Связанные документы: [README](../README.md), [SSH_FRONTEND_CONTRACT](SSH_FRONTEND_CONTRACT.md),
 [ARCHITECTURE](ARCHITECTURE.md), [DEVELOPMENT_MATRIX](DEVELOPMENT_MATRIX.md),
 [UI SPEC v1](UI_SPEC_V1.md), [Smart Files](SMART_FILES_SPEC.md), [Logs](LOGS_INTELLIGENCE_SPEC.md).

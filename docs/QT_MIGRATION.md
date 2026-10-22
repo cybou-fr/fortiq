@@ -1,5 +1,8 @@
 # FORTIQ — Qt 6 / C++20 migration, Windows & Android first
 
+22 October Disks slice: [read-only storage overview](DISKS.md), lsblk/findmnt JSON over pinned SSH,
+partial-source errors and server-generation isolation. No partition/mount mutation or health reporting.
+
 22 October follow-up: [Terminal](TERMINAL.md) now has an interactive SSH PTY, a libvterm screen,
 auto-start on an opened window's connected source and server-generation isolation.
 The primary screen now retains up to 1000 output lines in RAM (wheel, scrollbar, Shift+PageUp/PageDown);

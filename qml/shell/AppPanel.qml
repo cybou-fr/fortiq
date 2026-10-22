@@ -7,6 +7,7 @@ import QtQuick.Controls
 // the panel to move it.
 Item {
     id: panel
+    property bool fixture:false
     property Item backdrop
     property string edge: "bottom"          // "left" | "bottom"
     property var running: ({})               // app -> true when its window is open
@@ -22,7 +23,7 @@ Item {
         { app: "editor", kind: "editor", label: "Éditeur", ready: false },
         { app: "browser", kind: "browser", label: "Navigateur", ready: false },
         { app: "settings", kind: "settings", label: "Paramètres", ready: false }
-    ]
+    ].concat(fixture?[]:[{app:"disks",kind:"disks",label:"Disques",ready:true}])
     readonly property int cell: vertical ? 74 : 60
 
     Glass {

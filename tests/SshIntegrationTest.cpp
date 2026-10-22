@@ -7,6 +7,8 @@
 #include "core/LogsController.h"
 #include "core/RemoteController.h"
 #include "core/TerminalController.h"
+#include "core/DisksController.h"
+#include "core/DiskInfo.h"
 #include "ssh/SshClient.h"
 
 #include <QCryptographicHash>
@@ -134,6 +136,35 @@ private slots:
             remote.disconnectServer();QVERIFY(!terminal.running());QVERIFY(reset.size()>=2);
             QVERIFY(terminal.history().isEmpty());
             const auto count=output.size();terminal.send("must-not-send\r");QTest::qWait(200);QCOMPARE(output.size(),count);
+        }
+        QSettings::setDefaultFormat(oldFormat);QCoreApplication::setOrganizationName(oldOrg);QCoreApplication::setApplicationName(oldApp);
+    }
+
+    void disksReadOnlyAndDisconnect() {
+        auto req=base;req.expectedHostFingerprint=fingerprint;
+        if(req.password.isEmpty())req.keyPath=qEnvironmentVariable("FORTIQ_IT_KEY");
+        fortiq::SshSession session;auto opened=session.open(req);QVERIFY2(opened.status==SshResult::Status::Ok,qPrintable(opened.message));
+        for(bool devices:{true,false}) {
+            const auto result=session.runScript(devices?fortiq::diskDevicesScript():fortiq::diskMountsScript(),1048576);
+            QVERIFY2(result.code=="exit:0",qPrintable(result.message));QVERIFY(!result.truncated);
+            const auto parsed=fortiq::parseDiskRows(result.data,devices);QVERIFY2(parsed.error.isEmpty(),qPrintable(parsed.error));
+            if(!devices)QVERIFY(!parsed.rows.isEmpty());
+        }
+        QTemporaryDir settings;QVERIFY(settings.isValid());
+        const auto oldOrg=QCoreApplication::organizationName(),oldApp=QCoreApplication::applicationName();
+        const auto oldFormat=QSettings::defaultFormat();
+        QCoreApplication::setOrganizationName("CYBOU-tests");QCoreApplication::setApplicationName("disks-live");
+        QSettings::setDefaultFormat(QSettings::IniFormat);QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,settings.path());
+        {
+            fortiq::RemoteController remote;fortiq::DisksController disks(&remote);disks.setWindowActive(true);
+            QVERIFY(!disks.busy());
+            remote.connectServer(base.host,base.port,base.user,base.password,qEnvironmentVariable("FORTIQ_IT_KEY"));
+            QTRY_VERIFY_WITH_TIMEOUT(!remote.busy(),20000);if(!remote.connected()){QCOMPARE(remote.pendingFingerprint(),fingerprint);remote.trustHost();}
+            QTRY_VERIFY_WITH_TIMEOUT(remote.connected(),20000);
+            QTRY_VERIFY_WITH_TIMEOUT(disks.state()=="ready",20000);QVERIFY(!disks.mounts().isEmpty());QVERIFY(!disks.versions().isEmpty());
+            disks.reload();QVERIFY(disks.busy());remote.disconnectServer();
+            QVERIFY(disks.mounts().isEmpty());QVERIFY(disks.devices().isEmpty());QVERIFY(!disks.busy());
+            QTest::qWait(300);QVERIFY(disks.mounts().isEmpty());QCOMPARE(disks.state(),QString("disconnected"));
         }
         QSettings::setDefaultFormat(oldFormat);QCoreApplication::setOrganizationName(oldOrg);QCoreApplication::setApplicationName(oldApp);
     }

@@ -1,6 +1,7 @@
 #include <QtTest>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QQmlComponent>
 #include <QQmlError>
 #include <QQuickWindow>
 #include <QQuickItem>
@@ -18,7 +19,7 @@ private slots:
     void viewport_data() {
         QTest::addColumn<QSize>("size"); QTest::addColumn<QString>("preview");
         for (const QSize size : {QSize(1536,1024), QSize(1600,950), QSize(1024,768), QSize(768,1024), QSize(390,844)})
-            for (const QString &preview : {QString(), QString("logs"), QString("editor"), QString("incident"), QString("service"), QString("servers"), QString("terminal")})
+            for (const QString &preview : {QString(), QString("logs"), QString("editor"), QString("incident"), QString("service"), QString("servers"), QString("terminal"), QString("disks")})
                 QTest::newRow(qPrintable(QString("%1x%2-%3").arg(size.width()).arg(size.height()).arg(preview.isEmpty() ? "files" : preview))) << size << preview;
     }
     void viewport() {
@@ -36,6 +37,7 @@ private slots:
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first()); QVERIFY(window);
         window->resize(size); QTest::qWait(200);
         auto *shell = window->findChild<QQuickItem *>("desktopShell"); QVERIFY(shell);
+        if(preview=="disks") { shell->setProperty("disksOpen",true);shell->setProperty("foregroundApp","disks"); }
         if(preview=="terminal") { shell->setProperty("terminalOpen",true);shell->setProperty("foregroundApp","terminal"); }
         fortiq::BackNavigationFilter back(window, [shell] {
             QVariant handled;
@@ -58,7 +60,7 @@ private slots:
                 QVERIFY(item->x() + item->width() <= shell->width());
                 QVERIFY(item->y() + item->height() <= shell->height() - 68);
             }
-            QCOMPARE(files->isVisible(), !logApp && preview!="terminal");
+            QCOMPARE(files->isVisible(), !logApp && preview!="terminal" && preview!="disks");
             QCOMPARE(logs->isVisible(), logApp);
         } else {
             QCOMPARE(files->x(), 471.0); QCOMPARE(files->y(), 72.0);
@@ -136,6 +138,54 @@ private slots:
             auto *title = logs->findChild<QQuickItem *>("incidentTitle"); QVERIFY(title);
             auto *controls = logs->findChild<QQuickItem *>("incidentControls"); QVERIFY(controls);
             QVERIFY(title->y() + title->height() <= controls->y());
+        }
+        if(preview=="disks") {
+            auto *disk=shell->findChild<QQuickItem *>("disksWindow");QVERIFY(disk);QVERIFY(disk->isVisible());
+            QVERIFY(disk->x()>=0 && disk->y()>=47);QVERIFY(disk->x()+disk->width()<=shell->width());
+            auto *sidebar=disk->findChild<QQuickItem *>("disksSidebar");QVERIFY(sidebar);
+            QCOMPARE(sidebar->isVisible(),!disk->property("drawer").toBool());
+            auto *button=disk->findChild<QQuickItem *>("disksConnectButton");QVERIFY(button);QVERIFY(button->isVisible());
+            QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,button->mapToScene(QPointF(button->width()/2,button->height()/2)).toPoint());
+            QTRY_VERIFY(shell->property("serversOpen").toBool());shell->setProperty("serversOpen",false);
+            if(disk->property("drawer").toBool()) {
+                disk->setProperty("navigationOpen",true);QVERIFY(sidebar->isVisible());
+                QTest::keyRelease(window,Qt::Key_Back);QVERIFY(!disk->property("navigationOpen").toBool());
+                QCOMPARE(shell->property("foregroundApp").toString(),QString("disks"));
+            }
+            QQmlComponent component(&engine);
+            component.setData(R"(import QtQml
+                QtObject {
+                    property bool connected:true
+                    property string serverLabel:"fixture"
+                    property bool busy:false
+                    property string status:"Lecture seule"
+                    property string versions:"util-linux fixture"
+                    property string updated:"12:00:00"
+                    property string deviceError:""
+                    property string mountError:""
+                    property var mounts:[]
+                    property var devices:[]
+                    function setWindowActive(active) {}
+                    function reload() {}
+                })",QUrl());
+            auto *fixture=component.create();QVERIFY2(fixture,qPrintable(component.errorString()));fixture->setParent(window);
+            const QString mountPath=QString::fromUtf8("/media/Été espace");
+            fixture->setProperty("mounts",QVariantList{QVariantMap{{"target",mountPath},{"source","/dev/sda1"},{"fstype","ext4"},{"sizeText","1.0 Gio"},{"usedText","0.5 Gio"},{"availText","0.4 Gio"},{"fraction",0.5}}});
+            fixture->setProperty("devices",QVariantList{QVariantMap{{"path","/dev/sda1"},{"type","part"},{"fstype","ext4"},{"label","<b>plain text</b>"},{"sizeText","1.0 Gio"},{"readOnlyKnown",true},{"readOnly",false},{"pkname","sda"},{"mountpoint",mountPath}}});
+            disk->setProperty("disks",QVariant::fromValue(fixture));disk->setProperty("remote",QVariant::fromValue(fixture));
+            QTest::qWait(30);
+            auto *list=disk->findChild<QQuickItem *>("disksList");QVERIFY(list);QCOMPARE(list->property("count").toInt(),1);
+            std::function<QQuickItem *(QQuickItem *)> visualFind=[&](QQuickItem *item)->QQuickItem *{
+                if(item->objectName()=="disksOpenFiles")return item;
+                for(auto *child:item->childItems())if(auto *found=visualFind(child))return found;
+                return nullptr;
+            };
+            auto *open=visualFind(list);QVERIFY(open);QVERIFY(open->isVisible());
+            QSignalSpy openPath(disk,SIGNAL(openPath(QString)));
+            QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,open->mapToScene(QPointF(open->width()/2,open->height()/2)).toPoint());
+            QCOMPARE(openPath.size(),1);QCOMPARE(openPath.first().first().toString(),mountPath);
+            disk->setProperty("section","devices");QTest::qWait(30);
+            QVERIFY(window->grabWindow().save(QString("layout-captures/%1-disks.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
         }
         if(preview=="terminal") {
             auto *term=shell->findChild<QQuickItem *>("terminalWindow");QVERIFY(term);

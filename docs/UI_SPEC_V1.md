@@ -171,5 +171,8 @@ Selection clears on incoming output, input, scrolling and grid resize; touch han
 Terminal search (⌕ / Ctrl+Shift+F) is literal and case-insensitive, across current visual rows
 and the RAM buffer. Enter/Shift+Enter or arrows cycle through matches; Escape closes it.
 Ctrl+F remains shell input. New output/resize invalidates matches; reset clears the query.
+Disks uses the same glass and drag behavior, mounted-volumes/device sidebar, server chooser
+without SSH, and an adaptive drawer. Its read-only content comes from lsblk/findmnt; mounted
+paths open in Files. The production app panel and launcher expose it; the canonical fixture is unchanged.
 This is not a new visual approval, nor proof of complete Android touch/accessibility or GPU fidelity.
 See [Android foundation](ANDROID_FOUNDATION.md) for screenshots, build evidence and device gates.

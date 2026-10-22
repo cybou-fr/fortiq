@@ -27,7 +27,7 @@ Android arm64 debug APK прошёл базовые SSH/SFTP, поворот/IME
 | 06 | Viewer | §file§/§pdfinfo§/§pdftoppm§/SFTP | R2 | не реализовано |
 | 09 | Processes | §ps§/§kill§ | R1.5+ | не реализовано |
 | 11 | Network | §ss§/§ip§ | R1.5+ | не реализовано |
-| 13 | Disks | §lsblk§/§df§/§du§/§findmnt§ | R2+ | не реализовано |
+| 13 | Disks | §lsblk§/§findmnt§, JSON по SSH | R2+ | [первый read-only обзор](DISKS.md): устройства/разделы, mounts, ёмкость; нет операций/SMART/du |
 | 14 | Server Setup | §apt-get§/§systemctl§/§fail2ban§/§ufw§ | R2+ после безопасного согласия | не реализовано |
 | AI | необязательная §ai§/llama.cpp | серверный §llama-cli§ + обёртка | позже | не реализовано |
 

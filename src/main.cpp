@@ -2,6 +2,7 @@
 #include "core/LogsController.h"
 #include "core/RemoteController.h"
 #include "core/TerminalController.h"
+#include "core/DisksController.h"
 #endif
 
 #include "core/BackNavigationFilter.h"
@@ -75,12 +76,15 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("remote", &controller);
     fortiq::LogsController logs(&controller);
     engine.rootContext()->setContextProperty("logs", &logs);
+    fortiq::DisksController disks(&controller);
+    engine.rootContext()->setContextProperty("disks", &disks);
     fortiq::TerminalController terminal(&controller);
     engine.rootContext()->setContextProperty("terminal", &terminal);
 #else
     engine.rootContext()->setContextProperty("remote", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("logs", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("terminal", QVariant::fromValue<QObject *>(nullptr));
+    engine.rootContext()->setContextProperty("disks", QVariant::fromValue<QObject *>(nullptr));
 #endif
     engine.loadFromModule("Fortiq.App", "Main");
     if (engine.rootObjects().isEmpty()) return 1;
