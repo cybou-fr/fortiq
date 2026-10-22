@@ -2,6 +2,51 @@
 
 **Decision:** single C++20 + Qt Quick/QML codebase for Windows and Android. Linux server remains the sole application backend. **Git workflow:** update `main` only; preserved Flutter sources at tag `flutter-final`. This is an implementation plan with a truthful snapshot of the Qt progress.
 
+## File publication reliability slice — 22.10.2026
+
+Upload Replace no longer moves the old pathname to a backup: it publishes with one
+`posix-rename@openssh.com`, exactly as editor save does. There is no fallback that removes the
+original pathname. No-overwrite rename remains for Fail/KeepBoth and an initially absent Replace
+destination. Existing regular-file replacements preserve mode, uid and gid; unavailable metadata,
+foreign ownership that cannot be preserved, initial symlinks/directories and detected concurrent
+metadata changes cause refusal/conflict. New uploads keep the server-created 0644/umask mode:
+while still empty, staging captures it, switches to verified 0600 for content writes, then restores
+the intended mode before publication. Editor staging starts at 0600.
+
+Both paths verify size, applied metadata, supported fsync and CLOSE before publication. A zero-byte
+write cannot spin indefinitely. Metadata refusal or a false success that leaves different rights
+is not ignored. Empty-upload cancellation is checked before publishing. Editor rechecks content
+and destination metadata and validates read-back size, completeness and SHA-256. A lost publication
+request/acknowledgement or mismatched editor read-back is `unknown`, never an automatic retry.
+
+**Limits:** SHA checks and metadata checks are optimistic; a generic external writer can modify
+a pathname after the final check. Explicit upload Replace has no content-version precondition.
+No compare-and-swap, ACL/xattr preservation, hard-link preservation, or power-loss durability
+(including parent-directory fsync) is claimed. Unsupported fsync is tolerated. SSH loss before
+publication may leave a hidden staging file; the destination has not been published by this attempt.
+
+**Evidence:** Windows MSVC 2022 / Qt 6.12 build; `fortiq_publication` against the dedicated WSL
+`fortiq-test` OpenSSH/SFTP server using test user `fqshell` and a test-only key. It creates and cleans
+its own random `.fortiq-publication-*` directory under the test user's home. The suite exercises
+real SFTP for create/keep-both/replace, Unicode/spaces/quote filenames, mode preservation, staged
+concurrent edits/permission changes, a concurrent new name, cancellation and editor read-back.
+Deterministic test-only hooks simulate protocol/extension refusal, lost publication request/ack,
+metadata refusal/false acknowledgement, flush and CLOSE errors. These hooks are compiled only into
+the test executable. The lost-ack cases execute the real rename first; this is **fault injection**,
+not proof from physically cutting a network link or crashing the server. No private VPS writes,
+Android-device or clean-Windows-machine tests are included.
+
+Final run: publication QtTest **27 passed, 0 failed, 0 skipped**; Logs QtTest **10 passed**
+(including its WSL reader); RemotePath **5 passed**; CTest **5/5 targets passed**. The general
+`fortiq_ssh_integration` suite explicitly skipped because `FORTIQ_IT_*` was not configured;
+this does not negate the independently configured live publication fixture above.
+
+Re-run with `FORTIQ_PUBLICATION_HOST`, `FORTIQ_PUBLICATION_PORT`, `FORTIQ_PUBLICATION_USER`,
+`FORTIQ_PUBLICATION_KEY` (local test-key path) and `FORTIQ_PUBLICATION_FINGERPRINT` (independently
+verified SHA-256 host pin), then `ctest --test-dir build-msvc -R fortiq_publication --output-on-failure`.
+Never set these to a production account: tests mutate only their allocated fixture directory.
+Without fixture variables the suite skips explicitly; the detailed result is `publication-results.txt`.
+
 ## Reliability slice — 22.10.2026
 
 Journal following now uses `--after-cursor` with `--no-tail`, rather than selecting the newest
@@ -66,13 +111,13 @@ as `remote-path-results.txt`, `ssh-results.txt` and `logs-results.txt` in the bu
 
 **File viewer (21.10.2026):** `SshSession::readFile` opens a regular file read-only (`LIBSSH2_FXF_READ`) on the persistent session and reads at most a limit; nothing is written to the device. The Files window opens files on double-click / Enter / Space: UTF-8 text (first 1 MiB, line numbers, truncation notice), images png/jpg/gif/webp/bmp/svg/ico up to 16 MiB (fit, 1:1, wheel and keyboard zoom), otherwise a hex dump of the first 1 KiB. Verified on WSL: integration test 10/10 incl. controller-level preview of Cyrillic text, PNG, random binary and a 1.2 MB truncated file. Visual check via `--reference-fixture --fixture-preview text|image`; the live GUI was not driven automatically. No editing, download or external-app opening yet.
 
-**Transfers (21.10.2026):** download and upload run one at a time on a second SSH connection to the same pinned server (browsing stays responsive), in a queue with progress, cancel and per-transfer states queued / running / conflict / done / error / cancelled / unknown. Download: regular files only, written through `QSaveFile` (local temporary + atomic commit), size verified before commit; cancel or failure leaves no local file. Upload (SMART_FILES_SPEC §Safety): exclusive unique hidden temporary `.<name>.fortiq-upload-<random>`, size verified with `fstat`, `fsync` best effort, then published with SFTP rename, which never replaces an existing name; a name conflict asks the user — keep both (`name (2).ext`), replace (explicit confirmation; the original is moved to a backup name until the new file is in place, then removed) or skip. Cancel removes only the owned temporary; a drop during publication reports `unknown` instead of retrying. Transfers are bound to the server: disconnecting stops them, never redirects them. UI: toolbar buttons, Ctrl+D / Ctrl+U, system file dialogs, drag and drop onto the Files content, transfer panel. Verified on WSL: integration test 12/12 (round-trip byte equality of 3 MiB, conflict / keep both / replace, cancel without leftovers, cancelled download, Unicode names, path escape rejected, controller queue). Not yet: folders, multi-select download, resume, digest check, live GUI driven automatically.
+**Transfers (21.10.2026, publication details superseded by the file reliability slice above):** download and upload run one at a time on a second SSH connection to the same pinned server (browsing stays responsive), in a queue with progress, cancel and per-transfer states queued / running / conflict / done / error / cancelled / unknown. Download: regular files only, written through `QSaveFile` (local temporary + atomic commit), size verified before commit; cancel or failure leaves no local file. Upload (SMART_FILES_SPEC §Safety): exclusive unique hidden temporary `.<name>.fortiq-upload-<random>`, size verified with `fstat`, `fsync` best effort, then published with SFTP rename, which never replaces an existing name; a name conflict asks the user — keep both (`name (2).ext`), replace (explicit confirmation; the original is moved to a backup name until the new file is in place, then removed) or skip. Cancel removes only the owned temporary; a drop during publication reports `unknown` instead of retrying. Transfers are bound to the server: disconnecting stops them, never redirects them. UI: toolbar buttons, Ctrl+D / Ctrl+U, system file dialogs, drag and drop onto the Files content, transfer panel. Verified on WSL: integration test 12/12 (round-trip byte equality of 3 MiB, conflict / keep both / replace, cancel without leftovers, cancelled download, Unicode names, path escape rejected, controller queue). Not yet: folders, multi-select download, resume, digest check, live GUI driven automatically.
 
 **Folder, rename, Trash (21.10.2026):** new folder (`sftp mkdir`, 0755 before umask), rename within the folder and move to Trash, on the browsing session, one at a time, never replayed after a drop (`unknown`). Existing names are never reused or replaced (`conflict`); names with `/`, `.` or `..` are refused. Trash follows the freedesktop.org Trash specification in `~/.local/share/Trash` on the server (`.trashinfo` reserved exclusively first, then rename into `files/`), so `trash-cli`, `gio` and desktop file managers can list and restore items; verified with `trash-list` / `trash-restore` on WSL Debian 13. No copy-and-delete fallback: items on another filesystem fail with a message. Home, `/`, the Trash itself and items already in it are refused. UI: + button, Ctrl+Shift+N, F2, Delete, right-click menu, glass dialogs with confirmation for Trash, Trash in the sidebar, result notice in the status bar. Integration test 14/14 on WSL.
 
 **Restore and empty Trash (21.10.2026):** in the Trash folder Files shows a banner with Restore and Empty Trash, and the context menu offers Restore / Delete permanently. Restore reads `Path=` from the item's `.trashinfo` and renames it back; an occupied name asks to keep both (`name (2)`), a vanished original folder is refused (nothing is recreated silently), the record is removed after the move. Permanent deletion is allowed only for whole items of `Trash/files` (recursive, symlinks unlinked and never followed, non-UTF-8 names refused rather than guessed) and needs an explicit irreversible-action confirmation; Empty Trash clears `files/` and `info/`, hidden items included. Verified on WSL: integration test 15/15, incl. restoring an item trashed by `trash-put`, conflict / keep both, missing original folder, nested folder with a symlink to an outside folder (target untouched), refusal outside the Trash, empty Trash.
 
-**Edit and safe save (22.10.2026):** complete UTF-8 text files (not truncated, not binary) open for editing from the viewer (Modifier / Ctrl+E); Ctrl+S saves. `SshSession::saveFile` follows SMART_FILES_SPEC edit/save: the server bytes must still hash (SHA-256) to the opened version, new bytes go to an exclusive hidden temporary in the same folder with the original permissions (and group when allowed), size-checked, the version is re-checked, then published atomically with `posix-rename@openssh.com` and read back; no non-atomic fallback. Symlinks are saved through to their target; files owned by another user are refused (an atomic replace would change their owner). A changed server version is a conflict: overwrite (explicit), save a copy `name (n)` or keep editing; a drop while publishing is `unknown` and offers a reload. Line endings (CRLF) and a UTF-8 BOM are preserved; unsaved changes are protected on close and on leaving edit mode. Verified on WSL: integration test 17/17. Not checked on the owner's VPS (no write without consent); hard-linked files lose the link on save (SFTP v3 does not report link counts).
+**Edit and safe save (22.10.2026, metadata/flush guarantees strengthened by the file reliability slice above):** complete UTF-8 text files (not truncated, not binary) open for editing from the viewer (Modifier / Ctrl+E); Ctrl+S saves. `SshSession::saveFile` follows SMART_FILES_SPEC edit/save: the server bytes must still hash (SHA-256) to the opened version, new bytes go to an exclusive hidden temporary in the same folder with the original permissions (and group when allowed), size-checked, the version is re-checked, then published atomically with `posix-rename@openssh.com` and read back; no non-atomic fallback. Symlinks are saved through to their target; files owned by another user are refused (an atomic replace would change their owner). A changed server version is a conflict: overwrite (explicit), save a copy `name (n)` or keep editing; a drop while publishing is `unknown` and offers a reload. Line endings (CRLF) and a UTF-8 BOM are preserved; unsaved changes are protected on close and on leaving edit mode. Verified on WSL: integration test 17/17. Not checked on the owner's VPS (no write without consent); hard-linked files lose the link on save (SFTP v3 does not report link counts).
 
 **Server search (22.10.2026):** typing in the Files search field still filters the open folder; Enter searches the server by name and Ctrl+Enter by content, below the open folder (a hint shows both). Search runs on a third SSH connection so browsing stays live, shows progress, can be stopped and returns at most 500 results ("limit reached"). Tools on the server, checked at run time: name — GNU `find -xdev -iname` with `-printf` metadata (plain `-print0` fallback), glob characters made literal, Trash pruned; content — `rg -i -F` (hidden files, `.git` skipped, 3 lines per file, 20 MB file cap) or `grep -rIinF` when `rg` is absent, binary files skipped. The query is data: NUL and line breaks are refused and the value is single-quoted into a POSIX `sh` script sent on stdin to `sh -s`, so the login shell never parses it; stderr is discarded, closing the channel stops the tool. Results show the relative folder, line number and highlighted snippet; double-click opens the file in the viewer or enters the folder, "Emplacement" opens the containing folder. Verified on WSL: integration test 19/19 with grep and with ripgrep 14.1.1, incl. command-injection attempts (`'; …`, `$(…)`, backticks, `"`) that created nothing. The owner's VPS has `find`/`grep` but no `rg`; search was not run there.
 

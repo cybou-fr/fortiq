@@ -17,6 +17,9 @@
 
 #include <libssh2.h>
 #include <libssh2_sftp.h>
+#ifdef FORTIQ_PUBLICATION_TESTS
+#include "PublicationHooks.h"
+#endif
 
 namespace fortiq {
 namespace {
@@ -31,6 +34,40 @@ QString sshError(LIBSSH2_SESSION *session, const QString &prefix) {
 }
 SshResult fail(const QString &reason) {
     SshResult result; result.message = reason; return result;
+}
+int replaceFile(LIBSSH2_SESSION *session, LIBSSH2_SFTP *sftp, const QByteArray &from, const QByteArray &to) {
+#ifdef FORTIQ_PUBLICATION_TESTS
+    if (publication_test::replace) return publication_test::replace(session, sftp, from, to);
+#else
+    Q_UNUSED(session);
+#endif
+    return libssh2_sftp_posix_rename_ex(sftp, from.constData(), static_cast<size_t>(from.size()),
+                                      to.constData(), static_cast<size_t>(to.size()));
+}
+// Unsupported fsync extensions do not imply durable storage. Every other
+// flush error and every CLOSE error must prevent publication of the staging file.
+bool flushFile(LIBSSH2_SFTP *sftp, LIBSSH2_SFTP_HANDLE *file) {
+    int rc;
+#ifdef FORTIQ_PUBLICATION_TESTS
+    if (publication_test::flush) rc = publication_test::flush(file);
+    else
+#endif
+    rc = libssh2_sftp_fsync(file);
+    return rc == 0 || rc == LIBSSH2_ERROR_METHOD_NOT_SUPPORTED
+        || (rc == LIBSSH2_ERROR_SFTP_PROTOCOL
+            && libssh2_sftp_last_error(sftp) == LIBSSH2_FX_OP_UNSUPPORTED);
+}
+int setFileAttributes(LIBSSH2_SFTP_HANDLE *file, LIBSSH2_SFTP_ATTRIBUTES *attr) {
+#ifdef FORTIQ_PUBLICATION_TESTS
+    if (publication_test::attributes) return publication_test::attributes(file, attr);
+#endif
+    return libssh2_sftp_fstat_ex(file, attr, 1);
+}
+int closeStagingFile(LIBSSH2_SFTP_HANDLE *file) {
+#ifdef FORTIQ_PUBLICATION_TESTS
+    if (publication_test::close) return publication_test::close(file);
+#endif
+    return libssh2_sftp_close(file);
 }
 QString modeString(unsigned long mode) {
     QString s(10, QLatin1Char('-'));
@@ -377,6 +414,20 @@ SshResult SshSession::upload(const QString &localPath, const QString &remoteDir,
         return libssh2_sftp_stat_ex(d->sftp, p.constData(), static_cast<unsigned int>(p.size()), LIBSSH2_SFTP_LSTAT, &a) == 0;
     };
     QString finalPath = *target;
+    std::optional<LIBSSH2_SFTP_ATTRIBUTES> replacement;
+    if (policy == ConflictPolicy::Replace) {
+        const QByteArray p = finalPath.toUtf8();
+        LIBSSH2_SFTP_ATTRIBUTES attr{};
+        if (libssh2_sftp_stat_ex(d->sftp, p.constData(), static_cast<unsigned int>(p.size()), LIBSSH2_SFTP_LSTAT, &attr) == 0) {
+            const unsigned long needed = LIBSSH2_SFTP_ATTR_PERMISSIONS | LIBSSH2_SFTP_ATTR_UIDGID;
+            if ((attr.flags & needed) != needed || !LIBSSH2_SFTP_S_ISREG(attr.permissions))
+                return transferFail(QStringLiteral("Only a regular file with known permissions and owner can be replaced."));
+            replacement = attr;
+        } else if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL
+                   || libssh2_sftp_last_error(d->sftp) != LIBSSH2_FX_NO_SUCH_FILE) {
+            return transferFail(QStringLiteral("Cannot inspect the destination; replacement was not attempted."));
+        }
+    }
     if (exists(finalPath)) {
         if (policy == ConflictPolicy::Fail)
             return transferFail(QStringLiteral("« %1 » already exists in this folder.").arg(name), QStringLiteral("conflict"));
@@ -394,8 +445,26 @@ SshResult SshSession::upload(const QString &localPath, const QString &remoteDir,
         0644, LIBSSH2_SFTP_OPENFILE);
     if (!file) return transferFail(QStringLiteral("Cannot create a file in this folder (permission error?)."));
     auto removeTemp = [this, &tempUtf8] {
+        if (!d->sftp) return;
         libssh2_sftp_unlink_ex(d->sftp, tempUtf8.constData(), static_cast<unsigned int>(tempUtf8.size()));
     };
+
+    // Capture the server's creation mode (including its umask) while empty,
+    // then restrict the staging file before writing any source bytes.
+    LIBSSH2_SFTP_ATTRIBUTES created{};
+    const bool creationKnown = libssh2_sftp_fstat_ex(file, &created, 0) == 0
+        && (created.flags & LIBSSH2_SFTP_ATTR_PERMISSIONS);
+    LIBSSH2_SFTP_ATTRIBUTES privateMode{};
+    privateMode.flags = LIBSSH2_SFTP_ATTR_PERMISSIONS;
+    privateMode.permissions = 0600;
+    const bool restricted = creationKnown && setFileAttributes(file, &privateMode) == 0;
+    LIBSSH2_SFTP_ATTRIBUTES secured{};
+    const bool privateVerified = restricted && libssh2_sftp_fstat_ex(file, &secured, 0) == 0
+        && (secured.flags & LIBSSH2_SFTP_ATTR_PERMISSIONS) && (secured.permissions & 07777) == 0600;
+    if (!privateVerified) {
+        libssh2_sftp_close(file); removeTemp();
+        return transferFail(QStringLiteral("Cannot secure the empty staging file; no content was uploaded."));
+    }
 
     std::vector<char> buffer(256 * 1024);
     qint64 done = 0;
@@ -406,7 +475,7 @@ SshResult SshSession::upload(const QString &localPath, const QString &remoteDir,
         qint64 off = 0;
         while (off < n) {
             const auto w = libssh2_sftp_write(file, buffer.data() + off, static_cast<size_t>(n - off));
-            if (w < 0) {
+            if (w <= 0) {
                 const bool lost = libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL;
                 libssh2_sftp_close(file);
                 if (lost) {
@@ -427,42 +496,70 @@ SshResult SshSession::upload(const QString &localPath, const QString &remoteDir,
             return transferFail(QStringLiteral("Cancelled before publication; nothing changed on the server."), QStringLiteral("cancelled"));
         }
     }
-    libssh2_sftp_fsync(file); // best effort: not every server supports fsync@openssh.com
+    LIBSSH2_SFTP_ATTRIBUTES mine{};
+    const bool mineOk = libssh2_sftp_fstat_ex(file, &mine, 0) == 0 && (mine.flags & LIBSSH2_SFTP_ATTR_UIDGID);
+    bool metadataOk = mineOk && (!replacement || mine.uid == replacement->uid);
+    if (metadataOk && replacement && mine.gid != replacement->gid) {
+        LIBSSH2_SFTP_ATTRIBUTES group{};
+        group.flags = LIBSSH2_SFTP_ATTR_UIDGID;
+        group.uid = mine.uid; group.gid = replacement->gid;
+        metadataOk = setFileAttributes(file, &group) == 0;
+    }
+    LIBSSH2_SFTP_ATTRIBUTES mode{};
+    mode.flags = LIBSSH2_SFTP_ATTR_PERMISSIONS;
+    mode.permissions = replacement ? replacement->permissions & 07777 : created.permissions & 0777;
+    metadataOk = metadataOk && setFileAttributes(file, &mode) == 0;
+    const bool flushed = flushFile(d->sftp, file);
     LIBSSH2_SFTP_ATTRIBUTES written{};
     const bool statOk = libssh2_sftp_fstat_ex(file, &written, 0) == 0;
-    libssh2_sftp_close(file);
-    if (!statOk || !(written.flags & LIBSSH2_SFTP_ATTR_SIZE) || static_cast<qint64>(written.filesize) != total) {
+    const bool closed = closeStagingFile(file) == 0;
+    const unsigned long required = LIBSSH2_SFTP_ATTR_SIZE | LIBSSH2_SFTP_ATTR_PERMISSIONS | LIBSSH2_SFTP_ATTR_UIDGID;
+    const bool metadataVerified = (written.flags & required) == required && (written.permissions & 07777) == mode.permissions
+        && written.uid == (replacement ? replacement->uid : mine.uid)
+        && written.gid == (replacement ? replacement->gid : mine.gid);
+    if (!metadataOk || !metadataVerified || !flushed || !closed || done != total || !statOk || static_cast<qint64>(written.filesize) != total) {
         removeTemp();
-        return transferFail(QStringLiteral("Size verification failed; nothing was published."));
+        return transferFail(QStringLiteral("Staging size, metadata, flush or close verification failed; nothing was published."));
+    }
+    if (progress && !progress(done, total)) {
+        removeTemp();
+        return transferFail(QStringLiteral("Cancelled before publication; the destination was not changed."), QStringLiteral("cancelled"));
     }
 
-    // Publish. SFTP v3 rename never replaces an existing name, so a file that
-    // appeared meanwhile is reported as a conflict instead of being lost.
+    // Replace is one POSIX rename: the old pathname stays visible until
+    // publication. Fail/KeepBoth retain SFTP v3's no-overwrite semantics.
     const QByteArray finalUtf8 = finalPath.toUtf8();
-    auto rename = [this](const QByteArray &from, const QByteArray &to) {
-        return libssh2_sftp_rename_ex(d->sftp, from.constData(), static_cast<unsigned int>(from.size()),
-                                      to.constData(), static_cast<unsigned int>(to.size()), 0);
-    };
-    QByteArray backupUtf8;
-    if (policy == ConflictPolicy::Replace && exists(finalPath)) {
-        backupUtf8 = safeChildPath(*dir, QStringLiteral(".%1.fortiq-replaced-%2").arg(name.left(80), randomTag()))->toUtf8();
-        if (rename(finalUtf8, backupUtf8) != 0) {
+#ifdef FORTIQ_PUBLICATION_TESTS
+    if (publication_test::staged) publication_test::staged();
+#endif
+    if (replacement) {
+        LIBSSH2_SFTP_ATTRIBUTES latest{};
+        const unsigned long flags = LIBSSH2_SFTP_ATTR_PERMISSIONS | LIBSSH2_SFTP_ATTR_UIDGID;
+        if (libssh2_sftp_stat_ex(d->sftp, finalUtf8.constData(), static_cast<unsigned int>(finalUtf8.size()),
+                               LIBSSH2_SFTP_LSTAT, &latest) != 0
+            || (latest.flags & flags) != flags || !LIBSSH2_SFTP_S_ISREG(latest.permissions)
+            || (latest.permissions & 07777) != (replacement->permissions & 07777)
+            || latest.uid != replacement->uid || latest.gid != replacement->gid) {
             removeTemp();
-            return transferFail(QStringLiteral("Cannot set the existing file aside; nothing was replaced."));
+            return transferFail(QStringLiteral("Destination type, permissions or owner/group changed during upload."), QStringLiteral("conflict"));
         }
     }
-    if (rename(tempUtf8, finalUtf8) != 0) {
-        if (!isOpen() || libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
+    const int published = replacement
+        ? replaceFile(d->handle, d->sftp, tempUtf8, finalUtf8)
+        : libssh2_sftp_rename_ex(d->sftp, tempUtf8.constData(), static_cast<unsigned int>(tempUtf8.size()),
+                                finalUtf8.constData(), static_cast<unsigned int>(finalUtf8.size()), 0);
+    if (published != 0) {
+        if (!isOpen() || (published != LIBSSH2_ERROR_METHOD_NOT_SUPPORTED
+            && libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL)) {
             d->close();
             return transferFail(QStringLiteral("Connection lost while publishing; check the folder before retrying."), QStringLiteral("unknown"));
         }
-        if (!backupUtf8.isEmpty()) rename(backupUtf8, finalUtf8); // restore the original
         removeTemp();
-        return transferFail(QStringLiteral("« %1 » appeared on the server meanwhile; nothing was replaced.").arg(finalPath.section('/', -1)),
+        if (replacement)
+            return transferFail(QStringLiteral("Atomic replacement was refused (unsupported extension or permissions); the original was not moved or removed."));
+        return transferFail(QStringLiteral("Cannot publish « %1 » (name taken or permission denied); nothing was replaced.").arg(finalPath.section('/', -1)),
                             QStringLiteral("conflict"));
     }
-    if (!backupUtf8.isEmpty())
-        libssh2_sftp_unlink_ex(d->sftp, backupUtf8.constData(), static_cast<unsigned int>(backupUtf8.size()));
 
     SshResult r;
     r.status = SshResult::Status::Ok;
@@ -775,7 +872,8 @@ SshResult SshSession::saveFile(const QString &path, const QByteArray &data, cons
     if (libssh2_sftp_stat_ex(d->sftp, targetUtf8.constData(), static_cast<unsigned int>(targetUtf8.size()),
                              LIBSSH2_SFTP_LSTAT, &original) != 0)
         return transferFail(QStringLiteral("The file no longer exists on the server."), QStringLiteral("conflict"));
-    if (!LIBSSH2_SFTP_S_ISREG(original.permissions)) return transferFail(QStringLiteral("Not a regular file."));
+    if (!(original.flags & LIBSSH2_SFTP_ATTR_PERMISSIONS) || !LIBSSH2_SFTP_S_ISREG(original.permissions))
+        return transferFail(QStringLiteral("Not a regular file or missing permissions metadata."));
 
     auto currentHash = [&]() -> std::optional<QByteArray> {
         const SshResult now = readFile(target, kEditLimit + 1);
@@ -796,9 +894,10 @@ SshResult SshSession::saveFile(const QString &path, const QByteArray &data, cons
     const QByteArray tempUtf8 = tempPath.toUtf8();
     LIBSSH2_SFTP_HANDLE *file = libssh2_sftp_open_ex(d->sftp, tempUtf8.constData(),
         static_cast<unsigned int>(tempUtf8.size()), LIBSSH2_FXF_WRITE | LIBSSH2_FXF_CREAT | LIBSSH2_FXF_EXCL,
-        original.permissions & 0777, LIBSSH2_SFTP_OPENFILE);
+        0600, LIBSSH2_SFTP_OPENFILE);
     if (!file) return transferFail(QStringLiteral("Cannot write in this folder (a safe save needs write access to the folder)."));
     auto removeTemp = [this, &tempUtf8] {
+        if (!d->sftp) return;
         libssh2_sftp_unlink_ex(d->sftp, tempUtf8.constData(), static_cast<unsigned int>(tempUtf8.size()));
     };
 
@@ -809,23 +908,10 @@ SshResult SshSession::saveFile(const QString &path, const QByteArray &data, cons
         removeTemp();
         return transferFail(QStringLiteral("This file belongs to another user; saving it safely would change its owner. Not saved."));
     }
-    // Same permissions and group as the original (group may be refused: ignored).
-    LIBSSH2_SFTP_ATTRIBUTES keep{};
-    keep.flags = LIBSSH2_SFTP_ATTR_PERMISSIONS;
-    keep.permissions = original.permissions & 07777;
-    libssh2_sftp_fstat_ex(file, &keep, 1);
-    if (original.gid != mine.gid) {
-        LIBSSH2_SFTP_ATTRIBUTES group{};
-        group.flags = LIBSSH2_SFTP_ATTR_UIDGID;
-        group.uid = mine.uid;
-        group.gid = original.gid;
-        libssh2_sftp_fstat_ex(file, &group, 1);
-    }
-
     qint64 off = 0;
     while (off < data.size()) {
         const auto w = libssh2_sftp_write(file, data.constData() + off, static_cast<size_t>(data.size() - off));
-        if (w < 0) {
+        if (w <= 0) {
             const bool lost = libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL;
             libssh2_sftp_close(file);
             if (lost) {
@@ -837,12 +923,34 @@ SshResult SshSession::saveFile(const QString &path, const QByteArray &data, cons
         }
         off += w;
     }
-    libssh2_sftp_fsync(file); // best effort
+    // Restore and verify metadata after writing; do not silently widen rights
+    // or change group when the server refuses fsetstat.
+    bool metadataOk = true;
+    if (mine.gid != original.gid) {
+        LIBSSH2_SFTP_ATTRIBUTES group{};
+        group.flags = LIBSSH2_SFTP_ATTR_UIDGID;
+        group.uid = mine.uid; group.gid = original.gid;
+        metadataOk = setFileAttributes(file, &group) == 0;
+    }
+    LIBSSH2_SFTP_ATTRIBUTES keep{};
+    keep.flags = LIBSSH2_SFTP_ATTR_PERMISSIONS;
+    keep.permissions = original.permissions & 07777;
+    metadataOk = metadataOk && setFileAttributes(file, &keep) == 0;
+    const bool flushed = flushFile(d->sftp, file);
     LIBSSH2_SFTP_ATTRIBUTES written{};
-    const bool sized = libssh2_sftp_fstat_ex(file, &written, 0) == 0 && (written.flags & LIBSSH2_SFTP_ATTR_SIZE)
-                       && static_cast<qint64>(written.filesize) == data.size();
-    libssh2_sftp_close(file);
-    if (!sized) { removeTemp(); return transferFail(QStringLiteral("Size verification failed; the original file was not changed.")); }
+    const unsigned long required = LIBSSH2_SFTP_ATTR_SIZE | LIBSSH2_SFTP_ATTR_PERMISSIONS | LIBSSH2_SFTP_ATTR_UIDGID;
+    const bool verified = libssh2_sftp_fstat_ex(file, &written, 0) == 0 && (written.flags & required) == required
+        && static_cast<qint64>(written.filesize) == data.size()
+        && (written.permissions & 07777) == (original.permissions & 07777)
+        && written.uid == original.uid && written.gid == original.gid;
+    const bool closed = closeStagingFile(file) == 0;
+    if (!metadataOk || !flushed || !verified || !closed) {
+        removeTemp();
+        return transferFail(QStringLiteral("Staging size, permissions, owner/group, flush or close verification failed; the original file was not changed."));
+    }
+#ifdef FORTIQ_PUBLICATION_TESTS
+    if (publication_test::staged) publication_test::staged();
+#endif
 
     // Re-check right before publishing: someone may have saved meanwhile.
     if (!force) {
@@ -852,19 +960,30 @@ SshResult SshSession::saveFile(const QString &path, const QByteArray &data, cons
             return transferFail(QStringLiteral("The file was changed on the server during the save."), QStringLiteral("conflict"));
         }
     }
-    if (libssh2_sftp_posix_rename_ex(d->sftp, tempUtf8.constData(), static_cast<size_t>(tempUtf8.size()),
-                                     targetUtf8.constData(), static_cast<size_t>(targetUtf8.size())) != 0) {
-        if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
+    LIBSSH2_SFTP_ATTRIBUTES latest{};
+    const unsigned long identityFlags = LIBSSH2_SFTP_ATTR_PERMISSIONS | LIBSSH2_SFTP_ATTR_UIDGID;
+    if (!d->sftp || libssh2_sftp_stat_ex(d->sftp, targetUtf8.constData(), static_cast<unsigned int>(targetUtf8.size()),
+                                      LIBSSH2_SFTP_LSTAT, &latest) != 0
+        || (latest.flags & identityFlags) != identityFlags || !LIBSSH2_SFTP_S_ISREG(latest.permissions)
+        || (latest.permissions & 07777) != (original.permissions & 07777)
+        || latest.uid != original.uid || latest.gid != original.gid) {
+        removeTemp();
+        return transferFail(QStringLiteral("The destination type, permissions or owner/group changed during the save."), QStringLiteral("conflict"));
+    }
+    const int published = replaceFile(d->handle, d->sftp, tempUtf8, targetUtf8);
+    if (published != 0) {
+        if (published != LIBSSH2_ERROR_METHOD_NOT_SUPPORTED
+            && libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
             d->close();
             return transferFail(QStringLiteral("Connection lost while publishing; reopen the file to see which version is on the server."),
                                 QStringLiteral("unknown"));
         }
         removeTemp();
         // No non-atomic fallback that could leave the file half-replaced.
-        return transferFail(QStringLiteral("The server does not support atomic replacement (posix-rename); the original file was not changed."));
+        return transferFail(QStringLiteral("Atomic replacement was refused (unsupported extension or permissions); the original file was not changed."));
     }
     const SshResult back = readFile(target, kEditLimit + 1);
-    if (back.status != SshResult::Status::Ok || sha256(back.data) != sha256(data))
+    if (back.status != SshResult::Status::Ok || back.truncated || back.fileSize != data.size() || sha256(back.data) != sha256(data))
         return transferFail(QStringLiteral("Saved, but the read-back check differs; reopen the file."), QStringLiteral("unknown"));
     SshResult r;
     r.status = SshResult::Status::Ok;

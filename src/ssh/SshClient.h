@@ -61,8 +61,11 @@ public:
     SshResult download(const QString &remotePath, const QString &localPath, const TransferProgress &progress);
     // Local file -> remoteDir/name. Exclusive unique temporary on the server,
     // size verified, then published without silently replacing: Fail reports
-    // "conflict", KeepBoth picks "name (n).ext", Replace keeps the original
-    // under a backup name until the new file is in place.
+    // "conflict", KeepBoth picks "name (n).ext", Replace of an existing regular
+    // file uses one atomic posix-rename, preserving mode/uid/gid (no backup
+    // gap or non-atomic fallback). An initially absent name is never overwritten
+    // if it appears meanwhile. Unsupported replacement fails before changing
+    // the original; lost ack is "unknown". No content-version CAS for uploads.
     SshResult upload(const QString &localPath, const QString &remoteDir, const QString &name,
                      ConflictPolicy policy, const TransferProgress &progress);
     // New folder `name` in `dir` (mode 0755 before umask); never reuses an
@@ -91,6 +94,8 @@ public:
     // published atomically with posix-rename@openssh.com and read back.
     // Symlinks are saved through to their target; files owned by another
     // user are refused (an atomic replace would change their owner).
+    // Permissions and owner/group are verified before publication. Hash checks
+    // are optimistic: SFTP has no atomic compare-and-swap against external writers.
     SshResult saveFile(const QString &path, const QByteArray &data, const QByteArray &expectedSha256, bool force);
     // Writes data as a new file in dir, "name (n).ext" if the name is taken.
     SshResult saveCopy(const QString &dir, const QString &name, const QByteArray &data);

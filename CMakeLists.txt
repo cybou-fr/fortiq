@@ -203,9 +203,15 @@ if(BUILD_TESTING)
     target_include_directories(fortiq_logs_tests PRIVATE src)
     target_link_libraries(fortiq_logs_tests PRIVATE Qt6::Core Qt6::Network Qt6::Concurrent Qt6::Test ${FORTIQ_SSH_TARGET})
     add_test(NAME fortiq_logs COMMAND fortiq_logs_tests -o "${CMAKE_CURRENT_BINARY_DIR}/logs-results.txt,txt" -o "-,txt")
+    qt_add_executable(fortiq_publication_tests tests/PublicationTest.cpp
+        src/ssh/SshClient.cpp src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h)
+    target_compile_definitions(fortiq_publication_tests PRIVATE FORTIQ_PUBLICATION_TESTS)
+    target_include_directories(fortiq_publication_tests PRIVATE src tests)
+    target_link_libraries(fortiq_publication_tests PRIVATE Qt6::Core Qt6::Network Qt6::Test ${FORTIQ_SSH_TARGET})
+    add_test(NAME fortiq_publication COMMAND fortiq_publication_tests -o "${CMAKE_CURRENT_BINARY_DIR}/publication-results.txt,txt" -o "-,txt")
     if(WIN32)
         # Developer tests need the matching Qt Test runtime, absent from the app package.
-        set_tests_properties(fortiq_remote_path fortiq_ssh_integration fortiq_logs PROPERTIES
+        set_tests_properties(fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_publication PROPERTIES
             ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:$<TARGET_FILE_DIR:${FORTIQ_SSH_TARGET}>")
     endif()
 endif()

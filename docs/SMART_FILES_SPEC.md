@@ -43,4 +43,29 @@ Premium, fast, touch-capable **remote file manager that feels local**. The conte
 5. Windows mouse/keyboard and Android tablet touch/IME; screenshot diff against Files portion of [golden design](UI_SPEC_V1.md).
 6. No direct work networking, no unintended local disk cache, no secret-bearing logs.
 
-**Qt R0.1 truth (22.10.2026):** navigation, preview, transfers, Trash, editor and search exist in source; see [Qt migration](QT_MIGRATION.md) for executed tests. Upload Replace has a backup-rename visibility gap; editor hash checks are not atomic compare-and-swap. Full Windows/Android qualification and the complete target contract remain unfinished.
+**Qt R0.1 truth (22.10.2026):** navigation, preview, transfers, Trash, editor and search exist in source; see [Qt migration](QT_MIGRATION.md) for executed tests. Upload Replace now uses a single atomic posix-rename without a backup visibility gap; editor hash checks remain optimistic, not atomic compare-and-swap. Full Windows/Android qualification and the complete target contract remain unfinished.
+
+### File publication reliability slice, 22.10.2026
+
+- Existing-file upload Replace and editor save use `posix-rename@openssh.com`, with no
+  move-original-to-backup or non-atomic fallback. Unsupported replacement fails; an uncertain
+  publication acknowledgement is `unknown` and is never retried automatically.
+- Upload Fail/KeepBoth, and Replace whose destination was initially absent, use no-overwrite
+  SFTP rename. A name created by another writer during transfer is not overwritten.
+- Upload staging is created empty with mode 0644 to capture the server's creation mode/umask,
+  then restricted and verified as 0600 before writing source bytes. The captured creation mode
+  is restored for a new file. Existing-file Replace preserves mode, uid and gid and refuses
+  initial symlinks/directories/unknown destination metadata or an owner it cannot preserve.
+- Editor staging starts as 0600. Mode and owner/group are restored after writing and verified
+  before publication, as are size, flush (when supported) and CLOSE. Failed or falsely acknowledged
+  metadata updates prevent publication. Concurrent destination type/mode/owner/group changes
+  detected before publication are conflicts. Empty-upload cancellation is checked too.
+- Editor checks SHA-256 before staging and before publication and verifies the published content
+  by reading it back; mismatch or lost acknowledgement is `unknown`. These are **optimistic** checks:
+  an external writer can still change the file between the last check and rename. Explicit upload
+  Replace overwrites content without a source-version compare. No atomic compare-and-swap is claimed.
+- Unsupported fsync extensions are tolerated; this does not guarantee power-loss durability or a
+  durable parent-directory rename. ACLs, xattrs and hard-link relationships are not preserved by
+  this slice. A disconnected pre-publication operation may leave its owned hidden temporary.
+
+Executed tests and repeatable fixture requirements: [Qt migration](QT_MIGRATION.md#file-publication-reliability-slice--22102026).
