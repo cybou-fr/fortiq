@@ -155,6 +155,21 @@ private slots:
             QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,QByteArray("\033[2J\033[HHELLO\r\n\033[31mRED\033[0m"))));
             QString text; QVERIFY(QMetaObject::invokeMethod(surface,"screenText",Q_RETURN_ARG(QString,text)));
             QVERIFY(text.contains("HELLO") && text.contains("RED") && !text.contains(QChar(27)));
+            surface->forceActiveFocus();
+            QTest::keyClick(window,Qt::Key_F,Qt::ControlModifier|Qt::ShiftModifier);
+            QTRY_VERIFY(term->property("searchOpen").toBool());
+            auto *searchInput=term->findChild<QQuickItem *>("terminalSearchInput");QVERIFY(searchInput);
+            QVERIFY(searchInput->hasActiveFocus());
+            for(char c:QByteArray("HELLO"))QTest::keyClick(window,c);
+            QTRY_COMPARE(surface->property("searchStatus").toString(),QString("1 / 1"));
+            QVERIFY(QMetaObject::invokeMethod(surface,"selectedText",Q_RETURN_ARG(QString,text)));QCOMPARE(text,QString("HELLO"));
+            QVERIFY(bytes.isEmpty());
+            QTest::keyClick(window,Qt::Key_Escape);QVERIFY(!term->property("searchOpen").toBool());
+            QCOMPARE(shell->property("foregroundApp").toString(),QString("terminal"));QVERIFY(term->isVisible());
+            QVERIFY(surface->hasActiveFocus());
+            QTest::qWait(30); // settle the search bar's adaptive grid resize before dragging
+            QTest::keyClick(window,Qt::Key_F,Qt::ControlModifier);
+            QVERIFY(!bytes.isEmpty());QCOMPARE(bytes.last().first().toByteArray(),QByteArray(1,char(6)));bytes.clear();
             const qreal cw=surface->width()/surface->property("columns").toInt();
             const qreal ch=surface->height()/surface->property("rows").toInt();
             auto select=[&](qreal x1,qreal y1,qreal x2,qreal y2) {
@@ -256,6 +271,29 @@ private slots:
             QVERIFY(QMetaObject::invokeMethod(surface,"reset"));
             QCOMPARE(surface->property("scrollbackLines").toInt(),0);
             QCOMPARE(surface->property("scrollOffset").toInt(),0);
+            QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,QString::fromUtf8("Alpha café\r\nbeta ALPHA\r\n界é\033[8mSECRET\033[0m").toUtf8())));
+            auto find=[&](const QString &query,bool backward=false){return QMetaObject::invokeMethod(surface,"findText",Q_ARG(QString,query),Q_ARG(bool,backward));};
+            bytes.clear();QVERIFY(find("alpha"));QCOMPARE(surface->property("searchStatus").toString(),QString("1 / 2"));
+            QVERIFY(find("alpha"));QCOMPARE(surface->property("searchStatus").toString(),QString("2 / 2"));
+            QVERIFY(QMetaObject::invokeMethod(surface,"selectedText",Q_RETURN_ARG(QString,text)));QCOMPARE(text,QString("ALPHA"));
+            QVERIFY(find("alpha"));QCOMPARE(surface->property("searchStatus").toString(),QString("1 / 2"));
+            QVERIFY(find("alpha",true));QCOMPARE(surface->property("searchStatus").toString(),QString("2 / 2"));
+            QVERIFY(find(QString::fromUtf8("CAFÉ")));QVERIFY(QMetaObject::invokeMethod(surface,"selectedText",Q_RETURN_ARG(QString,text)));QCOMPARE(text,QString::fromUtf8("café"));
+            QVERIFY(find(QString::fromUtf8("界é")));QVERIFY(QMetaObject::invokeMethod(surface,"selectedText",Q_RETURN_ARG(QString,text)));QCOMPARE(text,QString::fromUtf8("界é"));
+            QVERIFY(find("SECRET"));QCOMPARE(surface->property("searchStatus").toString(),QString("Aucun résultat"));
+            QVERIFY(!surface->property("hasSelection").toBool());
+            QVERIFY(find("alpha"));
+            QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,output)));
+            QVERIFY(surface->property("searchStatus").toString().contains("relancer"));
+            QVERIFY(find("bounded"));QVERIFY(surface->property("scrollOffset").toInt()>0);
+            QVERIFY(surface->property("searchStatus").toString().contains("1000"));
+            QVERIFY(find("o"));QVERIFY(surface->property("searchStatus").toString().contains("limite"));
+            QVERIFY(find("bad\nquery"));QVERIFY(surface->property("searchStatus").toString().contains("256"));
+            QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,QByteArray("\033[?1049hALT only"))));
+            QVERIFY(find("bounded"));QCOMPARE(surface->property("searchStatus").toString(),QString("Aucun résultat"));
+            QVERIFY(find("ALT"));QCOMPARE(surface->property("searchStatus").toString(),QString("1 / 1"));
+            QVERIFY(bytes.isEmpty());
+            QVERIFY(QMetaObject::invokeMethod(surface,"reset"));QVERIFY(surface->property("searchStatus").toString().isEmpty());
         }
         window->resize(QSize(844,390)); QTest::qWait(30);
         window->resize(size); QTest::qWait(30);

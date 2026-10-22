@@ -74,6 +74,7 @@ TerminalView::TerminalView(QQuickItem *parent) : QQuickPaintedItem(parent), m_vt
 bool TerminalView::terminalFocused() const { return hasActiveFocus() && window() && window()->isActive(); }
 TerminalView::~TerminalView() { vterm_free(m_vt); }
 void TerminalView::reset() {
+    clearSearch();
     clearSelection();
     m_scrollback.clear(); m_scrollOffset = 0; m_wheelRemainder = 0;
     vterm_screen_reset(m_screen, 1);
@@ -81,7 +82,7 @@ void TerminalView::reset() {
     vterm_screen_set_default_colors(m_screen, &fg, &bg); update(); emit scrollbackChanged();
 }
 void TerminalView::feed(const QByteArray &data) {
-    if (!data.isEmpty()) clearSelection();
+    if (!data.isEmpty()) { clearSelection(); invalidateSearch(); }
     m_cursorOn = true;
     vterm_input_write(m_vt, data.constData(), data.size()); vterm_screen_flush_damage(m_screen); update(); emit scrollbackChanged();
 }
@@ -89,6 +90,7 @@ void TerminalView::geometryChange(const QRectF &n, const QRectF &o) { QQuickPain
 void TerminalView::sizeGrid() {
     const int columns = qBound(2, int(width() / m_cellWidth), 240), rows = qBound(2, int(height() / m_cellHeight), 100);
     if (columns == m_columns && rows == m_rows) return;
+    invalidateSearch();
     clearSelection();
     m_columns = columns; m_rows = rows; vterm_set_size(m_vt, rows, columns); update(); emit scrollbackChanged(); emit dimensionsChanged(); emit gridChanged(columns, rows);
 }
@@ -99,13 +101,68 @@ void TerminalView::scrollTo(int offset) {
     m_scrollOffset = next; update(); emit scrollbackChanged();
 }
 bool TerminalView::viewportCell(int row, int col, VTermScreenCell *cell) const {
-    const int index = scrollbackLines() - m_scrollOffset + row;
-    if (index < scrollbackLines()) {
-        const auto &line = m_scrollback[size_t(index)];
+    return bufferCell(scrollbackLines() - m_scrollOffset + row,col,cell);
+}
+bool TerminalView::bufferCell(int row, int col, VTermScreenCell *cell) const {
+    if (row < scrollbackLines()) {
+        const auto &line = m_scrollback[size_t(row)];
         if (col >= int(line.size())) return false;
         *cell = line[size_t(col)]; return true;
     }
-    return vterm_screen_get_cell(m_screen, {index - scrollbackLines(), col}, cell);
+    return vterm_screen_get_cell(m_screen, {row - scrollbackLines(), col}, cell);
+}
+void TerminalView::clearSearch() {
+    m_searchQuery.clear(); m_searchCurrent = -1; m_searchStatus.clear(); emit searchChanged();
+}
+void TerminalView::invalidateSearch() {
+    m_searchCurrent = -1;
+    if (m_searchQuery.isEmpty()) return;
+    m_searchStatus = QStringLiteral("Sortie modifiée — relancer la recherche"); emit searchChanged();
+}
+void TerminalView::findText(const QString &query, bool backward) {
+    if (query != m_searchQuery) m_searchCurrent = -1;
+    m_searchQuery = query.left(256);
+    clearSelection();
+    if (query.isEmpty()) { clearSearch(); return; }
+    if (query.size()>256 || query.contains('\n') || query.contains('\r')) {
+        m_searchStatus=QStringLiteral("Recherche : une ligne, 256 caractères maximum"); emit searchChanged(); return;
+    }
+    struct Match { int row, first, last; };
+    std::vector<Match> matches;
+    constexpr int limit = 1000;
+    for (int row=0; row<scrollbackLines()+m_rows && matches.size()<=limit; ++row) {
+        QString line; std::vector<int> starts, ends;
+        for (int col=0; col<m_columns; ++col) {
+            VTermScreenCell cell{};
+            if (!bufferCell(row,col,&cell)) continue;
+            if (cell.width==0 || cell.chars[0]==UINT32_MAX) continue;
+            QString token;
+            if (!cell.chars[0] || cell.attrs.conceal) token=QString(std::max(1,int(cell.width)),' ');
+            else for (uint32_t cp:cell.chars) {
+                if(!cp || cp==UINT32_MAX)break;
+                const char32_t c=cp;token+=QString::fromUcs4(&c,1);
+            }
+            for(int i=0;i<token.size();++i){starts.push_back(col);ends.push_back(col+std::max(1,int(cell.width))-1);}
+            line+=token;
+        }
+        qsizetype from=0;
+        while(matches.size()<=limit) {
+            const auto at=line.indexOf(query,from,Qt::CaseInsensitive);
+            if(at<0)break;
+            matches.push_back({row,starts[size_t(at)],ends[size_t(at+query.size()-1)]});from=at+query.size();
+        }
+    }
+    if(matches.empty()) { m_searchCurrent=-1;m_searchStatus=QStringLiteral("Aucun résultat");emit searchChanged();return; }
+    const bool limited=matches.size()>limit;
+    if(limited)matches.resize(limit);
+    const int count=int(matches.size());
+    m_searchCurrent=m_searchCurrent<0?(backward?count-1:0):(m_searchCurrent+(backward?-1:1)+count)%count;
+    const auto &match=matches[size_t(m_searchCurrent)];
+    scrollTo(qBound(0,scrollbackLines()-match.row,scrollbackLines()));
+    const int row=match.row-(scrollbackLines()-m_scrollOffset);
+    m_selectionStart=row*m_columns+match.first;m_selectionEnd=row*m_columns+match.last;
+    m_searchStatus=QStringLiteral("%1 / %2%3").arg(m_searchCurrent+1).arg(count).arg(limited?QStringLiteral("+ (limite)"):QString());
+    update();emit selectionChanged();emit searchChanged();
 }
 void TerminalView::paint(QPainter *p) {
     p->fillRect(boundingRect(), QColor(8,16,28,235));
@@ -183,6 +240,7 @@ void TerminalView::textInput(const QString &text) { if(text.isEmpty())return; cl
 void TerminalView::keyPressEvent(QKeyEvent *e) {
     const auto mods = e->modifiers();
     if (e->key() == Qt::Key_Shift || e->key() == Qt::Key_Control || e->key() == Qt::Key_Alt || e->key() == Qt::Key_Meta) { e->accept(); return; }
+    if (mods == (Qt::ControlModifier|Qt::ShiftModifier) && e->key()==Qt::Key_F) { emit searchRequested(); e->accept(); return; }
     if (!m_alternateScreen && mods == Qt::ShiftModifier && (e->key() == Qt::Key_PageUp || e->key() == Qt::Key_PageDown || e->key() == Qt::Key_End)) {
         scrollTo(e->key() == Qt::Key_End ? 0 : m_scrollOffset + (e->key() == Qt::Key_PageUp ? 1 : -1) * std::max(1,m_rows-1));
         e->accept(); return;

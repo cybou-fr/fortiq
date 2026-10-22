@@ -168,5 +168,8 @@ Shift+End or input returns to live output; the alternate screen has no local scr
 Mouse drag selects visible terminal cells (including scrollback). Copier/Ctrl+Shift+C copy
 the selection, or the visible screen when none is selected. Ctrl+C remains a shell interrupt.
 Selection clears on incoming output, input, scrolling and grid resize; touch handles are pending.
+Terminal search (⌕ / Ctrl+Shift+F) is literal and case-insensitive, across current visual rows
+and the RAM buffer. Enter/Shift+Enter or arrows cycle through matches; Escape closes it.
+Ctrl+F remains shell input. New output/resize invalidates matches; reset clears the query.
 This is not a new visual approval, nor proof of complete Android touch/accessibility or GPU fidelity.
 See [Android foundation](ANDROID_FOUNDATION.md) for screenshots, build evidence and device gates.

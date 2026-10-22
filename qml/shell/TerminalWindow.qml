@@ -10,12 +10,15 @@ Item {
     property var remote: null
     property string pasteText: ""
     property bool navigationOpen: false
+    property bool searchOpen: false
     readonly property bool connected: remote !== null && remote.connected
     readonly property bool drawer: adaptive && width < 900
     readonly property real contentLeft: drawer ? 0 : 210
     signal closeRequested()
     signal requestServers()
     function syncSession() { if(terminal)terminal.setWindowActive(visible) }
+    function openSearch() { searchOpen=true;navigationOpen=false;searchInput.forceActiveFocus();searchInput.selectAll() }
+    function closeSearch() { searchDelay.stop();searchOpen=false;surface.clearSearch();surface.forceActiveFocus() }
     onVisibleChanged: syncSession()
     onTerminalChanged: syncSession()
     Component.onCompleted: syncSession()
@@ -34,6 +37,7 @@ Item {
     function handleBack() {
         if(navigationOpen){navigationOpen=false;return true}
         if(pasteDialog.visible){pasteDialog.close();return true}
+        if(searchOpen){closeSearch();return true}
         return false
     }
     Glass { anchors.fill: parent; backdrop: win.backdrop; tint: "#B3121C30"; blurAmount: 0.9; radius: 16 }
@@ -106,17 +110,42 @@ Item {
             anchors.right:parent.right;anchors.rightMargin:8;anchors.verticalCenter:parent.verticalCenter;spacing:4
             Action { text:"Copier";enabled:surface.visible;onClicked:surface.copyScreen() }
             Action { text:"Coller…";enabled:surface.inputEnabled;onClicked:surface.pasteRequested() }
+            Action { objectName:"terminalSearchButton";text:"⌕";enabled:surface.visible;onClicked:win.openSearch() }
+        }
+    }
+    Item {
+        id:searchBar;objectName:"terminalSearchBar"
+        visible:win.searchOpen
+        x:win.contentLeft+12;y:50;width:win.width-x-12;height:win.adaptive?44:36
+        TextField {
+            id:searchInput;objectName:"terminalSearchInput"
+            width:Math.max(40,parent.width-searchActions.width-8);height:parent.height
+            placeholderText:"Rechercher dans la sortie…";selectByMouse:true;maximumLength:256
+            onTextEdited:searchDelay.restart()
+            Keys.onPressed:event=>{
+                if(event.key===Qt.Key_Escape){event.accepted=true}
+                else if(event.key===Qt.Key_Return || event.key===Qt.Key_Enter){searchDelay.stop();surface.findText(text,!!(event.modifiers&Qt.ShiftModifier));event.accepted=true}
+            }
+            Keys.onReleased:event=>{if(event.key===Qt.Key_Escape){event.accepted=true;win.closeSearch()}}
+        }
+        Timer { id:searchDelay;interval:180;onTriggered:surface.findText(searchInput.text,false) }
+        Row {
+            id:searchActions;anchors.right:parent.right;spacing:4
+            ToolButtonGlass { glyph:"↑";touch:win.adaptive;enabled:searchInput.text.length>0;onClicked:{searchDelay.stop();surface.findText(searchInput.text,true)} }
+            ToolButtonGlass { glyph:"↓";touch:win.adaptive;enabled:searchInput.text.length>0;onClicked:{searchDelay.stop();surface.findText(searchInput.text,false)} }
+            ToolButtonGlass { glyph:"×";touch:win.adaptive;onClicked:win.closeSearch() }
         }
     }
     TerminalView {
         id:surface
         objectName:"terminalSurface"
-        x:win.contentLeft+12;y:52;width:Math.max(32,parent.width-x-(win.adaptive?32:24));height:Math.max(32,parent.height-y-28)
+        x:win.contentLeft+12;y:52+(win.searchOpen?searchBar.height+4:0);width:Math.max(32,parent.width-x-(win.adaptive?32:24));height:Math.max(32,parent.height-y-28)
         visible:win.connected && win.terminal!==null && win.terminal.running
         inputEnabled:win.terminal!==null && win.terminal.running
         onBytes:data=>{if(win.terminal)win.terminal.send(data)}
         onGridChanged:(columns,rows)=>{if(win.terminal)win.terminal.resize(columns,rows)}
         onPasteRequested:{win.pasteText=clipboardText();pasteDialog.open()}
+        onSearchRequested:win.openSearch()
         Component.onCompleted:if(win.terminal)win.terminal.resize(columns,rows)
     }
     ScrollBar {
@@ -154,13 +183,13 @@ Item {
     Connections {
         target:win.terminal
         function onOutput(data){surface.feed(data)}
-        function onResetScreen(){surface.reset()}
-        function onChanged(){if(win.terminal.running && win.visible)surface.forceActiveFocus()}
+        function onResetScreen(){searchDelay.stop();surface.reset();searchInput.clear();win.searchOpen=false}
+        function onChanged(){if(win.terminal.running && win.visible && !win.searchOpen)surface.forceActiveFocus()}
     }
     Text {
         x:win.contentLeft+12;anchors.bottom:parent.bottom;anchors.bottomMargin:8
         width:Math.max(20,win.width-x-12);elide:Text.ElideRight
-        text:surface.scrollOffset>0 ? "Historique de sortie · "+surface.scrollOffset+" lignes au-dessus" : (win.terminal?win.terminal.status:"Déconnecté");color:Theme.inkMuted;font.pixelSize:11
+        text:win.searchOpen ? surface.searchStatus : (surface.scrollOffset>0 ? "Historique de sortie · "+surface.scrollOffset+" lignes au-dessus" : (win.terminal?win.terminal.status:"Déconnecté"));color:Theme.inkMuted;font.pixelSize:11
     }
     Dialog {
         id:pasteDialog

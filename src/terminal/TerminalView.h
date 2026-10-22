@@ -16,6 +16,7 @@ class TerminalView : public QQuickPaintedItem {
     Q_PROPERTY(int scrollbackLines READ scrollbackLines NOTIFY scrollbackChanged)
     Q_PROPERTY(int scrollOffset READ scrollOffset NOTIFY scrollbackChanged)
     Q_PROPERTY(bool hasSelection READ hasSelection NOTIFY selectionChanged)
+    Q_PROPERTY(QString searchStatus READ searchStatus NOTIFY searchChanged)
 public:
     explicit TerminalView(QQuickItem *parent = nullptr);
     int columns() const { return m_columns; }
@@ -23,6 +24,7 @@ public:
     int scrollbackLines() const { return m_alternateScreen ? 0 : int(m_scrollback.size()); }
     int scrollOffset() const { return m_scrollOffset; }
     bool hasSelection() const { return m_selectionStart >= 0 && m_selectionEnd >= 0; }
+    QString searchStatus() const { return m_searchStatus; }
     ~TerminalView() override;
     void paint(QPainter *painter) override;
     Q_INVOKABLE void feed(const QByteArray &data);
@@ -32,6 +34,8 @@ public:
     Q_INVOKABLE void copyScreen();
     Q_INVOKABLE QString selectedText() const;
     Q_INVOKABLE void clearSelection();
+    Q_INVOKABLE void findText(const QString &query, bool backward);
+    Q_INVOKABLE void clearSearch();
     Q_INVOKABLE void paste(const QString &text);
     Q_INVOKABLE void insertHistory(const QString &text);
     Q_INVOKABLE void control(int code);
@@ -44,6 +48,8 @@ signals:
     void dimensionsChanged();
     void scrollbackChanged();
     void selectionChanged();
+    void searchChanged();
+    void searchRequested();
 protected:
     void geometryChange(const QRectF &n, const QRectF &o) override;
     void keyPressEvent(QKeyEvent *event) override;
@@ -58,6 +64,10 @@ private:
     void textInput(const QString &text);
     bool terminalFocused() const;
     bool viewportCell(int row, int col, VTermScreenCell *cell) const;
+    bool bufferCell(int row, int col, VTermScreenCell *cell) const;
+    void invalidateSearch();
+    QString m_searchQuery, m_searchStatus;
+    int m_searchCurrent = -1;
     int cellIndex(const QPointF &position) const;
     void extendSelection(const QPointF &position);
     QString textRange(int first, int last) const;
