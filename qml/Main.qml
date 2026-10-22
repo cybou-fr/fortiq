@@ -13,9 +13,17 @@ ApplicationWindow {
     minimumHeight: 320
     title: "FORTIQ"
     color: "#06152A"
-    // Extend artwork beneath Android system bars; controls stay in safe areas.
-    background: Wallpaper {
-        source: shell.wallpaperUrl
+    // Android draws its own status icons. Give that safe inset the system
+    // palette background rather than wallpaper; navigation stays edge-to-edge.
+    background: Item {
+        Wallpaper { anchors.fill: parent; source: shell.wallpaperUrl }
+        Rectangle {
+            objectName: "systemStatusBackground"
+            visible: Qt.platform.os === "android"
+            width: parent.width
+            height: Math.max(window.topPadding, window.contentItem.y, window.SafeArea.margins.top)
+            color: window.palette.window
+        }
     }
     onClosing: close => { if ((adaptive || Qt.platform.os === "android") && shell.handleBack()) close.accepted = false }
 

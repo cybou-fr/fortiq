@@ -86,6 +86,12 @@ private slots:
             QVERIFY(files->x() > before.x());
             QVERIFY(files->y() > before.y());
             files->setX(before.x()); files->setY(before.y());
+            // Coalesced native gestures may deliver only press and release.
+            QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, start);
+            QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, start + QPoint(80, 50));
+            QVERIFY(files->x() > before.x());
+            QVERIFY(files->y() > before.y());
+            files->setX(before.x()); files->setY(before.y());
             shell->setProperty("fixture", false);
             shell->setProperty("launcherOpen", true);
             QTest::qWait(50);

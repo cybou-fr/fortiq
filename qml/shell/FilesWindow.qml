@@ -263,14 +263,30 @@ Item {
         // Empty sidebar space is a window handle; places and window controls
         // above this area keep their own clicks and touch gestures.
         MouseArea {
+            id: sidebarHandle
             objectName: "filesSidebarDrag"
             anchors.fill: parent
             enabled: !win.adaptive && !win.maximized
-            drag.target: win
-            drag.minimumX: -win.width + 120
-            drag.maximumX: win.parent ? win.parent.width - 120 : 0
-            drag.minimumY: 47
-            drag.maximumY: win.parent ? win.parent.height - 60 : 0
+            property point pressPosition
+            property point windowPosition
+            property bool moving: false
+            function moveWindow(mouse) {
+                if (!win.parent) return
+                const p = mapToItem(win.parent, mouse.x, mouse.y)
+                const dx = p.x - pressPosition.x, dy = p.y - pressPosition.y
+                if (!moving && Math.hypot(dx, dy) < Qt.styleHints.startDragDistance) return
+                moving = true
+                win.x = Math.max(-win.width + 120, Math.min(win.parent.width - 120, windowPosition.x + dx))
+                win.y = Math.max(47, Math.min(win.parent.height - 60, windowPosition.y + dy))
+            }
+            onPressed: mouse => {
+                pressPosition = mapToItem(win.parent, mouse.x, mouse.y)
+                windowPosition = Qt.point(win.x, win.y)
+                moving = false
+            }
+            onPositionChanged: mouse => { if (pressed) moveWindow(mouse) }
+            // Native input can coalesce all movement into the release event.
+            onReleased: mouse => moveWindow(mouse)
             onDoubleClicked: win.toggleMaximize()
         }
 

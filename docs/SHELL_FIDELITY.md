@@ -106,3 +106,11 @@ sidebar space supports bounded dragging. Layout QtTest: **32 passed**, including
 viewport-edge coverage and real mouse drags from the sidebar at both desktop sizes. Windows app
 build passed. Offscreen tests cannot validate the glass shaders; Android runtime evidence is recorded
 in [Android foundation](ANDROID_FOUNDATION.md). Visual acceptance remains pending.
+
+Native Windows follow-up (22 October 2026): the current MSVC build launches without a missing-Qt
+dialog; wallpaper covers the client area, the background selector changes the scene, the launcher
+opens directly above the bottom app panel, and lower surfaces remain visible through the glass.
+A fast native sidebar drag exposed an input-coalescing gap; the corrected handler passed a native
+drag and QtTest's additional press/release-only regression. These checks use the developer machine,
+not a clean Windows installation. Full lower-window blur, remaining font glyph fidelity, high-DPI/
+multi-monitor coverage and owner visual acceptance are still open.

@@ -160,6 +160,14 @@ Windows/Android rebuilds passed; the updated APK was installed and launched. Nat
 confirmed artwork underneath both system bars. Layout QtTest: **32 passed**, now also clicking
 all three background cards and checking the bottom launcher's position. Concurrent owner input
 prevented additional native clicks; the three-card click evidence is QtTest, not an Android gesture run.
+The latest owner revision restores a system-palette background behind Android's native status icons
+at the top, while keeping the bottom navigation artwork. The rebuilt APK was installed/launched;
+`build-dist/emulator-system-status.png` confirms the solid light status area with readable dark native
+icons on this AVD. Dark system theme and physical devices remain unqualified.
+Windows native checks also found coalesced fast sidebar drags could fail despite the previous
+two-move QtTest. The handle now applies bounded movement from parent-space press coordinates,
+including the final release position. QtTest adds a press/release-only case; the native Windows drag
+then moved Files successfully. This change is also included in the installed Android APK.
 
 The emulator remains available for further testing. On physical Lenovo hardware still verify installation/launch,
 rotation and real DPR, safe areas/predictive Back, IME/selection, tap/long press, readable touch controls,
