@@ -32,7 +32,7 @@ Item {
         : (wallpaperName.length > 0 ? Qt.resolvedUrl("../../assets/wallpapers/" + wallpaperName + ".jpg") : "")
     property bool launcherOpen: fixture && !adaptive && fixturePreview !== "logs" && fixturePreview !== "incident" && fixturePreview !== "service" && fixturePreview !== "service"
     property bool controlOpen: fixture && !adaptive
-    property bool filesOpen: true
+    property bool filesOpen: false   // the reference scene opens it on completion; production starts without windows
     property bool browserOpen: fixture && fixturePreview !== "logs" && fixturePreview !== "incident"
     property bool logsOpen: fixture && (fixturePreview === "logs" || fixturePreview === "incident" || fixturePreview === "service")
     property date now: new Date()
@@ -350,5 +350,8 @@ Item {
     Keys.onReleased: event => {
         if ((shell.adaptive || Qt.platform.os === "android") && (event.key === Qt.Key_Back || event.key === Qt.Key_Escape)) event.accepted = shell.handleBack()
     }
-    Component.onCompleted: if (!fixture && controller && !controller.connected) serversOpen = true
+    Component.onCompleted: {
+        if (fixture) filesOpen = true
+        else if (controller && !controller.connected) serversOpen = true
+    }
 }

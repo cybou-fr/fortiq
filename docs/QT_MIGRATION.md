@@ -4,6 +4,7 @@
 (owner decision, [UI SPEC](UI_SPEC_V1.md)); layout QtTest 47/47 on Windows MSVC. The layout test source also
 hides one raw string from moc (moc silently generated nothing since the MDok slice) and its launcher
 expectation was updated for the 9-app bottom panel. Not visually accepted by the owner; Android not rebuilt.
+Production now starts with no app window open (Files is opened from the panel); the reference fixture still opens it.
 
 23 October MDok: [first Markdown editor](MDOK.md), independent RAM document, pinned SFTP,
 existing safe-save/copy primitives, protected draft and Qt preview without resource loading. PDF pending.
