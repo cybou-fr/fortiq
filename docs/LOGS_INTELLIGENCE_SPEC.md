@@ -66,3 +66,24 @@ Styled as a sibling of the reference **light-content Files window with dark navi
 **Real Debian/Ubuntu tests:** boot changes, a small test systemd unit producing known severity lines, induced repeat errors, file rotation, permission denied, clock skew, missing journalctl, SSH drop during `follow`, 100k events bounded processing. Test WSL without systemd journal as a *capability unavailable* state, never a false green. QML visual comparisons use the golden design's window material and sidebar.
 
 **Deferred:** OpenTelemetry collector, Prometheus server, Loki/Elastic, external APIs, custom log daemon, full SOC/SIEM, continuous AI inference or logs stored on Windows/Android.
+
+### Implemented reliability slice, 22.10.2026
+
+Journal following reads forwards from `--after-cursor` using `--no-tail`; initial reads remain
+bounded to recent events. A capped response advances only to the last complete JSON event and
+marks coverage incomplete.
+
+File following reads at most 256 KiB per poll from a single opened descriptor. The cursor advances
+only for a validated complete page, by received bytes, never directly to the observed file size.
+Short/truncated/failed responses preserve position and show an error; backlog and initial byte-tail
+limits are explicit. An unfinished line (including split UTF-8) is retained across polls, with a
+bounded display prefix. Initial/replaced-file views are limited to the last 256 KiB, omit the cut
+first line, and display at most 2000 events. Messages display at most 4000 characters. Newline-free
+suffixes appear when completed. Rotation is detected by inode/size, not a guarantee of retaining
+all writes to replaced files or detecting copy-truncate/regrowth between polls.
+
+Every asynchronous Logs result checks the captured SSH connection generation. Source-list and
+service requests also have independent sequence numbers; disconnect invalidates them and clears
+server-specific sidebars/status. Source changes invalidate service/inspector requests. A successful
+SSH transport does not by itself mean a successful remote command. Tests and platform evidence:
+[Qt migration reliability slice](QT_MIGRATION.md#reliability-slice--22102026).

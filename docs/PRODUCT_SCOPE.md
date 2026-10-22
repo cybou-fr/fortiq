@@ -1,8 +1,9 @@
 # FORTIQ: назначение и границы продукта
 
 Статус: продуктовая спецификация, 18 октября 2026. Прототип на Flutter удалён (тег `flutter-final`);
-клиент заново разрабатывается на C++/Qt. На 21 октября есть только прототип R0.1 — просмотр файлов по
-SFTP только для чтения (см. [QT_MIGRATION](QT_MIGRATION.md)). Всё ниже — цель, а не наличие.
+клиент заново разрабатывается на C++/Qt. На 22 октября 2026 в инженерном R0.1 есть SSH,
+файловые операции и первый Logs; факты и ограничения — [QT_MIGRATION](QT_MIGRATION.md).
+Описания ниже остаются целями там, где нет подтверждённой реализации и испытаний.
 Связанные документы: [README](../README.md), [SSH_FRONTEND_CONTRACT](SSH_FRONTEND_CONTRACT.md),
 [ARCHITECTURE](ARCHITECTURE.md), [DEVELOPMENT_MATRIX](DEVELOPMENT_MATRIX.md),
 [UI SPEC v1](UI_SPEC_V1.md), [Smart Files](SMART_FILES_SPEC.md), [Logs](LOGS_INTELLIGENCE_SPEC.md).

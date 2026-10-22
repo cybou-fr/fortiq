@@ -1,6 +1,6 @@
 # FORTIQ — Smart Files specification v1 (remote Debian/Ubuntu)
 
-**Status:** target design, not implemented in Qt R0.1 beyond read-only SFTP list/navigation. **Visual contract:** [UI SPEC v1](UI_SPEC_V1.md). **Mandatory network contract:** [SSH frontend](SSH_FRONTEND_CONTRACT.md).
+**Status:** target design; implemented slices and test evidence are tracked in [Qt migration](QT_MIGRATION.md), not implied by this specification. **Visual contract:** [UI SPEC v1](UI_SPEC_V1.md). **Mandatory network contract:** [SSH frontend](SSH_FRONTEND_CONTRACT.md).
 
 ## Product value
 
@@ -43,4 +43,4 @@ Premium, fast, touch-capable **remote file manager that feels local**. The conte
 5. Windows mouse/keyboard and Android tablet touch/IME; screenshot diff against Files portion of [golden design](UI_SPEC_V1.md).
 6. No direct work networking, no unintended local disk cache, no secret-bearing logs.
 
-**Qt R0.1 truth:** currently ONLY verified-source-path construction tests and implemented read-only source listing are present; complete Windows/Android testing and all advanced features above are not verified.
+**Qt R0.1 truth (22.10.2026):** navigation, preview, transfers, Trash, editor and search exist in source; see [Qt migration](QT_MIGRATION.md) for executed tests. Upload Replace has a backup-rename visibility gap; editor hash checks are not atomic compare-and-swap. Full Windows/Android qualification and the complete target contract remain unfinished.

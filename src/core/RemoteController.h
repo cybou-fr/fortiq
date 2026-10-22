@@ -171,6 +171,7 @@ signals:
     void operationFinished(bool ok, const QString &message, const QString &code, const QString &path);
 
 private:
+    friend class LogsControllerTest;
     enum class Kind { Open, List };
     void request(Kind kind, const QString &directory, bool record);
     void scrubPassword();

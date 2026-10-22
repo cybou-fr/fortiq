@@ -72,7 +72,7 @@ LogsController::LogsController(RemoteController *remote, QObject *parent)
     connect(&m_followTimer, &QTimer::timeout, this, &LogsController::poll);
     connect(m_remote, &RemoteController::changed, this, [this] {
         // Results are bound to the server they came from.
-        if (!m_remote->connected()) { if (m_token != -1) disconnected(); return; }
+        if (!m_remote->connected()) { disconnected(); return; }
         if (m_token != -1 && m_token != m_remote->connectionToken()) disconnected();
     });
 }
@@ -86,17 +86,29 @@ LogsController::~LogsController() {
 
 void LogsController::disconnected() {
     ++m_seq;
+    ++m_sourcesSeq;
+    ++m_serviceSeq;
+    ++m_inspectorSeq;
+    m_serviceBusy = false;
+    m_serviceInfo.clear(); m_serviceHistory.clear(); m_serviceDays.clear(); m_serviceError.clear();
+    m_units.clear(); m_files.clear();
+    emit serviceChanged();
+    emit sourcesChanged();
     m_followTimer.stop();
     m_following = false;
     m_busy = false;
     m_token = -1;
-    if (m_inspectorOpen) { ++m_inspectorSeq; m_inspectorBusy = false; emit inspectorChanged(); }
+    if (m_inspectorOpen) { m_inspectorBusy = false; emit inspectorChanged(); }
     m_state = QStringLiteral("disconnected");
     m_stateText = QStringLiteral("Source déconnectée — affichage figé, suivi en direct arrêté.");
     auto slot = m_session;
     (void)QtConcurrent::run(&m_pool, [slot] { slot->reset(); });
     m_session = std::make_shared<std::unique_ptr<SshSession>>();
     emit changed();
+}
+
+bool LogsController::accepts(int token) const {
+    return m_remote->connected() && token == m_remote->connectionToken();
 }
 
 QString LogsController::templateOf(const QString &message) {
@@ -408,16 +420,17 @@ void LogsController::runInspector() {
     if (m_source == "user" || m_source == "userunit") args += " --user";
     const QByteArray script = "command -v journalctl >/dev/null 2>&1 || { echo 'FORTIQ:missing' >&2; exit 3; }\n"
                               "exec journalctl " + args + "\n";
+    const int token = m_remote->connectionToken();
     const ConnectionRequest req = m_remote->connectionRequest();
     auto slot = m_session;
     auto *watcher = new QFutureWatcher<SshResult>(this);
-    connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, seq, finish, limited] {
+    connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, token, seq, finish, limited] {
         const SshResult r = watcher->result();
         watcher->deleteLater();
-        if (seq != m_inspectorSeq) return;
-        if (r.status != SshResult::Status::Ok) {
+        if (!accepts(token) || seq != m_inspectorSeq) return;
+        if (r.status != SshResult::Status::Ok || r.code != "exit:0") {
             m_inspectorBusy = false;
-            m_inspectorError = r.message;
+            m_inspectorError = r.message.isEmpty() ? QStringLiteral("Commande distante échouée (%1).").arg(r.code) : r.message;
             emit inspectorChanged();
             return;
         }
@@ -536,6 +549,37 @@ QVariantList LogsController::dailyCounts(const QVariantList &history, qint64 now
     return days;
 }
 
+void LogsController::applyService(const SshResult &r, int token, int seq, bool userScope) {
+    if (!accepts(token) || seq != m_serviceSeq) return;
+    m_serviceBusy = false;
+    if (r.status != SshResult::Status::Ok || r.code != "exit:0" || r.message.contains("FORTIQ:missing")) {
+        m_serviceError = r.message.contains("FORTIQ:missing") ? QStringLiteral("systemctl n'est pas disponible sur ce serveur.") : (r.message.isEmpty() ? QStringLiteral("Commande distante échouée (%1).").arg(r.code) : r.message);
+        emit serviceChanged();
+        return;
+    }
+    const int show = r.data.indexOf("#show\n"), journal = r.data.indexOf("#journal\n");
+    const QByteArray showText = show >= 0 ? r.data.mid(show + 6, (journal > show ? journal : r.data.size()) - show - 6) : QByteArray();
+    m_serviceInfo = parseServiceShow(showText);
+    QVariantList events;
+    if (journal >= 0)
+        for (const QByteArray &line : r.data.mid(journal + 9).split('\n'))
+            if (!line.isEmpty()) if (QVariantMap e = parseJournalLine(line); !e.isEmpty()) events << e;
+    m_serviceHistory = lifecycleHistory(events);
+    m_serviceDays = dailyCounts(m_serviceHistory, QDateTime::currentMSecsSinceEpoch());
+    bool full = !r.truncated;
+    for (const QString &line : r.message.split('\n'))
+        if (line.startsWith(QStringLiteral("FORTIQ:id "))) {
+            const QStringList f = line.mid(10).split(' ', Qt::SkipEmptyParts);
+            full = !r.truncated && !f.isEmpty() && (f[0] == "0" || f.contains("adm") || f.contains("systemd-journal") || f.contains("wheel"));
+        }
+    m_serviceInfo.insert("historyLimited", !userScope && !full);
+    m_serviceInfo.insert("eventsRead", events.size());
+    m_serviceInfo.insert("userScope", userScope);
+    if (m_serviceInfo.value("load").toString() == "not-found")
+        m_serviceError = QStringLiteral("Cette unité n'existe pas sur le serveur.");
+    emit serviceChanged();
+}
+
 void LogsController::loadService() {
     if (!m_remote->connected() || (m_source != "unit" && m_source != "userunit") || m_target.isEmpty()) return;
     const int seq = ++m_serviceSeq;
@@ -554,41 +598,15 @@ void LogsController::loadService() {
         "echo '#journal'\n"
         "echo \"FORTIQ:id $(id -u) $(id -nG)\" >&2\n"
         "command -v journalctl >/dev/null 2>&1 && exec journalctl" + scope + " --no-pager -o json -u \"$u\" --since=-7d -n 5000 -p 0..6\n";
+    const int token = m_remote->connectionToken();
     const ConnectionRequest req = m_remote->connectionRequest();
     const bool userScope = m_source == "userunit";
     auto slot = m_session;
     auto *watcher = new QFutureWatcher<SshResult>(this);
-    connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, seq, userScope] {
+    connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, token, seq, userScope] {
         const SshResult r = watcher->result();
         watcher->deleteLater();
-        if (seq != m_serviceSeq) return;
-        m_serviceBusy = false;
-        if (r.status != SshResult::Status::Ok || r.message.contains("FORTIQ:missing")) {
-            m_serviceError = r.message.contains("FORTIQ:missing") ? QStringLiteral("systemctl n'est pas disponible sur ce serveur.") : r.message;
-            emit serviceChanged();
-            return;
-        }
-        const int show = r.data.indexOf("#show\n"), journal = r.data.indexOf("#journal\n");
-        const QByteArray showText = show >= 0 ? r.data.mid(show + 6, (journal > show ? journal : r.data.size()) - show - 6) : QByteArray();
-        m_serviceInfo = parseServiceShow(showText);
-        QVariantList events;
-        if (journal >= 0)
-            for (const QByteArray &line : r.data.mid(journal + 9).split('\n'))
-                if (!line.isEmpty()) if (QVariantMap e = parseJournalLine(line); !e.isEmpty()) events << e;
-        m_serviceHistory = lifecycleHistory(events);
-        m_serviceDays = dailyCounts(m_serviceHistory, QDateTime::currentMSecsSinceEpoch());
-        bool full = true;
-        for (const QString &line : r.message.split('\n'))
-            if (line.startsWith(QStringLiteral("FORTIQ:id "))) {
-                const QStringList f = line.mid(10).split(' ', Qt::SkipEmptyParts);
-                full = !f.isEmpty() && (f[0] == "0" || f.contains("adm") || f.contains("systemd-journal") || f.contains("wheel"));
-            }
-        m_serviceInfo.insert("historyLimited", !userScope && !full);
-        m_serviceInfo.insert("eventsRead", events.size());
-        m_serviceInfo.insert("userScope", userScope);
-        if (m_serviceInfo.value("load").toString() == "not-found")
-            m_serviceError = QStringLiteral("Cette unité n'existe pas sur le serveur.");
-        emit serviceChanged();
+        applyService(r, token, seq, userScope);
     });
     watcher->setFuture(QtConcurrent::run(&m_pool, [slot, req, script] {
         if (!*slot) *slot = std::make_unique<SshSession>();
@@ -600,8 +618,35 @@ void LogsController::loadService() {
     }));
 }
 
+void LogsController::applySources(const SshResult &r, int token, int seq) {
+    if (!accepts(token) || seq != m_sourcesSeq) return;
+    if (r.status != SshResult::Status::Ok || r.code != "exit:0" || r.truncated) return;
+    QVariantList units, files;
+    for (const QByteArray &line : r.data.split('\n')) {
+        const QList<QByteArray> f = line.split('\t');
+        if (f.size() >= 4 && (f[0] == "U" || f[0] == "V") && f[1].endsWith(".service"))
+            units.push_back(QVariantMap { { "name", QString::fromUtf8(f[1]) }, { "active", QString::fromUtf8(f[2]) },
+                                          { "sub", QString::fromUtf8(f[3]) }, { "user", f[0] == "V" } });
+        else if (f.size() >= 4 && f[0] == "F")
+            files.push_back(QVariantMap { { "path", QString::fromUtf8(f[3]) }, { "name", QString::fromUtf8(f[3]).mid(9) },
+                                          { "readable", f[1] == "r" }, { "size", f[2].toDouble() } });
+    }
+    std::sort(units.begin(), units.end(), [](const QVariant &a, const QVariant &b) {
+        const bool fa = a.toMap().value("sub") == "failed", fb = b.toMap().value("sub") == "failed";
+        if (fa != fb) return fa; // failed services first
+        return a.toMap().value("name").toString() < b.toMap().value("name").toString();
+    });
+    std::sort(files.begin(), files.end(), [](const QVariant &a, const QVariant &b) {
+        return a.toMap().value("path").toString() < b.toMap().value("path").toString();
+    });
+    m_units = units;
+    m_files = files;
+    emit sourcesChanged();
+}
+
 void LogsController::loadSources() {
     if (!m_remote->connected()) return;
+    const int seq = ++m_sourcesSeq;
     const QByteArray script =
         "systemctl list-units --type=service --all --no-legend --plain --no-pager 2>/dev/null"
         " | awk '{print \"U\\t\" $1 \"\\t\" $3 \"\\t\" $4}'\n"
@@ -609,34 +654,14 @@ void LogsController::loadSources() {
         " | awk '{print \"V\\t\" $1 \"\\t\" $3 \"\\t\" $4}'\n"
         "find /var/log -maxdepth 2 -type f ! -name '*.gz' ! -name '*.xz' ! -name '*.zst' ! -name '*.journal' ! -name '*.journal~'"
         " \\( -readable -printf 'F\\tr\\t%s\\t%p\\n' -o -printf 'F\\tn\\t%s\\t%p\\n' \\) 2>/dev/null | head -n 400\n";
+    const int token = m_remote->connectionToken();
     const ConnectionRequest req = m_remote->connectionRequest();
     auto slot = m_session;
     auto *watcher = new QFutureWatcher<SshResult>(this);
-    connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher] {
+    connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, token, seq] {
         const SshResult r = watcher->result();
         watcher->deleteLater();
-        if (r.status != SshResult::Status::Ok) return;
-        QVariantList units, files;
-        for (const QByteArray &line : r.data.split('\n')) {
-            const QList<QByteArray> f = line.split('\t');
-            if (f.size() >= 4 && (f[0] == "U" || f[0] == "V") && f[1].endsWith(".service"))
-                units.push_back(QVariantMap { { "name", QString::fromUtf8(f[1]) }, { "active", QString::fromUtf8(f[2]) },
-                                              { "sub", QString::fromUtf8(f[3]) }, { "user", f[0] == "V" } });
-            else if (f.size() >= 4 && f[0] == "F")
-                files.push_back(QVariantMap { { "path", QString::fromUtf8(f[3]) }, { "name", QString::fromUtf8(f[3]).mid(9) },
-                                              { "readable", f[1] == "r" }, { "size", f[2].toDouble() } });
-        }
-        std::sort(units.begin(), units.end(), [](const QVariant &a, const QVariant &b) {
-            const bool fa = a.toMap().value("sub") == "failed", fb = b.toMap().value("sub") == "failed";
-            if (fa != fb) return fa; // failed services first
-            return a.toMap().value("name").toString() < b.toMap().value("name").toString();
-        });
-        std::sort(files.begin(), files.end(), [](const QVariant &a, const QVariant &b) {
-            return a.toMap().value("path").toString() < b.toMap().value("path").toString();
-        });
-        m_units = units;
-        m_files = files;
-        emit sourcesChanged();
+        applySources(r, token, seq);
     });
     watcher->setFuture(QtConcurrent::run(&m_pool, [slot, req, script] {
         if (!*slot) *slot = std::make_unique<SshSession>();
@@ -649,6 +674,9 @@ void LogsController::loadSources() {
 }
 
 void LogsController::select(const QString &source, const QString &target) {
+    ++m_serviceSeq;
+    m_serviceBusy = false;
+    closeInspector();
     m_source = source;
     m_target = target;
     m_serviceInfo.clear();
@@ -666,6 +694,9 @@ void LogsController::reload() {
     m_cursor.clear();
     m_fileOffset = 0;
     m_fileInode.clear();
+    m_filePending.clear();
+    m_fileSkipLine = false;
+    m_fileHistoryLimited = false;
     run(false);
 }
 
@@ -681,11 +712,15 @@ void LogsController::poll() {
 }
 
 QByteArray LogsController::journalScript(bool append) const {
-    QByteArray args = "--no-pager -o json -n " + QByteArray::number(kMaxEvents);
+    // Initial view is a recent tail. Following must read from the cursor
+    // forwards: -n would silently drop the oldest events of a large backlog.
+    const bool resume = append && !m_cursor.isEmpty();
+    QByteArray args = "--no-pager -o json";
+    args += resume ? QByteArray(" --no-tail") : " -n " + QByteArray::number(kMaxEvents);
     if (m_source == "user" || m_source == "userunit") args += " --user";
     if ((m_source == "unit" || m_source == "userunit") && !m_target.isEmpty()) args += " -u " + SshSession::shellQuote(m_target);
     if (m_maxPriority < 7) args += " -p 0.." + QByteArray::number(m_maxPriority);
-    if (append && !m_cursor.isEmpty()) args += " --after-cursor=" + SshSession::shellQuote(m_cursor);
+    if (resume) args += " --after-cursor=" + SshSession::shellQuote(m_cursor);
     else if (m_range == "boot") args += " -b";
     else {
         static const QHash<QString, QByteArray> since { { "15min", "-15min" }, { "1h", "-1h" }, { "24h", "-24h" }, { "7d", "-7d" } };
@@ -699,22 +734,22 @@ QByteArray LogsController::journalScript(bool append) const {
 }
 
 QByteArray LogsController::fileScript(bool append) const {
+    // Open once: rotation cannot switch the inode between stat and read.
+    // A page is deliberately smaller than the transport cap; the header gives
+    // the byte position of its first byte, never an optimistic next offset.
     QByteArray s = "p=" + SshSession::shellQuote(m_target) + "\n"
         "[ -e \"$p\" ] || { echo 'FORTIQ:gone' >&2; exit 4; }\n"
         "[ -r \"$p\" ] || { echo 'FORTIQ:denied' >&2; exit 4; }\n"
-        "set -- $(stat -L -c '%i %s' -- \"$p\")\n"
-        "echo \"FORTIQ:stat $1 $2\"\n";
-    if (append && !m_fileInode.isEmpty()) {
-        // Same inode and not shorter: exactly the bytes up to the size just
-        // measured (the next read starts there: no gap, no duplicate).
-        // Otherwise the file was rotated or truncated.
-        s += "if [ \"$1\" = " + SshSession::shellQuote(m_fileInode) + " ] && [ \"$2\" -ge " + QByteArray::number(m_fileOffset) + " ]; then\n"
-             "  tail -c +" + QByteArray::number(m_fileOffset + 1) + " -- \"$p\" | head -c $(( $2 - " + QByteArray::number(m_fileOffset) + " ))\n"
-             "  exit 0\n"
-             "fi\n"
-             "echo 'FORTIQ:rotated'\n";
-    }
-    s += "head -c \"$2\" -- \"$p\" | tail -n " + QByteArray::number(kMaxEvents) + "\n";
+        "exec 3< \"$p\" || { echo 'FORTIQ:denied' >&2; exit 4; }\n"
+        "set -- $(stat -L -c '%i %s' /proc/self/fd/3)\n"
+        "[ \"$#\" = 2 ] || exit 5\n"
+        "start=0; reset=1\n";
+    if (append && !m_fileInode.isEmpty())
+        s += "if [ \"$1\" = " + SshSession::shellQuote(m_fileInode) + " ] && [ \"$2\" -ge " + QByteArray::number(m_fileOffset) + " ]; then start=" + QByteArray::number(m_fileOffset) + "; reset=0; fi\n";
+    s += "if [ \"$reset\" = 1 ] && [ \"$2\" -gt 262144 ]; then start=$(( $2 - 262144 )); fi\n"
+         "count=$(( $2 - start )); [ \"$count\" -le 262144 ] || count=262144\n"
+         "echo \"FORTIQ:stat $1 $2 $start $reset $count\"\n"
+         "tail -c +$(( start + 1 )) <&3 | head -c \"$count\"\n";
     return s;
 }
 
@@ -722,18 +757,28 @@ void LogsController::run(bool append) {
     if (!m_remote->connected()) return;
     if (m_source == "file" && m_target.isEmpty()) return;
     const int seq = ++m_seq;
-    if (m_token != m_remote->connectionToken()) { m_token = m_remote->connectionToken(); append = false; }
+    if (m_token != m_remote->connectionToken()) {
+        m_token = m_remote->connectionToken();
+        append = false;
+        m_cursor.clear();
+        m_fileOffset = 0;
+        m_fileInode.clear();
+        m_filePending.clear();
+        m_fileSkipLine = false;
+        m_fileHistoryLimited = false;
+    }
     m_busy = true;
     if (!append) { m_state.clear(); m_stateText.clear(); }
     emit changed();
     const QByteArray script = m_source == "file" ? fileScript(append) : journalScript(append);
+    const int token = m_remote->connectionToken();
     const ConnectionRequest req = m_remote->connectionRequest();
     auto slot = m_session;
     auto *watcher = new QFutureWatcher<SshResult>(this);
-    connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, append, seq] {
+    connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, token, append, seq] {
         const SshResult r = watcher->result();
         watcher->deleteLater();
-        apply(r, append, seq);
+        if (accepts(token)) apply(r, append, seq);
     });
     watcher->setFuture(QtConcurrent::run(&m_pool, [slot, req, script] {
         if (!*slot) *slot = std::make_unique<SshSession>();
@@ -756,6 +801,12 @@ void LogsController::apply(const SshResult &r, bool append, int seq) {
         return;
     }
     const QString err = r.message;
+    if (r.code != "exit:0" && !r.truncated && !err.contains("FORTIQ:missing")
+        && !err.contains("FORTIQ:denied") && !err.contains("FORTIQ:gone")) {
+        m_state = QStringLiteral("error");
+        m_stateText = err.isEmpty() ? QStringLiteral("Commande distante échouée (%1).").arg(r.code) : err;
+        emit changed(); return;
+    }
     QVariantList fresh;
     if (m_source == "file") {
         if (err.contains("FORTIQ:denied")) {
@@ -768,28 +819,64 @@ void LogsController::apply(const SshResult &r, bool append, int seq) {
             m_stateText = QStringLiteral("Le fichier %1 n'existe plus.").arg(m_target);
             m_events.clear(); recompute(); emit changed(); return;
         }
-        QByteArray data = r.data;
-        const int nl = data.indexOf('\n');
-        if (data.startsWith("FORTIQ:stat ") && nl > 0) {
-            const QList<QByteArray> st = data.left(nl).split(' ');
-            if (st.size() >= 3) { m_fileInode = QString::fromLatin1(st[1]); m_fileOffset = st[2].toLongLong(); }
-            data.remove(0, nl + 1);
+        const int nl = r.data.indexOf('\n');
+        const QList<QByteArray> st = r.data.left(nl).split(' ');
+        bool sizeOk = false, startOk = false, countOk = false;
+        const qint64 size = st.value(2).toLongLong(&sizeOk);
+        const qint64 start = st.value(3).toLongLong(&startOk);
+        const qint64 count = st.value(5).toLongLong(&countOk);
+        const QByteArray data = nl >= 0 ? r.data.mid(nl + 1) : QByteArray();
+        if (r.code != "exit:0" || r.truncated || nl < 0 || st.size() != 6
+            || st[0] != "FORTIQ:stat" || !sizeOk || !startOk || !countOk
+            || start < 0 || size < start || count < 0 || count > 262144
+            || count > size - start || data.size() != count
+            || (st[4] != "0" && st[4] != "1")
+            || (st[4] == "0" && (start != m_fileOffset || QString::fromLatin1(st[1]) != m_fileInode))) {
+            m_state = QStringLiteral("error");
+            m_stateText = QStringLiteral("Lecture incomplète ou échouée — position conservée, réessayer la lecture.");
+            emit changed(); return;
         }
-        if (data.startsWith("FORTIQ:rotated\n")) {
-            data.remove(0, 15);
+        const bool reset = st[4] == "1";
+        const bool rotated = reset && append;
+        if (reset) {
             append = false;
-            m_state = QStringLiteral("rotated");
-            m_stateText = QStringLiteral("Rotation ou troncature détectée : relecture des dernières lignes.");
+            m_filePending.clear();
+            m_fileSkipLine = start > 0; // first line of a byte tail can be cut
+            m_fileHistoryLimited = start > 0;
         }
-        // On append, the last partial line is kept for the next read.
-        const QList<QByteArray> lines = data.split('\n');
-        for (const QByteArray &raw : lines) {
-            if (raw.isEmpty()) continue;
-            const QString line = QString::fromUtf8(raw).left(4000);
-            const double ms = fileLineTime(line);
-            fresh.push_back(QVariantMap {
-                { "time", ms }, { "timeText", timeText(ms) }, { "priority", -1 }, { "priorityName", priorityName(-1) },
-                { "unit", m_target.section('/', -1) }, { "pid", QString() }, { "message", line }, { "cursor", QString() }, { "boot", QString() } });
+        m_fileInode = QString::fromLatin1(st[1]);
+        m_fileOffset = start + data.size();
+        // Keep at most the displayed prefix of an unfinished line, but consume
+        // all its bytes so even a multi-megabyte line cannot stall following.
+        qsizetype pos = 0;
+        while (pos < data.size()) {
+            const qsizetype end = data.indexOf('\n', pos);
+            const qsizetype length = (end < 0 ? data.size() : end) - pos;
+            if (!m_fileSkipLine)
+                m_filePending += data.mid(pos, std::min<qsizetype>(length, 16000 - m_filePending.size()));
+            if (end < 0) break;
+            if (!m_fileSkipLine && !m_filePending.isEmpty()) {
+                const QString line = QString::fromUtf8(m_filePending).left(4000);
+                const double ms = fileLineTime(line);
+                fresh.push_back(QVariantMap {
+                    { "time", ms }, { "timeText", timeText(ms) }, { "priority", -1 }, { "priorityName", priorityName(-1) },
+                    { "unit", m_target.section('/', -1) }, { "pid", QString() }, { "message", line }, { "cursor", QString() }, { "boot", QString() } });
+                if (fresh.size() >= 2 * kMaxEvents) fresh = fresh.mid(kMaxEvents);
+            }
+            m_filePending.clear();
+            m_fileSkipLine = false;
+            pos = end + 1;
+        }
+        m_state.clear(); m_stateText.clear();
+        if (m_fileOffset < size) {
+            m_state = QStringLiteral("limited");
+            m_stateText = QStringLiteral("Lecture en retard : %1 octets restent à lire. Activer le suivi pour continuer.").arg(size - m_fileOffset);
+        } else if (m_fileHistoryLimited) {
+            m_state = QStringLiteral("limited");
+            m_stateText = QStringLiteral("Vue initiale limitée aux derniers 256 Kio ; la première ligne partielle est ignorée.");
+        } else if (rotated) {
+            m_state = QStringLiteral("rotated");
+            m_stateText = QStringLiteral("Rotation ou troncature détectée : relecture ; les écritures de l'ancien fichier ne sont plus suivies.");
         }
     } else {
         if (err.contains("FORTIQ:missing")) {
@@ -804,6 +891,12 @@ void LogsController::apply(const SshResult &r, bool append, int seq) {
             fresh.push_back(e);
             m_cursor = e.value("cursor").toString();
         }
+        if (r.truncated) {
+            m_state = QStringLiteral("limited");
+            m_stateText = fresh.isEmpty()
+                ? QStringLiteral("Réponse tronquée avant un événement complet — curseur conservé ; un événement peut dépasser la limite de lecture.")
+                : QStringLiteral("Réponse tronquée — le suivi reprendra après le dernier événement complet ; couverture incomplète.");
+        }
         // Same rule as journalctl: root, adm, systemd-journal (and wheel on
         // some distributions) read the whole system journal.
         bool fullAccess = true;
@@ -816,7 +909,7 @@ void LogsController::apply(const SshResult &r, bool append, int seq) {
             m_state = QStringLiteral("limited");
             m_stateText = QStringLiteral("Accès limité : seuls les messages de votre utilisateur sont visibles. "
                                          "Les membres des groupes adm ou systemd-journal voient tout le journal.");
-        } else if (!append && m_state != "rotated") {
+        } else if (!r.truncated && m_state != "rotated") {
             m_state.clear();
             m_stateText.clear();
         }
@@ -837,10 +930,11 @@ void LogsController::apply(const SshResult &r, bool append, int seq) {
         if (m_events.size() > kMaxEvents) m_events = m_events.mid(m_events.size() - kMaxEvents);
     } else {
         m_events = fresh;
+        if (m_events.size() > kMaxEvents) m_events = m_events.mid(m_events.size() - kMaxEvents);
     }
     const bool bounded = m_events.size() >= kMaxEvents || r.truncated;
     m_coverage = QStringLiteral("%1 événement%2").arg(m_events.size()).arg(m_events.size() > 1 ? "s" : "")
-        + (bounded ? QStringLiteral(" — limite : les %1 plus récents").arg(kMaxEvents) : QString());
+        + (bounded ? QStringLiteral(" — vue limitée à %1 événements ; couverture incomplète").arg(kMaxEvents) : QString());
     m_lastUpdate = QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss"));
     recompute();
     emit changed();

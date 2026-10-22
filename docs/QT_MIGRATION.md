@@ -2,6 +2,36 @@
 
 **Decision:** single C++20 + Qt Quick/QML codebase for Windows and Android. Linux server remains the sole application backend. **Git workflow:** update `main` only; preserved Flutter sources at tag `flutter-final`. This is an implementation plan with a truthful snapshot of the Qt progress.
 
+## Reliability slice — 22.10.2026
+
+Journal following now uses `--after-cursor` with `--no-tail`, rather than selecting the newest
+2000 entries of an unread backlog. A transport-capped reply checkpoints only complete parsed
+events and explicitly reports incomplete coverage. Initial journal views remain bounded tails.
+
+Logs file reads now use an opened descriptor (GNU stat on `/proc/self/fd/3`) and pages up to
+256 KiB, below the 8 MiB SSH stdout cap. Headers carry inode, observed size, start, reset and
+expected count. Only a successful complete page advances the cursor by received bytes;
+failed/truncated/short reads keep the cursor and pending line. Incomplete UTF-8 lines span pages;
+long lines retain only a bounded display prefix (4000 characters), without stalling byte progress.
+Initial/replaced files show a bounded tail, omit its cut first line and explicitly mark limited
+history; following shows remaining bytes when behind. The timeline stays capped at 2000 events.
+Rotation cannot recover writes to a file replaced between polls; copy-truncate followed by regrowth
+between polls remains undetectable from inode/size alone. This is a bounded viewer, not a lossless archive.
+
+All Logs completions (timeline, sources, service view, inspector) check the captured connection
+generation; sources/service additionally reject superseded requests. Disconnect clears server
+sources and service data and invalidates pending work. Changing the selected source invalidates
+service/inspector work. Logs consumers distinguish transport success from a nonzero remote exit;
+source lists reject truncated output. This does not change `runScript` semantics for other callers.
+
+Verified locally: Windows MSVC 2022 / Qt 6.12 application and test build; Logs QtTest **10 passed,
+0 failed, 0 skipped** with `FORTIQ_TEST_WSL=Debian`, including the actual shell reader on Linux
+with Unicode/spaces/quote in the filename, 30000 appended lines over multiple pages, initial tail
+and rename/recreate rotation. Deterministic cases cover >10 MiB long lines, split UTF-8, short /
+truncated / failed responses, stale server/request results and disconnect invalidation.
+CTest now supplies matching Qt/libssh2 runtime paths on Windows; QtTest reports (including failures and skips) are saved
+as `remote-path-results.txt`, `ssh-results.txt` and `logs-results.txt` in the build directory. No new live SSH, device or clean-machine qualification is claimed.
+
 ## Migration constraints, not negotiable
 
 1. Not a DevOps dashboard. **Exact master-screenshot desktop UI** (not merely inspired by it) → **Smart Files** → **Logs** (deterministic analysis without AI) → supporting Terminal/System → Editor/Documents → Mail → Browser/media; AI optional later. [UI SPEC](UI_SPEC_V1.md), [Files](SMART_FILES_SPEC.md), [Logs](LOGS_INTELLIGENCE_SPEC.md).

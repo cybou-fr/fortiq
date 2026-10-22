@@ -9,7 +9,7 @@
 | What is FORTIQ / where work happens? | [SSH frontend contract](SSH_FRONTEND_CONTRACT.md) | UI screenshot / old Flutter features |
 | How does it look? | **[UI SPEC v1](UI_SPEC_V1.md)** and the owner's exact 1536×1024 source screenshot (hash recorded there) | Qt controls defaults, invented glassmorphism themes |
 | What do users get, and in what order? | [Product Scope](PRODUCT_SCOPE.md) | old marketing/landing page drafts |
-| What does flagship Files do? | [Smart Files](SMART_FILES_SPEC.md) | the current read-only SFTP grid |
+| What does flagship Files do? | [Smart Files](SMART_FILES_SPEC.md) | the current subset of file operations |
 | What does flagship Logs do? | [Logs Intelligence](LOGS_INTELLIGENCE_SPEC.md) | arbitrary sysadmin/SIEM features or AI promises |
 | How to implement it? | [Architecture](ARCHITECTURE.md), [Desktop Blueprint](FORTIQ_DESKTOP_BLUEPRINT.md) | discontinued Flutter architecture |
 | What is actually in code today? | **[README](../README.md), [Qt migration](QT_MIGRATION.md), [Development Matrix](DEVELOPMENT_MATRIX.md)** plus executed test evidence | aspirational specification, unrun tests, screenshots |
@@ -25,7 +25,7 @@
 4. **Remote:** SSH-only for work data, SFTP, CLI, PTY and future browser forwarding. No FORTIQ backend daemon, persistent local working-data copies or direct client mail protocols.
 5. **Flagships:** **Smart Files first**, **Logs second**; Logs performs deterministic source-backed grouping and synthesis **without AI**. Terminal/Services/System are supporting.
 6. **Deferred:** browser until its SSH-only routing is provable on Windows and Android; mail/docs/editor progressively after flagship basis; optional CPU Linux `ai` later.
-7. **Status:** Qt R0.1 source only (password login + pinned host fingerprint + SFTP list + RemotePath test); no qualified Windows/Android binaries, mature shell, Smart Files, Logs or license client.
+7. **Status:** engineering Qt R0.1 has persistent SSH/password/key, file operations and first Logs slices; Windows builds locally, while clean-machine/Android/visual qualification and licensing remain incomplete. Executed test evidence is in Qt migration.
 8. **Git workflow:** direct commits to `main`; no branches by default. The Flutter reference exists only at tag `flutter-final`.
 9. **Design verification:** master PNG SHA-256 recorded in UI SPEC. **The exact image is not yet committed**. The verified import process is [tool/install_master_reference.py](../tool/install_master_reference.py); once imported it is copied into both `docs/design/reference/` and `www/assets/`, allowing the marketing preview to display the byte-exact design reference. Golden Qt pixel-comparison still requires the running app and separate screenshot evidence.
 
@@ -34,9 +34,9 @@
 | Track | Source now? | Target | Acceptance |
 | --- | --- | --- | --- |
 | Shell | QML rough page, **not faithful** | exactly reproduce owner screenshot | golden 1536×1024 visual diff + manual review |
-| SSH | host pin + password + per-request SFTP listing | persistent trusted session, key auth, cancellation | Windows + Android Debian real tests |
-| Smart Files | basic read-only SFTP | search, collections, preview, safe writes/transfers | permission, Unicode, conflict, interruption tests |
-| Logs | none | journal + file logs, live tail, evidence-linked synthesis | real Debian service logs, failure and rights coverage |
+| SSH | host pin, password/key, persistent sessions and profiles | persistent trusted session, key auth, cancellation | Windows + Android Debian real tests |
+| Smart Files | navigation, preview, transfers, Trash, editor, search | search, collections, preview, safe writes/transfers | permission, Unicode, conflict, interruption tests |
+| Logs | journal/files, following, patterns, inspector, service view | journal + file logs, live tail, evidence-linked synthesis | real Debian service logs, failure and rights coverage |
 | Terminal/Services | none in Qt | support flagship workflows | real PTY and service query tests |
 | Mail/Browser/AI/Licenses | none in Qt | future gated additions | separately qualified |
 

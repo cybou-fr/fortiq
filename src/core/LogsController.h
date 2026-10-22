@@ -128,6 +128,10 @@ signals:
     void serviceChanged();
 
 private:
+    friend class LogsControllerTest;
+    bool accepts(int token) const;
+    void applySources(const SshResult &r, int token, int seq);
+    void applyService(const SshResult &r, int token, int seq, bool userScope);
     void run(bool append);
     void poll();
     void apply(const SshResult &r, bool append, int seq);
@@ -141,6 +145,7 @@ private:
     std::shared_ptr<std::unique_ptr<SshSession>> m_session;
     QTimer m_followTimer;
     int m_seq = 0;
+    int m_sourcesSeq = 0;
     int m_token = -1;
     QString m_source = QStringLiteral("journal");
     QString m_target;
@@ -155,6 +160,9 @@ private:
     QString m_cursor;     // journal: last __CURSOR seen
     qint64 m_fileOffset = 0;
     QString m_fileInode;
+    QByteArray m_filePending;
+    bool m_fileSkipLine = false;
+    bool m_fileHistoryLimited = false;
     QVariantList m_events;
     QVariantList m_patterns;
     QVariantList m_counts;

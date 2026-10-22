@@ -187,7 +187,7 @@ if(BUILD_TESTING)
     find_package(Qt6 6.8 REQUIRED COMPONENTS Test)
     qt_add_executable(fortiq_tests tests/RemotePathTest.cpp src/core/RemotePath.cpp src/core/RemotePath.h)
     target_link_libraries(fortiq_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME fortiq_remote_path COMMAND fortiq_tests)
+    add_test(NAME fortiq_remote_path COMMAND fortiq_tests -o "${CMAKE_CURRENT_BINARY_DIR}/remote-path-results.txt,txt" -o "-,txt")
     # Live SSH check; skips itself unless FORTIQ_IT_* variables are set.
     qt_add_executable(fortiq_ssh_it tests/SshIntegrationTest.cpp
         src/ssh/SshClient.cpp src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h
@@ -195,5 +195,17 @@ if(BUILD_TESTING)
         src/core/LogsController.cpp src/core/LogsController.h)
     target_include_directories(fortiq_ssh_it PRIVATE src)
     target_link_libraries(fortiq_ssh_it PRIVATE Qt6::Core Qt6::Network Qt6::Concurrent Qt6::Test ${FORTIQ_SSH_TARGET})
-    add_test(NAME fortiq_ssh_integration COMMAND fortiq_ssh_it)
+    add_test(NAME fortiq_ssh_integration COMMAND fortiq_ssh_it -o "${CMAKE_CURRENT_BINARY_DIR}/ssh-results.txt,txt" -o "-,txt")
+    qt_add_executable(fortiq_logs_tests tests/LogsControllerTest.cpp
+        src/ssh/SshClient.cpp src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h
+        src/core/RemoteController.cpp src/core/RemoteController.h
+        src/core/LogsController.cpp src/core/LogsController.h)
+    target_include_directories(fortiq_logs_tests PRIVATE src)
+    target_link_libraries(fortiq_logs_tests PRIVATE Qt6::Core Qt6::Network Qt6::Concurrent Qt6::Test ${FORTIQ_SSH_TARGET})
+    add_test(NAME fortiq_logs COMMAND fortiq_logs_tests -o "${CMAKE_CURRENT_BINARY_DIR}/logs-results.txt,txt" -o "-,txt")
+    if(WIN32)
+        # Developer tests need the matching Qt Test runtime, absent from the app package.
+        set_tests_properties(fortiq_remote_path fortiq_ssh_integration fortiq_logs PROPERTIES
+            ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:$<TARGET_FILE_DIR:${FORTIQ_SSH_TARGET}>")
+    endif()
 endif()
