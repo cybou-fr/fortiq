@@ -169,7 +169,13 @@ two-move QtTest. The handle now applies bounded movement from parent-space press
 including the final release position. QtTest adds a press/release-only case; the native Windows drag
 then moved Files successfully. This change is also included in the installed Android APK.
 
-The emulator remains available for further testing. On physical Lenovo hardware still verify installation/launch,
+The emulator remains available for further testing.
+The [Terminal slice](TERMINAL.md) also built and installed/launched on FortiqTablet. This verifies
+APK startup, not interactive Android terminal IME/TUI acceptance. Live PTY and controller tests
+ran on Windows against isolated WSL Debian. The disposable public key was revoked and its local
+private/public files removed after testing; no production account was used.
+
+On physical Lenovo hardware still verify installation/launch,
 rotation and real DPR, safe areas/predictive Back, IME/selection, tap/long press, readable touch controls,
 native key/upload/save pickers, provider metadata/unknown size, expired grants and restart persistence,
 SSH disconnect during transfer/export, partial-document warnings, and GPU blur/performance.

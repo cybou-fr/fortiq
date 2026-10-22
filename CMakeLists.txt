@@ -1,11 +1,15 @@
 cmake_minimum_required(VERSION 3.21)
-project(Fortiq VERSION 0.1.0 LANGUAGES CXX)
+project(Fortiq VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Quick QuickControls2 Network Concurrent)
+file(GLOB FORTIQ_VTERM_SOURCES CONFIGURE_DEPENDS third_party/libvterm/src/*.c)
+add_library(fortiq_vterm STATIC ${FORTIQ_VTERM_SOURCES})
+target_include_directories(fortiq_vterm PUBLIC third_party/libvterm/include)
+set_target_properties(fortiq_vterm PROPERTIES C_STANDARD 11 POSITION_INDEPENDENT_CODE ON)
 qt_standard_project_setup(REQUIRES 6.8)
 
 # One raster brand source -> native icons for both executables and the Android APK.
@@ -46,6 +50,8 @@ set(FORTIQ_SHELL_QML
     qml/shell/Theme.qml
     qml/shell/Wallpaper.qml
     qml/shell/Glass.qml
+    qml/shell/WindowDragArea.qml
+    qml/shell/TerminalWindow.qml
     qml/shell/AppIcon.qml
     qml/shell/FolderGlyph.qml
     qml/shell/FileThumb.qml
@@ -82,12 +88,14 @@ qt_add_qml_module(fortiq_shell
     RESOURCE_PREFIX /qt/qml
     OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/qml/Fortiq/Shell
     QML_FILES ${FORTIQ_SHELL_QML}
+    SOURCES src/terminal/TerminalView.cpp src/terminal/TerminalView.h
     RESOURCES
         assets/wallpapers/aurora.jpg
         assets/wallpapers/desert.jpg
         assets/wallpapers/city.jpg
 )
-target_link_libraries(fortiq_shell PRIVATE Qt6::Quick)
+target_link_libraries(fortiq_shell PRIVATE Qt6::Quick fortiq_vterm)
+target_include_directories(fortiq_shell PRIVATE src/terminal)
 
 qt_add_executable(fortiq_shell_preview src/main.cpp)
 target_compile_definitions(fortiq_shell_preview PRIVATE FORTIQ_NO_SSH)
@@ -141,6 +149,8 @@ qt_add_executable(fortiq
     src/core/RemoteController.h
     src/core/LogsController.cpp
     src/core/LogsController.h
+    src/core/TerminalController.cpp
+    src/core/TerminalController.h
     src/ssh/SshClient.cpp
     src/ssh/SshClient.h
 )
@@ -148,6 +158,9 @@ qt_add_resources(fortiq "fortiq_app_icon"
     PREFIX "/branding"
     BASE "${FORTIQ_BRAND_OUTPUT}"
     FILES "${FORTIQ_BRAND_OUTPUT}/fortiq_mark.png")
+qt_add_resources(fortiq "fortiq_third_party" PREFIX "/licenses"
+    BASE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libvterm"
+    FILES third_party/libvterm/LICENSE)
 if(WIN32)
     target_sources(fortiq PRIVATE "${FORTIQ_BRAND_OUTPUT}/fortiq.rc")
 endif()
@@ -204,6 +217,7 @@ if(BUILD_TESTING)
     add_test(NAME fortiq_remote_path COMMAND fortiq_tests -o "${CMAKE_CURRENT_BINARY_DIR}/remote-path-results.txt,txt" -o "-,txt")
     # Live SSH check; skips itself unless FORTIQ_IT_* variables are set.
     qt_add_executable(fortiq_ssh_it tests/SshIntegrationTest.cpp
+        src/core/TerminalController.cpp src/core/TerminalController.h
         src/ssh/SshClient.cpp src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h
         src/core/LocalDocument.cpp src/core/LocalDocument.h
         src/core/RemoteController.cpp src/core/RemoteController.h

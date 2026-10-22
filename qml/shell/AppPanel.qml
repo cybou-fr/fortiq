@@ -18,7 +18,7 @@ Item {
         { app: "launcher", kind: "apps", label: "Applications", ready: true },
         { app: "files", kind: "files", label: "Fichiers", ready: true },
         { app: "logs", kind: "logs", label: "Journaux", ready: true },
-        { app: "terminal", kind: "terminal", label: "Terminal", ready: false },
+        { app: "terminal", kind: "terminal", label: "Terminal", ready: true },
         { app: "editor", kind: "editor", label: "Éditeur", ready: false },
         { app: "browser", kind: "browser", label: "Navigateur", ready: false },
         { app: "settings", kind: "settings", label: "Paramètres", ready: false }

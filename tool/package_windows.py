@@ -134,6 +134,7 @@ def main() -> int:
     # Licenses and notices.
     lic = stage / "licenses"
     lic.mkdir(exist_ok=True)
+    shutil.copy2(ROOT / "third_party/libvterm/LICENSE", lic / "libvterm.txt")
     for pkg in ("libssh2", "openssl", "zlib"):
         src = VCPKG / "share" / pkg / "copyright"
         if src.exists():
@@ -144,7 +145,8 @@ def main() -> int:
             shutil.copy2(src, lic / f"Qt-{name}")
     redist = Path(crt[-1]).parents[2] / "redist.txt"
     (lic / "THIRD_PARTY_NOTICES.txt").write_text(
-        "FORTIQ includes, unmodified and dynamically linked:\n"
+        "FORTIQ includes the following third-party libraries:\n"
+        "- libvterm 0.3.3 (MIT), statically linked, unmodified sources: see libvterm.txt.\n"
         f"- Qt {QT.parent.name} (LGPLv3 / GPLv3; see Qt-*.txt). The Qt libraries are separate DLLs in this folder and can be replaced.\n"
         "- libssh2 (BSD-3-Clause), OpenSSL 3 (Apache-2.0), zlib (zlib license): see the matching files.\n"
         "- Microsoft Visual C++ runtime DLLs, redistributed app-locally under the Visual Studio redistribution terms.\n"

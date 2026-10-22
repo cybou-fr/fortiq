@@ -15,6 +15,8 @@ Item {
     readonly property real appHeight: Math.max(44, height - appTop - (Qt.inputMethod.visible ? 8 : 76))
     property var controller: null
     property var logsController: null
+    property var terminalController: null
+    property bool terminalOpen: false
     property bool fixture: false
     property string fixturePreview: ""
     property url wallpaperSource: ""
@@ -41,7 +43,7 @@ Item {
     property string panelEdge: fixture ? (fixturePreview === "panelleft" ? "left" : "bottom")
                                        : (displaySettings.panelEdge === "left" ? "left" : "bottom")
     property bool serversOpen: false
-    property var windowOrder: ["files", "browser", "logs"]
+    property var windowOrder: ["files", "browser", "logs", "terminal"]
     function raiseApp(app) {
         windowOrder = windowOrder.filter(key => key !== app).concat([app])
         foregroundApp = app
@@ -67,6 +69,7 @@ Item {
         else if (app === "browser") { browserOpen = !browserOpen; if (browserOpen) raiseApp("browser") }
         else if (app === "servers") serversOpen = true
         else if (app === "logs") { raiseApp("logs"); logsOpen = true; launcherOpen = false }
+        else if (app === "terminal") { terminalOpen = true; raiseApp("terminal"); launcherOpen = false }
         else if (app === "trash") {
             filesOpen = true; raiseApp("files")
             if (controller && controller.connected && controller.trashDirectory.length > 0) controller.navigate(controller.trashDirectory)
@@ -139,6 +142,21 @@ Item {
         onRequestServers: shell.serversOpen = true
     }
 
+    TerminalWindow {
+        id: terminalWindow
+        visible: shell.terminalOpen && (!shell.adaptive || shell.foregroundApp === "terminal")
+        adaptive: shell.adaptive
+        x: shell.adaptive ? 8 : 340; y: shell.adaptive ? shell.appTop : 110
+        width: shell.adaptive ? shell.width-16 : 920
+        height: shell.adaptive ? shell.appHeight : 600
+        z: shell.windowOrder.indexOf("terminal") + 1
+        backdrop: wallpaper
+        terminal: shell.terminalController
+        remote: shell.controller
+        onCloseRequested: { shell.terminalOpen=false; if(shell.adaptive){shell.foregroundApp="files";shell.filesOpen=true} }
+        onRequestServers: shell.serversOpen=true
+    }
+
     // Observe a press above app windows, then reject it so the same event
     // continues to the actual button, field or drag handle underneath.
     MouseArea {
@@ -146,7 +164,7 @@ Item {
         z: 9
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         onPressed: mouse => {
-            const windows = [{key: "files", item: filesWindow}, {key: "browser", item: browserWindow}, {key: "logs", item: logsWindow}]
+            const windows = [{key: "files", item: filesWindow}, {key: "browser", item: browserWindow}, {key: "logs", item: logsWindow}, {key: "terminal", item: terminalWindow}]
             windows.sort((a, b) => b.item.z - a.item.z)
             for (const entry of windows) {
                 const p = entry.item.mapFromItem(shell, mouse.x, mouse.y)
@@ -198,7 +216,7 @@ Item {
         y: edge === "left" ? 59 : parent.height - height - 8
         width: edge === "left" ? 84 : 560
         height: edge === "left" ? parent.height - 59 - 8 : 70
-        running: ({ files: shell.filesOpen, logs: shell.logsOpen, launcher: shell.launcherOpen })
+        running: ({ files: shell.filesOpen, logs: shell.logsOpen, terminal: shell.terminalOpen, launcher: shell.launcherOpen })
         onLaunch: (app) => shell.launch(app)
         onMoveTo: (edge) => {
             shell.panelEdge = edge
@@ -244,6 +262,7 @@ Item {
         name: "adaptive"; when: shell.adaptive
         PropertyChanges { target: filesWindow; x: 8; y: shell.appTop; width: shell.width - 16; height: shell.appHeight }
         PropertyChanges { target: logsWindow; x: 8; y: shell.appTop; width: shell.width - 16; height: shell.appHeight }
+        PropertyChanges { target: terminalWindow; x: 8; y: shell.appTop; width: shell.width - 16; height: shell.appHeight }
     }
     focus: true
     function handleBack() {
@@ -251,6 +270,10 @@ Item {
         if (serversOpen) { serverManager.back(); return true }
         if (launcherOpen || controlOpen) { launcherOpen = false; controlOpen = false; return true }
         if (foregroundApp === "files" && filesWindow.handleBack()) return true
+        if (foregroundApp === "terminal") {
+            if(terminalWindow.handleBack())return true
+            foregroundApp="files";filesOpen=true;return true
+        }
         if (foregroundApp === "logs") {
             if (logsWindow.handleBack()) return true
             foregroundApp = "files"; filesOpen = true; return true

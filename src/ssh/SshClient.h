@@ -117,6 +117,9 @@ public:
     // closed: `truncated`), stderr -> message (first 8 KiB), exit status ->
     // code "exit:N". Callers must quote data with shellQuote().
     SshResult runScript(const QByteArray &script, qint64 maxStdout, const std::function<bool()> &keepGoing = {});
+    // Interactive PTY on this worker-owned connection; no automatic replay.
+    SshResult startTerminal(int columns, int rows);
+    SshResult terminalExchange(const QByteArray &input, int columns, int rows);
     static QByteArray shellQuote(const QString &value);
     QString homeDirectory() const;
     bool isOpen() const;

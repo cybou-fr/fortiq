@@ -192,6 +192,12 @@ Item {
         color: "#40050B18"
         Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: "#1FFFFFFF" }
 
+        WindowDragArea {
+            anchors.fill: parent
+            windowItem: win
+            movable: !win.adaptive
+        }
+
         Row {
             x: 14; y: 17; spacing: 9
             Repeater {
@@ -240,6 +246,7 @@ Item {
         }
         ListView {
             id: unitList
+            interactive: count > 0
             x: 8; y: unitSearch.y + 28; width: parent.width - 16
             height: (parent.height - y - 30) * 0.55
             clip: true
@@ -271,6 +278,7 @@ Item {
         Text { id: filesTitle; x: 18; y: unitList.y + unitList.height + 8; text: "FICHIERS /var/log"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2; font.family: Theme.fontFamily }
         ListView {
             id: fileList
+            interactive: count > 0
             x: 8; y: filesTitle.y + 16; width: parent.width - 16
             height: parent.height - y - 10
             clip: true
@@ -307,10 +315,10 @@ Item {
     Item {
         id: toolbar
         x: win.contentLeft; width: parent.width - x; height: 48
-        MouseArea {
+        WindowDragArea {
             anchors.fill: parent
-            drag.target: win.adaptive ? null : win
-            drag.minimumY: 47
+            windowItem: win
+            movable: !win.adaptive
         }
         Text {
             x: win.drawer ? 54 : 14; anchors.verticalCenter: parent.verticalCenter

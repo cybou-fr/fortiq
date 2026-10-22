@@ -122,3 +122,9 @@ Shell panels/global dialogs retain their upper layer. Windows and Android builds
 layout QtTest **32 passed**, including bidirectional click-to-raise, app-panel launch ordering,
 child close-button delivery, and the existing drag regressions. The new APK was installed/launched
 on FortiqTablet; Android-specific touch activation is not separately qualified by this QtTest run.
+
+Terminal follow-up: Files, Logs, Browser and Terminal now share WindowDragArea. Empty Logs lists
+do not consume the drag as scrolling. Layout QtTest **37 passed**, including the new terminal
+at five viewports, ANSI/alternate screen/Ctrl+C and Logs drag. Terminal opened in the native
+Windows UI; interactive SSH is separately exercised by [live tests](TERMINAL.md). New APK built
+and installed/launched on FortiqTablet; Android terminal IME/TUI interaction remains pending.

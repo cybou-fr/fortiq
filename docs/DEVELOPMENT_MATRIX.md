@@ -38,7 +38,7 @@ Android arm64 debug APK прошёл базовые SSH/SFTP, поворот/IME
 | CORE | Модуль | Фактический статус Qt |
 |---|---|---|
 | 01 | CMake + C++20 + Qt Quick/QML | Windows MSVC и Android arm64 debug APK собираются; базовый запуск в эмуляторе проверен |
-| 02 | SSH/libssh2 и host fingerprint | пароль/ключ, pin хоста и SFTP есть; PTY и forwarding не реализованы |
+| 02 | SSH/libssh2 и host fingerprint | пароль/ключ, pin, SFTP и первый PTY есть; forwarding не реализован; [Terminal](TERMINAL.md) |
 | 03 | SessionManager / постоянное SSH соединение | сессии переиспользуются; общая политика восстановления не завершена |
 | 04 | TaskManager / операции / §unknown§ | очередь Files и исход unknown есть; общего TaskManager нет |
 | 05 | ResourceLocation / FileService | частично: SFTP список и пути; типизированная multi-server модель не реализована |

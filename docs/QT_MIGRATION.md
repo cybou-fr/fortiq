@@ -1,5 +1,10 @@
 # FORTIQ — Qt 6 / C++20 migration, Windows & Android first
 
+22 October follow-up: [Terminal](TERMINAL.md) now has an interactive SSH PTY, a libvterm screen,
+explicit start/stop and server-generation isolation. Shared WindowDragArea serves Files/Logs/
+Browser/Terminal. Windows/Android builds, 37 layout cases and two live PTY/controller cases passed
+(4 live QtTest passes including init/cleanup). Full Android IME/TUI qualification is still pending.
+
 **Decision:** single C++20 + Qt Quick/QML codebase for Windows and Android. Linux server remains the sole application backend. **Git workflow:** update `main` only; preserved Flutter sources at tag `flutter-final`. This is an implementation plan with a truthful snapshot of the Qt progress.
 
 ## Android foundation slice — 22.10.2026

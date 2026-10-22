@@ -6,6 +6,7 @@
 // environment and are never printed.
 #include "core/LogsController.h"
 #include "core/RemoteController.h"
+#include "core/TerminalController.h"
 #include "ssh/SshClient.h"
 
 #include <QCryptographicHash>
@@ -74,6 +75,58 @@ private slots:
         request.keyPath = qEnvironmentVariable("FORTIQ_IT_KEY");
         const SshResult result = SshClient::list(request);
         QVERIFY2(result.status == SshResult::Status::Ok, qPrintable(result.message));
+    }
+
+    void interactiveTerminalPreservesStateAndResizes() {
+        auto req=base; req.expectedHostFingerprint=fingerprint;
+        if(req.password.isEmpty())req.keyPath=qEnvironmentVariable("FORTIQ_IT_KEY");
+        fortiq::SshSession session;
+        const auto opened=session.open(req);QVERIFY2(opened.status==SshResult::Status::Ok,qPrintable(opened.message));
+        QVERIFY(session.startTerminal(80,24).status==SshResult::Status::Ok);
+        auto readUntil=[&](const QByteArray &input,const QByteArray &needle,int cols=80,int rows=24) {
+            QByteArray output; QElapsedTimer timer;timer.start();bool first=true;
+            while(timer.elapsed()<6000) {
+                auto r=session.terminalExchange(first?input:QByteArray(),cols,rows);first=false;
+                if(r.status!=SshResult::Status::Ok)return QByteArray("ERROR");
+                output+=r.data;if(output.contains(needle))break;QThread::msleep(20);
+            }
+            return output;
+        };
+        QVERIFY(readUntil("stty -echo; printf '\\nREADY\\n'\r","\r\nREADY\r\n").contains("\r\nREADY\r\n"));
+        const auto unicode=QString::fromUtf8("été Привет").toUtf8();
+        QVERIFY(readUntil("cd /tmp; export FORTIQ_TERM_MARK='"+unicode+"'; printf '\\nSET:%s\\n' \"$FORTIQ_TERM_MARK\"\r","SET:"+unicode).contains("SET:"+unicode));
+        QVERIFY(readUntil("printf '\\nSTATE:%s:%s\\n' \"$PWD\" \"$FORTIQ_TERM_MARK\"\r","STATE:/tmp:"+unicode).contains("STATE:/tmp:"+unicode));
+        QVERIFY(readUntil("printf '\\nSIZE:'; stty size\r","SIZE:35 120",120,35).contains("SIZE:35 120"));
+        session.terminalExchange("sleep 30\r",120,35);QThread::msleep(150);
+        session.terminalExchange(QByteArray(1,char(3)),120,35);QThread::msleep(100);
+        QVERIFY(readUntil("printf '\\nALIVE\\n'\r","\r\nALIVE\r\n",120,35).contains("\r\nALIVE\r\n"));
+        auto r=session.terminalExchange("exit 7\r",120,35);
+        QElapsedTimer end;end.start();while(r.code.isEmpty()&&end.elapsed()<6000){QThread::msleep(20);r=session.terminalExchange({},120,35);}
+        QCOMPARE(r.code,QString("exit:7"));QVERIFY(!session.isOpen());
+    }
+
+    void terminalControllerStopsOnServerChange() {
+        QTemporaryDir settings;QVERIFY(settings.isValid());
+        const auto oldOrg=QCoreApplication::organizationName(),oldApp=QCoreApplication::applicationName();
+        const auto oldFormat=QSettings::defaultFormat();
+        QCoreApplication::setOrganizationName("CYBOU-tests");QCoreApplication::setApplicationName("terminal-live");
+        QSettings::setDefaultFormat(QSettings::IniFormat);QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,settings.path());
+        {
+            fortiq::RemoteController remote;
+            fortiq::TerminalController terminal(&remote);
+            QSignalSpy output(&terminal,&fortiq::TerminalController::output),reset(&terminal,&fortiq::TerminalController::resetScreen);
+            remote.connectServer(base.host,base.port,base.user,base.password,qEnvironmentVariable("FORTIQ_IT_KEY"));
+            QTRY_VERIFY_WITH_TIMEOUT(!remote.busy(),20000);
+            QCOMPARE(remote.pendingFingerprint(),fingerprint);remote.trustHost();
+            QTRY_VERIFY_WITH_TIMEOUT(remote.connected(),20000);
+            terminal.start();QTRY_VERIFY_WITH_TIMEOUT(terminal.running(),20000);
+            terminal.send("stty -echo; printf '\\nFQ_CONTROLLER\\n'\r");
+            auto received=[&]{QByteArray data;for(const auto &entry:output)data+=entry.first().toByteArray();return data;};
+            QTRY_VERIFY_WITH_TIMEOUT(received().contains("\r\nFQ_CONTROLLER\r\n"),6000);
+            remote.disconnectServer();QVERIFY(!terminal.running());QVERIFY(reset.size()>=2);
+            const auto count=output.size();terminal.send("must-not-send\r");QTest::qWait(200);QCOMPARE(output.size(),count);
+        }
+        QSettings::setDefaultFormat(oldFormat);QCoreApplication::setOrganizationName(oldOrg);QCoreApplication::setApplicationName(oldApp);
     }
 
     void persistentSessionNavigates() {

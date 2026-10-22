@@ -1,6 +1,7 @@
 #ifndef FORTIQ_NO_SSH
 #include "core/LogsController.h"
 #include "core/RemoteController.h"
+#include "core/TerminalController.h"
 #endif
 
 #include "core/BackNavigationFilter.h"
@@ -74,9 +75,12 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("remote", &controller);
     fortiq::LogsController logs(&controller);
     engine.rootContext()->setContextProperty("logs", &logs);
+    fortiq::TerminalController terminal(&controller);
+    engine.rootContext()->setContextProperty("terminal", &terminal);
 #else
     engine.rootContext()->setContextProperty("remote", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("logs", QVariant::fromValue<QObject *>(nullptr));
+    engine.rootContext()->setContextProperty("terminal", QVariant::fromValue<QObject *>(nullptr));
 #endif
     engine.loadFromModule("Fortiq.App", "Main");
     if (engine.rootObjects().isEmpty()) return 1;

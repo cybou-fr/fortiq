@@ -25,10 +25,9 @@ Item {
     }
     onXChanged: { chrome.syncOrigin(); page.syncOrigin() }
     onYChanged: { chrome.syncOrigin(); page.syncOrigin() }
-    MouseArea {
+    WindowDragArea {
         width: parent.width; height: 36
-        drag.target: win
-        drag.minimumY: 47
+        windowItem: win
     }
 
     // Scenic page: the same wallpaper slice, unblurred, inside the frame.

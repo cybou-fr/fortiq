@@ -37,7 +37,7 @@
 | SSH | host pin, password/key, persistent sessions and profiles | persistent trusted session, key auth, cancellation | Windows + Android Debian real tests |
 | Smart Files | navigation, preview, transfers, Trash, editor, search | search, collections, preview, safe writes/transfers | permission, Unicode, conflict, interruption tests |
 | Logs | journal/files, following, patterns, inspector, service view | journal + file logs, live tail, evidence-linked synthesis | real Debian service logs, failure and rights coverage |
-| Terminal/Services | none in Qt | support flagship workflows | real PTY and service query tests |
+| Terminal/Services | first SSH PTY/libvterm and read-only service view; [Terminal](TERMINAL.md) | support flagship workflows | live PTY/controller tests passed; full platform/TUI qualification pending |
 | Mail/Browser/AI/Licenses | none in Qt | future gated additions | separately qualified |
 
 ## Documentation maintenance rule

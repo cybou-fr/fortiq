@@ -16,7 +16,7 @@ private slots:
     void viewport_data() {
         QTest::addColumn<QSize>("size"); QTest::addColumn<QString>("preview");
         for (const QSize size : {QSize(1536,1024), QSize(1600,950), QSize(1024,768), QSize(768,1024), QSize(390,844)})
-            for (const QString &preview : {QString(), QString("logs"), QString("editor"), QString("incident"), QString("service"), QString("servers")})
+            for (const QString &preview : {QString(), QString("logs"), QString("editor"), QString("incident"), QString("service"), QString("servers"), QString("terminal")})
                 QTest::newRow(qPrintable(QString("%1x%2-%3").arg(size.width()).arg(size.height()).arg(preview.isEmpty() ? "files" : preview))) << size << preview;
     }
     void viewport() {
@@ -34,6 +34,7 @@ private slots:
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first()); QVERIFY(window);
         window->resize(size); QTest::qWait(200);
         auto *shell = window->findChild<QQuickItem *>("desktopShell"); QVERIFY(shell);
+        if(preview=="terminal") { shell->setProperty("terminalOpen",true);shell->setProperty("foregroundApp","terminal"); }
         fortiq::BackNavigationFilter back(window, [shell] {
             QVariant handled;
             return QMetaObject::invokeMethod(shell, "handleBack", Q_RETURN_ARG(QVariant, handled)) && handled.toBool();
@@ -55,7 +56,7 @@ private slots:
                 QVERIFY(item->x() + item->width() <= shell->width());
                 QVERIFY(item->y() + item->height() <= shell->height() - 68);
             }
-            QCOMPARE(files->isVisible(), !logApp);
+            QCOMPARE(files->isVisible(), !logApp && preview!="terminal");
             QCOMPARE(logs->isVisible(), logApp);
         } else {
             QCOMPARE(files->x(), 471.0); QCOMPARE(files->y(), 72.0);
@@ -101,6 +102,12 @@ private slots:
             QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
                 logs->mapToScene(QPointF(25, 80)).toPoint());
             QTRY_VERIFY(logs->z() > files->z());
+            const auto logPosition=logs->position();
+            const auto logStart=logs->mapToScene(QPointF(80,560)).toPoint();
+            QTest::mousePress(window,Qt::LeftButton,Qt::NoModifier,logStart);
+            QTest::mouseRelease(window,Qt::LeftButton,Qt::NoModifier,logStart+QPoint(60,40));
+            QVERIFY(logs->x()>logPosition.x()); QVERIFY(logs->y()>logPosition.y());
+            logs->setPosition(logPosition);
             QVERIFY(QMetaObject::invokeMethod(shell, "launch", Q_ARG(QVariant, QVariant("files"))));
             QTRY_VERIFY(files->z() > logs->z());
             // The passive activation handler must not consume child clicks.
@@ -127,6 +134,22 @@ private slots:
             auto *title = logs->findChild<QQuickItem *>("incidentTitle"); QVERIFY(title);
             auto *controls = logs->findChild<QQuickItem *>("incidentControls"); QVERIFY(controls);
             QVERIFY(title->y() + title->height() <= controls->y());
+        }
+        if(preview=="terminal") {
+            auto *term=shell->findChild<QQuickItem *>("terminalWindow");QVERIFY(term);
+            QVERIFY(term->isVisible());
+            QVERIFY(term->x()>=0 && term->y()>=47);
+            QVERIFY(term->x()+term->width()<=shell->width());
+            auto *surface=term->findChild<QQuickItem *>("terminalSurface");QVERIFY(surface);
+            surface->setProperty("inputEnabled",true);
+            QSignalSpy bytes(surface,SIGNAL(bytes(QByteArray)));
+            QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,QByteArray("\033[2J\033[HHELLO\r\n\033[31mRED\033[0m"))));
+            QString text; QVERIFY(QMetaObject::invokeMethod(surface,"screenText",Q_RETURN_ARG(QString,text)));
+            QVERIFY(text.contains("HELLO") && text.contains("RED") && !text.contains(QChar(27)));
+            surface->forceActiveFocus();QTest::keyClick(window,Qt::Key_C,Qt::ControlModifier);
+            QVERIFY(!bytes.isEmpty());QCOMPARE(bytes.last().first().toByteArray(),QByteArray(1,char(3)));
+            QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,QByteArray("\033[?1049hALT\033[?1049l"))));
+            QVERIFY(QMetaObject::invokeMethod(surface,"screenText",Q_RETURN_ARG(QString,text)));QVERIFY(text.contains("HELLO"));
         }
         window->resize(QSize(844,390)); QTest::qWait(30);
         window->resize(size); QTest::qWait(30);

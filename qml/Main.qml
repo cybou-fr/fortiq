@@ -42,6 +42,7 @@ ApplicationWindow {
         height: adaptive ? Math.max(200, window.contentItem.height - window.keyboardOverlap) : window.contentItem.height / window.canvasScale
         controller: remote
         logsController: logs
+        terminalController: typeof terminal !== "undefined" ? terminal : null
         fixture: shellFixture
         fixturePreview: shellFixturePreview
         wallpaperSource: shellWallpaper
