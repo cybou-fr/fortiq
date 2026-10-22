@@ -145,6 +145,7 @@ private slots:
             auto *switcher = shell->findChild<QQuickItem *>("backgroundSwitcher"); QVERIFY(switcher);
             QVERIFY(switcher->isVisible());
             QVERIFY(control->isAncestorOf(switcher));                    // the choice is part of the panel
+            QVERIFY(window->grabWindow().save(QString("layout-captures/%1-control.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
             for (int index = 0; index < 3; ++index) {
                 // Repeater delegates are visual children only: walk the item tree.
                 std::function<QQuickItem *(QQuickItem *, const QString &)> find = [&find](QQuickItem *root, const QString &name) -> QQuickItem * {
@@ -157,6 +158,8 @@ private slots:
                     choice->mapToScene(QPointF(choice->width() / 2, choice->height() / 2)).toPoint());
                 QTRY_COMPARE(shell->property("wallpaperName").toString(), (QStringList{"aurora", "desert", "city"}.at(index)));
             }
+            QTest::qWait(400);
+            QVERIFY(window->grabWindow().save(QString("layout-captures/%1-control-selected.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
             shell->setProperty("fixture", true);
         }
         if (preview == "incident" && adaptive && size.width() < 700) {

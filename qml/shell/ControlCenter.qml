@@ -17,7 +17,7 @@ Glass {
     readonly property var wallpaperLabels: ({ aurora: "Aurora", desert: "Désert", city: "Ville" })
     radius: docked ? 0 : 18
     // Match the Logs window material; the shared workspace tint is lighter.
-    tint: "#B3121C30"
+    tint: docked ? "#D9101A2E" : "#B3121C30"
     blurAmount: 0.9
 
     component Tile: Rectangle {
@@ -120,7 +120,7 @@ Glass {
     Item {
         id: backgrounds
         objectName: "backgroundSwitcher"
-        readonly property real blockHeight: 124
+        readonly property real blockHeight: 140
         x: 0; width: parent.width; height: blockHeight
         y: Math.max(570, cc.height - blockHeight - 14)
         visible: !cc.fixture && cc.wallpapers.length > 0 && cc.height >= 570 + blockHeight + 14
@@ -134,9 +134,9 @@ Glass {
                     id: choice
                     required property string modelData
                     required property int index
-                    width: 86; height: 78
+                    width: 86; height: 94
                     Image {
-                        x: 3; y: 3; width: parent.width - 6; height: 50
+                        x: 3; y: 3; width: parent.width - 6; height: 66
                         source: Qt.resolvedUrl("../../assets/wallpapers/" + choice.modelData + ".jpg")
                         fillMode: Image.PreserveAspectCrop
                         sourceSize.width: 172
@@ -144,7 +144,7 @@ Glass {
                         clip: true
                     }
                     Rectangle {
-                        width: parent.width; height: 56; radius: 6; color: "transparent"
+                        width: parent.width; height: 72; radius: 6; color: "transparent"
                         border.width: choice.modelData === cc.wallpaperName ? 2 : 0
                         border.color: Theme.accent
                         MouseArea {
@@ -155,7 +155,7 @@ Glass {
                         }
                     }
                     Text {
-                        anchors.horizontalCenter: parent.horizontalCenter; y: 62
+                        anchors.horizontalCenter: parent.horizontalCenter; y: 78
                         text: cc.wallpaperLabels[choice.modelData] || choice.modelData
                         color: Theme.ink; font.pixelSize: 11; font.family: Theme.fontFamily
                     }
