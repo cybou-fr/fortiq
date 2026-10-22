@@ -7,7 +7,9 @@ Glass {
     id: cc
     property bool fixture: false
     radius: 18
-    tint: Theme.control
+    // Match the Logs window material; the shared workspace tint is lighter.
+    tint: "#B3121C30"
+    blurAmount: 0.9
 
     component Tile: Rectangle {
         id: tile

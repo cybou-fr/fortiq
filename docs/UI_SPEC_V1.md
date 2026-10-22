@@ -154,5 +154,7 @@ they do not implement saved remote workspaces. The reference fixture keeps the o
 Clicking or touching an exposed app window raises it above the other app windows; choosing its
 app-panel entry raises it too. Activation observes the press passively so fields, buttons and drag
 handles retain the same gesture. Shell panels and the global server dialog remain above app windows.
+Owner material correction: Control Center uses the Logs window tint (`#B3121C30`) and blur amount
+(`0.9`), rather than the lighter workspace-card tint, so the right panel has comparable density.
 This is not a new visual approval, nor proof of complete Android touch/accessibility or GPU fidelity.
 See [Android foundation](ANDROID_FOUNDATION.md) for screenshots, build evidence and device gates.
