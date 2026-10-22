@@ -24,12 +24,12 @@ Glass {
             visible: tile.badge
             x: 10; anchors.verticalCenter: parent.verticalCenter
             width: 38; height: 38; radius: 19; color: Theme.accentDeep
-            Text { anchors.centerIn: parent; text: tile.glyph; color: "white"; font.pixelSize: 18 }
+            SymbolGlyph { anchors.centerIn: parent; glyph: tile.glyph; color: "white"; size: 18 }
         }
-        Text {
+        SymbolGlyph {
             visible: !tile.badge
             x: 14; anchors.verticalCenter: parent.verticalCenter
-            text: tile.glyph; color: "white"; font.pixelSize: 18
+            glyph: tile.glyph; color: "white"; size: 18
         }
         Column {
             x: tile.badge ? 57 : 46; anchors.verticalCenter: parent.verticalCenter

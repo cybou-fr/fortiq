@@ -3,6 +3,8 @@
 #include "core/RemoteController.h"
 #endif
 
+#include "core/BackNavigationFilter.h"
+
 #include <QCommandLineParser>
 #include <QDir>
 #include <QGuiApplication>
@@ -78,8 +80,17 @@ int main(int argc, char *argv[])
 #endif
     engine.loadFromModule("Fortiq.App", "Main");
     if (engine.rootObjects().isEmpty()) return 1;
-    if (auto *rootWindow = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst()))
+    if (auto *rootWindow = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst())) {
         rootWindow->setIcon(fortiqIcon);
+#ifdef Q_OS_ANDROID
+        auto *shell = rootWindow->findChild<QObject *>(QStringLiteral("desktopShell"));
+        if (shell) new fortiq::BackNavigationFilter(rootWindow, [shell] {
+            QVariant handled;
+            return QMetaObject::invokeMethod(shell, "handleBack", Q_RETURN_ARG(QVariant, handled))
+                && handled.toBool();
+        });
+#endif
+    }
 
     if (parser.isSet(screenshotOption)) {
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());

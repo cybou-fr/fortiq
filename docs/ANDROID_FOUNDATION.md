@@ -10,6 +10,8 @@ The binding visual contract remains [UI SPEC v1](UI_SPEC_V1.md); product/network
   1280 logical pixels, or in portrait, the shell uses actual viewport units, without shrinking
   the complete 1536×1024 desktop. One foreground Files/Logs surface maximizes within the shell;
   the single bottom app panel scrolls horizontally, with unavailable apps explicitly dimmed.
+  On a wide Android tablet the same viewport layout is used while the IME is visible, avoiding
+  a miniaturized desktop above the keyboard; hiding the IME restores the desktop composition.
 - Files has a touch toolbar, path/search fields, an action menu, single-tap opening and long-press
   context actions. Its sidebar becomes a drawer below 900 pixels. Logs uses the same drawer
   pattern and scrollable filters; its incident inspector switches synopsis/events on narrow screens.
@@ -18,6 +20,10 @@ The binding visual contract remains [UI SPEC v1](UI_SPEC_V1.md); product/network
   confirmation before leaving the editor. ApplicationWindow supplies Qt's safe-area padding;
   keyboard overlap is accounted for, the app panel hides during text input, and server-form fields
   can scroll into view. These native interactions still require real-device tests.
+- Android Back is routed at the Qt window before focus-dependent QML handlers, using the same
+  shell navigation/dirty-editor guard. With nothing to close, Android may background the app normally.
+  Missing desktop symbol glyphs use small Canvas silhouettes on Android, including navigation,
+  search, transfer arrows and Logs. The touch action menu uses the existing glass material.
 - The manifest uses SAF document grants and declares INTERNET, without legacy READ/WRITE_EXTERNAL_STORAGE
   or MANAGE_EXTERNAL_STORAGE permissions. It allows rotation, requests adjustResize, and packages
   the approved native icon. AndroidX adds its app-private non-exported-receiver permission during merge.
@@ -36,13 +42,17 @@ a temporary file or persisted in a profile; its byte buffer is cleared after use
 is remembered. This is not a claim of hardened/locked secret memory.
 
 Native downloads retain QSaveFile atomic publication. A SAF download first finishes its SFTP read
-into an auto-removing temporary file (Android app-private temporary storage), verifies byte count
+into an auto-removing temporary file under the explicit app-private CacheLocation/document-staging
+directory (not the process-wide temporary directory), verifies byte count
 when the server reports size, then opens the chosen provider destination. Provider publication is
 **not atomic**: an open/write/flush/close failure or cancellation after opening reports `unknown`
 with an explicit partial-document warning. Disconnecting during a running provider download
 also conservatively marks it `unknown`, even when a new server generation would discard its late result. It never silently enables QSaveFile direct-write fallback.
 Cancellation before publication does not open the destination; the picker itself may already have
 created an empty document. Abrupt process death can leave temporary storage requiring OS/app cleanup.
+An idle transfer transport lost during the initial read-only SFTP stat is closed and reconnected
+once, rechecking the host pin, before retrying that preflight. Permission/path errors, uploads and
+provider writes are not replayed. This is not general automatic recovery after publication begins.
 
 Implementation references: [Qt QFile content-URI limitations](https://doc.qt.io/qt-6/qfile.html),
 [QSaveFile](https://doc.qt.io/qt-6/qsavefile.html),
@@ -74,8 +84,11 @@ to a device. `--build-type Release` produces an unsigned release candidate unles
 Expected debug output: `build-android-arm64/android-build/build/outputs/apk/debug/android-build-debug.apk`.
 Customers receive a finished application; these instructions are for repository development only.
 
-Windows regression evidence: CTest **7/7 targets passed**; layout QtTest **26 passed**,
-document/export QtTest **9 passed**, Logs **11 passed**, live publication **27 passed**. The general
+Earlier Windows regression evidence: CTest **7/7 targets passed**, Logs **11 passed**. This emulator
+slice rebuilt Windows/Android and reran the changed suites: layout QtTest **26 passed**,
+document/export QtTest **10 passed**, live publication **28 passed**. New cases exercise window-level
+Back with focused forms at every viewport, writable/auto-removed private staging, and lost download
+preflight preserving an existing destination and invalidating the dead session. The general
 SSH integration suite explicitly skipped without `FORTIQ_IT_*`; the separate publication fixture
 used real SSH with a test key through the new memory-authentication path.
 Layout cases cover 1536×1024, 1024×768, 768×1024 and 390×844 for Files, Logs, editor, incident,
@@ -89,14 +102,27 @@ Document tests use fake providers to exercise opaque URLs, deferred destination 
 writes, denied opening and cancellation before/during export. Live publication tests on the isolated
 WSL SSH/SFTP fixture also verify the new memory-key path. They do not simulate Android grant/provider APIs.
 
-## Still required on Lenovo / Android
+## Emulator run and remaining Android qualification
 
 On 22 October 2026 the debug arm64 APK was installed successfully on the `FortiqTablet` AVD
 (Android 17 / API 37, x86_64 with arm64 translation, 2560×1600). The shell and Files rendered,
 and tapping the server chooser opened Server Manager. The first translated launch took about
 30 seconds. Screenshots: ignored `build-dist/emulator-launch.png` and `emulator-servers.png`.
-Some symbol icons lack glyphs; logcat also reported a GFXSTREAM GL 0x502 error. This limited
-launch/tap smoke check does not qualify GPU fidelity, native arm64 hardware, SSH or document providers.
+The follow-up run verified pinned host-key authentication with a disposable key in app-private storage,
+SFTP navigation (including a Cyrillic/accented filename with a space), UTF-8 editing/saving on the Linux
+fixture, portrait/landscape rotation retaining the edit, native IME, and Back/unsaved confirmation.
+Native DocumentsUI opened a Downloads document for upload; the 43-byte UTF-8/CRLF source matched
+the remote SHA-256. Downloading it to a new SAF document matched the source byte for byte.
+The fixture was an isolated WSL Debian server; the temporary key is revoked/deleted after testing.
+Failures found and fixed: missing symbol fonts, focus-dependent Back backgrounding the Activity,
+whole-desktop shrink above the landscape IME, and default temporary-file creation failing during SAF
+download. Read-only SFTP preflight transport loss is now distinguished from permission/path errors.
+Screenshots (ignored `build-dist/`): `emulator-menu-fixed.png`, `emulator-back-verified.png`,
+`emulator-landscape-ime-fixed.png`, `emulator-dirty-back.png`, `emulator-saf-verified.png`.
+The GFXSTREAM GL 0x502 warning observed in the first run and occasional brand-texture rendering
+remain GPU/fidelity follow-up items; these functional checks do not qualify performance or visuals.
+The key picker itself was not exercised with a real private-key provider URI in this run.
+
 The emulator remains available for further testing. On physical Lenovo hardware still verify installation/launch,
 rotation and real DPR, safe areas/predictive Back, IME/selection, tap/long press, readable touch controls,
 native key/upload/save pickers, provider metadata/unknown size, expired grants and restart persistence,

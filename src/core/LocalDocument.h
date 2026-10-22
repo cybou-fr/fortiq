@@ -9,6 +9,9 @@ namespace fortiq {
 QString localDocumentPath(const QUrl &url);
 bool isContentDocument(const QString &path);
 QString localDocumentName(const QString &path);
+// Explicit app-cache template; never rely on an Android process-wide TMPDIR.
+// Empty means the private directory could not be prepared.
+QString documentStagingTemplate();
 struct DocumentExportResult {
     bool ok = false;
     bool attempted = false; // provider may have changed once opening is attempted

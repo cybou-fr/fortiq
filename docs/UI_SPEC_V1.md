@@ -136,5 +136,7 @@ Section 4 now has a first source implementation: below 1280 logical pixels or in
 one foreground Files/Logs surface uses viewport units, with a single scrollable app panel,
 collapsed sidebars and touch-sized primary controls. Window/editor instances survive resizing;
 Back preserves unsaved text. The reference desktop geometry remains under tests at 1536×1024.
+While the Android IME is visible, wide tablets also use viewport units to keep text and controls
+readable above the keyboard; the normal landscape composition returns when the IME hides.
 This is not a new visual approval, nor proof of complete Android touch/accessibility or GPU fidelity.
 See [Android foundation](ANDROID_FOUNDATION.md) for screenshots, build evidence and device gates.

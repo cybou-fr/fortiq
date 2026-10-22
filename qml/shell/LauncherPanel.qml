@@ -29,7 +29,7 @@ Glass {
     Rectangle {
         x: 18; y: 17; width: parent.width - 36; height: 31; radius: 15.5
         color: "#1FFFFFFF"; border.width: 1; border.color: "#40FFFFFF"
-        Text { x: 12; anchors.verticalCenter: parent.verticalCenter; text: "⌕"; color: Theme.ink; font.pixelSize: 16 }
+        SymbolGlyph { x: 12; anchors.verticalCenter: parent.verticalCenter; glyph: "⌕"; color: Theme.ink; size: 16 }
         Text { x: 36; anchors.verticalCenter: parent.verticalCenter; text: "Rechercher des applications..."; color: "#C5D0E0"; font.pixelSize: 11; font.family: Theme.fontFamily }
     }
 

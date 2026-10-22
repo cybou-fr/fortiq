@@ -78,12 +78,12 @@ Rectangle {
             width: list.width
             height: t.state === "conflict" ? 64 : 42
 
-            Text {
+            SymbolGlyph {
                 x: 14; y: 6
-                text: row.t.upload ? "⤒" : "⤓"
+                glyph: row.t.upload ? "⤒" : "⤓"
                 color: row.t.state === "error" || row.t.state === "unknown" ? "#FCA5A5"
                      : row.t.state === "done" ? "#4ADE80" : Theme.accent
-                font.pixelSize: 16
+                size: 16
             }
             Text {
                 x: 38; y: 4

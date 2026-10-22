@@ -603,9 +603,16 @@ void RemoteController::startTransfer(int id, int policyValue) {
             if (tick.elapsed() > 120 || done == total) { tick.restart(); report(done, total); }
             return !job.cancel->load();
         };
-        return job.upload
-            ? session.upload(job.local, job.remote, job.name, policy, progress)
-            : session.download(job.remote, job.local, progress);
+        if (job.upload) return session.upload(job.local, job.remote, job.name, policy, progress);
+        auto result = session.download(job.remote, job.local, progress);
+        // A native document picker can outlive an idle transport. Retry only
+        // the read-only preflight, before any destination has been opened.
+        if (result.code == "disconnected" && !job.cancel->load()) {
+            const auto reopened = session.open(req); // pin checked again
+            if (reopened.status != SshResult::Status::Ok) return reopened;
+            result = session.download(job.remote, job.local, progress);
+        }
+        return result;
     }));
 }
 

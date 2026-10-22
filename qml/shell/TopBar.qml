@@ -58,10 +58,10 @@ Rectangle {
         width: 515; height: 31; radius: 15.5
         color: "#33A9C8F0"
         border.width: 1; border.color: "#4D9DC4F5"
-        Text {
+        SymbolGlyph {
             x: 14; anchors.verticalCenter: parent.verticalCenter
-            text: "⌕"
-            color: Theme.ink; font.pixelSize: 18
+            glyph: "⌕"
+            color: Theme.ink; size: 18
         }
         Text {
             x: 42; anchors.verticalCenter: parent.verticalCenter
@@ -78,11 +78,11 @@ Rectangle {
         spacing: 22
         Repeater {
             model: ["⧉", "▤", "|", "🔔", "◠", "ᛒ", "🔊"]
-            Text {
+            SymbolGlyph {
                 required property string modelData
-                text: modelData
+                glyph: modelData
                 color: modelData === "|" ? "#6F86A8" : Theme.ink
-                font.pixelSize: 15
+                size: 15
             }
         }
     }

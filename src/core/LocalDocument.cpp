@@ -1,6 +1,8 @@
 #include "LocalDocument.h"
 #include <QFileDevice>
 #include <QFileInfo>
+#include <QDir>
+#include <QStandardPaths>
 
 namespace fortiq {
 QString localDocumentPath(const QUrl &url) {
@@ -16,6 +18,13 @@ QString localDocumentName(const QString &path) {
     // Qt's Android content engine queries DocumentsProvider DISPLAY_NAME.
     // Do not derive a name from an opaque /document/... identifier.
     return QFileInfo(path).fileName();
+}
+QString documentStagingTemplate() {
+    const QString cache = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    if (cache.isEmpty()) return {};
+    const QDir directory(QDir(cache).filePath(QStringLiteral("document-staging")));
+    if (!QDir().mkpath(directory.absolutePath())) return {};
+    return directory.filePath(QStringLiteral("download-XXXXXX"));
 }
 DocumentExportResult exportDocument(QIODevice &staging,
     const std::function<std::unique_ptr<QIODevice>()> &openDestination,

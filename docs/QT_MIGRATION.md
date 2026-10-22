@@ -14,10 +14,14 @@ retain QSaveFile. The manifest omits broad storage permission requests.
 
 **Actual builds:** Windows MSVC and Android arm64 (Qt 6.12, NDK 28.2, JDK 21, SDK 36, min API 28).
 OpenSSL/libssh2/zlib were built for Android; a debug-signed APK was produced and signature/manifest/ABI
-checked. Device installation/runtime is **not verified**: no device was attached. Layout QtTest
-26/26 and local-document QtTest 9/9 passed; screenshots include four viewport sizes and six views,
-plus rotation and Back/unsaved-edit checks. These are Windows offscreen tests, not Android provider,
-IME, GPU or touch acceptance. Detailed evidence, commands and pending device checks:
+checked. FortiqTablet AVD (API 37, x86_64 with arm64 translation) passed installation, pinned key
+authentication, SFTP navigation, rotation/IME/Back with dirty-editor protection, remote UTF-8 save,
+and native SAF upload/download with byte-for-byte round-trip verification. Physical hardware and
+GPU/visual acceptance remain unqualified. Window-level Back routing and an explicit private-cache
+download staging directory fix failures found in that run. Current Windows regressions: layout
+26/26, local-document 10/10, live publication 28/28, including failed download preflight preserving
+the destination. Earlier full CTest was 7/7; the changed targets were rerun in this slice.
+Detailed evidence, commands and pending device checks:
 [Android foundation](ANDROID_FOUNDATION.md).
 
 ## File publication reliability slice — 22.10.2026

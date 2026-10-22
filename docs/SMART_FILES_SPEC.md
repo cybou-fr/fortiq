@@ -76,4 +76,7 @@ Files now has an adaptive foreground layout and opaque SAF URI handling. Keys ar
 QFile into bounded RAM for authentication; uploads stream provider content using actual bytes
 when reported length is unknown. Downloads stage completely before provider publication, which
 is explicitly non-atomic and reports possible partial results on interruption. No broad storage
-permissions or direct network fallback are introduced. [Implementation and pending Android tests](ANDROID_FOUNDATION.md).
+permissions or direct network fallback are introduced. The FortiqTablet emulator run verified Unicode
+file navigation/edit/save and native SAF upload/download with identical round-trip bytes; staging
+now uses an explicit private app-cache directory. Physical hardware and provider failure/grant
+coverage remain pending. [Implementation and Android evidence](ANDROID_FOUNDATION.md).

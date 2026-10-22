@@ -16,13 +16,13 @@ Rectangle {
     border.color: "#802F8CFF"
     opacity: enabledState ? 1 : 0.35
 
-    Text {
+    SymbolGlyph {
         visible: ["grid", "list", "eye", "sort"].indexOf(button.glyph) < 0
         anchors.centerIn: parent
-        text: button.glyph
+        glyph: button.glyph
         color: Theme.ink
-        font.pixelSize: 17
-        font.family: Theme.fontFamily
+        size: 17
+        fontFamily: Theme.fontFamily
     }
     Grid {
         visible: button.glyph === "grid"

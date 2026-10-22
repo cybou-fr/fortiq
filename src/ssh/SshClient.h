@@ -30,7 +30,8 @@ struct SshResult {
     qint64 fileSize = -1; // readFile(): full size reported by the server
     bool truncated = false;
     // Transfers: "conflict", "cancelled", "unknown" (outcome on the server not
-    // known after a drop, or local document publication incomplete), or empty. `directory` holds the final path on Ok.
+    // known after a drop, or local document publication incomplete), "disconnected"
+    // (download read-only preflight lost its transport), or empty. `directory` holds the final path on Ok.
     QString code;
     qint64 bytes = 0;
 };

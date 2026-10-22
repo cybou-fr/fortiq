@@ -13,11 +13,14 @@ ApplicationWindow {
     minimumHeight: 320
     title: "FORTIQ"
     color: "#06152A"
-    onClosing: close => { if (adaptive && shell.handleBack()) close.accepted = false }
+    onClosing: close => { if ((adaptive || Qt.platform.os === "android") && shell.handleBack()) close.accepted = false }
 
     readonly property real keyboardOverlap: Qt.platform.os === "android" && Qt.inputMethod.visible && Qt.inputMethod.keyboardRectangle.height > 0
         ? Math.max(0, contentItem.y + contentItem.height - Qt.inputMethod.keyboardRectangle.y) : 0
+    // A wide tablet must not shrink the entire desktop to fit above its IME.
+    // Keep controls in logical units while typing, then restore the desktop.
     readonly property bool adaptive: contentItem.width < 1280 || contentItem.width < contentItem.height
+                                    || (Qt.platform.os === "android" && Qt.inputMethod.visible)
     readonly property real canvasScale: adaptive ? 1 : Math.min(contentItem.width / Theme.canvasWidth, contentItem.height / Theme.canvasHeight)
 
     DesktopShell {

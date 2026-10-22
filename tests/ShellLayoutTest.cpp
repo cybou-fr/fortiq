@@ -6,6 +6,7 @@
 #include <QQuickItem>
 #include <QDir>
 #include <QQmlExtensionPlugin>
+#include "../src/core/BackNavigationFilter.h"
 Q_IMPORT_QML_PLUGIN(Fortiq_ShellPlugin)
 
 class ShellLayoutTest : public QObject {
@@ -33,6 +34,10 @@ private slots:
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first()); QVERIFY(window);
         window->resize(size); QTest::qWait(200);
         auto *shell = window->findChild<QQuickItem *>("desktopShell"); QVERIFY(shell);
+        fortiq::BackNavigationFilter back(window, [shell] {
+            QVariant handled;
+            return QMetaObject::invokeMethod(shell, "handleBack", Q_RETURN_ARG(QVariant, handled)) && handled.toBool();
+        });
         auto *files = shell->findChild<QQuickItem *>("filesWindow"); QVERIFY(files);
         auto *logs = shell->findChild<QQuickItem *>("logsWindow"); QVERIFY(logs);
         auto *editor = files->findChild<QQuickItem *>("fileViewer"); QVERIFY(editor);
@@ -56,6 +61,13 @@ private slots:
             auto *manager = shell->findChild<QQuickItem *>("serverManager"); QVERIFY(manager);
             shell->setProperty("serversOpen", true); manager->setProperty("editingId", "new");
             QTest::qWait(50);
+            // Window-level Back must work with focus in a form, also at master width.
+            QTest::keyRelease(window, Qt::Key_Back);
+            QCOMPARE(manager->property("editingId").toString(), QString());
+            QVERIFY(shell->property("serversOpen").toBool());
+            QTest::keyRelease(window, Qt::Key_Back);
+            QVERIFY(!shell->property("serversOpen").toBool());
+            shell->setProperty("serversOpen", true); manager->setProperty("editingId", "new");
         }
         const auto image = window->grabWindow(); QVERIFY(!image.isNull());
         QDir().mkpath("layout-captures");

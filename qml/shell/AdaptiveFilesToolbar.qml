@@ -14,7 +14,7 @@ Column {
         ToolButtonGlass { touch: true; glyph: "‹"; enabledState: bar.files.connected && bar.files.controller.canGoBack; onClicked: bar.files.controller.goBack() }
         ToolButtonGlass { touch: true; glyph: "↑"; enabledState: bar.files.connected; onClicked: bar.files.controller.goUp() }
         ToolButtonGlass { touch: true; glyph: "↻"; enabledState: bar.files.connected; onClicked: bar.files.controller.refresh() }
-        ToolButtonGlass { touch: true; glyph: "⋯"; tip: "Actions"; onClicked: actions.popup() }
+        ToolButtonGlass { touch: true; glyph: "⋯"; tip: "Actions"; onClicked: actions.popup(4, 48) }
         ToolButtonGlass { touch: true; glyph: "×"; tip: "Fermer"; onClicked: if (!bar.files.handleBack()) bar.files.closeRequested() }
     }
     TextField {
@@ -40,6 +40,12 @@ Column {
     }
     Menu {
         id: actions
+        width: Math.min(360, bar.width - 8)
+        palette.text: Theme.ink
+        palette.windowText: Theme.ink
+        palette.highlightedText: Theme.ink
+        palette.highlight: Theme.selection
+        background: Glass { backdrop: bar.files.backdrop; radius: 10; tint: "#ED101A2E" }
         MenuItem { text: "Ouvrir la sélection"; enabled: bar.files.selected !== null; height: 44; onTriggered: bar.files.open(bar.files.selected) }
         MenuItem { text: "Envoyer depuis cet appareil…"; enabled: bar.files.connected; height: 44; onTriggered: bar.files.pickUpload() }
         MenuItem { text: "Télécharger la sélection…"; enabled: bar.files.selected !== null && !bar.files.selected.directory; height: 44; onTriggered: bar.files.askDownload(bar.files.selected) }

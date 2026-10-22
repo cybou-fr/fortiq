@@ -60,6 +60,7 @@ set(FORTIQ_SHELL_QML
     qml/shell/ServerManager.qml
     qml/shell/AppPanel.qml
     qml/shell/ToolButtonGlass.qml
+    qml/shell/SymbolGlyph.qml
     qml/shell/ToolTipLite.qml
     qml/shell/TopBar.qml
     qml/shell/ClockWidget.qml

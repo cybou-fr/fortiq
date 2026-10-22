@@ -217,7 +217,7 @@ Item {
                     readonly property bool active: win.lc && win.lc.source === modelData.s
                     width: parent.width; height: win.adaptive ? 44 : 28; radius: 7
                     color: active ? Theme.selection : (srcMouse.containsMouse ? "#1AFFFFFF" : "transparent")
-                    Text { x: 10; anchors.verticalCenter: parent.verticalCenter; text: modelData.g; color: "white"; font.pixelSize: 13 }
+                    SymbolGlyph { x: 10; anchors.verticalCenter: parent.verticalCenter; glyph: modelData.g; color: "white"; size: 13 }
                     Text { x: 32; anchors.verticalCenter: parent.verticalCenter; text: modelData.t; color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily }
                     MouseArea { id: srcMouse; anchors.fill: parent; hoverEnabled: true; enabled: win.connected; onClicked: win.choose(modelData.s, "") }
                 }
@@ -283,7 +283,7 @@ Item {
                 width: fileList.width; height: win.adaptive ? 44 : 24; radius: 6
                 color: active ? Theme.selection : (fMouse.containsMouse ? "#1AFFFFFF" : "transparent")
                 opacity: modelData.readable ? 1 : 0.5
-                Text { x: 10; anchors.verticalCenter: parent.verticalCenter; text: modelData.readable ? "▤" : "🔒"; color: "white"; font.pixelSize: 10 }
+                SymbolGlyph { x: 10; anchors.verticalCenter: parent.verticalCenter; glyph: modelData.readable ? "▤" : "🔒"; color: "white"; size: 10 }
                 Text {
                     x: 26; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 32; elide: Text.ElideMiddle
                     text: modelData.name; color: Theme.ink; font.pixelSize: 11; font.family: Theme.fontFamily

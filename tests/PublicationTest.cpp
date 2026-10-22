@@ -41,6 +41,7 @@ private slots:
     void cleanup() {
         publication_test::replace = {}; publication_test::staged = {};
         publication_test::attributes = {}; publication_test::flush = {}; publication_test::close = {};
+        publication_test::downloadStat = {};
     }
     void cleanupTestCase() {
         if (!dir.isEmpty()) QCOMPARE(command("rm -rf -- " + SshSession::shellQuote(dir)).code, QString("exit:0"));
@@ -70,6 +71,24 @@ private slots:
         QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(r.message));
         QCOMPARE(read(name), QByteArray("edited\n"));
         QCOMPARE(command("stat -c %a -- " + SshSession::shellQuote(dir + "/" + name)).data.trimmed(), QByteArray("600"));
+    }
+    void downloadPreflightKeepsDestination() {
+        SshSession reader;
+        QVERIFY(reader.open(request).status == SshResult::Status::Ok);
+        const QString destination = local.filePath("download-existing.txt");
+        { QFile f(destination); QVERIFY(f.open(QIODevice::WriteOnly)); QCOMPARE(f.write("keep me"), 7); }
+        auto r = reader.download(dir + "/missing.txt", destination, {});
+        QCOMPARE(r.status, SshResult::Status::Error);
+        QVERIFY(r.code != "disconnected");
+        QVERIFY(reader.isOpen()); // a missing file is not a broken transport
+        publication_test::downloadStat = [](auto *session, auto *, const auto &, auto *) {
+            libssh2_session_set_last_error(session, LIBSSH2_ERROR_SOCKET_RECV, "injected idle transport loss");
+            return -1;
+        };
+        r = reader.download(dir + "/missing.txt", destination, {});
+        QCOMPARE(r.code, QString("disconnected"));
+        QVERIFY(!reader.isOpen());
+        QFile f(destination); QVERIFY(f.open(QIODevice::ReadOnly)); QCOMPARE(f.readAll(), QByteArray("keep me"));
     }
     void publicationFailure_data() {
         QTest::addColumn<bool>("save");

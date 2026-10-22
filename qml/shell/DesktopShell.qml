@@ -219,7 +219,7 @@ Item {
         return false
     }
     Keys.onReleased: event => {
-        if (shell.adaptive && (event.key === Qt.Key_Back || event.key === Qt.Key_Escape)) event.accepted = shell.handleBack()
+        if ((shell.adaptive || Qt.platform.os === "android") && (event.key === Qt.Key_Back || event.key === Qt.Key_Escape)) event.accepted = shell.handleBack()
     }
     Component.onCompleted: if (!fixture && controller && !controller.connected) serversOpen = true
 }

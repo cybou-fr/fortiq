@@ -1,6 +1,9 @@
 #include "core/LocalDocument.h"
 #include <QtTest>
 #include <QBuffer>
+#include <QDir>
+#include <QStandardPaths>
+#include <QTemporaryFile>
 
 using namespace fortiq;
 class ProviderDevice : public QIODevice {
@@ -19,6 +22,26 @@ protected:
 class LocalDocumentTest : public QObject {
     Q_OBJECT
 private slots:
+    void privateStagingIsWritableAndRemoved() {
+        QStandardPaths::setTestModeEnabled(true);
+        const auto pathTemplate = documentStagingTemplate();
+        QVERIFY(!pathTemplate.isEmpty());
+        QVERIFY(QDir::isAbsolutePath(pathTemplate));
+        const auto relative = QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation)).relativeFilePath(pathTemplate);
+        QVERIFY(!relative.startsWith("..") && !QDir::isAbsolutePath(relative));
+        QString path;
+        {
+            QTemporaryFile stage(pathTemplate);
+            QVERIFY2(stage.open(), qPrintable(stage.errorString()));
+            path = stage.fileName();
+            QCOMPARE(stage.write("verified download"), 17);
+            QVERIFY(stage.seek(0));
+            QCOMPARE(stage.readAll(), QByteArray("verified download"));
+            QVERIFY(QFile::exists(path));
+        }
+        QVERIFY(!QFile::exists(path));
+        QStandardPaths::setTestModeEnabled(false);
+    }
     void locationsAreOpaque() {
         const QUrl uri("content://com.android.providers.downloads.documents/document/primary%3AEt%C3%A9%2Fnotes%20%231.txt");
         QCOMPARE(localDocumentPath(uri), uri.toString(QUrl::FullyEncoded));

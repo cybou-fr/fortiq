@@ -83,7 +83,7 @@ Qt 6.12.0 MinGW 13.1 x64, Windows 11, DPR=1, 21.10.2026. Средняя абсо
 2. **Иконки.** Нужен согласованный набор оригинальных иконок FORTIQ; часть Unicode-глифов в
    Segoe UI отображается квадратами.
 3. **Шрифт.** Сейчас системный Segoe UI; гарнитура эталона не установлена.
-4. **Планшет/узкий экран** (§4): первый адаптивный срез проверен offscreen-тестами 22.10.2026; реальная Android-проверка не выполнена — [Android foundation](ANDROID_FOUNDATION.md).
+4. **Планшет/узкий экран** (§4): offscreen-тесты и базовые поворот/IME/Back/Files в FortiqTablet выполнены 22.10.2026; физический Android и визуальная приёмка ожидаются — [Android foundation](ANDROID_FOUNDATION.md).
 5. **Полное приложение** `fortiq` собрано MSVC 2022 + Qt 6.12.0 msvc2022_64 + libssh2 1.11.1 (vcpkg x64-windows), `ctest` проходит, окно запускается и снимается без ошибок QML. SSH-стек проверен живым тестом против WSL (6/6, см. [QT_MIGRATION](QT_MIGRATION.md)); ввод данных в окне Files вручную ещё не проверялся.
 
 ## Brand icon integration (21 October 2026, source change)

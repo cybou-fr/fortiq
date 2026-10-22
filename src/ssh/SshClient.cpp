@@ -357,9 +357,22 @@ SshResult SshSession::download(const QString &remotePath, const QString &localPa
     if (!clean || localPath.isEmpty()) return transferFail(QStringLiteral("Invalid transfer paths."));
     const QByteArray pathUtf8 = clean->toUtf8();
     LIBSSH2_SFTP_ATTRIBUTES attr{};
-    if (libssh2_sftp_stat_ex(d->sftp, pathUtf8.constData(), static_cast<unsigned int>(pathUtf8.size()),
-            LIBSSH2_SFTP_STAT, &attr) != 0)
-        return transferFail(QStringLiteral("Cannot read remote file (permission or path error)."));
+    int statResult;
+#ifdef FORTIQ_PUBLICATION_TESTS
+    if (publication_test::downloadStat)
+        statResult = publication_test::downloadStat(d->handle, d->sftp, pathUtf8, &attr);
+    else
+#endif
+        statResult = libssh2_sftp_stat_ex(d->sftp, pathUtf8.constData(), static_cast<unsigned int>(pathUtf8.size()),
+                                         LIBSSH2_SFTP_STAT, &attr);
+    if (statResult != 0) {
+        if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
+            d->close();
+            return transferFail(QStringLiteral("SSH connection lost before download started."), QStringLiteral("disconnected"));
+        }
+        return transferFail(QStringLiteral("Cannot read remote file (permission or path error; SFTP %1).")
+                            .arg(libssh2_sftp_last_error(d->sftp)));
+    }
     if ((attr.flags & LIBSSH2_SFTP_ATTR_PERMISSIONS) && !LIBSSH2_SFTP_S_ISREG(attr.permissions))
         return transferFail(QStringLiteral("Only regular files can be downloaded."));
     const qint64 total = (attr.flags & LIBSSH2_SFTP_ATTR_SIZE) ? static_cast<qint64>(attr.filesize) : -1;
@@ -371,6 +384,14 @@ SshResult SshSession::download(const QString &remotePath, const QString &localPa
     const bool document = isContentDocument(localPath);
     QSaveFile native(localPath);
     QTemporaryFile staging;
+    if (document) {
+        const QString pathTemplate = documentStagingTemplate();
+        if (pathTemplate.isEmpty()) {
+            libssh2_sftp_close(file);
+            return transferFail(QStringLiteral("Cannot prepare private download storage."));
+        }
+        staging.setFileTemplate(pathTemplate);
+    }
     QFileDevice &out = document ? static_cast<QFileDevice &>(staging) : static_cast<QFileDevice &>(native);
     if (!(document ? staging.open() : native.open(QIODevice::WriteOnly))) {
         libssh2_sftp_close(file);

@@ -2,9 +2,10 @@
 
 Статус на 22.10.2026: **инженерный Qt R0.1, публичная квалификация Windows/Android не завершена**.
 В исходниках — SSH по паролю/ключу, постоянные сессии, менеджер серверов, файловые операции и Logs.
-Сборка Windows MSVC / Qt 6.12, регрессии Logs и файловая публикация через тестовый WSL SSH/SFTP проверены локально; APK на устройстве и чистая
-Windows-машина не проверены. Android arm64 debug APK собран; адаптация и SAF-адаптер в исходниках,
-проверка на устройстве остаётся обязательной — [Android foundation](ANDROID_FOUNDATION.md). Факты и ограничения — [QT_MIGRATION](QT_MIGRATION.md).
+Сборка Windows MSVC / Qt 6.12, регрессии Logs и файловая публикация через тестовый WSL SSH/SFTP проверены локально.
+Android arm64 debug APK прошёл базовые SSH/SFTP, поворот/IME/Back, редактор и нативный SAF upload/download
+в эмуляторе FortiqTablet. Физическое устройство и чистая Windows-машина не квалифицированы —
+[Android foundation](ANDROID_FOUNDATION.md). Факты и ограничения — [QT_MIGRATION](QT_MIGRATION.md).
 Первый срез Desktop Shell (`qml/shell/`) повторяет композицию [UI SPEC v1](UI_SPEC_V1.md), но визуально не принят; расхождения — [SHELL_FIDELITY](SHELL_FIDELITY.md).
 Историческая Flutter-версия — git-тег `flutter-final`.
 
@@ -36,10 +37,10 @@ Windows-машина не проверены. Android arm64 debug APK собра
 
 | CORE | Модуль | Фактический статус Qt |
 |---|---|---|
-| 01 | CMake + C++20 + Qt Quick/QML | **каркас есть; native Windows/Android билд не доказан** |
-| 02 | SSH/libssh2 и host fingerprint | **код есть:** пароль/проверка host key/read-only SFTP; PTY, forwarding, key auth нет |
-| 03 | SessionManager / постоянное SSH соединение | **не реализовано**; текущий SFTP листинг переподключается |
-| 04 | TaskManager / операции / §unknown§ | не реализовано |
+| 01 | CMake + C++20 + Qt Quick/QML | Windows MSVC и Android arm64 debug APK собираются; базовый запуск в эмуляторе проверен |
+| 02 | SSH/libssh2 и host fingerprint | пароль/ключ, pin хоста и SFTP есть; PTY и forwarding не реализованы |
+| 03 | SessionManager / постоянное SSH соединение | сессии переиспользуются; общая политика восстановления не завершена |
+| 04 | TaskManager / операции / §unknown§ | очередь Files и исход unknown есть; общего TaskManager нет |
 | 05 | ResourceLocation / FileService | частично: SFTP список и пути; типизированная multi-server модель не реализована |
 | 06 | QML Desktop Shell, окна, dock, launcher | **срез R0.2 в исходниках:** все регионы эталона, фикстура, захват и diff; **не принят** (обои, иконки, шрифт, §4 адаптации) |
 | 07 | Secure credentials | не реализовано (пароль в RAM) |
@@ -47,9 +48,9 @@ Windows-машина не проверены. Android arm64 debug APK собра
 | 09 | Лицензирование Lemon Squeezy | не реализовано в Qt |
 | 10 | Подготовка сервера с подтверждением и откатом | не реализовано |
 | 11 | Windows EXE + deployment | не проверено |
-| 12 | Android arm64 APK + touch | не проверено; Android — **первая очередь**, не R3 |
-| 13 | Smart Files full UX / transfers | не реализовано |
-| 14 | Logs analysis/synthesis | не реализовано |
+| 12 | Android arm64 APK + touch | debug APK: SSH, Files/Editor, IME/Back/поворот и SAF проверены в эмуляторе; физическое устройство и полный touch review ожидаются |
+| 13 | Smart Files full UX / transfers | базовые операции и передачи есть; полный контракт не закрыт |
+| 14 | Logs analysis/synthesis | первый срез есть; полная корреляция не реализована |
 
 ## 3. Этапы и приоритеты
 

@@ -298,7 +298,7 @@ Item {
                     readonly property bool active: target.length > 0 && win.location === target
                     width: parent.width; height: win.adaptive ? 44 : 29; radius: 7
                     color: active ? Theme.selection : (placeMouse.containsMouse ? "#1AFFFFFF" : "transparent")
-                    Text { x: 10; anchors.verticalCenter: parent.verticalCenter; text: modelData.g; color: "white"; font.pixelSize: 13; width: 16; horizontalAlignment: Text.AlignHCenter }
+                    SymbolGlyph { x: 10; anchors.verticalCenter: parent.verticalCenter; glyph: modelData.g; color: "white"; size: 13; width: 16 }
                     Text { x: 33; anchors.verticalCenter: parent.verticalCenter; text: modelData.t; color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily }
                     MouseArea {
                         id: placeMouse
@@ -442,7 +442,7 @@ Item {
                 width: Math.max(100, Math.min(200, toolbar.width * 0.2)); height: 30; radius: 15
                 color: "#1AFFFFFF"
                 border.width: 1; border.color: search.activeFocus ? Theme.accent : "#1FFFFFFF"
-                Text { x: 10; anchors.verticalCenter: parent.verticalCenter; text: "⌕"; color: Theme.inkMuted; font.pixelSize: 15 }
+                SymbolGlyph { x: 10; anchors.verticalCenter: parent.verticalCenter; glyph: "⌕"; color: Theme.inkMuted; size: 15 }
                 TextInput {
                     id: search
                     x: 30; width: parent.width - 52

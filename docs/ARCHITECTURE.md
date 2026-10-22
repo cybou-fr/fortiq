@@ -4,7 +4,9 @@
 SSH по паролю/ключу, постоянные сессии, файловые операции, серверные профили и первый Logs.
 Windows MSVC и Android arm64 / Qt 6.12 собираются локально (включая debug APK);
 чистая Windows-машина и работа на Android-устройстве не квалифицированы.
-Адаптация и URI/экспорт — [Android foundation](ANDROID_FOUNDATION.md).
+Базовые SSH/Files/SAF и IME/Back/поворот проверены в эмуляторе FortiqTablet. Подготовка SAF-скачивания
+использует явный приватный CacheLocation, Back маршрутизируется на уровне окна Qt;
+адаптация и URI/экспорт — [Android foundation](ANDROID_FOUNDATION.md).
 История испытаний и ограничения — [QT_MIGRATION](QT_MIGRATION.md). Остальные контракты ниже
 в основном **целевые**. Последний Flutter-прототип — тег `flutter-final`. Обязательная модель «клиент — GUI, Linux — backend» задана
 в [SSH_FRONTEND_CONTRACT](SSH_FRONTEND_CONTRACT.md) и имеет приоритет над этим файлом.
