@@ -46,7 +46,23 @@ Item {
     }
     property string panelEdge: fixture ? (fixturePreview === "panelleft" ? "left" : "bottom")
                                        : (displaySettings.panelEdge === "left" ? "left" : "bottom")
+    // The login screen (ServerManager) is shown while there is no session:
+    // at start, after "Se déconnecter", or when an app asks for a server.
     property bool serversOpen: false
+    property bool sessionMenuOpen: false
+    // Ends the session like a Linux logout: unsaved MDok drafts are protected,
+    // windows close, the SSH connection ends and the login screen returns.
+    function logout() {
+        if (!allowAppClose()) return
+        sessionMenuOpen = false; launcherOpen = false; controlOpen = false
+        filesOpen = false; logsOpen = false; terminalOpen = false; disksOpen = false; documentsOpen = false
+        if (controller) controller.disconnectServer()
+        serversOpen = true
+    }
+    Connections {
+        target: shell.controller
+        function onChanged() { if (shell.controller.connected && shell.serversOpen && !shell.fixture) shell.serversOpen = false }
+    }
     property var windowOrder: ["files", "browser", "logs", "terminal", "disks", "docs"]
     function raiseApp(app) {
         windowOrder = windowOrder.filter(key => key !== app).concat([app])
@@ -213,6 +229,7 @@ Item {
             // presses, so they never get here. The reference scene stays open.
             if (!shell.fixture && !shell.serversOpen) {
                 if (shell.controlOpen && !shell.pressInside(controlPanel, mouse.x, mouse.y)) shell.controlOpen = false
+                if (shell.sessionMenuOpen && !shell.pressInside(sessionMenu, mouse.x, mouse.y)) shell.sessionMenuOpen = false
                 if (shell.launcherOpen && !shell.pressInside(launcherItem, mouse.x, mouse.y)
                     && !shell.pressInside(appPanel, mouse.x, mouse.y) && !shell.pressInside(compactPanel, mouse.x, mouse.y))
                     shell.launcherOpen = false
@@ -303,10 +320,40 @@ Item {
             : (shell.controller && shell.controller.connected ? shell.controller.serverLabel : "Aucun serveur")
         clockText: shell.barClock
         connected: shell.controller !== null && shell.controller.connected
-        onServerClicked: if (!shell.fixture) shell.serversOpen = true
+        onServerClicked: {
+            if (shell.fixture) return
+            if (shell.controller && shell.controller.connected) shell.sessionMenuOpen = !shell.sessionMenuOpen
+            else shell.serversOpen = true
+        }
         MouseArea {
             x: shell.adaptive ? parent.width - 44 : 1100; width: shell.adaptive ? 44 : 380; height: parent.height
             onClicked: shell.controlOpen = !shell.controlOpen
+        }
+    }
+
+    // Session menu under the server name in the top bar.
+    Glass {
+        id: sessionMenu
+        objectName: "sessionMenu"
+        z: 11
+        visible: shell.sessionMenuOpen && !shell.fixture
+        x: shell.adaptive ? 8 : 58; y: 52
+        width: Math.min(280, shell.width - 16); height: 96
+        backdrop: wallpaper
+        radius: 14
+        tint: "#E6101A2E"
+        Rectangle { x: 16; y: 20; width: 9; height: 9; radius: 4.5; color: "#4ADE80" }
+        Text {
+            x: 34; y: 14; width: parent.width - 50; elide: Text.ElideRight
+            text: shell.controller ? "Connecté à " + shell.controller.serverLabel : ""
+            color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily
+        }
+        Rectangle {
+            objectName: "logoutButton"
+            x: 12; y: 46; width: parent.width - 24; height: 36; radius: 9
+            color: lm.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
+            Text { anchors.centerIn: parent; text: "Se déconnecter"; color: "white"; font.pixelSize: 13; font.family: Theme.fontFamily }
+            MouseArea { id: lm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: shell.logout() }
         }
     }
 
@@ -317,8 +364,10 @@ Item {
         z: 100
         visible: shell.serversOpen
         backdrop: wallpaper
+        wallpaperSource: shell.wallpaperUrl
+        timeText: shell.timeText
+        dateText: shell.dateText
         controller: shell.controller
-        onClosed: shell.serversOpen = false
     }
     states: State {
         name: "adaptive"; when: shell.adaptive
@@ -352,6 +401,6 @@ Item {
     }
     Component.onCompleted: {
         if (fixture) filesOpen = true
-        else if (controller && !controller.connected) serversOpen = true
+        else serversOpen = true
     }
 }

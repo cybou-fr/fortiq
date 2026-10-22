@@ -110,5 +110,6 @@ Rectangle {
             anchors.horizontalCenter: parent.horizontalCenter
             y: 17; width: 17; height: 8; radius: 4; color: "#3B4250"
         }
+        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: bar.serverClicked() }
     }
 }

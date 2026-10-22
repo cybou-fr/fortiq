@@ -149,6 +149,10 @@ background, without wallpaper. Wallpaper extends beneath the bottom navigation a
 safe insets. The production launcher opens beside the left app panel or directly above its bottom edge;
 its tint is lighter. Frosted wallpaper is blended with the scene underneath so overlapping windows
 remain visible. This is translucent composition, not yet blur of the complete lower-window scene.
+Owner decision 23.10.2026: connecting is a login screen, not a dialog: full-screen blurred wallpaper with
+a large clock, saved servers as round account tiles (initial, name, user@host), a password prompt and an
+"Ajouter un serveur" tile; it replaces the whole desktop (no top bar, panel or windows) until a session starts,
+and the session menu under the server name logs out. Not part of the master sketch; the reference fixture does not show it.
 Owner decision 23.10.2026: in production the right panel (control center) stays a floating glass card but sits against the right edge
 (8 px gap) and spans from below the top bar to the bottom, and the wallpaper choice is a section of that panel; the card is only as tall as its content
 (no empty tail), and a press anywhere outside it (or outside the launcher and the app panel, for the launcher) closes it

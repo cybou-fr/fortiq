@@ -1,5 +1,14 @@
 # FORTIQ — Qt 6 / C++20 migration, Windows & Android first
 
+23 October login (owner decision): connecting to a server now works like a Linux login. A full-screen login
+screen (`ServerManager.qml`, saved servers as account tiles, password or key-passphrase prompt, first-use
+fingerprint step, add/edit/remove) is shown at start and after logout; it replaces the previous Servers dialog,
+so Files/login no longer appear together. The top-bar server name or avatar opens a session menu with
+"Se déconnecter", which protects unsaved MDok drafts, closes all windows, ends the SSH session and returns to the
+login screen. A dropped connection does not log out: windows stay, the menu offers logout. Layout QtTest covers
+the login screen, secret entry and logout with a fake controller; the real connect-then-close path is not
+covered by an automated test and was not run against a live server in this slice.
+
 23 October shell: the production right panel is a floating card against the right edge and contains the wallpaper switcher
 (owner decision, [UI SPEC](UI_SPEC_V1.md)); layout QtTest 47/47 on Windows MSVC. The layout test source also
 hides one raw string from moc (moc silently generated nothing since the MDok slice) and its launcher

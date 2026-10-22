@@ -15,6 +15,32 @@
 #endif
 Q_IMPORT_QML_PLUGIN(Fortiq_ShellPlugin)
 
+static QQuickItem *findByName(QQuickItem *root, const QString &name) {
+    if (root->objectName() == name) return root;
+    for (QQuickItem *child : root->childItems()) if (auto *hit = findByName(child, name)) return hit;
+    return nullptr;
+}
+#ifndef Q_MOC_RUN // moc cannot parse raw strings
+static const char kFakeController[] = R"(import QtQml
+QtObject {
+    property bool connected: false
+    property bool busy: false
+    property string pendingFingerprint: ""
+    property string statusText: ""
+    property string serverLabel: "vps-1"
+    property var calls: []
+    property var servers: [
+        { id: "a", name: "vps-1", host: "vps.example", port: 22, user: "debian", keyPath: "", active: false, pinned: true },
+        { id: "b", name: "Maison", host: "192.0.2.10", port: 2222, user: "root", keyPath: "C:/k/id_ed25519", active: false, pinned: false } ]
+    signal changed()
+    function connectTo(id, secret) { calls = calls.concat([id + ":" + secret]) }
+    function trustHost() {}
+    function saveServer(o) { return "x" }
+    function removeServer(id) {}
+    function disconnectServer() { connected = false; changed() }
+})";
+#endif
+
 class ShellLayoutTest : public QObject {
     Q_OBJECT
 private slots:
@@ -83,12 +109,12 @@ private slots:
             shell->setProperty("serversOpen", true); manager->setProperty("editingId", "new");
             QTest::qWait(50);
             // Window-level Back must work with focus in a form, also at master width.
+            // The login screen cannot be dismissed: there is no session to go back to.
             QTest::keyRelease(window, Qt::Key_Back);
-            QCOMPARE(manager->property("editingId").toString(), QString());
             QVERIFY(shell->property("serversOpen").toBool());
             QTest::keyRelease(window, Qt::Key_Back);
-            QVERIFY(!shell->property("serversOpen").toBool());
-            shell->setProperty("serversOpen", true); manager->setProperty("editingId", "new");
+            QVERIFY(shell->property("serversOpen").toBool());
+            manager->setProperty("editingId", "new");
         }
         const auto image = window->grabWindow(); QVERIFY(!image.isNull());
         QDir().mkpath("layout-captures");
@@ -169,6 +195,37 @@ private slots:
             shell->setProperty("controlOpen", true);
             QTest::qWait(400);
             QVERIFY(window->grabWindow().save(QString("layout-captures/%1-control-selected.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+            {   // Login screen: connecting works like logging in to Linux, and logout returns to it.
+                QQmlComponent fakeComponent(&engine);
+                fakeComponent.setData(kFakeController, QUrl());
+                auto *fake = fakeComponent.create(); QVERIFY2(fake, qPrintable(fakeComponent.errorString())); fake->setParent(window);
+                shell->setProperty("serversOpen", true);
+                QTest::qWait(100);
+                auto *login = shell->findChild<QQuickItem *>("serverManager"); QVERIFY(login);
+                login->setProperty("controller", QVariant::fromValue(fake));   // only the login screen sees the fake
+                QTest::qWait(50);
+                QVERIFY(login->isVisible());
+                QCOMPARE(login->width(), shell->width()); QCOMPARE(login->height(), shell->height());   // replaces the desktop
+                auto *secretInput = findByName(login, "loginSecret"); QVERIFY(secretInput); QVERIFY(secretInput->isVisible());
+                QTest::qWait(300);
+                QVERIFY(window->grabWindow().save(QString("layout-captures/%1-login.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+                secretInput->forceActiveFocus();
+                for (const char c : {'p', 'w', '1'}) QTest::keyClick(window, c);
+                QTest::keyClick(window, Qt::Key_Return);
+                QTRY_COMPARE(fake->property("calls").toStringList(), QStringList{"a:pw1"});
+                // Logout from the session menu closes the windows and returns to the login screen.
+                login->setProperty("controller", QVariant::fromValue<QObject *>(nullptr));
+                shell->setProperty("serversOpen", false);
+                shell->setProperty("filesOpen", true);
+                shell->setProperty("sessionMenuOpen", true);
+                QTest::qWait(50);
+                auto *logout = findByName(shell, "logoutButton"); QVERIFY(logout); QVERIFY(logout->isVisible());
+                QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, logout->mapToScene(QPointF(logout->width() / 2, logout->height() / 2)).toPoint());
+                QTRY_VERIFY(shell->property("serversOpen").toBool());
+                QVERIFY(!shell->property("filesOpen").toBool());
+                QVERIFY(!shell->property("sessionMenuOpen").toBool());
+                shell->setProperty("serversOpen", false);
+            }
             shell->setProperty("fixture", true);
         }
         if (preview == "incident" && adaptive && size.width() < 700) {

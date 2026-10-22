@@ -2,31 +2,49 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
 
-// Global server manager (FORTIQ-wide, not per app): saved servers, connect /
-// disconnect, add / edit / remove, first-use host-key verification. Only
-// bootstrap data is saved on this device; passwords and passphrases stay in
-// memory for the session and are never written.
+// Login screen (owner decision 23.10.2026): connecting to a server works like
+// logging in to a Linux desktop. It covers the whole shell while there is no
+// session; the saved servers are shown as account tiles, choosing one asks for
+// the SSH password (or the key passphrase), and "Se déconnecter" in the
+// session menu returns here. Only bootstrap data is saved on this device
+// (address, user, key path, verified host-key pin); passwords and passphrases
+// stay in memory for the attempt and are never written. First-use host-key
+// verification is never bypassed.
 Item {
     id: mgr
     objectName: "serverManager"
     property bool adaptive: false
     property Item focusedInput: null
-    function back() {
-        if (editingId.length > 0) editingId = ""
-        else { secret = ""; connectingId = ""; closed() }
-    }
     property Item backdrop
     property var controller: null
-    signal closed()
+    property url wallpaperSource: ""
+    property string timeText: ""
+    property string dateText: ""
 
-    readonly property bool connected: controller !== null && controller.connected
-    readonly property bool busy: controller !== null && controller.busy
+    readonly property bool connected: !!controller && controller.connected
+    readonly property bool busy: !!controller && controller.busy
     readonly property var servers: controller ? controller.servers : []
-    property string editingId: ""      // "" = list, "new" = add form, else id being edited
-    property string connectingId: ""   // row whose secret field is open
+    property string editingId: ""      // "" = login, "new" = add form, else the id being edited
+    property string selectedId: ""     // account tile whose prompt is open
     property string confirmRemoveId: ""
     property string secret: ""          // RAM only, cleared after use
+    readonly property var selected: {
+        for (const p of servers) if (p.id === selectedId) return p
+        return null
+    }
 
+    // Returns true when it consumed Back: the login screen itself cannot be left.
+    function back() {
+        if (editingId.length > 0 && servers.length > 0) editingId = ""
+        else if (selectedId.length > 0 && servers.length > 1) selectedId = ""
+        return true
+    }
+    function pickDefault() {
+        if (selected) return
+        selectedId = ""
+        for (const p of servers) if (p.active) { selectedId = p.id; return }
+        if (servers.length > 0) selectedId = servers[0].id
+    }
     function startEdit(p) {
         editingId = p ? p.id : "new"
         nameField.text = p ? p.name : ""
@@ -42,88 +60,175 @@ Item {
                                            port: Number(portField.text), user: userField.text, keyPath: keyField.text })
         if (id.length === 0) { formError.text = "Adresse, port (1–65535) et utilisateur sont obligatoires, sans espaces."; return }
         editingId = ""
+        selectedId = id
     }
     function connect(p) {
         controller.connectTo(p.id, secret)
         secret = ""
+        secretField.text = ""
+    }
+    function initial(p) { return (p.name && p.name.length > 0 ? p.name : p.user).charAt(0).toUpperCase() }
+    function tint(p) {
+        const palette = ["#3B82F6", "#8B5CF6", "#14B8A6", "#F59E0B", "#EC4899", "#22C55E"]
+        let h = 0
+        for (const c of p.id + p.host) h = (h * 31 + c.charCodeAt(0)) & 0xffff
+        return palette[h % palette.length]
     }
 
-    // Close once connected from here (the manager opened for a purpose).
+    onServersChanged: pickDefault()
+    onVisibleChanged: if (visible) { pickDefault(); secretField.text = ""; secret = "" }
+    Component.onCompleted: { pickDefault(); if (servers.length === 0 && controller) startEdit(null) }
     Connections {
         target: mgr.controller
         function onChanged() {
-            if (mgr.visible && mgr.connected && mgr.connectingId.length > 0 && mgr.controller.pendingFingerprint.length === 0) {
-                mgr.connectingId = ""
-                mgr.closed()
-            }
+            if (mgr.connected) { secretField.text = ""; mgr.secret = "" }
         }
     }
 
-    Rectangle { anchors.fill: parent; color: "#80060C18"; MouseArea { anchors.fill: parent; onClicked: mgr.closed() } }
+    // Opaque: the login screen replaces the desktop instead of floating over it.
+    Wallpaper { anchors.fill: parent; source: mgr.wallpaperSource }
+    Rectangle { anchors.fill: parent; color: "#B3081020" }
+    MouseArea { anchors.fill: parent; onClicked: mgr.forceActiveFocus() }
 
-    Item {
-        id: card
-        width: Math.min(640, parent.width - 16); height: Math.min(parent.height - (mgr.adaptive ? 16 : 120), column.implicitHeight + 40)
-        anchors.centerIn: parent
-        Glass { anchors.fill: parent; backdrop: mgr.backdrop; radius: 18; tint: "#D9101A2E"; blurAmount: 0.9 }
-        MouseArea { anchors.fill: parent } // keep clicks inside the card
+    Flickable {
+        id: flick
+        function reveal(item) {
+            if (!item) return
+            const top = item.mapToItem(contentItem, 0, 0).y
+            if (top < contentY) contentY = Math.max(0, top - 12)
+            else if (top + item.height > contentY + height) contentY = Math.max(0, Math.min(contentHeight - height, top + item.height - height + 12))
+        }
+        onHeightChanged: Qt.callLater(() => reveal(mgr.focusedInput))
+        anchors.fill: parent
+        contentWidth: width
+        contentHeight: Math.max(height, page.implicitHeight + 48)
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-        Flickable {
-            id: formFlick
-            function reveal(item) {
-                if (!item) return
-                const top = item.mapToItem(contentItem, 0, 0).y
-                if (top < contentY) contentY = Math.max(0, top - 12)
-                else if (top + item.height > contentY + height) contentY = Math.max(0, Math.min(contentHeight - height, top + item.height - height + 12))
-            }
-            onHeightChanged: Qt.callLater(() => reveal(mgr.focusedInput))
-            anchors.fill: parent; anchors.margins: 20
-            contentHeight: column.implicitHeight
-            clip: true
-            boundsBehavior: Flickable.StopAtBounds
-            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+        Column {
+            id: page
+            width: Math.min(flick.width - 32, 720)
+            x: (flick.width - width) / 2
+            y: Math.max(24, (flick.height - implicitHeight) / 2 - (mgr.adaptive ? 0 : 20))
+            spacing: 22
 
+            // Clock, like a greeter's lock screen.
             Column {
-                id: column
-                width: parent.width
-                spacing: 12
+                width: parent.width; spacing: 2
+                visible: mgr.editingId === "" && !(mgr.adaptive && Qt.inputMethod.visible)
+                Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: mgr.timeText; color: "white"; font.pixelSize: mgr.adaptive ? 56 : 80; font.weight: Font.Light; font.family: Theme.fontFamily }
+                Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: mgr.dateText; color: Theme.ink; font.pixelSize: 18; font.family: Theme.fontFamily }
+            }
 
+            // Account tiles.
+            Flow {
+                visible: mgr.editingId === ""
+                width: parent.width; spacing: 14
+                // centre the rows
+                property real rowWidth: Math.min(width, (mgr.servers.length + 1) * 164 - 14)
+                x: 0
+                leftPadding: Math.max(0, (width - rowWidth) / 2)
+                Repeater {
+                    model: mgr.servers
+                    Item {
+                        id: tile
+                        required property var modelData
+                        readonly property bool current: mgr.selectedId === modelData.id
+                        width: 150; height: 156
+                        Rectangle {
+                            anchors.fill: parent; radius: 16
+                            color: tile.current ? "#2E2F8CFF" : (tm.containsMouse ? "#18FFFFFF" : "transparent")
+                            border.width: tile.current ? 1 : 0; border.color: "#802F8CFF"
+                        }
+                        Rectangle {
+                            x: (parent.width - 84) / 2; y: 14; width: 84; height: 84; radius: 42
+                            color: mgr.tint(tile.modelData)
+                            border.width: 3; border.color: tile.modelData.active ? "#4ADE80" : "#55FFFFFF"
+                            Text { anchors.centerIn: parent; text: mgr.initial(tile.modelData); color: "white"; font.pixelSize: 38; font.weight: Font.DemiBold; font.family: Theme.fontFamily }
+                        }
+                        Text {
+                            x: 6; y: 106; width: parent.width - 12; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
+                            text: tile.modelData.name; color: "white"; font.pixelSize: 14; font.weight: Font.DemiBold; font.family: Theme.fontFamily
+                        }
+                        Text {
+                            x: 6; y: 128; width: parent.width - 12; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideMiddle
+                            text: tile.modelData.user + "@" + tile.modelData.host + (tile.modelData.port !== 22 ? ":" + tile.modelData.port : "")
+                            color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
+                        }
+                        MouseArea {
+                            id: tm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                            onClicked: { mgr.selectedId = tile.modelData.id; mgr.confirmRemoveId = ""; secretField.text = ""; mgr.secret = ""; secretField.forceActiveFocus() }
+                        }
+                    }
+                }
                 Item {
-                    width: parent.width; height: 30
-                    Text { anchors.verticalCenter: parent.verticalCenter; text: "Serveurs"; color: Theme.ink; font.pixelSize: 18; font.weight: Font.DemiBold; font.family: Theme.fontFamily }
-                    ToolButtonGlass { touch: mgr.adaptive; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; glyph: "×"; tip: "Fermer (Échap)"; onClicked: mgr.closed() }
-                }
-                Text {
-                    width: parent.width; wrapMode: Text.WordWrap
-                    text: "Une connexion SSH sert toutes les applications : Fichiers, Journaux… Seuls l'adresse, l'utilisateur, le chemin de la clé et l'empreinte vérifiée de l'hôte sont mémorisés sur cet appareil ; les mots de passe ne le sont jamais."
-                    color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
-                }
-
-                // Current connection
-                Rectangle {
-                    visible: mgr.connected
-                    width: parent.width; height: 44; radius: 10
-                    color: "#1A16A34A"; border.width: 1; border.color: "#5516A34A"
-                    Rectangle { x: 14; anchors.verticalCenter: parent.verticalCenter; width: 9; height: 9; radius: 4.5; color: "#4ADE80" }
+                    width: 150; height: 156
+                    Rectangle { anchors.fill: parent; radius: 16; color: addMouse.containsMouse ? "#18FFFFFF" : "transparent" }
+                    Rectangle {
+                        x: (parent.width - 84) / 2; y: 14; width: 84; height: 84; radius: 42
+                        color: "#1FFFFFFF"; border.width: 2; border.color: "#55FFFFFF"
+                        Text { anchors.centerIn: parent; text: "+"; color: "white"; font.pixelSize: 40; font.weight: Font.Light }
+                    }
                     Text {
-                        x: 32; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 180; elide: Text.ElideRight
-                        text: "Connecté à " + (mgr.controller ? mgr.controller.serverLabel : "")
-                        color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily
+                        x: 6; y: 106; width: parent.width - 12; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
+                        text: "Ajouter un serveur"; color: "white"; font.pixelSize: 14; font.family: Theme.fontFamily
+                    }
+                    MouseArea { id: addMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: mgr.startEdit(null) }
+                }
+            }
+
+            // Password prompt for the chosen account.
+            Column {
+                visible: mgr.editingId === "" && mgr.selected !== null
+                width: parent.width; spacing: 10
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 8
+                    Rectangle {
+                        width: Math.min(320, page.width - 60); height: mgr.adaptive ? 48 : 40; radius: 20
+                        color: "#590A1224"; border.width: 1; border.color: secretField.activeFocus ? Theme.accent : "#66FFFFFF"
+                        TextInput {
+                            id: secretField
+                            objectName: "loginSecret"
+                            anchors.fill: parent; anchors.leftMargin: 18; anchors.rightMargin: 18
+                            verticalAlignment: TextInput.AlignVCenter
+                            echoMode: TextInput.Password
+                            enabled: !mgr.busy
+                            color: "white"; font.pixelSize: 14; font.family: Theme.fontFamily
+                            onTextEdited: mgr.secret = text
+                            onAccepted: if (mgr.selected) mgr.connect(mgr.selected)
+                            onActiveFocusChanged: if (activeFocus) { mgr.focusedInput = parent; Qt.callLater(() => flick.reveal(parent)) }
+                            Text {
+                                visible: parent.text.length === 0
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: mgr.selected && mgr.selected.keyPath ? "Phrase de passe de la clé (si demandée)" : "Mot de passe SSH"
+                                color: "#9FB1CE"; font.pixelSize: 14; font.family: Theme.fontFamily
+                            }
+                        }
                     }
                     Rectangle {
-                        anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
-                        height: 28; radius: 7; width: dl.implicitWidth + 20
-                        color: dm.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
-                        Text { id: dl; anchors.centerIn: parent; text: "Se déconnecter"; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
-                        MouseArea { id: dm; anchors.fill: parent; hoverEnabled: true; onClicked: mgr.controller.disconnectServer() }
+                        objectName: "loginSubmit"
+                        width: mgr.adaptive ? 48 : 40; height: width; radius: width / 2
+                        color: sm.containsMouse ? Theme.selection : "#CC2D6FE0"
+                        opacity: mgr.busy ? 0.5 : 1
+                        Text { anchors.centerIn: parent; text: mgr.busy ? "…" : "→"; color: "white"; font.pixelSize: 20 }
+                        MouseArea { id: sm; anchors.fill: parent; hoverEnabled: true; enabled: !mgr.busy; onClicked: if (mgr.selected) mgr.connect(mgr.selected) }
                     }
+                }
+                Text {
+                    width: parent.width; horizontalAlignment: Text.AlignHCenter
+                    text: mgr.selected ? (mgr.selected.keyPath ? "Connexion par clé " + mgr.selected.keyPath.split(/[\\/]/).pop() : "Connexion par mot de passe")
+                                         + "  ·  " + (mgr.selected.pinned ? "empreinte vérifiée" : "empreinte à vérifier") : ""
+                    color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily; elide: Text.ElideMiddle
                 }
 
                 // Host key verification (first use) — never bypassed.
                 Rectangle {
                     visible: mgr.controller && mgr.controller.pendingFingerprint.length > 0
-                    width: parent.width; height: trust.implicitHeight + 24; radius: 10
-                    color: "#26FACC15"; border.width: 1; border.color: "#80FACC15"
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Math.min(520, parent.width); height: trust.implicitHeight + 24; radius: 12
+                    color: "#33FACC15"; border.width: 1; border.color: "#80FACC15"
                     Column {
                         id: trust
                         x: 14; y: 12; width: parent.width - 28; spacing: 8
@@ -139,11 +244,11 @@ Item {
                             color: "#FEF3C7"; font.pixelSize: 11; font.family: Theme.fontFamily
                         }
                         Rectangle {
-                            height: 30; radius: 7; width: tl.implicitWidth + 24
-                            color: tm.containsMouse ? "#CA8A04" : "#A16207"
+                            height: 32; radius: 8; width: tl.implicitWidth + 24
+                            color: tm2.containsMouse ? "#CA8A04" : "#A16207"
                             opacity: mgr.busy ? 0.5 : 1
                             Text { id: tl; anchors.centerIn: parent; text: "Vérifiée — faire confiance à cet hôte"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
-                            MouseArea { id: tm; anchors.fill: parent; hoverEnabled: true; enabled: !mgr.busy; onClicked: mgr.controller.trustHost() }
+                            MouseArea { id: tm2; anchors.fill: parent; hoverEnabled: true; enabled: !mgr.busy; onClicked: mgr.controller.trustHost() }
                         }
                     }
                 }
@@ -151,120 +256,62 @@ Item {
                 // Status / errors of the last attempt
                 Text {
                     visible: mgr.controller && !mgr.connected && mgr.controller.statusText.length > 0 && mgr.controller.statusText !== "No Linux server connected."
-                    width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText
+                    width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; textFormat: Text.PlainText
                     text: mgr.controller ? (mgr.busy ? "Connexion… " : "") + mgr.controller.statusText : ""
-                    color: mgr.busy ? Theme.inkMuted : "#FCA5A5"; font.pixelSize: 11; font.family: Theme.fontFamily
+                    color: mgr.busy ? Theme.inkMuted : "#FCA5A5"; font.pixelSize: 12; font.family: Theme.fontFamily
                 }
 
-                // Saved servers
-                Text {
-                    visible: mgr.servers.length === 0 && mgr.editingId === ""
-                    text: "Aucun serveur enregistré. Ajoutez votre serveur Linux pour commencer."
-                    color: Theme.ink; font.pixelSize: 13; font.family: Theme.fontFamily
-                }
-                Repeater {
-                    model: mgr.editingId === "" ? mgr.servers : []
+                // Edit / remove the chosen account.
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter; spacing: 10
                     Rectangle {
-                        id: row
-                        required property var modelData
-                        readonly property bool open: mgr.connectingId === modelData.id
-                        width: column.width
-                        height: open ? 104 : 56
-                        radius: 10
-                        color: modelData.active ? "#262F8CFF" : (rm.containsMouse ? "#14FFFFFF" : "#0AFFFFFF")
-                        border.width: 1; border.color: modelData.active ? "#802F8CFF" : "#1AFFFFFF"
-                        MouseArea { id: rm; anchors.fill: parent; hoverEnabled: true }
-                        Rectangle { x: 14; y: 16; width: 9; height: 9; radius: 4.5; color: row.modelData.active ? "#4ADE80" : "#64748B" }
-                        Column {
-                            x: 32; y: 9; width: parent.width - 32 - actions.width - 16
-                            Text { width: parent.width; elide: Text.ElideRight; text: row.modelData.name; color: Theme.ink; font.pixelSize: 13; font.weight: Font.DemiBold; font.family: Theme.fontFamily }
-                            Text {
-                                width: parent.width; elide: Text.ElideMiddle
-                                text: row.modelData.user + "@" + row.modelData.host + (row.modelData.port !== 22 ? ":" + row.modelData.port : "")
-                                      + "  ·  " + (row.modelData.keyPath ? "clé " + row.modelData.keyPath.split(/[\\/]/).pop() : "mot de passe")
-                                      + "  ·  " + (row.modelData.pinned ? "empreinte vérifiée" : "empreinte à vérifier")
-                                color: Theme.inkMuted; font.pixelSize: 10; font.family: Theme.fontFamily
-                            }
+                        height: mgr.adaptive ? 40 : 28; radius: 14; width: el.implicitWidth + 24
+                        color: em.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
+                        Text { id: el; anchors.centerIn: parent; text: "✎  Modifier"; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
+                        MouseArea { id: em; anchors.fill: parent; hoverEnabled: true; onClicked: mgr.startEdit(mgr.selected) }
+                    }
+                    Rectangle {
+                        height: mgr.adaptive ? 40 : 28; radius: 14; width: rl.implicitWidth + 24
+                        color: rm.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
+                        Text {
+                            id: rl; anchors.centerIn: parent; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily
+                            text: mgr.selected && mgr.confirmRemoveId === mgr.selected.id ? "✓  Confirmer le retrait de la liste" : "🗑  Retirer de la liste"
                         }
-                        Row {
-                            id: actions
-                            anchors.right: parent.right; anchors.rightMargin: 10; y: 13
-                            spacing: 6
-                            Rectangle {
-                                visible: !row.modelData.active
-                                height: 28; radius: 7; width: cl.implicitWidth + 20
-                                color: cm.containsMouse ? Theme.selection : "#992D6FE0"
-                                opacity: mgr.busy ? 0.5 : 1
-                                Text { id: cl; anchors.centerIn: parent; text: "Se connecter"; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
-                                MouseArea {
-                                    id: cm; anchors.fill: parent; hoverEnabled: true; enabled: !mgr.busy
-                                    onClicked: {
-                                        mgr.connectingId = row.modelData.id
-                                        mgr.secret = ""
-                                        secretField.text = ""
-                                        // A key without passphrase connects at once.
-                                        if (row.modelData.keyPath) mgr.connect(row.modelData)
-                                        else secretField.forceActiveFocus()
-                                    }
-                                }
-                            }
-                            ToolButtonGlass { touch: mgr.adaptive; glyph: "✎"; tip: "Modifier"; enabledState: !row.modelData.active; onClicked: mgr.startEdit(row.modelData) }
-                            ToolButtonGlass { touch: mgr.adaptive;
-                                glyph: mgr.confirmRemoveId === row.modelData.id ? "✓" : "🗑"
-                                tip: mgr.confirmRemoveId === row.modelData.id ? "Confirmer la suppression de ce serveur de la liste" : "Retirer de la liste"
-                                onClicked: {
-                                    if (mgr.confirmRemoveId === row.modelData.id) { mgr.controller.removeServer(row.modelData.id); mgr.confirmRemoveId = "" }
-                                    else mgr.confirmRemoveId = row.modelData.id
-                                }
-                            }
-                        }
-                        Row {
-                            visible: row.open
-                            x: 32; y: 60; spacing: 8
-                            Rectangle {
-                                width: 300; height: mgr.adaptive ? 44 : 32; radius: 8; color: "#1AFFFFFF"
-                                border.width: 1; border.color: secretField.activeFocus ? Theme.accent : "#33FFFFFF"
-                                TextInput {
-                                    id: secretField
-                                    anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10
-                                    verticalAlignment: TextInput.AlignVCenter
-                                    echoMode: TextInput.Password
-                                    color: Theme.ink; font.pixelSize: 12
-                                    onTextEdited: mgr.secret = text
-                                    onAccepted: if (row.open) { mgr.connect(row.modelData); text = "" }
-                                    Text {
-                                        visible: parent.text.length === 0
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        text: row.modelData.keyPath ? "Phrase de passe de la clé (si demandée)" : "Mot de passe SSH (non enregistré)"
-                                        color: "#7F93B5"; font.pixelSize: 12; font.family: Theme.fontFamily
-                                    }
-                                }
-                            }
-                            Rectangle {
-                                height: mgr.adaptive ? 44 : 32; radius: 8; width: gl.implicitWidth + 24
-                                color: gm.containsMouse ? Theme.selection : "#992D6FE0"
-                                opacity: mgr.busy ? 0.5 : 1
-                                Text { id: gl; anchors.centerIn: parent; text: mgr.busy ? "Connexion…" : "Connexion"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
-                                MouseArea { id: gm; anchors.fill: parent; hoverEnabled: true; enabled: !mgr.busy; onClicked: { mgr.connect(row.modelData); secretField.text = "" } }
+                        MouseArea {
+                            id: rm; anchors.fill: parent; hoverEnabled: true
+                            onClicked: {
+                                if (!mgr.selected) return
+                                if (mgr.confirmRemoveId === mgr.selected.id) { const id = mgr.selected.id; mgr.confirmRemoveId = ""; mgr.selectedId = ""; mgr.controller.removeServer(id) }
+                                else mgr.confirmRemoveId = mgr.selected.id
                             }
                         }
                     }
                 }
+            }
 
-                Rectangle {
-                    visible: mgr.editingId === ""
-                    height: mgr.adaptive ? 44 : 32; radius: 8; width: al.implicitWidth + 26
-                    color: am.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
-                    Text { id: al; anchors.centerIn: parent; text: "+  Ajouter un serveur"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
-                    MouseArea { id: am; anchors.fill: parent; hoverEnabled: true; onClicked: mgr.startEdit(null) }
-                }
+            Text {
+                visible: mgr.editingId === "" && mgr.servers.length === 0
+                width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
+                text: "Aucun serveur enregistré. Ajoutez votre serveur Linux pour commencer."
+                color: Theme.ink; font.pixelSize: 14; font.family: Theme.fontFamily
+            }
 
-                // Add / edit form
+            // Add / edit form
+            Item {
+                id: formCard
+                visible: mgr.editingId !== ""
+                width: parent.width; height: form.implicitHeight + 40
+                Glass { anchors.fill: parent; backdrop: mgr.backdrop; radius: 18; tint: "#D9101A2E"; blurAmount: 0.9; blurEnabled: false }
                 Column {
-                    visible: mgr.editingId !== ""
-                    width: parent.width
+                    id: form
+                    x: 20; y: 20; width: parent.width - 40
                     spacing: 8
-                    Text { text: mgr.editingId === "new" ? "Nouveau serveur" : "Modifier le serveur"; color: Theme.ink; font.pixelSize: 14; font.weight: Font.DemiBold; font.family: Theme.fontFamily }
+                    Text { text: mgr.editingId === "new" ? "Nouveau serveur" : "Modifier le serveur"; color: Theme.ink; font.pixelSize: 16; font.weight: Font.DemiBold; font.family: Theme.fontFamily }
+                    Text {
+                        width: parent.width; wrapMode: Text.WordWrap
+                        text: "Une connexion SSH sert toutes les applications : Fichiers, Journaux… Seuls l'adresse, l'utilisateur, le chemin de la clé et l'empreinte vérifiée de l'hôte sont mémorisés sur cet appareil ; les mots de passe ne le sont jamais."
+                        color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
+                    }
                     component Field: Rectangle {
                         property alias text: input.text
                         property alias input: input
@@ -278,24 +325,24 @@ Item {
                             x: 10; y: 20; width: parent.width - 20
                             color: Theme.ink; font.pixelSize: 13; font.family: Theme.fontFamily; clip: true
                             selectByMouse: true
-                            onActiveFocusChanged: if (activeFocus) { mgr.focusedInput = parent; Qt.callLater(() => formFlick.reveal(parent)) }
+                            onActiveFocusChanged: if (activeFocus) { mgr.focusedInput = parent; Qt.callLater(() => flick.reveal(parent)) }
                             onAccepted: mgr.saveEdit()
                             Text { visible: parent.text.length === 0; text: parent.parent.hint; color: "#5F7395"; font.pixelSize: 13; font.family: Theme.fontFamily }
                         }
                     }
                     Row {
                         spacing: 8
-                        Field { id: hostField; width: column.width - 108; label: "ADRESSE"; hint: "serveur.exemple.fr ou 192.0.2.10" }
+                        Field { id: hostField; width: form.width - 108; label: "ADRESSE"; hint: "serveur.exemple.fr ou 192.0.2.10" }
                         Field { id: portField; width: 100; label: "PORT"; hint: "22"; input.validator: IntValidator { bottom: 1; top: 65535 } }
                     }
                     Row {
                         spacing: 8
-                        Field { id: userField; width: (column.width - 8) / 2; label: "UTILISATEUR"; hint: "debian" }
-                        Field { id: nameField; width: (column.width - 8) / 2; label: "NOM AFFICHÉ (OPTION)"; hint: "Mon VPS" }
+                        Field { id: userField; width: (form.width - 8) / 2; label: "UTILISATEUR"; hint: "debian" }
+                        Field { id: nameField; width: (form.width - 8) / 2; label: "NOM AFFICHÉ (OPTION)"; hint: "Mon VPS" }
                     }
                     Row {
                         spacing: 8
-                        Field { id: keyField; width: column.width - 108; label: "CLÉ PRIVÉE OPENSSH (VIDE = MOT DE PASSE)"; hint: Qt.platform.os === "android" ? "Choisir via Parcourir…" : "C:/Users/vous/.ssh/id_ed25519" }
+                        Field { id: keyField; width: form.width - 108; label: "CLÉ PRIVÉE OPENSSH (VIDE = MOT DE PASSE)"; hint: Qt.platform.os === "android" ? "Choisir via Parcourir…" : "C:/Users/vous/.ssh/id_ed25519" }
                         Rectangle {
                             width: 100; height: 46; radius: 8; color: bm.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
                             Text { anchors.centerIn: parent; text: "Parcourir…"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
@@ -307,11 +354,12 @@ Item {
                         spacing: 8
                         Rectangle {
                             height: mgr.adaptive ? 44 : 32; radius: 8; width: sl.implicitWidth + 26
-                            color: sm.containsMouse ? Theme.selection : "#992D6FE0"
+                            color: sm2.containsMouse ? Theme.selection : "#992D6FE0"
                             Text { id: sl; anchors.centerIn: parent; text: "Enregistrer"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
-                            MouseArea { id: sm; anchors.fill: parent; hoverEnabled: true; onClicked: mgr.saveEdit() }
+                            MouseArea { id: sm2; anchors.fill: parent; hoverEnabled: true; onClicked: mgr.saveEdit() }
                         }
                         Rectangle {
+                            visible: mgr.servers.length > 0
                             height: mgr.adaptive ? 44 : 32; radius: 8; width: xl.implicitWidth + 26
                             color: xm.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
                             Text { id: xl; anchors.centerIn: parent; text: "Annuler"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
@@ -334,5 +382,5 @@ Item {
     }
 
     focus: visible
-    Keys.onEscapePressed: if (editingId !== "") editingId = ""; else closed()
+    Keys.onEscapePressed: back()
 }
