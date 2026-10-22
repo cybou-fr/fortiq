@@ -8,6 +8,7 @@ Android arm64 debug APK прошёл базовые SSH/SFTP, поворот/IME
 [Android foundation](ANDROID_FOUNDATION.md). Факты и ограничения — [QT_MIGRATION](QT_MIGRATION.md).
 Первый срез Desktop Shell (`qml/shell/`) повторяет композицию [UI SPEC v1](UI_SPEC_V1.md), но визуально не принят; расхождения — [SHELL_FIDELITY](SHELL_FIDELITY.md).
 Историческая Flutter-версия — git-тег `flutter-final`.
+Детализация следующих этапов A–D (анализ 23.10.2026) — [ROADMAP](ROADMAP.md); фаза R0.x закрывается этапом A.
 
 ## 1. Приложения и исполнители
 

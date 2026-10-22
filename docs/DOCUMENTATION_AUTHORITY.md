@@ -13,6 +13,7 @@
 | What does flagship Logs do? | [Logs Intelligence](LOGS_INTELLIGENCE_SPEC.md) | arbitrary sysadmin/SIEM features or AI promises |
 | How to implement it? | [Architecture](ARCHITECTURE.md), [Desktop Blueprint](FORTIQ_DESKTOP_BLUEPRINT.md) | discontinued Flutter architecture |
 | What is actually in code today? | **[README](../README.md), [Qt migration](QT_MIGRATION.md), [Development Matrix](DEVELOPMENT_MATRIX.md)** plus executed test evidence | aspirational specification, unrun tests, screenshots |
+| What is planned next, and in what order? | [Roadmap](ROADMAP.md) (a plan; subordinate to Product Scope and the Matrix) | claims of implemented status |
 | How do licenses and optional AI work? | [Licensing](LICENSING.md), [Licensing Setup](LICENSING_SETUP.md), [AI CLI](AI_CLI.md) | historical Flutter implementation |
 
 **Conflict resolution:** stricter SSH/security guarantees win over UI convenience. For the visual appearance **in the user-provided master screenshot**, [UI SPEC](UI_SPEC_V1.md) wins over generic design suggestions, sample tokens and old wording. For actual implementation status, verifiable **current source + test evidence** wins over all roadmap claims.
