@@ -151,5 +151,8 @@ its tint is lighter. Frosted wallpaper is blended with the scene underneath so o
 remain visible. This is translucent composition, not yet blur of the complete lower-window scene.
 The three production cards select the bundled Aurora, Désert and Ville backgrounds, with previews;
 they do not implement saved remote workspaces. The reference fixture keeps the original cards.
+Clicking or touching an exposed app window raises it above the other app windows; choosing its
+app-panel entry raises it too. Activation observes the press passively so fields, buttons and drag
+handles retain the same gesture. Shell panels and the global server dialog remain above app windows.
 This is not a new visual approval, nor proof of complete Android touch/accessibility or GPU fidelity.
 See [Android foundation](ANDROID_FOUNDATION.md) for screenshots, build evidence and device gates.

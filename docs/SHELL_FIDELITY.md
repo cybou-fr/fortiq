@@ -114,3 +114,11 @@ A fast native sidebar drag exposed an input-coalescing gap; the corrected handle
 drag and QtTest's additional press/release-only regression. These checks use the developer machine,
 not a clean Windows installation. Full lower-window blur, remaining font glyph fidelity, high-DPI/
 multi-monitor coverage and owner visual acceptance are still open.
+
+Window activation follow-up: a press on the exposed portion of Files, Logs or Browser raises
+that window, and app-panel activation raises it too. A shell input observer rejects the press
+after updating a bounded app-window ordering, allowing the actual child control to handle it.
+Shell panels/global dialogs retain their upper layer. Windows and Android builds passed;
+layout QtTest **32 passed**, including bidirectional click-to-raise, app-panel launch ordering,
+child close-button delivery, and the existing drag regressions. The new APK was installed/launched
+on FortiqTablet; Android-specific touch activation is not separately qualified by this QtTest run.

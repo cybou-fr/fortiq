@@ -41,6 +41,11 @@ Item {
     property string panelEdge: fixture ? (fixturePreview === "panelleft" ? "left" : "bottom")
                                        : (displaySettings.panelEdge === "left" ? "left" : "bottom")
     property bool serversOpen: false
+    property var windowOrder: ["files", "browser", "logs"]
+    function raiseApp(app) {
+        windowOrder = windowOrder.filter(key => key !== app).concat([app])
+        foregroundApp = app
+    }
 
     width: Theme.canvasWidth
     height: Theme.canvasHeight
@@ -57,13 +62,13 @@ Item {
     Timer { running: !shell.fixture; repeat: true; interval: 15000; onTriggered: shell.now = new Date() }
 
     function launch(app) {
-        if (app === "files") { filesOpen = true; foregroundApp = "files" }
+        if (app === "files") { filesOpen = true; raiseApp("files") }
         else if (app === "launcher") launcherOpen = !launcherOpen
-        else if (app === "browser") browserOpen = !browserOpen
+        else if (app === "browser") { browserOpen = !browserOpen; if (browserOpen) raiseApp("browser") }
         else if (app === "servers") serversOpen = true
-        else if (app === "logs") { foregroundApp = "logs"; logsOpen = true; launcherOpen = false }
+        else if (app === "logs") { raiseApp("logs"); logsOpen = true; launcherOpen = false }
         else if (app === "trash") {
-            filesOpen = true; foregroundApp = "files"
+            filesOpen = true; raiseApp("files")
             if (controller && controller.connected && controller.trashDirectory.length > 0) controller.navigate(controller.trashDirectory)
             else serversOpen = true
         }
@@ -93,6 +98,7 @@ Item {
 
     FilesWindow {
         id: filesWindow
+        z: shell.windowOrder.indexOf("files") + 1
         visible: shell.filesOpen && (!shell.adaptive || shell.foregroundApp === "files")
         adaptive: shell.adaptive
         x: shell.adaptive ? 8 : 471; y: shell.adaptive ? shell.appTop : 72
@@ -107,6 +113,8 @@ Item {
     }
 
     BrowserWindow {
+        id: browserWindow
+        z: shell.windowOrder.indexOf("browser") + 1
         visible: shell.browserOpen && !shell.adaptive
         x: 554; y: 512; width: 650; height: 400
         backdrop: wallpaper
@@ -115,6 +123,7 @@ Item {
 
     LogsWindow {
         id: logsWindow
+        z: shell.windowOrder.indexOf("logs") + 1
         visible: shell.logsOpen && (!shell.adaptive || shell.foregroundApp === "logs")
         adaptive: shell.adaptive
         x: shell.adaptive ? 8 : 300; y: shell.adaptive ? shell.appTop : 130
@@ -130,7 +139,25 @@ Item {
         onRequestServers: shell.serversOpen = true
     }
 
+    // Observe a press above app windows, then reject it so the same event
+    // continues to the actual button, field or drag handle underneath.
+    MouseArea {
+        anchors.fill: parent
+        z: 9
+        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+        onPressed: mouse => {
+            const windows = [{key: "files", item: filesWindow}, {key: "browser", item: browserWindow}, {key: "logs", item: logsWindow}]
+            windows.sort((a, b) => b.item.z - a.item.z)
+            for (const entry of windows) {
+                const p = entry.item.mapFromItem(shell, mouse.x, mouse.y)
+                if (entry.item.visible && entry.item.contains(p)) { shell.raiseApp(entry.key); break }
+            }
+            mouse.accepted = false
+        }
+    }
+
     LauncherPanel {
+        z: 10
         objectName: "launcherPanel"
         visible: shell.launcherOpen
         x: shell.adaptive ? 8 : (shell.fixture ? 98 : (shell.panelEdge === "left" ? appPanel.x + appPanel.width + 10 : appPanel.x))
@@ -142,6 +169,7 @@ Item {
     }
 
     ControlCenter {
+        z: 10
         visible: shell.controlOpen
         x: shell.adaptive ? shell.width - width - 8 : 1215; y: 64
         width: Math.min(310, shell.width - 16); height: shell.adaptive ? Math.min(679, shell.height - 144) : 679
@@ -150,6 +178,7 @@ Item {
     }
 
     WorkspaceSwitcher {
+        z: 10
         objectName: "backgroundSwitcher"
         visible: !shell.adaptive
         x: 1215; y: 765; width: 310; height: 129
@@ -161,6 +190,7 @@ Item {
 
     AppPanel {
         id: appPanel
+        z: 10
         visible: !shell.adaptive
         backdrop: wallpaper
         edge: shell.panelEdge
@@ -177,6 +207,7 @@ Item {
     }
 
     CompactAppPanel {
+        z: 10
         apps: appPanel.apps
         visible: shell.adaptive && !Qt.inputMethod.visible
         x: 8; y: parent.height - height - 4; width: parent.width - 16; height: 68
@@ -185,6 +216,7 @@ Item {
     }
 
     TopBar {
+        z: 10
         compact: shell.adaptive
         width: parent.width
         serverLabel: shell.fixture ? "Linux"

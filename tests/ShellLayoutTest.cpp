@@ -93,6 +93,22 @@ private slots:
             QVERIFY(files->y() > before.y());
             files->setX(before.x()); files->setY(before.y());
             shell->setProperty("fixture", false);
+            shell->setProperty("logsOpen", true);
+            QTest::qWait(30);
+            QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                files->mapToScene(QPointF(100, 20)).toPoint());
+            QTRY_VERIFY(files->z() > logs->z());
+            QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                logs->mapToScene(QPointF(25, 80)).toPoint());
+            QTRY_VERIFY(logs->z() > files->z());
+            QVERIFY(QMetaObject::invokeMethod(shell, "launch", Q_ARG(QVariant, QVariant("files"))));
+            QTRY_VERIFY(files->z() > logs->z());
+            // The passive activation handler must not consume child clicks.
+            QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                files->mapToScene(QPointF(20, 23)).toPoint());
+            QVERIFY(!shell->property("filesOpen").toBool());
+            shell->setProperty("filesOpen", true);
+            shell->setProperty("logsOpen", false);
             shell->setProperty("launcherOpen", true);
             QTest::qWait(50);
             auto *launcher = shell->findChild<QQuickItem *>("launcherPanel"); QVERIFY(launcher);
