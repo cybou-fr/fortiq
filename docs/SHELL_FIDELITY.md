@@ -99,3 +99,10 @@ six app/overlay states, rotation without losing editor state, and Back with an u
 Captures: `build-msvc/layout-captures/`. Qt offscreen/software is explicitly configured with
 system fonts; it does not validate Android GPU blur, device DPR or owner acceptance. No new
 full-frame difference metric or pixel-perfect claim is made. [Build/device status](ANDROID_FOUNDATION.md).
+
+Owner feedback follow-up: the desktop now fills non-reference aspect ratios without navy margins,
+glass backdrop sampling follows ancestor movement, panel tints are less opaque, and empty Files
+sidebar space supports bounded dragging. Layout QtTest: **32 passed**, including 1600×950,
+viewport-edge coverage and real mouse drags from the sidebar at both desktop sizes. Windows app
+build passed. Offscreen tests cannot validate the glass shaders; Android runtime evidence is recorded
+in [Android foundation](ANDROID_FOUNDATION.md). Visual acceptance remains pending.

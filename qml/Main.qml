@@ -26,8 +26,8 @@ ApplicationWindow {
     DesktopShell {
         id: shell
         adaptive: window.adaptive
-        width: adaptive ? window.contentItem.width : Theme.canvasWidth
-        height: adaptive ? Math.max(200, window.contentItem.height - window.keyboardOverlap) : Theme.canvasHeight
+        width: adaptive ? window.contentItem.width : window.contentItem.width / window.canvasScale
+        height: adaptive ? Math.max(200, window.contentItem.height - window.keyboardOverlap) : window.contentItem.height / window.canvasScale
         controller: remote
         logsController: logs
         fixture: shellFixture

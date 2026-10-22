@@ -15,7 +15,7 @@ private slots:
     void initTestCase() { QCoreApplication::setOrganizationName("CYBOU-tests"); QCoreApplication::setApplicationName("fortiq-layout"); }
     void viewport_data() {
         QTest::addColumn<QSize>("size"); QTest::addColumn<QString>("preview");
-        for (const QSize size : {QSize(1536,1024), QSize(1024,768), QSize(768,1024), QSize(390,844)})
+        for (const QSize size : {QSize(1536,1024), QSize(1600,950), QSize(1024,768), QSize(768,1024), QSize(390,844)})
             for (const QString &preview : {QString(), QString("logs"), QString("editor"), QString("incident"), QString("service"), QString("servers")})
                 QTest::newRow(qPrintable(QString("%1x%2-%3").arg(size.width()).arg(size.height()).arg(preview.isEmpty() ? "files" : preview))) << size << preview;
     }
@@ -44,6 +44,10 @@ private slots:
         const bool logApp = preview == "logs" || preview == "incident" || preview == "service";
         const bool adaptive = size.width() < 1280 || size.height() > size.width();
         QCOMPARE(shell->property("adaptive").toBool(), adaptive);
+        QVERIFY(qAbs(shell->x()) < 0.01);
+        QVERIFY(qAbs(shell->y()) < 0.01);
+        QVERIFY(qAbs(shell->width() * shell->scale() - window->contentItem()->width()) < 0.01);
+        QVERIFY(qAbs(shell->height() * shell->scale() - window->contentItem()->height()) < 0.01);
         if (adaptive) {
             QCOMPARE(shell->scale(), 1.0);
             for (auto *item : {files, logs}) {
@@ -72,6 +76,17 @@ private slots:
         const auto image = window->grabWindow(); QVERIFY(!image.isNull());
         QDir().mkpath("layout-captures");
         QVERIFY(image.save(QString("layout-captures/%1.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+        if (!adaptive && preview.isEmpty()) {
+            const QPoint start = files->mapToScene(QPointF(70, 350)).toPoint();
+            const QPointF before(files->x(), files->y());
+            QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, start);
+            QTest::mouseMove(window, start + QPoint(25, 20), 30);
+            QTest::mouseMove(window, start + QPoint(65, 45), 30);
+            QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, start + QPoint(65, 45));
+            QVERIFY(files->x() > before.x());
+            QVERIFY(files->y() > before.y());
+            files->setX(before.x()); files->setY(before.y());
+        }
         if (preview == "incident" && adaptive && size.width() < 700) {
             auto *title = logs->findChild<QQuickItem *>("incidentTitle"); QVERIFY(title);
             auto *controls = logs->findChild<QQuickItem *>("incidentControls"); QVERIFY(controls);

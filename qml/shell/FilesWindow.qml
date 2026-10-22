@@ -246,7 +246,7 @@ Item {
         backdrop: win.backdrop
         radius: 16
         shadow: false
-        tint: "#B3121C30"
+        tint: "#8C121C30"
         blurAmount: 0.9
     }
 
@@ -259,6 +259,20 @@ Item {
         topLeftRadius: 16; bottomLeftRadius: 16
         color: "#40050B18"
         Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: "#1FFFFFFF" }
+
+        // Empty sidebar space is a window handle; places and window controls
+        // above this area keep their own clicks and touch gestures.
+        MouseArea {
+            objectName: "filesSidebarDrag"
+            anchors.fill: parent
+            enabled: !win.adaptive && !win.maximized
+            drag.target: win
+            drag.minimumX: -win.width + 120
+            drag.maximumX: win.parent ? win.parent.width - 120 : 0
+            drag.minimumY: 47
+            drag.maximumY: win.parent ? win.parent.height - 60 : 0
+            onDoubleClicked: win.toggleMaximize()
+        }
 
         Row {
             visible: !win.adaptive

@@ -9,13 +9,13 @@ QtObject {
     readonly property int canvasHeight: 1024
 
     readonly property color topBar: "#C9001C42"
-    readonly property color rail: "#E806162B"
+    readonly property color rail: "#9906162B"
     readonly property color filesBody: "#FEFEFE"
     readonly property color filesToolbar: "#F2F4F9"
     readonly property color filesSidebar: "#C21E2440"
     readonly property color launcher: "#D9152638"
     readonly property color browserChrome: "#F2132B52"
-    readonly property color control: "#B0162A4A"
+    readonly property color control: "#99162A4A"
     readonly property color tileLight: "#E6EFF9FE"
     readonly property color tileDark: "#59424A66"
     readonly property color dock: "#E2121A28"

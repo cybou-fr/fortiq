@@ -146,6 +146,14 @@ An experimental cold run with `-gpu swiftshader` produced severe triangular text
 it was reverted. Host GPU restored the normal scene, but the existing GPU/fidelity qualification
 items above remain open. No application code or APK changed for this recovery.
 
+The subsequent owner-requested shell correction rebuilt Windows and the Android APK and installed
+the APK on this AVD. Native window capture confirmed the wallpaper fills the usable viewport and
+panels show the blurred wallpaper. Layout QtTest passed **32 cases**, including 1600×950 edge
+coverage and Files sidebar mouse dragging. The native drag attempt was interrupted by concurrent
+owner input; automated dragging passed, but that is not an Android touch qualification claim.
+Glass sampling now follows ancestor movement; Files/app-panel/workspace tints are less opaque.
+Owner acceptance of the resulting glass appearance is still pending.
+
 The emulator remains available for further testing. On physical Lenovo hardware still verify installation/launch,
 rotation and real DPR, safe areas/predictive Back, IME/selection, tap/long press, readable touch controls,
 native key/upload/save pickers, provider metadata/unknown size, expired grants and restart persistence,

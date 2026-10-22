@@ -23,6 +23,12 @@ Item {
     onWidthChanged: syncOrigin()
     onHeightChanged: syncOrigin()
     Component.onCompleted: syncOrigin()
+    // Ancestor movement (for example dragging a window) does not change this
+    // item's local x/y. Sample the actual position before each rendered frame.
+    FrameAnimation {
+        running: glass.visible && glass.blurEnabled && glass.backdrop !== null
+        onTriggered: glass.syncOrigin()
+    }
 
     RectangularShadow {
         visible: glass.shadow

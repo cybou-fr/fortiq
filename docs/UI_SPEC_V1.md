@@ -138,5 +138,11 @@ collapsed sidebars and touch-sized primary controls. Window/editor instances sur
 Back preserves unsaved text. The reference desktop geometry remains under tests at 1536×1024.
 While the Android IME is visible, wide tablets also use viewport units to keep text and controls
 readable above the keyboard; the normal landscape composition returns when the IME hides.
+Owner correction on 22 October 2026: the usable viewport must have no navy margins around the
+desktop. Uniform artwork scaling is retained, with the logical desktop extending to the viewport
+edges at other aspect ratios. Empty space in the Files sidebar is also a drag handle in desktop
+mode; navigation rows and window buttons keep their actions. Panels must visibly retain the glass
+material: the backdrop sample follows ancestor movement, and Files/app-panel/workspace tints are
+less opaque following the owner's feedback. This material adjustment still awaits visual acceptance.
 This is not a new visual approval, nor proof of complete Android touch/accessibility or GPU fidelity.
 See [Android foundation](ANDROID_FOUNDATION.md) for screenshots, build evidence and device gates.
