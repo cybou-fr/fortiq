@@ -55,8 +55,11 @@ void RemoteController::startSearch(const QString &query, const QString &mode) {
             m_searchInfo = r.code == "cancelled" ? QStringLiteral("Recherche annulée — %1 résultat(s) partiel(s)").arg(n)
                                                  : r.message;
         }
+        // A stop request that the worker honoured before it produced a result is a cancellation, not a failure.
+        const auto taskState = m_tasks->state(taskId);
+        const bool stopRequested = taskState && *taskState == TaskManager::State::Cancelling;
         if (r.status == SshResult::Status::Ok) m_tasks->succeed(taskId, m_searchInfo);
-        else if (r.code == "cancelled") m_tasks->markCancelled(taskId, m_searchInfo);
+        else if (r.code == "cancelled" || stopRequested) m_tasks->markCancelled(taskId, m_searchInfo);
         else m_tasks->fail(taskId, r.message, r.code);
         emit searchChanged();
     });

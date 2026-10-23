@@ -41,7 +41,7 @@ Squeezy) — отдельный служебный канал, а не тран�
 4. **Terminal / Services / System Overview:** поддерживающие интеграции Linux/SSH для повседневного desktop и Logs; не DevOps dashboard.
 5. **Editor / Documents:** diff, редактор, Markdown/PDF и серверные документы.
 6. **Mail:** аккаунты и отправка исключительно через серверные консольные программы.
-7. **Browser / Media:** после доказанного SSH-only маршрута одновременно на Windows и Android.
+7. **Browser / Media:** первый срез Browser — GUI к `curl` на сервере ([BROWSER](BROWSER.md), реализован 23.10.2026); полный движок и Media — после доказанного SSH-only маршрута одновременно на Windows и Android.
 8. **AI только по желанию:** советник на Linux позднее; Files/Logs работают без него.
 
 Docker/Podman и расширенная DevOps-диагностика не приоритет.

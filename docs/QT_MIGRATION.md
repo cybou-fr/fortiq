@@ -258,6 +258,15 @@ follow, journal/file scripts, apply), `LogsAnalysis.cpp` (repeat groups, journal
 and the internal `LogsControllerInternal.h`; moved verbatim by script. Verified: CTest 11/11, Logs QtTest **11 passed, 0 skipped**
 with `FORTIQ_TEST_WSL=Debian` (real Linux reader), and the live integration suite **27 passed, 0 failed, 3 skipped**.
 
+23 October Browser (owner decision: "a GUI over curl"): the Navigateur app fetches pages with `curl` on the selected Linux server over
+SSH and shows them as safe text without JavaScript, styles or automatic resource loading ([BROWSER](BROWSER.md)). It opens from the
+panel/launcher, keeps history in RAM, offers a reader mode and a server-response panel (HTTP version, remote IP, timings, redirects,
+TLS verification, headers), and each load is a cancellable task. Verified: `fortiq_browser` 42 unit tests (URL rules, script quoting,
+response parser, charsets, sanitizer incl. 3000 random inputs), the live `browserFetchesThroughTheServer` test against a fixture web
+server on the disposable WSL Debian 13 (curl 8.14.1; redirects, `file://` redirect refused, DNS failure, loop, 6 MiB refusal, JSON,
+ISO-8859-1, binary, JavaScript-only page, stop of a slow page), and a layout test with a fake controller. Not done: images on request,
+forms, cookies, page search, bookmarks; Android not run on a device. The sketch window `BrowserWindow.qml` remains only in the reference scene.
+
 23 October TaskManager (first slice): one task model for the whole client (`TaskManager`, [ARCHITECTURE](ARCHITECTURE.md) §4) replaces
 the Files-only transfer queue. States queued / running / cancelling / cancelled / succeeded / failed / unknown; terminal states are
 final; a cancel is a request (a queued task is cancelled at once, a running cancellable one becomes `cancelling` and its owner

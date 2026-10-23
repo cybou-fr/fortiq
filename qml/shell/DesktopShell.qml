@@ -19,6 +19,8 @@ Item {
     property var terminalController: null
     property bool terminalOpen: false
     property var disksController: null
+    property var browserController: null
+    property bool webOpen: false
     property bool disksOpen: false
     property var documentsController:null
     property bool documentsOpen:false
@@ -56,7 +58,7 @@ Item {
     function logout() {
         if (!allowAppClose()) return
         sessionMenuOpen = false; launcherOpen = false; controlOpen = false
-        filesOpen = false; logsOpen = false; terminalOpen = false; disksOpen = false; documentsOpen = false
+        filesOpen = false; logsOpen = false; terminalOpen = false; disksOpen = false; documentsOpen = false; webOpen = false
         if (controller) controller.disconnectServer()
         serversOpen = true
     }
@@ -64,7 +66,7 @@ Item {
         target: shell.controller
         function onChanged() { if (shell.controller.connected && shell.serversOpen && !shell.fixture) shell.serversOpen = false }
     }
-    property var windowOrder: ["files", "browser", "logs", "terminal", "disks", "docs"]
+    property var windowOrder: ["files", "browser", "logs", "terminal", "disks", "docs", "web"]
     function raiseApp(app) {
         windowOrder = windowOrder.filter(key => key !== app).concat([app])
         foregroundApp = app
@@ -87,6 +89,7 @@ Item {
     function launch(app) {
         if (app === "files") { filesOpen = true; raiseApp("files") }
         else if (app === "launcher") launcherOpen = !launcherOpen
+        else if (app === "browser" && !fixture) { webOpen = true; raiseApp("web"); launcherOpen = false }
         else if (app === "browser") { browserOpen = !browserOpen; if (browserOpen) raiseApp("browser") }
         else if (app === "servers") serversOpen = true
         else if (app === "logs") { raiseApp("logs"); logsOpen = true; launcherOpen = false }
@@ -142,7 +145,7 @@ Item {
     BrowserWindow {
         id: browserWindow
         z: shell.windowOrder.indexOf("browser") + 1
-        visible: shell.browserOpen && !shell.adaptive
+        visible: shell.fixture && shell.browserOpen && !shell.adaptive
         x: 554; y: 512; width: 650; height: 400
         backdrop: wallpaper
         fixture: shell.fixture
@@ -179,6 +182,18 @@ Item {
         remote: shell.controller
         onCloseRequested: { shell.terminalOpen=false; if(shell.adaptive){shell.foregroundApp="files";shell.filesOpen=true} }
         onRequestServers: shell.serversOpen=true
+    }
+
+    WebWindow {
+        id: webWindow
+        visible: shell.webOpen && (!shell.adaptive || shell.foregroundApp === "web")
+        adaptive: shell.adaptive
+        x: shell.adaptive ? 8 : 320; y: shell.adaptive ? shell.appTop : 86
+        width: shell.adaptive ? shell.width - 16 : 940; height: shell.adaptive ? shell.appHeight : 660
+        z: shell.windowOrder.indexOf("web") + 1
+        backdrop: wallpaper; browser: shell.browserController; remote: shell.controller
+        onCloseRequested: { shell.webOpen = false; if (shell.adaptive) { shell.foregroundApp = "files"; shell.filesOpen = true } }
+        onRequestServers: shell.serversOpen = true
     }
 
     DisksWindow {
@@ -219,7 +234,7 @@ Item {
         z: 9
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         onPressed: mouse => {
-            const windows = [{key: "files", item: filesWindow}, {key: "browser", item: browserWindow}, {key: "logs", item: logsWindow}, {key: "terminal", item: terminalWindow}, {key:"disks",item:disksWindow}, {key:"docs",item:documentsWindow}]
+            const windows = [{key: "files", item: filesWindow}, {key: "browser", item: browserWindow}, {key: "logs", item: logsWindow}, {key: "terminal", item: terminalWindow}, {key:"disks",item:disksWindow}, {key:"docs",item:documentsWindow}, {key:"web",item:webWindow}]
             windows.sort((a, b) => b.item.z - a.item.z)
             for (const entry of windows) {
                 const p = entry.item.mapFromItem(shell, mouse.x, mouse.y)
@@ -295,7 +310,7 @@ Item {
         y: edge === "left" ? 59 : parent.height - height - 8
         width: edge === "left" ? 84 : (shell.fixture?560:Math.min(parent.width-16,appPanel.apps.length*60+84))
         height: edge === "left" ? parent.height - 59 - 8 : 70
-        running: ({ files: shell.filesOpen, logs: shell.logsOpen, terminal: shell.terminalOpen, disks:shell.disksOpen, docs:shell.documentsOpen, launcher: shell.launcherOpen })
+        running: ({ files: shell.filesOpen, logs: shell.logsOpen, terminal: shell.terminalOpen, disks:shell.disksOpen, docs:shell.documentsOpen, browser: shell.fixture ? shell.browserOpen : shell.webOpen, launcher: shell.launcherOpen })
         onLaunch: (app) => shell.launch(app)
         onMoveTo: (edge) => {
             shell.panelEdge = edge
@@ -402,6 +417,10 @@ Item {
         if (foregroundApp === "disks") {
             if(disksWindow.handleBack())return true
             foregroundApp="files";filesOpen=true;return true
+        }
+        if (foregroundApp === "web") {
+            if (webWindow.handleBack()) return true
+            foregroundApp = "files"; filesOpen = true; return true
         }
         if (foregroundApp === "terminal") {
             if(terminalWindow.handleBack())return true

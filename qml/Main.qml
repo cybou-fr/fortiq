@@ -45,6 +45,7 @@ ApplicationWindow {
         logsController: logs
         terminalController: typeof terminal !== "undefined" ? terminal : null
         disksController: typeof disks !== "undefined" ? disks : null
+        browserController: typeof browser !== "undefined" ? browser : null
         documentsController: typeof documents !== "undefined" ? documents : null
         fixture: shellFixture
         fixturePreview: shellFixturePreview

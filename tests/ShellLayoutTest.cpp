@@ -47,6 +47,40 @@ QtObject {
 })";
 #endif
 
+#ifndef Q_MOC_RUN // moc cannot parse raw strings
+static const char kFakeBrowser[] = R"(import QtQml
+QtObject {
+    property bool busy: false
+    property string state: "ready"
+    property string status: "HTTP 200 OK · 1,2 Ko · 0,12 s"
+    property string url: "https:\u002f\u002fexample.com/docs"
+    property string title: "Example"
+    property string kind: "html"
+    property string contentHtml: "<h1>Hello page</h1><p>Text with a <a href='https:\u002f\u002fexample.com/more'>link</a> and <b>bold</b>.</p><ul><li>one</li><li>two</li></ul>"
+    property string contentText: ""
+    property string imageSource: ""
+    property var headers: [{ name: "content-type", value: "text/html; charset=UTF-8" }, { name: "server", value: "nginx" }]
+    property var info: ({ requested: "https:\u002f\u002fexample.com/docs", status: 200, statusText: "OK", httpVersion: "2", remoteIp: "203.0.113.7",
+        contentType: "text/html; charset=UTF-8", charset: "utf-8", size: 1234, redirects: 1, redirectChain: [{ status: 301, location: "https:\u002f\u002fexample.com/docs" }],
+        tlsVerified: true, timings: { dns: 0.01, connect: 0.02, tls: 0.05, firstByte: 0.08, total: 0.12 } })
+    property var notes: ["Mode lecture : seul le contenu principal est affiché."]
+    property string refreshUrl: ""
+    property bool reader: true
+    property bool canGoBack: true
+    property bool canGoForward: false
+    property var calls: []
+    function open(t) { calls = calls.concat(["open:" + t]) }
+    function openLink(h) { calls = calls.concat(["link:" + h]) }
+    function reload() { calls = calls.concat(["reload"]) }
+    function stop() { calls = calls.concat(["stop"]) }
+    function goBack() { calls = calls.concat(["back"]) }
+    function goForward() { calls = calls.concat(["forward"]) }
+    function setWindowActive(a) {}
+})";
+static const char kFakeRemote[] = R"(import QtQml
+QtObject { property bool connected: true; property string serverLabel: "fixture@server" })";
+#endif
+
 class ShellLayoutTest : public QObject {
     Q_OBJECT
 private slots:
@@ -201,6 +235,50 @@ private slots:
             shell->setProperty("controlOpen", true);
             QTest::qWait(400);
             QVERIFY(window->grabWindow().save(QString("layout-captures/%1-control-selected.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+            {   // Navigateur: a window over curl on the server; links, address bar and details go through the controller.
+                QQmlComponent browserComponent(&engine), remoteComponent(&engine);
+                browserComponent.setData(kFakeBrowser, QUrl());
+                remoteComponent.setData(kFakeRemote, QUrl());
+                auto *fakeBrowser = browserComponent.create(); QVERIFY2(fakeBrowser, qPrintable(browserComponent.errorString()));
+                auto *fakeRemote = remoteComponent.create(); QVERIFY2(fakeRemote, qPrintable(remoteComponent.errorString()));
+                fakeBrowser->setParent(window); fakeRemote->setParent(window);
+                shell->setProperty("browserController", QVariant::fromValue(fakeBrowser));
+                shell->setProperty("webOpen", true);
+                shell->setProperty("foregroundApp", "web");
+                QTest::qWait(80);
+                auto *web = shell->findChild<QQuickItem *>("webWindow"); QVERIFY(web); QVERIFY(web->isVisible());
+                web->setProperty("remote", QVariant::fromValue(fakeRemote));
+                QVERIFY(web->x() >= 0 && web->y() >= 47 && web->x() + web->width() <= shell->width());
+                QTest::qWait(80);
+                auto *html = findByName(web, "webHtml"); QVERIFY(html); QVERIFY(html->isVisible());
+                QVERIFY(html->property("text").toString().contains("Hello page"));
+                QVERIFY(!html->property("text").toString().contains("<script"));
+                // Typing an address sends exactly that text to the controller.
+                auto *address = findByName(web, "webAddress"); QVERIFY(address);
+                address->forceActiveFocus();
+                address->setProperty("text", QString());
+                for (const char c : QByteArray("example.org/a")) QTest::keyClick(window, c);
+                QTest::keyClick(window, Qt::Key_Return);
+                QTRY_COMPARE(fakeBrowser->property("calls").toStringList(), QStringList{ "open:example.org/a" });
+                // A link clicked in the page is handed over unresolved (the controller applies the rules).
+                QVERIFY(QMetaObject::invokeMethod(html, "linkActivated", Q_ARG(QString, QString("https://example.com/more"))));
+                QTRY_COMPARE(fakeBrowser->property("calls").toStringList(), (QStringList{ "open:example.org/a", "link:https://example.com/more" }));
+                // Response details open beside the page and list the headers.
+                auto *infoButton = findByName(web, "webInfo"); QVERIFY(infoButton);
+                QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, infoButton->mapToScene(QPointF(infoButton->width() / 2, infoButton->height() / 2)).toPoint());
+                auto *infoPanel = findByName(web, "webInfoPanel"); QVERIFY(infoPanel);
+                QTRY_VERIFY(infoPanel->isVisible());
+                QTest::qWait(150);
+                QVERIFY(window->grabWindow().save(QString("layout-captures/%1-web.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+                // An error page is explicit and never shows stale content.
+                fakeBrowser->setProperty("kind", "error");
+                fakeBrowser->setProperty("state", "error");
+                fakeBrowser->setProperty("status", "Nom d'hôte introuvable depuis le serveur (DNS).");
+                QTest::qWait(80);
+                QVERIFY(!html->isVisible());
+                shell->setProperty("webOpen", false);
+                shell->setProperty("browserController", QVariant::fromValue<QObject *>(nullptr));
+            }
             {   // The shared task panel lists the tasks of every app and cancels through the manager.
                 fortiq::TaskManager manager;
                 shell->setProperty("taskManager", QVariant::fromValue<QObject *>(&manager));

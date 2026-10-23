@@ -110,8 +110,8 @@ void RemoteController::startTransfer(int id, int policyValue) {
         } else if (r.code == "conflict") {
             // The user decides (keep both / replace / skip); a stop request wins.
             if (!m_tasks->requestDecision(id, QStringLiteral("conflict"), r.message)) m_tasks->markCancelled(id, QStringLiteral("Annulé."));
-        } else if (r.code == "cancelled") {
-            m_tasks->markCancelled(id, r.message);
+        } else if (r.code == "cancelled" || state == TaskManager::State::Cancelling) {
+            m_tasks->markCancelled(id, r.message.isEmpty() ? QStringLiteral("Annulé.") : r.message);
         } else if (r.code == "unknown") {
             m_tasks->markUnknown(id, r.message);
         } else {

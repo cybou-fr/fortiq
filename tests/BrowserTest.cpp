@@ -242,6 +242,13 @@ private slots:
         const auto bad = sanitizeHtml("<meta http-equiv=\"refresh\" content=\"0; url=javascript:alert(1)\">", "https://e.com/a", false);
         QVERIFY(bad.refreshUrl.isEmpty());
     }
+    void spacesAroundInlineElementsStayOutside() {
+        QCOMPARE(clean("<p>First with a <a href=\"/x\">link</a> and <b>bold </b>next, <i>ok</i>.</p>"),
+                 QString("<p>First with a <a href=\"https://e.com/x\">link</a> and <b>bold</b> next, <i>ok</i>.</p>"));
+        QCOMPARE(clean("<p>a<b>b</b>c</p>"), QString("<p>a<b>b</b>c</p>"));                 // no invented spaces
+        QCOMPARE(clean("<p>  lead</p>  <p>next  </p>"), QString("<p>lead</p><p>next</p>"));
+        QCOMPARE(clean("<ul><li>one</li> <li>two</li></ul>"), QString("<ul><li>one</li><li>two</li></ul>"));
+    }
     void preformattedTextKeepsItsWhitespace() {
         QCOMPARE(clean("<pre>a\n  b</pre><p>x   \n  y</p>"), QString("<pre>a\n  b</pre><p>x y</p>"));
     }

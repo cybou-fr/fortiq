@@ -57,7 +57,7 @@
 | APP-02 | Editor | SFTP (OpenSSH `sftp-server`, расширение `posix-rename@openssh.com`) | SFTP внутри SSH: чтение, временный файл, атомарная замена, проверка чтением | текстовые файлы UTF-8 до 1 МиБ в Files, проверено на WSL Debian 13; полноценного приложения Editor нет |
 | APP-03 | Docs/Markdown | CLI файлов; при конвертации `pandoc` / `cmark` | SSH exec/SFTP | не начато |
 | APP-04 | Mail | `mail`, `sendmail`, `notmuch`, `mu`, `mbsync` — по совместимым возможностям | **Только SSH → серверная CLI** | не начато |
-| APP-05 | Browser | SSH `sshd` forwarding; для серверных запросов `curl` | **SSH SOCKS**, без fallback | не начато |
+| APP-05 | Browser | **первый срез: `curl` на сервере** ([BROWSER](BROWSER.md)); полный движок — SSH `sshd` forwarding | SSH exec (`sh -s`); движок — **SSH SOCKS**, без fallback | первый срез 23.10.2026: показ без JavaScript; движок не начат |
 | APP-06 | Viewer | `file`, `stat`, `pdfinfo`, `pdftoppm`, `base64` | SSH exec/SFTP | не начато |
 | APP-07 | Search | `find`, `grep`, `rg` | SSH exec | не начато |
 | APP-08 | Terminal | `sh`/`bash`, `tmux` | SSH PTY/exec | не начато |
@@ -74,7 +74,7 @@
 
 ### Browser: исключение формы представления, не транспорта
 
-Локальный WebView рендерит веб-страницу, но соединения с сайтами должны идти **через SSH SOCKS** выбранного Linux-сервера, а не напрямую с клиентского устройства. Серверный `sshd` исполняет сетевой маршрут. Серверные автоматизированные запросы/вычисления делает Linux CLI (`curl` и др.). DNS, WebRTC, loopback, отказы и отсутствие fallback требуют e2e-проверки.
+Первый срез (решение владельца 23.10.2026) — GUI к `curl`, исполняемому на сервере: см. [BROWSER](BROWSER.md). Для будущего полноценного движка: локальный WebView рендерит веб-страницу, но соединения с сайтами должны идти **через SSH SOCKS** выбранного Linux-сервера, а не напрямую с клиентского устройства. Серверный `sshd` исполняет сетевой маршрут. Серверные автоматизированные запросы/вычисления делает Linux CLI (`curl` и др.). DNS, WebRTC, loopback, отказы и отсутствие fallback требуют e2e-проверки.
 
 ### Mail: жёсткий запрет прямых протоколов
 

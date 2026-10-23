@@ -57,6 +57,11 @@ const QHash<QString, QString> &entityTable() {
     return t;
 }
 
+bool isInlineTag(const QString &n) {
+    static const QSet<QString> s { "a", "em", "strong", "b", "i", "u", "code", "s", "sub", "sup", "small", "mark", "kbd", "samp", "q", "cite", "del", "ins" };
+    return s.contains(n);
+}
+
 QString escapeText(const QString &s) {
     QString o;
     o.reserve(s.size());
@@ -363,14 +368,12 @@ SanitizedPage sanitizeHtml(const QString &html, const QString &baseUrl, bool rea
             }
             const bool visible = mainDepth > 0 && furnitureDepth == 0;
             if (visible && room()) {
-                // Headings, paragraphs, lists, quotes, tables... start a new block: no pending inline space.
+                const bool inlineTag = isInlineTag(t.name);
+                // A space owed before an inline element goes outside it; blocks start without one.
+                if (inlineTag && pendingSpace && !atBlockStart && !out.isEmpty()) out += QLatin1Char(' ');
                 out += tagText;
-                const bool block = t.name != QLatin1String("a") && t.name != QLatin1String("em") && t.name != QLatin1String("strong") && t.name != QLatin1String("b")
-                    && t.name != QLatin1String("i") && t.name != QLatin1String("u") && t.name != QLatin1String("code") && t.name != QLatin1String("s")
-                    && t.name != QLatin1String("sub") && t.name != QLatin1String("sup") && t.name != QLatin1String("small") && t.name != QLatin1String("mark")
-                    && t.name != QLatin1String("kbd") && t.name != QLatin1String("samp") && t.name != QLatin1String("q") && t.name != QLatin1String("cite")
-                    && t.name != QLatin1String("del") && t.name != QLatin1String("ins");
-                if (block) { atBlockStart = true; pendingSpace = false; }
+                if (inlineTag) pendingSpace = false;
+                else { atBlockStart = true; pendingSpace = false; }
                 if (t.name == QLatin1String("pre")) inPre = true;
             }
             stack.push_back({ outName, visible });
@@ -391,11 +394,12 @@ SanitizedPage sanitizeHtml(const QString &html, const QString &baseUrl, bool rea
             for (qsizetype s = stack.size() - 1; s >= 0; --s) if (stack.at(s).name == t.name) { idx = s; break; }
         }
         if (idx < 0) continue;
+        bool closedBlock = false;
         while (stack.size() > idx) {
             const bool wasMain = (t.name == QLatin1String("main") || t.name == QLatin1String("article"));
             const QString closing = stack.last().name;
+            if (!isInlineTag(closing) && stack.last().emitted) closedBlock = true;
             closeTop(true);
-            Q_UNUSED(closing);
             if (stack.size() == idx) {
                 if (extractMain && wasMain && mainDepth > 0) --mainDepth;
                 if (reader && furnitureDepth > 0 && furniture().contains(t.name)) --furnitureDepth;
@@ -404,8 +408,7 @@ SanitizedPage sanitizeHtml(const QString &html, const QString &baseUrl, bool rea
                 }
             }
         }
-        atBlockStart = true;
-        pendingSpace = false;
+        if (closedBlock) { atBlockStart = true; pendingSpace = false; }
     }
     while (!stack.isEmpty()) closeTop(true);
 

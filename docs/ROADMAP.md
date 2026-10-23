@@ -65,7 +65,7 @@ Android arm64, установщик Windows.
 
 - Лицензирование Lemon Squeezy — единственное прямое внешнее подключение клиента.
 - Подпись кода Windows и Android, уменьшение пакета, решение по лицензии Qt.
-- Browser: сначала доказательство SSH SOCKS-only на Windows и Android без прямого fallback; иначе
+- Browser: первый срез (GUI к `curl`, [BROWSER](BROWSER.md)) сделан 23.10.2026; полноценный движок — только после доказательства SSH SOCKS-only на Windows и Android без прямого fallback; иначе
   остаётся отложенным.
 - Опциональный `ai` над llama.cpp — после стабильных Files и Logs ([AI_CLI](AI_CLI.md)).
 

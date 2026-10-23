@@ -21,7 +21,7 @@ Item {
         { app: "logs", kind: "logs", label: "Journaux", ready: true },
         { app: "terminal", kind: "terminal", label: "Terminal", ready: true },
         { app: "editor", kind: "editor", label: "Éditeur", ready: false },
-        { app: "browser", kind: "browser", label: "Navigateur", ready: false },
+        { app: "browser", kind: "browser", label: "Navigateur", ready: !fixture },
         { app: "settings", kind: "settings", label: "Paramètres", ready: false }
     ].concat(fixture?[]:[{app:"disks",kind:"disks",label:"Disques",ready:true},{app:"docs",kind:"docs",label:"MDok",ready:true}])
     readonly property int cell: vertical ? 74 : 60

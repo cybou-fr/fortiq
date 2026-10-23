@@ -7,6 +7,7 @@
 #include "core/LogsController.h"
 #include "core/RemoteController.h"
 #include "core/TaskManager.h"
+#include "browser/BrowserController.h"
 #include "core/TerminalController.h"
 #include "core/DisksController.h"
 #include "core/DocumentsController.h"
@@ -1137,6 +1138,137 @@ private slots:
         QCOMPARE(controller.tasks()->activeCount(), 0);
 
         controller.disconnectServer();
+        settings.remove(pin);
+    }
+
+    // Needs FORTIQ_IT_WEB_BASE (for example http://127.0.0.1:8099): tests/fixtures/web_fixture.py running on the test server.
+    void browserFetchesThroughTheServer() {
+        const QString web = qEnvironmentVariable("FORTIQ_IT_WEB_BASE");
+        if (web.isEmpty()) QSKIP("FORTIQ_IT_WEB_BASE not set");
+        fortiq::RemoteController controller;
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        fortiq::BrowserController browser(&controller);
+        auto settled = [&] { return !browser.busy(); };
+
+        // Not connected / refused schemes never reach the server.
+        browser.open(QStringLiteral("file:///etc/passwd"));
+        QCOMPARE(browser.state(), QStringLiteral("error"));
+        QVERIFY(browser.status().contains("http"));
+        QCOMPARE(controller.tasks()->count(), 0);
+
+        // A page: sanitised, reader mode keeps <main>, nothing active survives.
+        browser.open(web + "/page");
+        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        QCOMPARE(browser.state(), QStringLiteral("ready"));
+        QCOMPARE(browser.kind(), QStringLiteral("html"));
+        QCOMPARE(browser.title(), QStringLiteral("Fixture page"));
+        QCOMPARE(browser.info().value("status").toInt(), 200);
+        QVERIFY(browser.contentHtml().contains("Hello fixture"));
+        QVERIFY2(browser.contentHtml().contains(QString("<a href=\"%1/page2\">link</a>").arg(web)), qPrintable(browser.contentHtml()));
+        QVERIFY(!browser.contentHtml().contains("executed"));
+        QVERIFY(!browser.contentHtml().contains("<script") && !browser.contentHtml().contains("<img") && !browser.contentHtml().contains("javascript:"));
+        QVERIFY(!browser.contentHtml().contains("Footer text"));           // reader mode
+        QVERIFY(browser.contentHtml().contains("[Tracking pixel]"));
+        QCOMPARE(browser.refreshUrl(), web + "/page2");                       // reported, not followed
+        QVERIFY(browser.notes().join("\n").contains("redirection"));
+        QCOMPARE(browser.url(), web + "/page");
+        browser.setReader(false);
+        QVERIFY(browser.contentHtml().contains("Footer text"));
+        browser.setReader(true);
+        QVERIFY(!browser.contentHtml().contains("Footer text"));
+        QVERIFY(!browser.headers().isEmpty());
+
+        // Redirects are followed by the server and reported.
+        browser.open(web + "/redir");
+        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        QCOMPARE(browser.url(), web + "/page");
+        QCOMPARE(browser.info().value("redirects").toInt(), 1);
+
+        // Links go through the same rules; history works.
+        browser.openLink("/page2");
+        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        QCOMPARE(browser.url(), web + "/page2");
+        QCOMPARE(browser.title(), QStringLiteral("Second"));
+        browser.openLink("javascript:alert(1)");
+        QCOMPARE(browser.url(), web + "/page2");                              // ignored
+        QVERIFY(browser.canGoBack());
+        browser.goBack();
+        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        QCOMPARE(browser.url(), web + "/page");
+        QVERIFY(browser.canGoForward());
+
+        // Errors are shown as pages with a note; failures are explicit.
+        browser.open(web + "/missing");
+        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        QCOMPARE(browser.state(), QStringLiteral("ready"));
+        QCOMPARE(browser.info().value("status").toInt(), 404);
+        QVERIFY(browser.notes().join("\n").contains("404"));
+        browser.open(QStringLiteral("http://nonexistent-host.invalid/"));
+        QTRY_VERIFY_WITH_TIMEOUT(settled(), 40000);
+        QCOMPARE(browser.state(), QStringLiteral("error"));
+        QVERIFY2(browser.status().contains("DNS"), qPrintable(browser.status()));
+        QVERIFY(browser.contentHtml().isEmpty());
+        browser.open(web + "/loop");
+        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        QCOMPARE(browser.state(), QStringLiteral("error"));
+        QVERIFY2(browser.status().contains("redirections"), qPrintable(browser.status()));
+        browser.open(web + "/redir-file");                                    // a redirect to file:// is refused by curl
+        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        QCOMPARE(browser.state(), QStringLiteral("error"));
+        QVERIFY(!browser.contentText().contains("root:"));
+        QVERIFY(!browser.contentHtml().contains("root:"));
+        browser.open(web + "/big");
+        QTRY_VERIFY_WITH_TIMEOUT(settled(), 30000);
+        QCOMPARE(browser.state(), QStringLiteral("error"));
+        QVERIFY2(browser.status().contains("5 Mio"), qPrintable(browser.status()));
+
+        // Other content types.
+        browser.open(web + "/json");
+        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        QCOMPARE(browser.kind(), QStringLiteral("json"));
+        QVERIFY(browser.contentText().contains("\n    \"name\": \"fortiq\""));
+        browser.open(web + "/latin1");
+        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        QCOMPARE(browser.kind(), QStringLiteral("text"));
+        QCOMPARE(browser.contentText(), QString::fromUtf8("café crème"));
+        browser.open(web + "/binary");
+        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        QCOMPARE(browser.kind(), QStringLiteral("binary"));
+        QVERIFY(browser.contentText().isEmpty());
+        browser.open(web + "/nojs");
+        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        QVERIFY(browser.notes().join("\n").contains("JavaScript"));
+
+        // Stopping a slow page returns quickly and ends its task as cancelled.
+        QElapsedTimer timer;
+        timer.start();
+        browser.open(web + "/slow");
+        QTRY_VERIFY_WITH_TIMEOUT(browser.busy(), 5000);
+        QTest::qWait(300);
+        browser.stop();
+        QTRY_VERIFY_WITH_TIMEOUT(settled(), 6000);
+        QVERIFY(timer.elapsed() < 6000);
+        QCOMPARE(browser.status(), QStringLiteral("Chargement annulé."));
+        const QVariantMap last = controller.tasks()->tasks().constLast().toMap();
+        QCOMPARE(last.value("kind").toString(), QStringLiteral("browse"));
+        QCOMPARE(last.value("state").toString(), QStringLiteral("cancelled"));
+
+        // Every fetch was a task: none left active, the successful ones succeeded.
+        QCOMPARE(controller.tasks()->activeCount(), 0);
+        int succeeded = 0;
+        for (const QVariant &v : controller.tasks()->tasks()) succeeded += v.toMap().value("state").toString() == "succeeded";
+        QVERIFY(succeeded >= 8);
+
+        // A new server session clears the page: nothing shown may look like it came from another server.
+        controller.disconnectServer();
+        QCOMPARE(browser.state(), QStringLiteral("disconnected"));
+        QVERIFY(browser.contentHtml().isEmpty() && browser.url().isEmpty() && !browser.canGoBack());
         settings.remove(pin);
     }
 

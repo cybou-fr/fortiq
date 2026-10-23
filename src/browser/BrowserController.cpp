@@ -228,7 +228,8 @@ void BrowserController::apply(const FetchOutcome &outcome, int, int, const QStri
         return;
     }
     // curl failed before any response (DNS, connect, TLS, timeout...): an explicit error, never an empty page.
-    if (r.curlExit != 0 && r.curlExit != 63) {
+    // Exit 63 with no body is a refusal because the announced size is above the limit.
+    if ((r.curlExit != 0 && r.curlExit != 63) || (r.curlExit == 63 && r.body.isEmpty())) {
         QString message = describeCurlExit(r.curlExit);
         if (!r.curlMessage.isEmpty() && r.curlExit != 28) message += QStringLiteral(" (") + r.curlMessage.section(QLatin1Char('\n'), 0, 0).left(200) + QLatin1Char(')');
         fail(message);
