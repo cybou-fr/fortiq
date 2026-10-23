@@ -21,6 +21,8 @@ Item {
     property var disksController: null
     property var browserController: null
     property bool webOpen: false
+    property var networkController: null
+    property bool networkOpen: false
     property bool disksOpen: false
     property var documentsController:null
     property bool documentsOpen:false
@@ -58,7 +60,7 @@ Item {
     function logout() {
         if (!allowAppClose()) return
         sessionMenuOpen = false; launcherOpen = false; controlOpen = false
-        filesOpen = false; logsOpen = false; terminalOpen = false; disksOpen = false; documentsOpen = false; webOpen = false
+        filesOpen = false; logsOpen = false; terminalOpen = false; disksOpen = false; documentsOpen = false; webOpen = false; networkOpen = false
         if (controller) controller.disconnectServer()
         serversOpen = true
     }
@@ -66,7 +68,7 @@ Item {
         target: shell.controller
         function onChanged() { if (shell.controller.connected && shell.serversOpen && !shell.fixture) shell.serversOpen = false }
     }
-    property var windowOrder: ["files", "browser", "logs", "terminal", "disks", "docs", "web"]
+    property var windowOrder: ["files", "browser", "logs", "terminal", "disks", "docs", "web", "network"]
     function raiseApp(app) {
         windowOrder = windowOrder.filter(key => key !== app).concat([app])
         foregroundApp = app
@@ -96,6 +98,7 @@ Item {
         else if (app === "terminal") { terminalOpen = true; raiseApp("terminal"); launcherOpen = false }
         else if (app === "docs") { documentsOpen=true;raiseApp("docs");launcherOpen=false }
         else if (app === "disks") { disksOpen=true;raiseApp("disks");launcherOpen=false }
+        else if (app === "network") { networkOpen = true; raiseApp("network"); launcherOpen = false }
         else if (app === "trash") {
             filesOpen = true; raiseApp("files")
             if (controller && controller.connected && controller.trashDirectory.length > 0) controller.navigate(controller.trashDirectory)
@@ -196,6 +199,18 @@ Item {
         onRequestServers: shell.serversOpen = true
     }
 
+    NetworkWindow {
+        id: networkWindow
+        visible: shell.networkOpen && (!shell.adaptive || shell.foregroundApp === "network")
+        adaptive: shell.adaptive
+        x: shell.adaptive ? 8 : 330; y: shell.adaptive ? shell.appTop : 92
+        width: shell.adaptive ? shell.width - 16 : 920; height: shell.adaptive ? shell.appHeight : 640
+        z: shell.windowOrder.indexOf("network") + 1
+        backdrop: wallpaper; network: shell.networkController; remote: shell.controller
+        onCloseRequested: { shell.networkOpen = false; if (shell.adaptive) { shell.foregroundApp = "files"; shell.filesOpen = true } }
+        onRequestServers: shell.serversOpen = true
+    }
+
     DisksWindow {
         id:disksWindow
         visible:shell.disksOpen && (!shell.adaptive || shell.foregroundApp==="disks")
@@ -234,7 +249,7 @@ Item {
         z: 9
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         onPressed: mouse => {
-            const windows = [{key: "files", item: filesWindow}, {key: "browser", item: browserWindow}, {key: "logs", item: logsWindow}, {key: "terminal", item: terminalWindow}, {key:"disks",item:disksWindow}, {key:"docs",item:documentsWindow}, {key:"web",item:webWindow}]
+            const windows = [{key: "files", item: filesWindow}, {key: "browser", item: browserWindow}, {key: "logs", item: logsWindow}, {key: "terminal", item: terminalWindow}, {key:"disks",item:disksWindow}, {key:"docs",item:documentsWindow}, {key:"web",item:webWindow}, {key:"network",item:networkWindow}]
             windows.sort((a, b) => b.item.z - a.item.z)
             for (const entry of windows) {
                 const p = entry.item.mapFromItem(shell, mouse.x, mouse.y)
@@ -301,6 +316,7 @@ Item {
 
     AppPanel {
         id: appPanel
+        objectName: "appPanel"
         fixture:shell.fixture
         z: 10
         visible: !shell.adaptive
@@ -310,7 +326,7 @@ Item {
         y: edge === "left" ? 59 : parent.height - height - 8
         width: edge === "left" ? 84 : (shell.fixture?560:Math.min(parent.width-16,appPanel.apps.length*60+84))
         height: edge === "left" ? parent.height - 59 - 8 : 70
-        running: ({ files: shell.filesOpen, logs: shell.logsOpen, terminal: shell.terminalOpen, disks:shell.disksOpen, docs:shell.documentsOpen, browser: shell.fixture ? shell.browserOpen : shell.webOpen, launcher: shell.launcherOpen })
+        running: ({ files: shell.filesOpen, logs: shell.logsOpen, terminal: shell.terminalOpen, disks:shell.disksOpen, docs:shell.documentsOpen, browser: shell.fixture ? shell.browserOpen : shell.webOpen, network: shell.networkOpen, launcher: shell.launcherOpen })
         onLaunch: (app) => shell.launch(app)
         onMoveTo: (edge) => {
             shell.panelEdge = edge
@@ -417,6 +433,10 @@ Item {
         if (foregroundApp === "disks") {
             if(disksWindow.handleBack())return true
             foregroundApp="files";filesOpen=true;return true
+        }
+        if (foregroundApp === "network") {
+            if (networkWindow.handleBack()) return true
+            foregroundApp = "files"; filesOpen = true; return true
         }
         if (foregroundApp === "web") {
             if (webWindow.handleBack()) return true

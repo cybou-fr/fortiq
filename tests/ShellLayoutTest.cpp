@@ -77,6 +77,41 @@ QtObject {
     function goForward() { calls = calls.concat(["forward"]) }
     function setWindowActive(a) {}
 })";
+static const char kFakeNetwork[] = R"(import QtQml
+QtObject {
+    property bool busy: false
+    property string state: 'ready'
+    property string status: 'Lecture seule'
+    property string updated: '12:00:00'
+    property string hostname: 'srv-test'
+    property var interfaces: [
+        { name: 'lo', index: 1, state: 'UNKNOWN', up: true, mtu: 65536, mac: '00:00:00:00:00:00', kind: 'loopback', flags: ['UP'],
+          addresses: [{ family: 'inet', address: '127.0.0.1', prefix: 8, scope: 'host', text: '127.0.0.1/8' }], hasStats: true, rx: '1.0 Mio', tx: '1.0 Mio', rxPackets: 10, txPackets: 10, errors: 0, dropped: 0 },
+        { name: 'eth0', index: 2, state: 'UP', up: true, mtu: 1500, mac: '52:54:00:aa:bb:cc', kind: 'ether', flags: ['UP'],
+          addresses: [{ family: 'inet', address: '192.0.2.10', prefix: 24, scope: 'global', text: '192.0.2.10/24' }, { family: 'inet6', address: 'fe80::1', prefix: 64, scope: 'link', text: 'fe80::1/64' }],
+          hasStats: true, rx: '12.5 Mio', tx: '3.20 Mio', rxPackets: 900, txPackets: 800, errors: 2, dropped: 0 } ]
+    property var routes: [{ family: 'inet', destination: 'default', gateway: '192.0.2.1', device: 'eth0', protocol: 'dhcp', prefsrc: '', metric: 100, isDefault: true }]
+    property var listeners: [
+        { protocol: 'tcp', state: 'LISTEN', address: '0.0.0.0', port: 22, process: 'sshd', pid: 700, exposure: 'all', recvQ: 0, sendQ: 128 },
+        { protocol: 'tcp', state: 'LISTEN', address: '127.0.0.1', port: 5432, process: '', pid: 0, exposure: 'local', recvQ: 0, sendQ: 244 } ]
+    property int exposedCount: 1
+    property var notes: ['Les noms de processus ne sont visibles que pour votre utilisateur (ou root).']
+    property var dnsServers: ['192.0.2.53']
+    property var dnsSearch: ['example.net']
+    property string dnsNote: ''
+    property string resolvedText: ''
+    property var tools: ['ping', 'getent']
+    property bool probeBusy: false
+    property string probeKind: ''
+    property string probeTarget: ''
+    property string probeOutput: ''
+    property string probeStatus: ''
+    property var calls: []
+    function reload() { calls = calls.concat(['reload']) }
+    function setWindowActive(a) {}
+    function runProbe(k, t) { calls = calls.concat(['probe:' + k + ':' + t]); probeKind = k; probeTarget = t; probeOutput = '4 packets transmitted'; probeStatus = 'Terminé.' }
+    function cancelProbe() {}
+})";
 static const char kFakeRemote[] = R"(import QtQml
 QtObject { property bool connected: true; property string serverLabel: "fixture@server" })";
 #endif
@@ -203,7 +238,9 @@ private slots:
             auto *launcher = shell->findChild<QQuickItem *>("launcherPanel"); QVERIFY(launcher);
             QVERIFY(launcher->x() >= 0);
             QVERIFY(launcher->y() + launcher->height() < shell->height() - 70);
-            QCOMPARE(launcher->x(), (shell->width() - qMin<qreal>(shell->width() - 16, 9 * 60 + 84)) / 2); // bottom panel: 9 apps outside the fixture
+            auto *appPanelItem = shell->findChild<QQuickItem *>("appPanel"); QVERIFY(appPanelItem);
+            QCOMPARE(appPanelItem->x(), (shell->width() - appPanelItem->width()) / 2);   // bottom panel is centred
+            QCOMPARE(launcher->x(), appPanelItem->x());                                  // the launcher opens above it
             shell->setProperty("controlOpen", true);
             QTest::qWait(50);
             auto *control = shell->findChild<QQuickItem *>("controlCenter"); QVERIFY(control);
@@ -235,6 +272,47 @@ private slots:
             shell->setProperty("controlOpen", true);
             QTest::qWait(400);
             QVERIFY(window->grabWindow().save(QString("layout-captures/%1-control-selected.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+            {   // Réseau: read-only sections and diagnostics that run on the server.
+                QQmlComponent netComponent(&engine), netRemoteComponent(&engine);
+                netComponent.setData(kFakeNetwork, QUrl());
+                netRemoteComponent.setData(kFakeRemote, QUrl());
+                auto *fakeNet = netComponent.create(); QVERIFY2(fakeNet, qPrintable(netComponent.errorString()));
+                auto *netRemote = netRemoteComponent.create(); QVERIFY2(netRemote, qPrintable(netRemoteComponent.errorString()));
+                fakeNet->setParent(window); netRemote->setParent(window);
+                shell->setProperty("networkController", QVariant::fromValue(fakeNet));
+                shell->setProperty("networkOpen", true);
+                shell->setProperty("foregroundApp", "network");
+                QTest::qWait(80);
+                auto *netWin = shell->findChild<QQuickItem *>("networkWindow"); QVERIFY(netWin); QVERIFY(netWin->isVisible());
+                netWin->setProperty("remote", QVariant::fromValue(netRemote));
+                QVERIFY(netWin->x() >= 0 && netWin->y() >= 47 && netWin->x() + netWin->width() <= shell->width());
+                QTest::qWait(80);
+                auto *netList = findByName(netWin, "networkList"); QVERIFY(netList); QVERIFY(netList->isVisible());
+                QCOMPARE(netList->property("count").toInt(), 2);                    // lo and eth0
+                auto clickSection = [&](const char *key) {
+                    auto *item = findByName(netWin, QString("networkSection_%1").arg(key)); QVERIFY(item);
+                    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
+                    QTest::qWait(60);
+                };
+                clickSection("ports");
+                QCOMPARE(netList->property("count").toInt(), 2);
+                QVERIFY(window->grabWindow().save(QString("layout-captures/%1-network.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+                clickSection("routes");
+                QCOMPARE(netList->property("count").toInt(), 1);
+                clickSection("dns");
+                QVERIFY(!netList->isVisible());
+                clickSection("diag");
+                auto *target = findByName(netWin, "networkTarget"); QVERIFY(target);
+                target->forceActiveFocus();
+                for (const char c : QByteArray("example.org")) QTest::keyClick(window, c);
+                auto *ping = findByName(netWin, "networkProbe_ping"); QVERIFY(ping);
+                QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, ping->mapToScene(QPointF(ping->width() / 2, ping->height() / 2)).toPoint());
+                QTRY_COMPARE(fakeNet->property("calls").toStringList(), QStringList{ "probe:ping:example.org" });
+                auto *output = findByName(netWin, "networkProbeOutput"); QVERIFY(output);
+                QTRY_VERIFY(output->property("text").toString().contains("4 packets transmitted"));
+                shell->setProperty("networkOpen", false);
+                shell->setProperty("networkController", QVariant::fromValue<QObject *>(nullptr));
+            }
             {   // Navigateur: a window over curl on the server; links, address bar and details go through the controller.
                 QQmlComponent browserComponent(&engine), remoteComponent(&engine);
                 browserComponent.setData(kFakeBrowser, QUrl());

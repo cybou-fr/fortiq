@@ -22,6 +22,7 @@ Item {
         settings: ["#7C8798", "#4A5465", "⚙"],
         logs:     ["#4FD1C5", "#2C7A9B", "☰"],
         disks:    ["#9DAFC5", "#425877", "▤"],
+        network:  ["#5FD0B0", "#1E7F8C", "⇄"],
         sheet:    ["#3FCB7A", "#16884A", "▦"],
         office:   ["#43D17F", "#1E9E55", ""],
         cad:      ["#FFAA45", "#E2671F", "◎"],

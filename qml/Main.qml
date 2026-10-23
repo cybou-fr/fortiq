@@ -46,6 +46,7 @@ ApplicationWindow {
         terminalController: typeof terminal !== "undefined" ? terminal : null
         disksController: typeof disks !== "undefined" ? disks : null
         browserController: typeof browser !== "undefined" ? browser : null
+        networkController: typeof network !== "undefined" ? network : null
         documentsController: typeof documents !== "undefined" ? documents : null
         fixture: shellFixture
         fixturePreview: shellFixturePreview

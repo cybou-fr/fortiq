@@ -8,6 +8,7 @@
 #include "core/RemoteController.h"
 #include "core/TaskManager.h"
 #include "browser/BrowserController.h"
+#include "network/NetworkController.h"
 #include "core/TerminalController.h"
 #include "core/DisksController.h"
 #include "core/DocumentsController.h"
@@ -1138,6 +1139,68 @@ private slots:
         QCOMPARE(controller.tasks()->activeCount(), 0);
 
         controller.disconnectServer();
+        settings.remove(pin);
+    }
+
+    // The Network app reads interfaces, routes, ports and DNS of the test server and runs diagnostics there.
+    void networkAppReadsTheServer() {
+        fortiq::RemoteController controller;
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        fortiq::NetworkController net(&controller);
+        net.setWindowActive(true);
+        QTRY_COMPARE_WITH_TIMEOUT(net.state(), QStringLiteral("ready"), 20000);
+        QVERIFY2(net.interfaces().size() >= 2, "lo and at least one more interface");
+        bool hasLoopback = false;
+        for (const QVariant &v : net.interfaces()) hasLoopback |= v.toMap().value("name").toString() == "lo";
+        QVERIFY(hasLoopback);
+        bool defaultRoute = false;
+        for (const QVariant &v : net.routes()) defaultRoute |= v.toMap().value("isDefault").toBool();
+        QVERIFY(defaultRoute);
+        // sshd listens on the test port on all interfaces: reported as reachable from outside.
+        bool sshListener = false;
+        for (const QVariant &v : net.listeners()) sshListener |= v.toMap().value("port").toInt() == base.port && v.toMap().value("exposure").toString() == "all";
+        QVERIFY2(sshListener, "the SSH port is listed as listening on all interfaces");
+        QVERIFY(net.exposedCount() >= 1);
+        QVERIFY(!net.dnsServers().isEmpty());
+        QVERIFY(!net.hostname().isEmpty());
+
+        // Diagnostics run on the server; invalid targets never reach it.
+        const int tasksBefore = controller.tasks()->count();
+        net.runProbe("ping", "a;b");
+        QVERIFY(net.probeStatus().contains("Saisissez"));
+        QCOMPARE(controller.tasks()->count(), tasksBefore);
+        net.runProbe("resolve", "localhost");
+        QTRY_VERIFY_WITH_TIMEOUT(!net.probeBusy(), 20000);
+        QVERIFY2(net.probeOutput().contains("127.0.0.1") || net.probeOutput().contains("::1"), qPrintable(net.probeOutput()));
+        if (net.tools().contains("ping")) {
+            net.runProbe("ping", "127.0.0.1");
+            QTRY_VERIFY_WITH_TIMEOUT(!net.probeBusy(), 30000);
+            QVERIFY2(net.probeOutput().contains("packets transmitted"), qPrintable(net.probeOutput()));
+            // A silent address takes seconds; stopping returns at once and the task ends as cancelled.
+            QElapsedTimer timer;
+            timer.start();
+            net.runProbe("ping", "203.0.113.1");
+            QTRY_VERIFY_WITH_TIMEOUT(net.probeBusy(), 5000);
+            QTest::qWait(300);
+            net.cancelProbe();
+            QTRY_VERIFY_WITH_TIMEOUT(!net.probeBusy(), 6000);
+            QVERIFY(timer.elapsed() < 6000);
+            QCOMPARE(net.probeStatus(), QStringLiteral("Annulé."));
+            QCOMPARE(controller.tasks()->tasks().constLast().toMap().value("state").toString(), QStringLiteral("cancelled"));
+        }
+        QCOMPARE(controller.tasks()->activeCount(), 0);
+        QVERIFY(controller.tasks()->tasks().constLast().toMap().value("kind").toString() == "networkProbe");
+
+        // A new server session clears everything.
+        controller.disconnectServer();
+        QCOMPARE(net.state(), QStringLiteral("disconnected"));
+        QVERIFY(net.interfaces().isEmpty() && net.listeners().isEmpty() && net.probeOutput().isEmpty());
         settings.remove(pin);
     }
 

@@ -258,6 +258,13 @@ follow, journal/file scripts, apply), `LogsAnalysis.cpp` (repeat groups, journal
 and the internal `LogsControllerInternal.h`; moved verbatim by script. Verified: CTest 11/11, Logs QtTest **11 passed, 0 skipped**
 with `FORTIQ_TEST_WSL=Debian` (real Linux reader), and the live integration suite **27 passed, 0 failed, 3 skipped**.
 
+23 October Network (read-only, [NETWORK](NETWORK.md)): the Réseau app shows interfaces (addresses, counters), listening ports with who can reach them
+(all interfaces / local only / one address), routes and DNS of the selected server, and runs resolve/ping/trace there as cancellable tasks. Existing tools
+only (`ip -j`, `ss`, `getent`, `dig`, `ping`, `mtr`/`tracepath`); targets are validated before anything is sent. Verified: `fortiq_network` 14 unit tests with
+real outputs of the test Debian, the live `networkAppReadsTheServer` test (sshd listed as reachable on all interfaces, a cancelled ping to a silent address,
+session clearing), and a layout test with a fake controller; CTest 14/14. Not done: any change to the network, packet capture, port scanning, firewall;
+Android not run on a device.
+
 23 October Browser (owner decision: "a GUI over curl"): the Navigateur app fetches pages with `curl` on the selected Linux server over
 SSH and shows them as safe text without JavaScript, styles or automatic resource loading ([BROWSER](BROWSER.md)). It opens from the
 panel/launcher, keeps history in RAM, offers a reader mode and a server-response panel (HTTP version, remote IP, timings, redirects,
