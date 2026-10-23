@@ -243,3 +243,11 @@ Qt WebEngine and Windows WebView2 do not provide a single browser component suit
 internal `SshInternal.h`; the code was moved verbatim by script. The public header is unchanged. Verified: Windows build,
 CTest 11/11, and the live `fortiq_publication` suite **28/28** against the disposable WSL `fortiq-test` SFTP server (the
 distro must be kept running during the test or sshd stops). The general `fortiq_ssh_integration` suite stayed skipped.
+
+Refactor, step 2 (no behaviour change): `RemoteController.cpp` is split into `RemoteController.cpp` (construction, request
+pipeline, navigation, disconnect), `RemoteProfiles.cpp` (saved servers, remembered secrets, connect), `RemotePreview.cpp`,
+`RemoteTransfers.cpp`, `RemoteOperations.cpp` (folder/rename/trash, safe save) and `RemoteSearch.cpp`, plus the internal
+`RemoteControllerInternal.h`; code moved verbatim by script, public header unchanged. Verified: CTest 11/11 and the live
+`fortiq_ssh_integration` suite **27 passed, 0 failed, 3 skipped** (logs service fixtures) against the disposable WSL
+`fortiq-test` server, with a key login, the upload/trash/save/search fixtures under `/home/fqshell/it`, and a throw-away
+`fqshell` password set on that disposable distro for the run.

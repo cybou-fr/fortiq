@@ -142,6 +142,15 @@ else()
     set(FORTIQ_SSH_TARGET fortiq_libssh2)
 endif()
 
+set(FORTIQ_REMOTE_SOURCES
+    src/core/RemoteController.cpp
+    src/core/RemoteProfiles.cpp
+    src/core/RemotePreview.cpp
+    src/core/RemoteTransfers.cpp
+    src/core/RemoteOperations.cpp
+    src/core/RemoteSearch.cpp
+)
+
 set(FORTIQ_SSH_SOURCES
     src/ssh/SshSession.cpp
     src/ssh/SshTerminal.cpp
@@ -158,7 +167,7 @@ qt_add_executable(fortiq
     src/core/LocalDocument.h
     src/core/RemotePath.cpp
     src/core/RemotePath.h
-    src/core/RemoteController.cpp
+    ${FORTIQ_REMOTE_SOURCES}
     src/core/RemoteController.h
     src/core/SecretStore.cpp
     src/core/SecretStore.h
@@ -256,7 +265,7 @@ if(BUILD_TESTING)
         src/core/DocumentsController.cpp src/core/DocumentsController.h
         ${FORTIQ_SSH_SOURCES} src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h
         src/core/LocalDocument.cpp src/core/LocalDocument.h
-        src/core/RemoteController.cpp src/core/RemoteController.h src/core/SecretStore.cpp src/core/SecretStore.h
+        ${FORTIQ_REMOTE_SOURCES} src/core/RemoteController.h src/core/SecretStore.cpp src/core/SecretStore.h
         src/core/LogsController.cpp src/core/LogsController.h)
     target_include_directories(fortiq_ssh_it PRIVATE src)
     target_link_libraries(fortiq_ssh_it PRIVATE Qt6::Core Qt6::Network Qt6::Concurrent Qt6::Test ${FORTIQ_SSH_TARGET})
@@ -264,7 +273,7 @@ if(BUILD_TESTING)
     qt_add_executable(fortiq_logs_tests tests/LogsControllerTest.cpp
         ${FORTIQ_SSH_SOURCES} src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h
         src/core/LocalDocument.cpp src/core/LocalDocument.h
-        src/core/RemoteController.cpp src/core/RemoteController.h src/core/SecretStore.cpp src/core/SecretStore.h
+        ${FORTIQ_REMOTE_SOURCES} src/core/RemoteController.h src/core/SecretStore.cpp src/core/SecretStore.h
         src/core/LogsController.cpp src/core/LogsController.h)
     target_include_directories(fortiq_logs_tests PRIVATE src)
     target_link_libraries(fortiq_logs_tests PRIVATE Qt6::Core Qt6::Network Qt6::Concurrent Qt6::Test ${FORTIQ_SSH_TARGET})
@@ -272,7 +281,7 @@ if(BUILD_TESTING)
     qt_add_executable(fortiq_credentials_tests tests/CredentialsTest.cpp
         ${FORTIQ_SSH_SOURCES} src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h
         src/core/LocalDocument.cpp src/core/LocalDocument.h
-        src/core/RemoteController.cpp src/core/RemoteController.h src/core/SecretStore.cpp src/core/SecretStore.h)
+        ${FORTIQ_REMOTE_SOURCES} src/core/RemoteController.h src/core/SecretStore.cpp src/core/SecretStore.h)
     target_include_directories(fortiq_credentials_tests PRIVATE src)
     target_link_libraries(fortiq_credentials_tests PRIVATE Qt6::Core Qt6::Network Qt6::Concurrent Qt6::Test ${FORTIQ_SSH_TARGET})
     add_test(NAME fortiq_credentials COMMAND fortiq_credentials_tests -o "${CMAKE_CURRENT_BINARY_DIR}/credentials-results.txt,txt" -o "-,txt")
