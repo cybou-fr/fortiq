@@ -13,7 +13,7 @@ QByteArray shellSingleQuote(const QString &value) {
 }
 }  // namespace
 
-QByteArray buildCurlScript(const QString &url) {
+QByteArray buildCurlScript(const QString &url, const QString &resolveSpec) {
     // Output frames, in order (all on stdout, binary-safe by length prefix):
     //   FORTIQ-RC <curl exit>\n
     //   FORTIQ-META\t<fields>\n                  (curl --write-out, portable to curl 7.x)
@@ -25,8 +25,8 @@ QByteArray buildCurlScript(const QString &url) {
     s += "command -v curl >/dev/null 2>&1 || { printf 'FORTIQ-ERR missing-curl\\n'; exit 3; }\n"
          "d=$(mktemp -d 2>/dev/null) || { printf 'FORTIQ-ERR mktemp\\n'; exit 3; }\n"
          "trap 'rm -rf \"$d\"' EXIT HUP INT TERM\n"
-         "m=$(curl --silent --show-error --location --max-redirs 10"
-         " --proto '=http,https' --proto-redir '=http,https'"
+         "m=$(curl -q --silent --show-error --noproxy '*'"
+         " --proto '=http,https'" + (resolveSpec.isEmpty() ? QByteArray() : " --resolve " + shellSingleQuote(resolveSpec)) + ""
          " --connect-timeout 10 --max-time 30 --max-filesize 5242880 --compressed"
          " --user-agent 'Mozilla/5.0 (compatible; FORTIQ-Browser/0.1)'"
          " --header 'Accept: text/html,application/xhtml+xml,application/json;q=0.9,text/plain;q=0.8,*/*;q=0.5'"
@@ -43,6 +43,11 @@ QByteArray buildCurlScript(const QString &url) {
          "printf 'FORTIQ-BODY %s\\n' \"$(size \"$d/b\")\"; [ -f \"$d/b\" ] && cat \"$d/b\"\n"
          "exit 0\n";
     return s;
+}
+
+QString redirectLocation(const CurlResult &r) {
+    if (r.status != 301 && r.status != 302 && r.status != 303 && r.status != 307 && r.status != 308) return {};
+    return headerValue(r.headers, QStringLiteral("Location")).trimmed();
 }
 
 QString describeCurlExit(int code) {

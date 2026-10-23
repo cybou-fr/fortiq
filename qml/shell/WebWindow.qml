@@ -22,6 +22,7 @@ Item {
     onBrowserChanged: sync()
     Component.onCompleted: sync()
     function handleBack() {
+        if (browser && browser.state === "confirm") { browser.cancelConfirm(); return true }
         if (infoOpen) { infoOpen = false; return true }
         if (browser && browser.canGoBack) { browser.goBack(); return true }
         return false
@@ -242,6 +243,62 @@ Item {
                 color: retryMouse.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
                 Text { id: retryLabel; anchors.centerIn: parent; text: "Réessayer"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
                 MouseArea { id: retryMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.browser.open(win.browser.info.requested) }
+            }
+        }
+    }
+
+    // ── internal address: asked before anything is fetched (docs/BROWSER.md, address policy) ──
+    Rectangle {
+        id: confirmPanel
+        objectName: "webConfirm"
+        visible: win.browser !== null && win.browser.state === "confirm"
+        x: 0; y: toolbar.height + notes.height; z: 30
+        width: page.width; height: page.height
+        color: "#E6101A2E"
+        MouseArea { anchors.fill: parent }   // modal for the page area
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 32, 560); height: Math.min(parent.height - 24, confirmColumn.implicitHeight + 32)
+            radius: 12; color: "#F2121C30"; border.width: 1; border.color: "#60FCD34D"
+            Flickable {
+                anchors.fill: parent; anchors.margins: 16; clip: true; contentWidth: width; contentHeight: confirmColumn.implicitHeight; boundsBehavior: Flickable.StopAtBounds
+                Column {
+                    id: confirmColumn
+                    width: parent.width; spacing: 8
+                    Text { width: parent.width; wrapMode: Text.Wrap; color: "#FCD34D"; font.pixelSize: 15; font.bold: true; font.family: Theme.fontFamily
+                           text: "Adresse interne au serveur" }
+                    Text {
+                        width: parent.width; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText; color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily
+                        text: win.browser && win.browser.pendingConfirm.url ? win.browser.pendingConfirm.url : ""
+                    }
+                    Text {
+                        visible: win.browser && win.browser.pendingConfirm.from !== undefined && win.browser.pendingConfirm.from !== ""
+                        width: parent.width; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText; color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
+                        text: win.browser && win.browser.pendingConfirm.from ? "Redirection depuis : " + win.browser.pendingConfirm.from : ""
+                    }
+                    Text {
+                        width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
+                        text: win.browser && win.browser.pendingConfirm.reason ? win.browser.pendingConfirm.reason : ""
+                    }
+                    Repeater {
+                        model: win.browser && win.browser.pendingConfirm.details ? win.browser.pendingConfirm.details : []
+                        Text {
+                            required property var modelData
+                            width: confirmColumn.width; textFormat: Text.PlainText; font.pixelSize: 11; font.family: "Consolas"
+                            color: modelData.cls === "public" ? Theme.inkMuted : "#FCD34D"
+                            text: "• " + modelData.ip + "   " + modelData.label
+                        }
+                    }
+                    Text {
+                        width: parent.width; wrapMode: Text.Wrap; color: Theme.inkMuted; font.pixelSize: 10; font.family: Theme.fontFamily
+                        text: "Aucune requête n'a été envoyée. « Ouvrir une fois » autorise cet hôte et ce port pour cette navigation seulement (redirections comprises) ; les adresses de métadonnées du cloud ne sont jamais ouvertes."
+                    }
+                    Row {
+                        spacing: 8
+                        Button { objectName: "webConfirmOpen"; text: "Ouvrir une fois"; onClicked: win.browser.confirmInternal() }
+                        Button { objectName: "webConfirmCancel"; text: "Annuler"; onClicked: win.browser.cancelConfirm() }
+                    }
+                }
             }
         }
     }

@@ -53,7 +53,7 @@ def main():
     env["PATH"] = os.pathsep.join([opts.qt_bin, opts.vcpkg_bin, env.get("PATH", "")])
     env.update({
         "FORTIQ_IT_HOST": opts.host, "FORTIQ_IT_PORT": opts.port, "FORTIQ_IT_USER": opts.user, "FORTIQ_IT_FINGERPRINT": opts.fingerprint,
-        "FORTIQ_IT_DB": "1", "FORTIQ_IT_MAIL": "1", "FORTIQ_IT_MAILSEND": "1",
+        "FORTIQ_IT_DB": "1", "FORTIQ_IT_MAIL": "1", "FORTIQ_IT_MAILSEND": "1", "FORTIQ_IT_POLICY": "1",
         "FORTIQ_PUBLICATION_HOST": opts.host, "FORTIQ_PUBLICATION_PORT": opts.port, "FORTIQ_PUBLICATION_USER": opts.user,
         "FORTIQ_PUBLICATION_FINGERPRINT": opts.fingerprint,
     })

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Disposable web server for the Browser live tests (run on the TEST Linux server only).
 
-    python3 web_fixture.py 8099
+    python3 web_fixture.py 8099            # 127.0.0.1 only
+    python3 web_fixture.py 8099 0.0.0.0    # also on the loopback aliases used by the address-policy tests
+                                            # (tool/setup_browser_policy_fixture.sh)
 
-Serves on 127.0.0.1 only. Paths:
+Paths:
   /page        HTML with <main>, a script, an iframe, an image, links and a meta refresh
   /redir       302 -> /page
   /redir-file  302 -> file:///etc/passwd   (must be refused by curl's --proto-redir)
@@ -15,7 +17,15 @@ Serves on 127.0.0.1 only. Paths:
   /slow        answers after 8 seconds
   /binary      application/octet-stream
   /missing     404 with an HTML body
+  /to-loopback 302 -> http://127.0.0.1:<port>/page            (public host redirecting to an internal address)
+  /to-metadata 302 -> http://169.254.169.254/latest/meta-data/ (cloud metadata: never fetched)
+  /to-odd      302 -> http://2130706433:<port>/page            (decimal spelling of 127.0.0.1)
+  /to-public   302 -> http://public-fixture.test:<port>/page
+  /to-other-port 302 -> http://127.0.0.1:8098/page             (another internal host:port)
+  /echo        200: Host header and the local address the connection arrived on
+  /_hits       200: JSON {path: number of requests}, to prove that nothing was fetched before a confirmation
 """
+import json
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -26,6 +36,9 @@ PAGE = b"""<!doctype html><html><head><title>Fixture page</title><meta charset="
 <main><h1>Hello fixture</h1><p>First paragraph with a <a href="/page2">link</a> and <a href="javascript:alert(1)">bad link</a>.</p>
 <img src="http://127.0.0.1:1/track.gif" alt="Tracking pixel"><iframe src="/page2">frame text</iframe>
 <script>document.write('executed')</script></main><footer>Footer text</footer></body></html>"""
+
+
+HITS = {}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -45,7 +58,24 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?")[0]
-        if path == "/page":
+        if path != "/_hits":
+            HITS[path] = HITS.get(path, 0) + 1
+        port = self.server.server_address[1]
+        if path == "/_hits":
+            self.reply(200, json.dumps(HITS).encode(), "application/json")
+        elif path == "/to-loopback":
+            self.reply(302, b"", "text/plain", [("Location", "http://127.0.0.1:%d/page" % port)])
+        elif path == "/to-metadata":
+            self.reply(302, b"", "text/plain", [("Location", "http://169.254.169.254/latest/meta-data/")])
+        elif path == "/to-odd":
+            self.reply(302, b"", "text/plain", [("Location", "http://2130706433:%d/page" % port)])
+        elif path == "/to-public":
+            self.reply(302, b"", "text/plain", [("Location", "http://public-fixture.test:%d/page" % port)])
+        elif path == "/to-other-port":
+            self.reply(302, b"", "text/plain", [("Location", "http://127.0.0.1:8098/page")])
+        elif path == "/echo":
+            self.reply(200, ("host=%s local=%s" % (self.headers.get("Host"), self.connection.getsockname()[0])).encode(), "text/plain")
+        elif path == "/page":
             self.reply(200, PAGE, "text/html; charset=utf-8")
         elif path == "/page2":
             self.reply(200, b"<html><title>Second</title><body><p>Second page</p></body></html>", "text/html")
@@ -75,4 +105,5 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8099
-    ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
+    bind = sys.argv[2] if len(sys.argv) > 2 else "127.0.0.1"
+    ThreadingHTTPServer((bind, port), Handler).serve_forever()

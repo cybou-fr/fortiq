@@ -18,8 +18,12 @@ namespace fortiq {
 constexpr qint64 kMaxBodyBytes = 5 * 1024 * 1024;     // enforced by curl --max-filesize and by the SSH output cap
 constexpr qint64 kMaxFetchOutput = kMaxBodyBytes + 256 * 1024;  // body + headers + frames
 
-// Script for `sh -s`. `url` must already be a normalised http(s) URL.
-QByteArray buildCurlScript(const QString &url);
+// Script for `sh -s`. `url` must already be a normalised http(s) URL. Redirects are NOT followed by curl: the caller reads
+// the Location and applies the address policy to every hop (UrlPolicy). `resolveSpec` ("host:port:ip", see curlResolveSpec)
+// pins the connection to the address the policy approved; empty for IP literals. curl ignores ~/.curlrc (-q) and any proxy
+// of the server's environment (--noproxy '*'), either of which could bypass the pin.
+QByteArray buildCurlScript(const QString &url, const QString &resolveSpec = {});
+
 
 struct CurlResult {
     bool framed = false;          // the output had the expected frames at all
@@ -44,6 +48,9 @@ struct CurlResult {
 
 // Parses what the script printed. Tolerant of binary bodies; never throws.
 CurlResult parseCurlOutput(const QByteArray &out);
+
+// The target of a redirect response (301/302/303/307/308) as written in its Location header, or empty.
+QString redirectLocation(const CurlResult &r);
 
 // Human text for a curl exit code ("Could not resolve host", "Timed out", ...).
 QString describeCurlExit(int code);

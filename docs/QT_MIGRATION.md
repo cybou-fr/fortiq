@@ -340,3 +340,10 @@ is a cancel, a shell that exits is a success, a failed link a failure) report to
 "Se déconnecter" link, connecting to another server, removing the open server and closing the window, and "Attendre" changes nothing. Verified: `fortiq_tasks` 21 unit tests, layout test of the dialog (stay, Back, quit, continue, reads do not ask),
 live `everyAppReportsItsWorkToTheTaskManager` (all four apps, including a real save conflict and a real shell exit/drop), full live suite 37 passed / 3 skipped, CTest 18/18. Not done: Système has no task (instant read); the dialog was only exercised
 on the desktop layout; Android not run on a device.
+
+23 October Audit backlog 2 ([AUDIT_2026-10-23](AUDIT_2026-10-23.md) R1) — Navigateur address policy, owner's choice "block by default, allow by explicit confirmation" ([BROWSER](BROWSER.md)): the server resolves the host (`getent ahosts`), the client classifies what came
+back (`UrlPolicy`): public addresses open; internal ones (loopback, private, CGNAT, ULA, reserved) ask first, before any request, and are allowed once for that host and port during that navigation; cloud-metadata addresses and names, link-local, multicast and
+unspecified addresses are never opened. curl no longer follows redirects: the client reads every `Location` and applies the same rules to each hop, curl is pinned to the approved address (`--resolve`, no second lookup), ignores `~/.curlrc` and any proxy
+(`-q`, `--noproxy '*'`); odd IPv4 spellings and IPv4 inside IPv6 / NAT64 / 6to4 are judged by the address they mean. Verified: `fortiq_browser` 108 checks, a layout test of the question, the live `browserAddressPolicy` test against a fixture with
+public-looking loopback aliases (nothing reaches the internal service before the answer; redirect public -> loopback asks; metadata never opens; the pinned address is the one connected to), live suite 38 passed / 3 skipped, CTest 18/18.
+Not done: a persistent allow-list of hosts, proxy-only servers, Android not run on a device.

@@ -76,6 +76,9 @@ QtObject {
     function goBack() { calls = calls.concat(["back"]) }
     function goForward() { calls = calls.concat(["forward"]) }
     function setWindowActive(a) {}
+    property var pendingConfirm: ({})
+    function confirmInternal() { calls = calls.concat(["confirm"]); state = "ready"; pendingConfirm = ({}) }
+    function cancelConfirm() { calls = calls.concat(["cancel-confirm"]); state = "ready"; pendingConfirm = ({}) }
 })";
 static const char kFakeNetwork[] = R"(import QtQml
 QtObject {
@@ -670,6 +673,35 @@ private slots:
                 fakeBrowser->setProperty("status", "Nom d'hôte introuvable depuis le serveur (DNS).");
                 QTest::qWait(80);
                 QVERIFY(!html->isVisible());
+                // An internal address is asked about before anything is fetched: two answers, nothing else is reachable meanwhile.
+                auto *confirm = findByName(web, "webConfirm"); QVERIFY(confirm); QVERIFY(!confirm->isVisible());
+                fakeBrowser->setProperty("pendingConfirm", QVariantMap { { "url", "http://127.0.0.1:8080/admin" }, { "host", "127.0.0.1" }, { "port", 8080 }, { "hop", 1 }, { "from", "https://example.com/go" },
+                    { "reason", "Cette adresse est interne au serveur : 127.0.0.1 (boucle locale (localhost))." },
+                    { "details", QVariantList { QVariantMap { { "ip", "127.0.0.1" }, { "label", "boucle locale (localhost)" }, { "cls", "internal" } } } } });
+                fakeBrowser->setProperty("state", "confirm");
+                QTRY_VERIFY(confirm->isVisible());
+                QVERIFY(window->grabWindow().save(QString("layout-captures/%1-web-confirm.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+                auto clickItem = [&](QQuickItem *item) {
+                    QVERIFY(item);
+                    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
+                    QTest::qWait(60);
+                };
+                clickItem(findByName(web, "webConfirmCancel"));
+                QTRY_VERIFY(fakeBrowser->property("calls").toStringList().contains("cancel-confirm"));
+                QVERIFY(!confirm->isVisible());
+                fakeBrowser->setProperty("pendingConfirm", QVariantMap { { "url", "http://127.0.0.1:8080/admin" }, { "host", "127.0.0.1" }, { "port", 8080 }, { "hop", 0 }, { "from", "" }, { "reason", "interne" }, { "details", QVariantList() } });
+                fakeBrowser->setProperty("state", "confirm");
+                QTRY_VERIFY(confirm->isVisible());
+                clickItem(findByName(web, "webConfirmOpen"));
+                QTRY_VERIFY(fakeBrowser->property("calls").toStringList().contains("confirm"));
+                QVERIFY(!confirm->isVisible());
+                // Back closes the question as a refusal.
+                fakeBrowser->setProperty("state", "confirm");
+                QTRY_VERIFY(confirm->isVisible());
+                QVariant handled;
+                QVERIFY(QMetaObject::invokeMethod(web, "handleBack", Q_RETURN_ARG(QVariant, handled)));
+                QVERIFY(handled.toBool());
+                QCOMPARE(fakeBrowser->property("calls").toStringList().count("cancel-confirm"), 2);
                 shell->setProperty("webOpen", false);
                 shell->setProperty("browserController", QVariant::fromValue<QObject *>(nullptr));
             }

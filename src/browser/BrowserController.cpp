@@ -2,6 +2,7 @@
 
 #include "CurlFetch.h"
 #include "HtmlSanitizer.h"
+#include "UrlPolicy.h"
 #include "UrlTools.h"
 #include "../core/RemoteController.h"
 #include "../core/TaskManager.h"
@@ -15,8 +16,28 @@
 namespace fortiq {
 
 struct FetchOutcome {
-    SshResult run;
+    enum class Kind { Done, Confirm, Error } kind = Kind::Done;
+    SshResult run;               // the last curl run (or the resolve run that failed)
     QString openError;
+    CurlResult curl;             // the parsed last response (Done)
+    QString error;               // Error: user-facing text
+    bool blocked = false;        // Error caused by the address policy (no way to confirm)
+    // Confirm: what the user is asked about
+    PolicyDecision decision;
+    QString confirmUrl, confirmHost, fromUrl;
+    int confirmPort = 0, hop = 0;
+    // Done: where the page really came from
+    QVariantList chain;          // redirects followed: [{status, from, location}]
+    QString pinnedIp, finalUrl, addressLabel;
+};
+
+struct BrowserController::Chain {
+    QString url;                 // the address to fetch next
+    QString requested;           // what the user asked for (the history key)
+    bool record = false;
+    int hop = 0, seq = 0, token = 0, taskId = 0;
+    QStringList confirmed;       // "host:port" the user allowed, for THIS navigation only
+    QVariantList chain;          // redirects followed so far
 };
 
 namespace {
@@ -77,6 +98,7 @@ void BrowserController::onRemoteChanged() {
     m_token = m_remote->connected() ? m_remote->connectionToken() : -1;
     m_history.clear();
     m_index = -1;
+    m_pending.reset(); m_pendingMap.clear();
     auto slot = m_session;
     (void)QtConcurrent::run(&m_pool, [slot] { slot->reset(); });
     m_session = std::make_shared<std::unique_ptr<SshSession>>();
@@ -124,6 +146,7 @@ void BrowserController::goForward() {
     navigate(m_history.at(m_index), false);
 }
 void BrowserController::stop() {
+    if (m_pending) { cancelConfirm(); return; }
     if (m_busy && m_taskId != 0 && m_remote->tasks()) m_remote->tasks()->requestCancel(m_taskId);
     else if (m_cancel) m_cancel->store(true);
 }
@@ -144,11 +167,14 @@ void BrowserController::navigate(const QString &url, bool record) {
         clearPage(QStringLiteral("disconnected"), QStringLiteral("Aucun serveur connecté"));
         return;
     }
+    if (m_pending) {   // a new request replaces an unanswered question
+        if (TaskManager *tasks = m_remote->tasks()) tasks->markCancelled(m_pending->taskId, QStringLiteral("Remplacé par une nouvelle adresse."));
+        m_pending.reset(); m_pendingMap.clear();
+    }
     if (m_busy) stop();   // a new request replaces the running one; its result is ignored
     m_token = m_remote->connectionToken();
     const int token = m_token, seq = ++m_seq;
     m_cancel = std::make_shared<std::atomic_bool>(false);
-    auto cancel = m_cancel;
     m_requested = url;
     m_busy = true;
     m_state = QStringLiteral("loading");
@@ -170,30 +196,155 @@ void BrowserController::navigate(const QString &url, bool record) {
     }
     emit changed();
 
+    Chain chain;
+    chain.url = url; chain.requested = url; chain.record = record; chain.seq = seq; chain.token = token; chain.taskId = taskId;
+    runChain(chain);
+}
+
+// One navigation = a loop of hops run on the worker thread: for every address (the typed one and each redirect target) the
+// SERVER resolves the host, the client classifies what came back, and only an approved address is fetched, pinned with
+// --resolve so that curl cannot connect anywhere else. curl never follows a redirect itself.
+void BrowserController::runChain(const Chain &chain) {
+    auto cancel = m_cancel;
     const ConnectionRequest request = m_remote->connectionRequest();
     auto slot = m_session;
     auto *watcher = new QFutureWatcher<FetchOutcome>(this);
-    connect(watcher, &QFutureWatcher<FetchOutcome>::finished, this, [this, watcher, seq, token, url, record, taskId] {
+    connect(watcher, &QFutureWatcher<FetchOutcome>::finished, this, [this, watcher, chain] {
         const FetchOutcome outcome = watcher->result();
         watcher->deleteLater();
-        if (seq != m_seq || token != m_remote->connectionToken() || !m_remote->connected()) {
-            if (TaskManager *tasks = m_remote->tasks()) tasks->markCancelled(taskId, QStringLiteral("Annulé."));
+        if (chain.seq != m_seq || chain.token != m_remote->connectionToken() || !m_remote->connected()) {
+            if (TaskManager *tasks = m_remote->tasks()) tasks->markCancelled(chain.taskId, QStringLiteral("Annulé."));
             return;
         }
-        apply(outcome, seq, token, url, record, taskId);
+        onChain(outcome, chain);
     });
-    watcher->setFuture(QtConcurrent::run(&m_pool, [slot, request, url, cancel] {
-        FetchOutcome outcome;
-        if (cancel->load()) { outcome.run.code = QStringLiteral("cancelled"); return outcome; }
+    watcher->setFuture(QtConcurrent::run(&m_pool, [slot, request, chain, cancel] {
+        FetchOutcome out;
+        out.chain = chain.chain;
+        auto cancelled = [&] { return cancel->load(); };
+        if (cancelled()) { out.run.code = QStringLiteral("cancelled"); return out; }
         if (!*slot) *slot = std::make_unique<SshSession>();
         SshSession &session = **slot;
         if (!session.isOpen()) {
             const SshResult opened = session.open(request);   // host pin re-checked
-            if (opened.status != SshResult::Status::Ok) { outcome.openError = opened.message; return outcome; }
+            if (opened.status != SshResult::Status::Ok) { out.openError = opened.message; return out; }
         }
-        outcome.run = session.runScript(buildCurlScript(url), kMaxFetchOutput, [cancel] { return !cancel->load(); });
-        return outcome;
+        QString url = chain.url;
+        int hop = chain.hop;
+        QVariantList followed = chain.chain;
+        for (;;) {
+            if (cancelled()) { out.run.code = QStringLiteral("cancelled"); return out; }
+            const UrlCheck check = normalizeUrl(url);
+            if (!check.ok) { out.kind = FetchOutcome::Kind::Error; out.error = check.error; return out; }
+            const HostPlan plan = planHost(check.url);
+            if (!plan.ok) { out.kind = FetchOutcome::Kind::Error; out.error = plan.error; return out; }
+            QStringList ips;
+            if (plan.literalIp) ips << plan.ip;
+            else {
+                const SshResult resolved = session.runScript(buildResolveScript(plan.host), 4096, [cancel] { return !cancel->load(); });
+                if (resolved.code == QLatin1String("cancelled")) { out.run = resolved; return out; }
+                if (resolved.status != SshResult::Status::Ok) { out.run = resolved; return out; }
+                QString problem;
+                ips = parseResolveOutput(resolved.data, &problem);
+                if (!problem.isEmpty()) {
+                    out.kind = FetchOutcome::Kind::Error;
+                    out.error = problem == QLatin1String("missing-getent") ? QStringLiteral("getent n'est pas disponible sur ce serveur : la vérification des adresses est impossible, rien n'est ouvert.") : problem;
+                    return out;
+                }
+                if (ips.isEmpty()) { out.kind = FetchOutcome::Kind::Error; out.error = QStringLiteral("Nom d'hôte introuvable depuis le serveur (DNS)."); return out; }
+            }
+            const PolicyDecision decision = decideAddresses(ips);
+            const QString hostKey = QStringLiteral("%1:%2").arg(plan.host).arg(plan.port);
+            if (decision.kind == PolicyDecision::Kind::Block) { out.kind = FetchOutcome::Kind::Error; out.blocked = true; out.error = decision.reason; return out; }
+            if (decision.kind == PolicyDecision::Kind::Confirm && !chain.confirmed.contains(hostKey)) {
+                out.kind = FetchOutcome::Kind::Confirm;
+                out.decision = decision; out.confirmUrl = check.url; out.confirmHost = plan.host; out.confirmPort = plan.port; out.hop = hop; out.chain = followed;
+                out.fromUrl = followed.isEmpty() ? QString() : followed.last().toMap().value("from").toString();
+                return out;
+            }
+            const QString spec = plan.literalIp ? QString() : curlResolveSpec(plan.host, plan.port, decision.pinIp);
+            const SshResult run = session.runScript(buildCurlScript(check.url, spec), kMaxFetchOutput, [cancel] { return !cancel->load(); });
+            out.run = run;
+            out.pinnedIp = plan.literalIp ? plan.ip : decision.pinIp;
+            out.finalUrl = check.url;
+            out.addressLabel = classifyAddress(out.pinnedIp).label;
+            if (run.code == QLatin1String("cancelled") || run.status != SshResult::Status::Ok || run.truncated) return out;
+            out.curl = parseCurlOutput(run.data);
+            if (!out.curl.framed || (out.curl.curlExit != 0 && out.curl.curlExit != 63)) return out;
+            const QString location = redirectLocation(out.curl);
+            if (location.isEmpty()) return out;
+            if (followed.size() >= 10) { out.kind = FetchOutcome::Kind::Error; out.error = describeCurlExit(47); return out; }
+            const QString next = resolveLink(check.url, location);
+            if (next.isEmpty()) {
+                out.kind = FetchOutcome::Kind::Error;
+                out.error = QStringLiteral("La page redirige vers une adresse non autorisée (« %1 ») : seules les adresses http et https sont suivies.").arg(location.left(120));
+                return out;
+            }
+            followed.push_back(QVariantMap { { "status", out.curl.status }, { "from", check.url }, { "location", next } });
+            out.chain = followed;
+            url = next;
+            ++hop;
+            out.curl = CurlResult();
+        }
     }));
+}
+
+void BrowserController::onChain(const FetchOutcome &outcome, const Chain &chain) {
+    TaskManager *tasks = m_remote->tasks();
+    if (outcome.kind == FetchOutcome::Kind::Confirm) {
+        // Nothing has been fetched from this address. The task stays open (running) while the question is up.
+        m_busy = false;
+        m_state = QStringLiteral("confirm");
+        m_status = QStringLiteral("Adresse interne : confirmation requise.");
+        m_pending = std::make_shared<Chain>(chain);
+        m_pending->url = outcome.confirmUrl;
+        m_pending->hop = outcome.hop;
+        m_pending->chain = outcome.chain;
+        m_pendingMap = QVariantMap { { "url", outcome.confirmUrl }, { "host", outcome.confirmHost }, { "port", outcome.confirmPort }, { "reason", outcome.decision.reason },
+                                     { "details", outcome.decision.details }, { "hop", outcome.hop }, { "from", outcome.fromUrl } };
+        if (tasks) tasks->setMessage(chain.taskId, QStringLiteral("En attente de votre confirmation (adresse interne)."));
+        emit changed();
+        return;
+    }
+    if (outcome.kind == FetchOutcome::Kind::Error) {
+        m_busy = false;
+        m_state = QStringLiteral("error");
+        m_status = outcome.error;
+        m_kind = QStringLiteral("error");
+        m_html.clear(); m_text.clear(); m_image.clear(); m_rawHtml.clear(); m_headers.clear();
+        m_info = QVariantMap { { "requested", chain.requested }, { "blocked", outcome.blocked } };
+        if (tasks) tasks->fail(chain.taskId, outcome.error, outcome.blocked ? QStringLiteral("blocked") : QString());
+        emit changed();
+        return;
+    }
+    apply(outcome, chain.seq, chain.token, chain.requested, chain.record, chain.taskId);
+}
+
+void BrowserController::confirmInternal() {
+    if (!m_pending || m_state != QLatin1String("confirm")) return;
+    Chain chain = *m_pending;
+    m_pending.reset();
+    m_pendingMap.clear();
+    chain.confirmed << QStringLiteral("%1:%2").arg(QUrl(chain.url).host(), QString::number(QUrl(chain.url).port(QUrl(chain.url).scheme() == QLatin1String("https") ? 443 : 80)));
+    m_cancel = std::make_shared<std::atomic_bool>(false);
+    m_busy = true;
+    m_state = QStringLiteral("loading");
+    m_status = QStringLiteral("Chargement par le serveur…");
+    if (TaskManager *tasks = m_remote->tasks()) tasks->setMessage(chain.taskId, QString());
+    emit changed();
+    runChain(chain);
+}
+
+void BrowserController::cancelConfirm() {
+    if (!m_pending) return;
+    const int taskId = m_pending->taskId;
+    m_pending.reset();
+    m_pendingMap.clear();
+    m_busy = false;
+    m_state = m_url.isEmpty() ? QStringLiteral("idle") : QStringLiteral("ready");
+    m_status = QStringLiteral("Adresse interne : ouverture annulée.");
+    if (TaskManager *tasks = m_remote->tasks()) tasks->markCancelled(taskId, QStringLiteral("Annulé : adresse interne non confirmée."));
+    emit changed();
 }
 
 void BrowserController::apply(const FetchOutcome &outcome, int, int, const QString &requested, bool record, int taskId) {
@@ -221,7 +372,10 @@ void BrowserController::apply(const FetchOutcome &outcome, int, int, const QStri
     if (outcome.run.status != SshResult::Status::Ok) { fail(outcome.run.message.isEmpty() ? QStringLiteral("Connexion SSH perdue.") : outcome.run.message); return; }
     if (outcome.run.truncated) { fail(QStringLiteral("Réponse trop grande pour être transférée (limite 5 Mio).")); return; }
 
-    const CurlResult r = parseCurlOutput(outcome.run.data);
+    CurlResult r = outcome.curl;
+    r.redirects = static_cast<int>(outcome.chain.size());
+    r.redirectChain = outcome.chain;
+    if (!outcome.finalUrl.isEmpty()) r.effectiveUrl = outcome.finalUrl;
     if (!r.framed) {
         if (r.problem == QLatin1String("missing-curl")) fail(QStringLiteral("curl n'est pas installé sur ce serveur (sudo apt install curl)."));
         else if (r.problem == QLatin1String("mktemp")) fail(QStringLiteral("Le serveur ne peut pas créer de fichier temporaire."));
@@ -295,7 +449,7 @@ void BrowserController::apply(const FetchOutcome &outcome, int, int, const QStri
         { "requested", requested }, { "status", r.status }, { "statusText", r.statusText }, { "httpVersion", r.httpVersion },
         { "remoteIp", r.remoteIp }, { "contentType", r.contentType }, { "charset", charset }, { "size", r.sizeDownload },
         { "redirects", r.redirects }, { "redirectChain", r.redirectChain }, { "tlsVerified", r.tlsVerify == 0 }, { "timings", timings },
-        { "truncated", r.truncated || r.curlExit == 63 } };
+        { "truncated", r.truncated || r.curlExit == 63 }, { "pinnedIp", outcome.pinnedIp }, { "addressClass", outcome.addressLabel } };
 
     if (record) {
         if (m_index + 1 < m_history.size()) m_history = m_history.mid(0, m_index + 1);

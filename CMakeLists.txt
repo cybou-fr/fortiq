@@ -167,6 +167,7 @@ set(FORTIQ_BROWSER_PURE_SOURCES
     src/browser/UrlTools.cpp
     src/browser/CurlFetch.cpp
     src/browser/HtmlSanitizer.cpp
+    src/browser/UrlPolicy.cpp
 )
 set(FORTIQ_BROWSER_SOURCES ${FORTIQ_BROWSER_PURE_SOURCES} src/browser/BrowserController.cpp src/browser/BrowserController.h)
 
@@ -341,7 +342,7 @@ if(BUILD_TESTING)
     add_test(NAME fortiq_tasks COMMAND fortiq_task_tests -o "${CMAKE_CURRENT_BINARY_DIR}/task-results.txt,txt" -o "-,txt")
     qt_add_executable(fortiq_browser_tests tests/BrowserTest.cpp ${FORTIQ_BROWSER_PURE_SOURCES})
     target_include_directories(fortiq_browser_tests PRIVATE src)
-    target_link_libraries(fortiq_browser_tests PRIVATE Qt6::Core Qt6::Test)
+    target_link_libraries(fortiq_browser_tests PRIVATE Qt6::Core Qt6::Network Qt6::Test)
     add_test(NAME fortiq_browser COMMAND fortiq_browser_tests -o "${CMAKE_CURRENT_BINARY_DIR}/browser-results.txt,txt" -o "-,txt")
     qt_add_executable(fortiq_network_tests tests/NetworkTest.cpp ${FORTIQ_NETWORK_PURE_SOURCES})
     target_include_directories(fortiq_network_tests PRIVATE src)

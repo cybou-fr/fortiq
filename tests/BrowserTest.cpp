@@ -1,6 +1,7 @@
 #include <QtTest>
 #include "browser/CurlFetch.h"
 #include "browser/HtmlSanitizer.h"
+#include "browser/UrlPolicy.h"
 #include "browser/UrlTools.h"
 
 #include <QRandomGenerator>
@@ -79,9 +80,8 @@ private slots:
         const QByteArray s = buildCurlScript(QStringLiteral("https://e.com/?q='; rm -rf /; echo '"));
         QVERIFY(s.startsWith("u='https://e.com/?q='\\''; rm -rf /; echo '\\'''\n"));
         QVERIFY(s.contains("--proto '=http,https'"));
-        QVERIFY(s.contains("--proto-redir '=http,https'"));
         QVERIFY(s.contains("--max-filesize 5242880"));
-        QVERIFY(s.contains("--max-redirs 10"));
+        QVERIFY(!s.contains("--location") && !s.contains("--max-redirs"));   // redirects are followed hop by hop by the client, under the address policy
         QVERIFY(s.contains("--max-time 30"));
         QVERIFY(s.contains("-- \"$u\""));            // the URL is data after "--", never an option
         QVERIFY(s.contains("trap 'rm -rf \"$d\"' EXIT"));
@@ -276,6 +276,149 @@ private slots:
         deep += "end";
         QVERIFY(balanced(clean(deep)));
     }
+    // ---- Address policy (audit R1) ----
+    void classifiesAddresses_data() {
+        QTest::addColumn<QString>("ip");
+        QTest::addColumn<int>("cls");   // 0 public, 1 internal, 2 blocked
+        auto row = [](const char *ip, int cls) { QTest::newRow(ip) << QString::fromLatin1(ip) << cls; };
+        for (const char *ip : { "93.184.216.34", "8.8.8.8", "1.1.1.1", "172.15.255.255", "172.32.0.1", "100.63.255.255", "100.128.0.1", "2606:4700:4700::1111", "2a00:1450:4001::1" }) row(ip, 0);
+        for (const char *ip : { "127.0.0.1", "127.255.255.254", "10.0.0.1", "10.255.255.255", "172.16.0.1", "172.31.255.255", "192.168.1.1", "100.64.0.1", "100.127.255.255", "198.18.0.1", "198.19.255.255",
+                                "192.0.2.5", "198.51.100.1", "203.0.113.9", "::1", "fc00::1", "fd12:3456::1", "2001:db8::1", "fec0::1" }) row(ip, 1);
+        for (const char *ip : { "169.254.169.254", "169.254.170.2", "169.254.0.1", "169.254.1.1", "100.100.100.200", "0.0.0.0", "0.1.2.3", "224.0.0.1", "239.255.255.255", "240.0.0.1", "255.255.255.255",
+                                "::", "fe80::1", "febf::1", "ff02::1", "fd00:ec2::254" }) row(ip, 2);
+        // IPv4 inside IPv6: judged by the IPv4 (the classic bypasses)
+        row("::ffff:127.0.0.1", 1); row("::ffff:169.254.169.254", 2); row("::ffff:8.8.8.8", 0); row("::ffff:10.1.2.3", 1);
+        row("64:ff9b::7f00:1", 1); row("64:ff9b::a9fe:a9fe", 2); row("64:ff9b::808:808", 0);
+        row("2002:7f00:1::", 1); row("2002:a9fe:a9fe::1", 2); row("2002:808:808::1", 0);
+        row("::127.0.0.1", 1); row("fe80::1%eth0", 2);
+        row("not an address", 2); row("", 2); row("999.1.1.1", 2);
+    }
+    void classifiesAddresses() {
+        QFETCH(QString, ip);
+        QFETCH(int, cls);
+        const AddressVerdict v = classifyAddress(ip);
+        QCOMPARE(static_cast<int>(v.cls == AddressClass::Public ? 0 : v.cls == AddressClass::Internal ? 1 : 2), cls);
+        QVERIFY(!v.label.isEmpty());
+    }
+    void metadataIsNamedAsSuch() {
+        QVERIFY(classifyAddress("169.254.169.254").label.contains("métadonnées"));
+        QVERIFY(classifyAddress("fd00:ec2::254").label.contains("métadonnées"));
+        QVERIFY(classifyAddress("127.0.0.1").label.contains("localhost"));
+    }
+
+    void plansCanonicalHostsOnly() {
+        auto plan = [](const char *url) { return planHost(QString::fromLatin1(url)); };
+        QVERIFY(plan("https://example.com/").ok); QCOMPARE(plan("https://example.com/").port, 443);
+        QCOMPARE(plan("http://example.com/").port, 80); QCOMPARE(plan("http://example.com:8080/x").port, 8080);
+        QVERIFY(plan("http://my-host_1.sub.example.org/").ok);
+        QVERIFY(plan("http://127.0.0.1:8099/").literalIp); QCOMPARE(plan("http://127.0.0.1:8099/").ip, QString("127.0.0.1"));
+        QVERIFY(plan("http://[::1]:8099/").literalIp); QCOMPARE(plan("http://[::1]:8099/").ip, QString("::1"));
+        QVERIFY(plan("http://[::ffff:127.0.0.1]/").literalIp);
+        QCOMPARE(plan("http://[::ffff:127.0.0.1]/").ip, QString("::ffff:127.0.0.1"));
+        // Odd IPv4 spellings. The product normalises every address with QUrl first, which already rewrites decimal / hex / octal / short
+        // forms to the dotted quad; whatever Qt leaves unrewritten is refused here. Either way the address curl gets is canonical.
+        auto fromText = [](const char *text) {
+            const UrlCheck c = normalizeUrl(QString::fromLatin1(text));
+            return c.ok ? planHost(c.url) : HostPlan();
+        };
+        for (const char *text : { "http://2130706433/", "http://0x7f000001/", "http://0x7f.0.0.1/", "http://0177.0.0.1/", "http://127.1/", "http://127.0.1/", "http://017700000001/" }) {
+            const HostPlan p = fromText(text);
+            QVERIFY2(!p.ok || (p.literalIp && p.ip == "127.0.0.1"), text);          // refused, or exactly the loopback it means
+            if (p.ok) QCOMPARE(classifyAddress(p.ip).cls, AddressClass::Internal);
+        }
+        for (const char *text : { "http://2852039166/", "http://0xa9fea9fe/", "http://0251.0376.0251.0376/", "http://169.254.43518/", "http://0xa9.0xfe.0xa9.0xfe/" }) {
+            const HostPlan p = fromText(text);
+            QVERIFY2(!p.ok || (p.literalIp && p.ip == "169.254.169.254"), text);   // refused, or the metadata address, which is then blocked
+            if (p.ok) QCOMPARE(classifyAddress(p.ip).cls, AddressClass::Blocked);
+        }
+        for (const char *url : { "http://256.1.1.1/", "http://1.2.3.4.5/", "http://example.123/", "http://0x7f.example.com/", "http://127.0.0.1./" }) {
+            const HostPlan p = plan(url);
+            QVERIFY2(!p.ok && !p.error.isEmpty(), url);
+        }
+        // Metadata host names never get as far as a lookup.
+        for (const char *url : { "http://metadata.google.internal/computeMetadata/v1/", "http://METADATA/", "http://instance-data/latest/", "http://instance-data.ec2.internal/" }) {
+            const HostPlan p = plan(url);
+            QVERIFY2(p.blockedName && !p.ok, url);
+        }
+        QVERIFY(!plan("ftp://example.com/").ok);
+        QVERIFY(!plan("http://exa mple.com/").ok);
+        QVERIFY(!plan("http://-evil.example/").ok);
+    }
+
+    void decidesFromResolvedAddresses() {
+        QCOMPARE(decideAddresses({ "93.184.216.34" }).kind, PolicyDecision::Kind::Allow);
+        QCOMPARE(decideAddresses({ "93.184.216.34" }).pinIp, QString("93.184.216.34"));
+        QCOMPARE(decideAddresses({ "93.184.216.34", "2606:2800:220:1::1" }).kind, PolicyDecision::Kind::Allow);
+        QCOMPARE(decideAddresses({ "127.0.0.1" }).kind, PolicyDecision::Kind::Confirm);
+        QCOMPARE(decideAddresses({ "10.1.2.3" }).pinIp, QString("10.1.2.3"));
+        // DNS rebinding shape: a public address next to an internal one is internal, and the internal one is what gets pinned and confirmed.
+        const PolicyDecision mixed = decideAddresses({ "93.184.216.34", "127.0.0.1" });
+        QCOMPARE(mixed.kind, PolicyDecision::Kind::Confirm);
+        QCOMPARE(mixed.pinIp, QString("127.0.0.1"));
+        QVERIFY(mixed.reason.contains("127.0.0.1"));
+        QCOMPARE(mixed.details.size(), 2);
+        QCOMPARE(mixed.details.at(0).toMap().value("cls").toString(), QString("public"));
+        QCOMPARE(mixed.details.at(1).toMap().value("cls").toString(), QString("internal"));
+        // Anything blocked in the set blocks the whole request: no way to confirm it.
+        const PolicyDecision meta = decideAddresses({ "93.184.216.34", "169.254.169.254" });
+        QCOMPARE(meta.kind, PolicyDecision::Kind::Block);
+        QVERIFY(meta.pinIp.isEmpty());
+        QVERIFY(meta.reason.contains("169.254.169.254"));
+        QCOMPARE(decideAddresses({ "127.0.0.1", "fe80::1" }).kind, PolicyDecision::Kind::Block);
+        QCOMPARE(decideAddresses({}).kind, PolicyDecision::Kind::Block);
+        QCOMPARE(decideAddresses({ "garbage" }).kind, PolicyDecision::Kind::Block);
+    }
+
+    void resolveScriptAndOutput() {
+        const QByteArray script = buildResolveScript("exa'mple.com");
+        QVERIFY(script.contains("getent ahosts 'exa'\\''mple.com'"));
+        QVERIFY(script.contains("head -n 8"));
+        QVERIFY(!script.contains("curl"));
+        QString problem;
+        QCOMPARE(parseResolveOutput("93.184.216.34\n2606:2800:220:1:248:1893:25c8:1946\n93.184.216.34\n", &problem), QStringList({ "93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946" }));
+        QCOMPARE(parseResolveOutput("fe80::1%eth0\n127.0.0.1\n", &problem), QStringList({ "fe80::1", "127.0.0.1" }));      // zone dropped
+        QVERIFY(parseResolveOutput("", &problem).isEmpty());
+        QVERIFY(parseResolveOutput("not-an-ip\n; rm -rf /\n", &problem).isEmpty());
+        QVERIFY(parseResolveOutput("FORTIQ-ERR missing-getent\n", &problem).isEmpty());
+        QCOMPARE(problem, QString("missing-getent"));
+        QCOMPARE(curlResolveSpec("example.com", 443, "93.184.216.34"), QString("example.com:443:93.184.216.34"));
+        QCOMPARE(curlResolveSpec("example.com", 8443, "2606:2800::1"), QString("example.com:8443:[2606:2800::1]"));
+        QVERIFY(curlResolveSpec("example.com", 80, "").isEmpty());
+    }
+
+    // The pin and the hardening flags are part of the script; curl never follows a redirect by itself any more.
+    void curlScriptIsPinnedAndDoesNotFollowRedirects() {
+        const QByteArray plain = buildCurlScript("https://example.com/a?b=1");
+        QVERIFY(plain.contains("curl -q --silent"));                 // -q first: ~/.curlrc is ignored
+        QVERIFY(plain.contains("--noproxy '*'"));
+        QVERIFY(plain.contains("--proto '=http,https'"));
+        QVERIFY(!plain.contains("--location"));
+        QVERIFY(!plain.contains("--max-redirs"));
+        QVERIFY(!plain.contains("--resolve"));
+        const QByteArray pinned = buildCurlScript("https://example.com/", "example.com:443:93.184.216.34");
+        QVERIFY(pinned.contains("--resolve 'example.com:443:93.184.216.34'"));
+        QVERIFY(pinned.contains("--max-filesize 5242880") && pinned.contains("--max-time 30"));
+        QVERIFY(buildCurlScript("https://x.example/", "x.example:443:[::1]").contains("--resolve 'x.example:443:[::1]'"));
+    }
+
+    void redirectTargets() {
+        auto result = [](int status, const char *location) {
+            CurlResult r; r.status = status;
+            if (location) r.headers.push_back(QVariantMap { { "name", "Location" }, { "value", QString::fromLatin1(location) } });
+            return r;
+        };
+        QCOMPARE(redirectLocation(result(302, "/next")), QString("/next"));
+        QCOMPARE(redirectLocation(result(301, "https://example.com/x")), QString("https://example.com/x"));
+        for (int status : { 303, 307, 308 }) QVERIFY(!redirectLocation(result(status, "/a")).isEmpty());
+        QVERIFY(redirectLocation(result(200, "/next")).isEmpty());   // a Location on a normal page is not a redirect
+        QVERIFY(redirectLocation(result(304, "/next")).isEmpty());
+        QVERIFY(redirectLocation(result(302, nullptr)).isEmpty());
+        // What the controller does with the target: relative is resolved, unsafe schemes are dropped.
+        QCOMPARE(resolveLink("https://a.example/dir/page", "../other"), QString("https://a.example/other"));
+        QVERIFY(resolveLink("https://a.example/", "file:///etc/passwd").isEmpty());
+        QVERIFY(resolveLink("https://a.example/", "javascript:alert(1)").isEmpty());
+    }
+
     // Audit 23.10.2026: the output grammar, not a blacklist. Whatever is fed in, every tag that comes out is in a small allow-list, carries
     // only href (http/https) / colspan / rowspan / start, and nothing executable or loadable survives.
     void structuredAttacksProduceOnlyTheAllowedGrammar() {

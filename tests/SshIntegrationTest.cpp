@@ -24,6 +24,8 @@
 #include <QDateTime>
 #include <QRegularExpression>
 #include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QFileInfo>
 #include <QUrl>
 #include <QTemporaryDir>
@@ -2191,7 +2193,11 @@ private slots:
         controller.connectServer(base.host, base.port, base.user, base.password, key);
         QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
         fortiq::BrowserController browser(&controller);
-        auto settled = [&] { return !browser.busy(); };
+        // The fixture is on the server's loopback: an INTERNAL address, so every navigation asks once (audit R1). The test answers yes.
+        auto settle = [&](int ms) {
+            QTRY_VERIFY_WITH_TIMEOUT(browser.state() == "confirm" || !browser.busy(), ms);
+            if (browser.state() == "confirm") { browser.confirmInternal(); QTRY_VERIFY_WITH_TIMEOUT(!browser.busy(), ms); }
+        };
 
         // Not connected / refused schemes never reach the server.
         browser.open(QStringLiteral("file:///etc/passwd"));
@@ -2201,7 +2207,10 @@ private slots:
 
         // A page: sanitised, reader mode keeps <main>, nothing active survives.
         browser.open(web + "/page");
-        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        QTRY_VERIFY_WITH_TIMEOUT(browser.state() == "confirm", 20000);       // asked before anything is fetched
+        QCOMPARE(browser.pendingConfirm().value("host").toString(), QStringLiteral("127.0.0.1"));
+        browser.confirmInternal();
+        QTRY_VERIFY_WITH_TIMEOUT(!browser.busy(), 20000);
         QCOMPARE(browser.state(), QStringLiteral("ready"));
         QCOMPARE(browser.kind(), QStringLiteral("html"));
         QCOMPARE(browser.title(), QStringLiteral("Fixture page"));
@@ -2223,73 +2232,75 @@ private slots:
 
         // Redirects are followed by the server and reported.
         browser.open(web + "/redir");
-        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        settle(20000);
         QCOMPARE(browser.url(), web + "/page");
         QCOMPARE(browser.info().value("redirects").toInt(), 1);
 
         // Links go through the same rules; history works.
         browser.openLink("/page2");
-        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        settle(20000);
         QCOMPARE(browser.url(), web + "/page2");
         QCOMPARE(browser.title(), QStringLiteral("Second"));
         browser.openLink("javascript:alert(1)");
         QCOMPARE(browser.url(), web + "/page2");                              // ignored
         QVERIFY(browser.canGoBack());
         browser.goBack();
-        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        settle(20000);
         QCOMPARE(browser.url(), web + "/page");
         QVERIFY(browser.canGoForward());
 
         // Errors are shown as pages with a note; failures are explicit.
         browser.open(web + "/missing");
-        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        settle(20000);
         QCOMPARE(browser.state(), QStringLiteral("ready"));
         QCOMPARE(browser.info().value("status").toInt(), 404);
         QVERIFY(browser.notes().join("\n").contains("404"));
         browser.open(QStringLiteral("http://nonexistent-host.invalid/"));
-        QTRY_VERIFY_WITH_TIMEOUT(settled(), 40000);
+        settle(40000);
         QCOMPARE(browser.state(), QStringLiteral("error"));
         QVERIFY2(browser.status().contains("DNS"), qPrintable(browser.status()));
         QVERIFY(browser.contentHtml().isEmpty());
         browser.open(web + "/loop");
-        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        settle(20000);
         QCOMPARE(browser.state(), QStringLiteral("error"));
         QVERIFY2(browser.status().contains("redirections"), qPrintable(browser.status()));
         browser.open(web + "/redir-file");                                    // a redirect to file:// is refused by curl
-        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        settle(20000);
         QCOMPARE(browser.state(), QStringLiteral("error"));
         QVERIFY(!browser.contentText().contains("root:"));
         QVERIFY(!browser.contentHtml().contains("root:"));
         browser.open(web + "/big");
-        QTRY_VERIFY_WITH_TIMEOUT(settled(), 30000);
+        settle(30000);
         QCOMPARE(browser.state(), QStringLiteral("error"));
         QVERIFY2(browser.status().contains("5 Mio"), qPrintable(browser.status()));
 
         // Other content types.
         browser.open(web + "/json");
-        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        settle(20000);
         QCOMPARE(browser.kind(), QStringLiteral("json"));
         QVERIFY(browser.contentText().contains("\n    \"name\": \"fortiq\""));
         browser.open(web + "/latin1");
-        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        settle(20000);
         QCOMPARE(browser.kind(), QStringLiteral("text"));
         QCOMPARE(browser.contentText(), QString::fromUtf8("café crème"));
         browser.open(web + "/binary");
-        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        settle(20000);
         QCOMPARE(browser.kind(), QStringLiteral("binary"));
         QVERIFY(browser.contentText().isEmpty());
         browser.open(web + "/nojs");
-        QTRY_VERIFY_WITH_TIMEOUT(settled(), 20000);
+        settle(20000);
         QVERIFY(browser.notes().join("\n").contains("JavaScript"));
 
         // Stopping a slow page returns quickly and ends its task as cancelled.
         QElapsedTimer timer;
         timer.start();
         browser.open(web + "/slow");
+        QTRY_VERIFY_WITH_TIMEOUT(browser.state() == "confirm", 10000);
+        browser.confirmInternal();
         QTRY_VERIFY_WITH_TIMEOUT(browser.busy(), 5000);
         QTest::qWait(300);
         browser.stop();
-        QTRY_VERIFY_WITH_TIMEOUT(settled(), 6000);
+        settle(6000);
         QVERIFY(timer.elapsed() < 6000);
         QCOMPARE(browser.status(), QStringLiteral("Chargement annulé."));
         const QVariantMap last = controller.tasks()->tasks().constLast().toMap();
@@ -2306,6 +2317,160 @@ private slots:
         controller.disconnectServer();
         QCOMPARE(browser.state(), QStringLiteral("disconnected"));
         QVERIFY(browser.contentHtml().isEmpty() && browser.url().isEmpty() && !browser.canGoBack());
+        settings.remove(pin);
+    }
+
+    // Audit R1: the Browser's address policy against a real server. Needs FORTIQ_IT_WEB_BASE and FORTIQ_IT_POLICY=1 with
+    // tool/setup_browser_policy_fixture.sh run as root on the DISPOSABLE Debian (public-looking loopback aliases, host names, fixture on 0.0.0.0).
+    void browserAddressPolicy() {
+        if (qEnvironmentVariable("FORTIQ_IT_WEB_BASE").isEmpty() || qEnvironmentVariable("FORTIQ_IT_POLICY").isEmpty()) QSKIP("FORTIQ_IT_WEB_BASE and FORTIQ_IT_POLICY are needed");
+        fortiq::RemoteController controller;
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        fortiq::BrowserController browser(&controller);
+        fortiq::SshSession shellSession;
+        QVERIFY(shellSession.open(controller.connectionRequest()).status == SshResult::Status::Ok);
+        auto shell = [&](const QByteArray &script) { return QString::fromUtf8(shellSession.runScript(script, 65536, {}).data).trimmed(); };
+        auto hits = [&](const QString &path) {   // how many requests the fixture actually received for a path
+            const QJsonObject o = QJsonDocument::fromJson(shell("curl -s http://127.0.0.1:8099/_hits\n").toUtf8()).object();
+            return o.value(path).toInt(0);
+        };
+        auto waitIdleOrAsk = [&] { QTRY_VERIFY_WITH_TIMEOUT(browser.state() == "confirm" || !browser.busy(), 30000); };
+        const QString pub = "http://public-fixture.test:8099";
+        const int tasksBefore = controller.tasks()->count();
+
+        // ---- a public address is fetched without a question, and curl is pinned to the address that was checked ----
+        browser.open(pub + "/page");
+        waitIdleOrAsk();
+        QCOMPARE(browser.state(), QStringLiteral("ready"));
+        QCOMPARE(browser.info().value("pinnedIp").toString(), QStringLiteral("93.184.216.34"));
+        QCOMPARE(browser.info().value("remoteIp").toString(), QStringLiteral("93.184.216.34"));      // curl really connected to the pinned address
+        QVERIFY(browser.contentHtml().contains("Hello fixture"));
+        // two public addresses: the first is pinned and used
+        browser.open("http://multi-fixture.test:8099/echo");
+        waitIdleOrAsk();
+        QCOMPARE(browser.state(), QStringLiteral("ready"));
+        QCOMPARE(browser.info().value("remoteIp").toString(), QStringLiteral("93.184.216.34"));
+        QVERIFY2(browser.contentText().contains("local=93.184.216.34"), qPrintable(browser.contentText()));
+
+        // ---- an internal address asks BEFORE anything is sent ----
+        const int pageHitsBefore = hits("/page");
+        browser.open("http://127.0.0.1:8099/page");
+        waitIdleOrAsk();
+        QCOMPARE(browser.state(), QStringLiteral("confirm"));
+        QVERIFY(!browser.busy());
+        QCOMPARE(browser.pendingConfirm().value("host").toString(), QStringLiteral("127.0.0.1"));
+        QVERIFY(browser.pendingConfirm().value("reason").toString().contains("boucle locale"));
+        QCOMPARE(hits("/page"), pageHitsBefore);                                                    // not a single request reached the service
+        QCOMPARE(controller.tasks()->tasks().constLast().toMap().value("state").toString(), QStringLiteral("running"));
+        browser.cancelConfirm();
+        QCOMPARE(browser.state() == "confirm", false);
+        QCOMPARE(controller.tasks()->tasks().constLast().toMap().value("state").toString(), QStringLiteral("cancelled"));
+        QCOMPARE(hits("/page"), pageHitsBefore);
+        browser.open("http://127.0.0.1:8099/page");
+        waitIdleOrAsk();
+        QCOMPARE(browser.state(), QStringLiteral("confirm"));
+        browser.confirmInternal();
+        QTRY_VERIFY_WITH_TIMEOUT(!browser.busy(), 20000);
+        QCOMPARE(browser.state(), QStringLiteral("ready"));
+        QCOMPARE(hits("/page"), pageHitsBefore + 1);
+        QVERIFY(browser.info().value("addressClass").toString().contains("boucle locale"));
+        // the answer is for one navigation only
+        browser.open("http://127.0.0.1:8099/page");
+        waitIdleOrAsk();
+        QCOMPARE(browser.state(), QStringLiteral("confirm"));
+        browser.cancelConfirm();
+        // names that resolve to something internal ask too; a mixed set is internal and the internal address is the one shown
+        browser.open("http://internal-fixture.test:8099/page");
+        waitIdleOrAsk();
+        QCOMPARE(browser.state(), QStringLiteral("confirm"));
+        browser.cancelConfirm();
+        browser.open("http://mixed-fixture.test:8099/page");
+        waitIdleOrAsk();
+        QCOMPARE(browser.state(), QStringLiteral("confirm"));
+        const QVariantList mixed = browser.pendingConfirm().value("details").toList();
+        QCOMPARE(mixed.size(), 2);
+        QStringList classes;                                                                          // getent orders the addresses as it likes
+        for (const QVariant &d : mixed) classes << d.toMap().value("cls").toString();
+        classes.sort();
+        QCOMPARE(classes, QStringList({ "internal", "public" }));
+        browser.cancelConfirm();
+        browser.open("http://private-fixture.test/");                                               // 10.255.255.1: asks, and would not even connect
+        waitIdleOrAsk();
+        QCOMPARE(browser.state(), QStringLiteral("confirm"));
+        QVERIFY(browser.pendingConfirm().value("reason").toString().contains("réseau privé"));
+        browser.cancelConfirm();
+
+        // ---- redirects are judged hop by hop ----
+        const int toLoopbackBefore = hits("/to-loopback"), pageBefore = hits("/page");
+        browser.open(pub + "/to-loopback");                                                         // public host -> loopback
+        waitIdleOrAsk();
+        QCOMPARE(browser.state(), QStringLiteral("confirm"));
+        QCOMPARE(browser.pendingConfirm().value("hop").toInt(), 1);
+        QVERIFY(browser.pendingConfirm().value("from").toString().endsWith("/to-loopback"));
+        QCOMPARE(hits("/to-loopback"), toLoopbackBefore + 1);                                       // the public hop was fetched...
+        QCOMPARE(hits("/page"), pageBefore);                                                        // ...the internal target was not
+        browser.cancelConfirm();
+        QCOMPARE(hits("/page"), pageBefore);
+        browser.open(pub + "/to-loopback");
+        waitIdleOrAsk();
+        browser.confirmInternal();
+        QTRY_VERIFY_WITH_TIMEOUT(!browser.busy(), 20000);
+        QCOMPARE(browser.state(), QStringLiteral("ready"));
+        QCOMPARE(browser.info().value("redirects").toInt(), 1);
+        QCOMPARE(browser.url(), QStringLiteral("http://127.0.0.1:8099/page"));
+        QCOMPARE(hits("/page"), pageBefore + 1);
+        // a decimal spelling of 127.0.0.1 in a redirect is read as what it is, not as a way around the question
+        browser.open(pub + "/to-odd");
+        waitIdleOrAsk();
+        QCOMPARE(browser.state(), QStringLiteral("confirm"));
+        QCOMPARE(browser.pendingConfirm().value("host").toString(), QStringLiteral("127.0.0.1"));
+        browser.cancelConfirm();
+        // internal (confirmed) -> public: no second question; internal -> another internal host:port: a new question
+        browser.open("http://127.0.0.1:8099/to-public");
+        waitIdleOrAsk();
+        QCOMPARE(browser.state(), QStringLiteral("confirm"));
+        browser.confirmInternal();
+        QTRY_VERIFY_WITH_TIMEOUT(!browser.busy(), 20000);
+        QCOMPARE(browser.state(), QStringLiteral("ready"));
+        QCOMPARE(browser.info().value("remoteIp").toString(), QStringLiteral("93.184.216.34"));
+        browser.open("http://127.0.0.1:8099/to-other-port");
+        waitIdleOrAsk();
+        QCOMPARE(browser.state(), QStringLiteral("confirm"));
+        browser.confirmInternal();
+        QTRY_VERIFY_WITH_TIMEOUT(browser.state() == "confirm" || !browser.busy(), 20000);
+        QCOMPARE(browser.state(), QStringLiteral("confirm"));                                       // 127.0.0.1:8098 is a different host:port
+        QCOMPARE(browser.pendingConfirm().value("port").toInt(), 8098);
+        browser.cancelConfirm();
+
+        // ---- cloud metadata is never opened, and there is nothing to confirm ----
+        const int metaBefore = controller.tasks()->count();
+        for (const QString &url : { QStringLiteral("http://169.254.169.254/latest/meta-data/"), QStringLiteral("http://[fd00:ec2::254]/"), QStringLiteral("http://[::ffff:169.254.169.254]/"),
+                                    QStringLiteral("http://2852039166/"), QStringLiteral("http://metadata.google.internal/"), QStringLiteral("http://meta-fixture.test/"), pub + "/to-metadata" }) {
+            browser.open(url);
+            waitIdleOrAsk();
+            QVERIFY2(browser.state() == "error", qPrintable(url + " -> " + browser.state() + " " + browser.status()));
+            QVERIFY2(browser.state() != "confirm", qPrintable(url));
+            QVERIFY2(browser.status().contains("bloqu"), qPrintable(url + " -> " + browser.status()));
+            QVERIFY(browser.pendingConfirm().isEmpty());
+            QCOMPARE(controller.tasks()->tasks().constLast().toMap().value("state").toString(), QStringLiteral("failed"));
+        }
+        QCOMPARE(controller.tasks()->count(), metaBefore + 7);
+
+        // ---- the user's own curl settings cannot get around the pin ----
+        QCOMPARE(shell("printf 'proxy = \"http://127.0.0.1:1\"\\nlocation\\n' > ~/.curlrc; echo ok\n"), QStringLiteral("ok"));
+        browser.open(pub + "/page");
+        waitIdleOrAsk();
+        QCOMPARE(browser.state(), QStringLiteral("ready"));                                         // ~/.curlrc is ignored (curl -q), so is a proxy
+        shell("rm -f ~/.curlrc\n");
+
+        QCOMPARE(controller.tasks()->activeCount(), 0);
+        QVERIFY(controller.tasks()->count() > tasksBefore);
         settings.remove(pin);
     }
 
