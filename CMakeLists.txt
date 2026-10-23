@@ -157,6 +157,13 @@ set(FORTIQ_LOGS_SOURCES
     src/core/LogsServices.cpp
 )
 
+set(FORTIQ_BROWSER_PURE_SOURCES
+    src/browser/UrlTools.cpp
+    src/browser/CurlFetch.cpp
+    src/browser/HtmlSanitizer.cpp
+)
+set(FORTIQ_BROWSER_SOURCES ${FORTIQ_BROWSER_PURE_SOURCES} src/browser/BrowserController.cpp src/browser/BrowserController.h)
+
 set(FORTIQ_REMOTE_SOURCES
     src/core/RemoteController.cpp
     src/core/RemoteProfiles.cpp
@@ -188,6 +195,7 @@ qt_add_executable(fortiq
     src/core/SecretStore.h
     src/core/TaskManager.cpp
     src/core/TaskManager.h
+    ${FORTIQ_BROWSER_SOURCES}
     ${FORTIQ_LOGS_SOURCES}
     src/core/LogsController.h
     src/core/TerminalController.cpp
@@ -312,6 +320,10 @@ if(BUILD_TESTING)
     target_include_directories(fortiq_task_tests PRIVATE src)
     target_link_libraries(fortiq_task_tests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME fortiq_tasks COMMAND fortiq_task_tests -o "${CMAKE_CURRENT_BINARY_DIR}/task-results.txt,txt" -o "-,txt")
+    qt_add_executable(fortiq_browser_tests tests/BrowserTest.cpp ${FORTIQ_BROWSER_PURE_SOURCES})
+    target_include_directories(fortiq_browser_tests PRIVATE src)
+    target_link_libraries(fortiq_browser_tests PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME fortiq_browser COMMAND fortiq_browser_tests -o "${CMAKE_CURRENT_BINARY_DIR}/browser-results.txt,txt" -o "-,txt")
     qt_add_executable(fortiq_document_tests tests/LocalDocumentTest.cpp src/core/LocalDocument.cpp src/core/LocalDocument.h)
     target_include_directories(fortiq_document_tests PRIVATE src)
     target_link_libraries(fortiq_document_tests PRIVATE Qt6::Core Qt6::Test)
@@ -330,7 +342,7 @@ if(BUILD_TESTING)
         file(TO_CMAKE_PATH "$ENV{WINDIR}/Fonts" FORTIQ_TEST_FONT_DIR)
         set_property(TEST fortiq_layout APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=${FORTIQ_TEST_FONT_DIR}")
         # Developer tests need the matching Qt Test runtime, absent from the app package.
-        set_tests_properties(fortiq_markdown fortiq_disks fortiq_terminal_history fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_credentials fortiq_tasks fortiq_publication fortiq_documents fortiq_layout PROPERTIES
+        set_tests_properties(fortiq_markdown fortiq_disks fortiq_terminal_history fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_credentials fortiq_tasks fortiq_browser fortiq_publication fortiq_documents fortiq_layout PROPERTIES
             ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:$<TARGET_FILE_DIR:${FORTIQ_SSH_TARGET}>")
     endif()
 endif()
