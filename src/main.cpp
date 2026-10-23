@@ -5,6 +5,7 @@
 #include "core/DisksController.h"
 #include "core/DocumentsController.h"
 #include "core/SecretStore.h"
+#include "core/TaskManager.h"
 #include <QSettings>
 #include <QUuid>
 #endif
@@ -124,7 +125,11 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("shellWallpaper", bundled ? QUrl()
         : QUrl::fromLocalFile(QDir::current().absoluteFilePath(wallpaper)));
 #ifndef FORTIQ_NO_SSH
+    // One task model for every app; it outlives the controllers that report to it.
+    fortiq::TaskManager taskManager;
+    engine.rootContext()->setContextProperty("tasks", &taskManager);
     fortiq::RemoteController controller;
+    controller.setTaskManager(&taskManager);
     engine.rootContext()->setContextProperty("remote", &controller);
     fortiq::LogsController logs(&controller);
     engine.rootContext()->setContextProperty("logs", &logs);
@@ -135,6 +140,7 @@ int main(int argc, char *argv[])
     fortiq::TerminalController terminal(&controller);
     engine.rootContext()->setContextProperty("terminal", &terminal);
 #else
+    engine.rootContext()->setContextProperty("tasks", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("remote", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("logs", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("terminal", QVariant::fromValue<QObject *>(nullptr));

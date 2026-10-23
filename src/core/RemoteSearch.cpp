@@ -4,8 +4,19 @@ namespace fortiq {
 void RemoteController::startSearch(const QString &query, const QString &mode) {
     const QString q = query.trimmed();
     if (!m_connected || q.isEmpty() || m_currentDirectory.isEmpty()) return;
-    m_searchCancel->store(true); // a running search stops; its result is ignored
+    // A running search stops and its task ends; its result is ignored.
+    if (m_searchTaskId != 0) {
+        m_tasks->requestCancel(m_searchTaskId);
+        m_tasks->markCancelled(m_searchTaskId, QStringLiteral("Remplacée par une nouvelle recherche."));
+        m_searchTaskId = 0;
+    }
+    m_searchCancel->store(true);
     m_searchCancel = std::make_shared<std::atomic_bool>(false);
+    TaskManager::Spec spec;
+    spec.kind = QStringLiteral("search"); spec.title = q; spec.source = serverLabel(); spec.destination = m_currentDirectory;
+    spec.cancellable = true; spec.generation = m_generation;
+    const int taskId = m_searchTaskId = m_tasks->create(spec);
+    m_tasks->start(taskId);
     const int seq = ++m_searchSeq;
     const int token = m_generation;
     m_searchActive = true;
@@ -27,10 +38,11 @@ void RemoteController::startSearch(const QString &query, const QString &mode) {
     const QString scope = m_searchScope, searchMode = m_searchMode;
     QPointer<RemoteController> self(this);
     auto *watcher = new QFutureWatcher<SshResult>(this);
-    connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, seq, token] {
+    connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, seq, token, taskId] {
         const SshResult r = watcher->result();
         watcher->deleteLater();
         if (token != m_generation || seq != m_searchSeq) return;
+        if (m_searchTaskId == taskId) m_searchTaskId = 0;
         m_searchBusy = false;
         m_searchResults = r.entries;
         const int n = static_cast<int>(r.entries.size());
@@ -43,6 +55,9 @@ void RemoteController::startSearch(const QString &query, const QString &mode) {
             m_searchInfo = r.code == "cancelled" ? QStringLiteral("Recherche annulée — %1 résultat(s) partiel(s)").arg(n)
                                                  : r.message;
         }
+        if (r.status == SshResult::Status::Ok) m_tasks->succeed(taskId, m_searchInfo);
+        else if (r.code == "cancelled") m_tasks->markCancelled(taskId, m_searchInfo);
+        else m_tasks->fail(taskId, r.message, r.code);
         emit searchChanged();
     });
     watcher->setFuture(QtConcurrent::run(&m_searchPool, [slot, req, scope, q, searchMode, cancel, self, seq] {
@@ -69,10 +84,16 @@ void RemoteController::startSearch(const QString &query, const QString &mode) {
 }
 
 void RemoteController::cancelSearch() {
+    if (m_searchTaskId != 0) m_tasks->requestCancel(m_searchTaskId);
     m_searchCancel->store(true);
 }
 
 void RemoteController::clearSearch() {
+    if (m_searchTaskId != 0) {
+        m_tasks->requestCancel(m_searchTaskId);
+        m_tasks->markCancelled(m_searchTaskId, QStringLiteral("Recherche fermée."));
+        m_searchTaskId = 0;
+    }
     m_searchCancel->store(true);
     ++m_searchSeq;
     m_searchActive = false;

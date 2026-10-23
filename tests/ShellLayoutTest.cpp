@@ -10,6 +10,7 @@
 #include <QDir>
 #include <QQmlExtensionPlugin>
 #include "../src/core/BackNavigationFilter.h"
+#include "../src/core/TaskManager.h"
 #ifndef Q_MOC_RUN
 #include "../src/documents/MarkdownPreview.h"
 #endif
@@ -200,6 +201,30 @@ private slots:
             shell->setProperty("controlOpen", true);
             QTest::qWait(400);
             QVERIFY(window->grabWindow().save(QString("layout-captures/%1-control-selected.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+            {   // The shared task panel lists the tasks of every app and cancels through the manager.
+                fortiq::TaskManager manager;
+                shell->setProperty("taskManager", QVariant::fromValue<QObject *>(&manager));
+                fortiq::TaskManager::Spec spec;
+                spec.kind = "upload"; spec.title = "a.txt"; spec.destination = "/home"; spec.generation = 1;
+                const int id = manager.create(spec);
+                manager.start(id);
+                manager.setProgress(id, 10, 100);
+                QTest::qWait(60);
+                auto *panel = shell->findChild<QQuickItem *>("taskPanel"); QVERIFY(panel);
+                QVERIFY(panel->isVisible());
+                QVERIFY(panel->x() >= 0 && panel->x() + panel->width() <= shell->width());
+                QVERIFY(panel->y() >= 0 && panel->y() + panel->height() <= shell->height());
+                auto *cancel = findByName(panel, "taskCancel"); QVERIFY(cancel); QVERIFY(cancel->isVisible());
+                QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, cancel->mapToScene(QPointF(cancel->width() / 2, cancel->height() / 2)).toPoint());
+                QTRY_COMPARE(manager.state(id).value(), fortiq::TaskManager::State::Cancelling);   // a request, not a stop
+                manager.markCancelled(id, "stopped");
+                auto *clear = findByName(panel, "taskClear");
+                QTRY_VERIFY(clear && clear->isVisible()); QTest::qWait(80);
+                QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, clear->mapToScene(QPointF(clear->width() / 2, clear->height() / 2)).toPoint());
+                QTRY_COMPARE(manager.count(), 0);
+                QTRY_VERIFY(!panel->isVisible());
+                shell->setProperty("taskManager", QVariant::fromValue<QObject *>(nullptr));
+            }
             {   // Login screen: connecting works like logging in to Linux, and logout returns to it.
                 QQmlComponent fakeComponent(&engine);
                 fakeComponent.setData(kFakeController, QUrl());

@@ -16,6 +16,7 @@ namespace fortiq {
 class SshSession;
 struct SshResult;
 struct ConnectionRequest;
+class TaskManager;
 
 class RemoteController : public QObject {
     Q_OBJECT
@@ -43,10 +44,7 @@ class RemoteController : public QObject {
     // Editing: complete UTF-8 text files only (not truncated, not binary).
     Q_PROPERTY(bool previewEditable READ previewEditable NOTIFY previewChanged)
     Q_PROPERTY(bool saving READ saving NOTIFY savingChanged)
-    // Transfer queue: [{id, upload, name, remote, local, state, done, total, message}]
     // state: queued | running | conflict | done | error | cancelled | unknown
-    Q_PROPERTY(QVariantList transfers READ transfers NOTIFY transfersChanged)
-    Q_PROPERTY(int activeTransfers READ activeTransfers NOTIFY transfersChanged)
     // Server-side search (third SSH connection, so browsing stays live).
     Q_PROPERTY(bool searchActive READ searchActive NOTIFY searchChanged)
     Q_PROPERTY(bool searchBusy READ searchBusy NOTIFY searchChanged)
@@ -95,7 +93,6 @@ public:
     QString previewInfo() const { return m_previewInfo; }
     bool previewEditable() const { return m_previewKind == QLatin1String("text") && !m_editHash.isEmpty(); }
     bool saving() const { return m_saving; }
-    QVariantList transfers() const;
     QVariantList servers() const;
     QString activeServerId() const { return m_activeServerId; }
     bool searchActive() const { return m_searchActive; }
@@ -105,7 +102,10 @@ public:
     QString searchScope() const { return m_searchScope; }
     QString searchInfo() const { return m_searchInfo; }
     QVariantList searchResults() const { return m_searchResults; }
-    int activeTransfers() const;
+    // Every transfer, operation, save and search of this server is a task of the shared
+    // TaskManager (the application's, or a private one when none was given).
+    TaskManager *tasks() const { return m_tasks; }
+    void setTaskManager(TaskManager *tasks);
     QString rememberedHost() const;
     QString rememberedUser() const;
     int rememberedPort() const;
@@ -152,8 +152,8 @@ public:
     Q_INVOKABLE void upload(const QVariantList &localFiles, const QString &remoteDir = {});
     // policy: "replace" (after explicit confirmation), "keepBoth" or "skip".
     Q_INVOKABLE void resolveConflict(int id, const QString &policy);
-    Q_INVOKABLE void cancelTransfer(int id);
-    Q_INVOKABLE void clearFinishedTransfers();
+    Q_INVOKABLE void cancelTransfer(int id);          // = TaskManager::requestCancel
+    Q_INVOKABLE void clearFinishedTransfers();        // = TaskManager::clearFinished
     // File operations in the current folder; each ends with operationFinished.
     Q_INVOKABLE void createFolder(const QString &name);
     Q_INVOKABLE void renameEntry(const QString &path, const QString &newName);
@@ -170,7 +170,6 @@ public:
 signals:
     void changed();
     void previewChanged();
-    void transfersChanged();
     void operationBusyChanged();
     void savingChanged();
     void serversChanged();
@@ -185,10 +184,13 @@ private:
     enum class Kind { Open, List };
     void request(Kind kind, const QString &directory, bool record);
     void scrubPassword();
-    void runOperation(const QString &doneMessage, std::function<SshResult(SshSession &)> op);
+    void runOperation(const QString &kind, const QString &title, const QString &destination,
+                      const QString &doneMessage, std::function<SshResult(SshSession &)> op);
     struct Transfer;
     void startTransfer(int id, int policy);
     Transfer *findTransfer(int id);
+    int createTransferTask(const QString &kind, const QString &name, const QString &destination);
+    void onTaskCancelRequested(int id);
     QString pinKey() const;
     QVariantList loadProfiles() const;
     void storeProfiles(const QVariantList &profiles);
@@ -231,20 +233,19 @@ private:
     QString m_previewImage;
     QString m_previewInfo;
 
+    // Job details of a transfer task (the task itself lives in the TaskManager).
     struct Transfer {
-        int id = 0;
+        int id = 0;     // task id
         bool upload = false;
         QString name;
         QString remote; // download: source file; upload: target folder
         QString local;
-        QString state = QStringLiteral("queued");
-        QString message;
-        qint64 done = 0;
-        qint64 total = -1;
         std::shared_ptr<std::atomic_bool> cancel = std::make_shared<std::atomic_bool>(false);
     };
-    QList<Transfer> m_transfers;
-    int m_nextTransferId = 1;
+    QHash<int, Transfer> m_transferJobs;
+    TaskManager *m_tasks = nullptr;
+    std::unique_ptr<TaskManager> m_ownedTasks;
+    int m_searchTaskId = 0;
     QThreadPool m_transferPool;
     QThreadPool m_searchPool;
     std::shared_ptr<std::unique_ptr<SshSession>> m_searchSession;

@@ -36,7 +36,7 @@ Android arm64, установщик Windows.
    VM владельца не используются) и для физического Android (touch, IME, фон, потеря сети).
 4. **Рефакторинг без смены поведения (сделан 23.10.2026, см. QT_MIGRATION).** Разделить SSH-сессию, SFTP, передачи, поиск и PTY; вынести
    подкомпоненты из `FilesWindow.qml`; опора — существующие тесты.
-5. **TaskManager.** Единая модель задач (queued/running/cancelling/cancelled/succeeded/failed/`unknown`)
+5. **TaskManager (первый срез сделан 23.10.2026: Files; остальные приложения — позже).** Единая модель задач (queued/running/cancelling/cancelled/succeeded/failed/`unknown`)
    вместо очередей отдельных приложений ([ARCHITECTURE](ARCHITECTURE.md) §4).
 
 ## 3. Этап B — Files и Logs до контракта (R1 / R1.5)

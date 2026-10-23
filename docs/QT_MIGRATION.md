@@ -258,6 +258,21 @@ follow, journal/file scripts, apply), `LogsAnalysis.cpp` (repeat groups, journal
 and the internal `LogsControllerInternal.h`; moved verbatim by script. Verified: CTest 11/11, Logs QtTest **11 passed, 0 skipped**
 with `FORTIQ_TEST_WSL=Debian` (real Linux reader), and the live integration suite **27 passed, 0 failed, 3 skipped**.
 
+23 October TaskManager (first slice): one task model for the whole client (`TaskManager`, [ARCHITECTURE](ARCHITECTURE.md) §4) replaces
+the Files-only transfer queue. States queued / running / cancelling / cancelled / succeeded / failed / unknown; terminal states are
+final; a cancel is a request (a queued task is cancelled at once, a running cancellable one becomes `cancelling` and its owner
+stops the work; tasks that cannot be stopped, such as saves and Trash moves, refuse it); a name conflict returns the task to
+`queued` with a pending decision (keep both / replace after confirmation / skip); tasks are bound to the server session
+generation, and a disconnect settles them (`unknown` when a mutation may have happened, otherwise `cancelled`). Registered:
+uploads, downloads, folder/rename/Trash/restore/delete/empty operations, safe saves and server searches. The Files-local
+`TransferPanel` is replaced by a shell-level `TaskPanel` fed by the manager (bottom right). Behaviour changes worth knowing:
+an operation or save interrupted by a disconnect is now reported as `unknown` instead of disappearing silently, and a search
+is listed as a task. Verified: `fortiq_tasks` unit tests (18), layout test with a real manager (panel, cancel request, clear),
+CTest 12/12, live `fortiq_ssh_integration` 27 passed / 0 failed / 3 skipped (transfers, conflict decision, operations and search
+as tasks) and `fortiq_publication` 28/28 on the disposable WSL server. Not done: Logs, Documents/MDok, Disks and Terminal do not
+register tasks; no persistent task history; the Android debug APK builds (not run on a device for this slice); the fortiq.exe/installer were not rebuilt
+because a running instance locked the file.
+
 Refactor, step 4 (no behaviour change): `FilesWindow.qml` (1038 → 494 lines) now composes `FilesSidebar`, `FilesToolbar`,
 `FilesTrashBanner`, `FilesGrid`, `FilesList`, `FilesStatusBar` and `FilesFixtureData` (visual-only reference samples); the code
 was moved by script with `win` renamed to the injected `files` property, and the same ids/objectNames are kept. Verified: CTest

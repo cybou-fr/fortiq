@@ -1,24 +1,22 @@
 #include "RemoteControllerInternal.h"
 
 namespace fortiq {
-QVariantList RemoteController::transfers() const {
-    QVariantList out;
-    for (const Transfer &t : m_transfers) {
-        out.push_back(QVariantMap {
-            { "id", t.id }, { "upload", t.upload }, { "name", t.name }, { "remote", t.remote },
-            { "local", t.local }, { "state", t.state }, { "message", t.message },
-            { "done", static_cast<double>(t.done) }, { "total", static_cast<double>(t.total) } });
-    }
-    return out;
-}
-int RemoteController::activeTransfers() const {
-    int n = 0;
-    for (const Transfer &t : m_transfers) n += (t.state == "queued" || t.state == "running" || t.state == "conflict");
-    return n;
-}
 RemoteController::Transfer *RemoteController::findTransfer(int id) {
-    for (Transfer &t : m_transfers) if (t.id == id) return &t;
-    return nullptr;
+    const auto it = m_transferJobs.find(id);
+    return it == m_transferJobs.end() ? nullptr : &it.value();
+}
+
+// Transfers are tasks of the shared TaskManager; this controller keeps only
+// the job details (paths, cancel flag) that the manager does not need.
+int RemoteController::createTransferTask(const QString &kind, const QString &name, const QString &destination) {
+    TaskManager::Spec spec;
+    spec.kind = kind;
+    spec.title = name;
+    spec.source = serverLabel();
+    spec.destination = destination;
+    spec.cancellable = true;
+    spec.generation = m_generation;
+    return m_tasks->create(spec);
 }
 
 void RemoteController::download(const QString &remotePath, const QUrl &localFile) {
@@ -26,12 +24,11 @@ void RemoteController::download(const QString &remotePath, const QUrl &localFile
     const QString local = localDocumentPath(localFile);
     if (!m_connected || !clean || local.isEmpty()) return;
     Transfer t;
-    t.id = m_nextTransferId++;
     t.name = clean->section('/', -1);
     t.remote = *clean;
     t.local = local;
-    m_transfers.push_back(t);
-    emit transfersChanged();
+    t.id = createTransferTask(QStringLiteral("download"), t.name, local);
+    m_transferJobs.insert(t.id, t);
     startTransfer(t.id, static_cast<int>(ConflictPolicy::Fail));
 }
 
@@ -43,56 +40,37 @@ void RemoteController::upload(const QVariantList &localFiles, const QString &rem
         const QString local = localDocumentPath(url);
         if (local.isEmpty()) continue;
         Transfer t;
-        t.id = m_nextTransferId++;
         t.upload = true;
         t.name = localDocumentName(local);
         if (t.name.isEmpty()) {
-            t.name = QStringLiteral("Document");
-            t.state = QStringLiteral("error");
-            t.message = QStringLiteral("Cannot read the selected document name. Select the file again to renew access.");
-            m_transfers.push_back(t);
+            const int id = createTransferTask(QStringLiteral("upload"), QStringLiteral("Document"), *dir);
+            m_tasks->fail(id, QStringLiteral("Cannot read the selected document name. Select the file again to renew access."));
             continue;
         }
         t.remote = *dir;
         t.local = local;
-        m_transfers.push_back(t);
+        t.id = createTransferTask(QStringLiteral("upload"), t.name, *dir);
+        m_transferJobs.insert(t.id, t);
         startTransfer(t.id, static_cast<int>(ConflictPolicy::Fail));
     }
-    emit transfersChanged();
 }
 
 void RemoteController::resolveConflict(int id, const QString &policy) {
-    Transfer *t = findTransfer(id);
-    if (!t || t->state != "conflict") return;
+    if (!findTransfer(id) || m_tasks->task(id).value("decision").toString() != QLatin1String("conflict")) return;
     if (policy == "skip") {
-        t->state = QStringLiteral("cancelled");
-        t->message = QStringLiteral("Ignoré ; le fichier existant est conservé.");
-        emit transfersChanged();
+        m_tasks->markCancelled(id, QStringLiteral("Ignoré ; le fichier existant est conservé."));
         return;
     }
-    t->state = QStringLiteral("queued");
-    t->message.clear();
-    t->done = 0;
-    emit transfersChanged();
+    m_tasks->resolveDecision(id);
     startTransfer(id, static_cast<int>(policy == "replace" ? ConflictPolicy::Replace : ConflictPolicy::KeepBoth));
 }
 
-void RemoteController::cancelTransfer(int id) {
-    Transfer *t = findTransfer(id);
-    if (!t) return;
-    t->cancel->store(true);
-    if (t->state == "queued" || t->state == "conflict") {
-        t->state = QStringLiteral("cancelled");
-        t->message = QStringLiteral("Annulé.");
-        emit transfersChanged();
-    }
-}
+void RemoteController::cancelTransfer(int id) { m_tasks->requestCancel(id); }
+void RemoteController::clearFinishedTransfers() { m_tasks->clearFinished(); }
 
-void RemoteController::clearFinishedTransfers() {
-    m_transfers.removeIf([](const Transfer &t) {
-        return t.state == "done" || t.state == "error" || t.state == "cancelled" || t.state == "unknown";
-    });
-    emit transfersChanged();
+void RemoteController::onTaskCancelRequested(int id) {
+    if (Transfer *t = findTransfer(id)) t->cancel->store(true);
+    if (id == m_searchTaskId) m_searchCancel->store(true);
 }
 
 void RemoteController::startTransfer(int id, int policyValue) {
@@ -113,10 +91,7 @@ void RemoteController::startTransfer(int id, int policyValue) {
     auto report = [self, id, token](qint64 done, qint64 total) {
         QMetaObject::invokeMethod(self, [self, id, token, done, total] {
             if (!self || token != self->m_generation) return;
-            if (Transfer *t = self->findTransfer(id); t && t->state == "running") {
-                t->done = done; t->total = total;
-                emit self->transfersChanged();
-            }
+            self->m_tasks->setProgress(id, done, total);
         }, Qt::QueuedConnection);
     };
 
@@ -124,31 +99,30 @@ void RemoteController::startTransfer(int id, int policyValue) {
     connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, id, token, job] {
         const SshResult r = watcher->result();
         watcher->deleteLater();
-        Transfer *t = findTransfer(id);
-        if (!t || token != m_generation || t->state == "cancelled") return;
+        if (token != m_generation) return;
+        // Cancelled while queued, or settled by a disconnect: the task is final.
+        const auto state = m_tasks->state(id);
+        if (!state || TaskManager::isTerminal(*state)) return;
         if (r.status == SshResult::Status::Ok) {
-            t->state = QStringLiteral("done");
-            t->done = r.bytes;
-            t->total = r.bytes;
-            t->message = job.upload ? QStringLiteral("Publié : %1").arg(r.directory.section('/', -1))
-                                    : QStringLiteral("Enregistré : %1").arg(r.directory);
+            m_tasks->succeed(id, job.upload ? QStringLiteral("Publié : %1").arg(r.directory.section('/', -1))
+                                            : QStringLiteral("Enregistré : %1").arg(r.directory), r.bytes);
             if (job.upload && m_connected && job.remote == m_currentDirectory) refresh();
+        } else if (r.code == "conflict") {
+            // The user decides (keep both / replace / skip); a stop request wins.
+            if (!m_tasks->requestDecision(id, QStringLiteral("conflict"), r.message)) m_tasks->markCancelled(id, QStringLiteral("Annulé."));
+        } else if (r.code == "cancelled") {
+            m_tasks->markCancelled(id, r.message);
+        } else if (r.code == "unknown") {
+            m_tasks->markUnknown(id, r.message);
         } else {
-            t->state = r.code == "conflict" ? QStringLiteral("conflict")
-                     : r.code == "cancelled" ? QStringLiteral("cancelled")
-                     : r.code == "unknown" ? QStringLiteral("unknown") : QStringLiteral("error");
-            t->message = r.message;
+            m_tasks->fail(id, r.message, r.code);
         }
-        emit transfersChanged();
     });
     watcher->setFuture(QtConcurrent::run(&m_transferPool, [slot, req, job, policy, report, self, id, token] {
         if (job.cancel->load()) return SshResult{};  // cancelled while queued; result ignored
         QMetaObject::invokeMethod(self, [self, id, token] {
             if (!self || token != self->m_generation) return;
-            if (Transfer *t = self->findTransfer(id); t && t->state == "queued") {
-                t->state = QStringLiteral("running");
-                emit self->transfersChanged();
-            }
+            self->m_tasks->start(id);
         }, Qt::QueuedConnection);
         if (!*slot) *slot = std::make_unique<SshSession>();
         SshSession &session = **slot;

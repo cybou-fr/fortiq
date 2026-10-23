@@ -128,8 +128,8 @@ bool TaskManager::requestCancel(int id) {
     if (!t || isTerminal(t->state) || t->state == State::Cancelling) return false;
     if (t->state == State::Queued) {
         // Never ran, or waiting for a decision: nothing on the server to stop.
+        emit cancelRequested(id);   // first: the owner flags its job so it cannot start later
         markCancelled(id, QStringLiteral("Annulé."));
-        emit cancelRequested(id);   // the owner drops its job so it cannot start later
         return true;
     }
     if (!t->spec.cancellable) return false;

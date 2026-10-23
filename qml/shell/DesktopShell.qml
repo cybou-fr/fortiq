@@ -14,6 +14,7 @@ Item {
     readonly property real appTop: adaptive ? 56 : 0
     readonly property real appHeight: Math.max(44, height - appTop - (Qt.inputMethod.visible ? 8 : 76))
     property var controller: null
+    property var taskManager: null      // the application's TaskManager (transfers, operations, saves, searches)
     property var logsController: null
     property var terminalController: null
     property bool terminalOpen: false
@@ -357,6 +358,20 @@ Item {
             Text { anchors.centerIn: parent; text: "Se déconnecter"; color: "white"; font.pixelSize: 13; font.family: Theme.fontFamily }
             MouseArea { id: lm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: shell.logout() }
         }
+    }
+
+    FixtureTasks { id: fixtureTasks }
+    TaskPanel {
+        id: taskPanel
+        objectName: "taskPanel"
+        z: 12
+        visible: !shell.serversOpen && (shell.fixture ? shell.fixturePreview === "transfers"
+                                                      : (shell.taskManager !== null && shell.taskManager.count > 0))
+        manager: shell.fixture ? fixtureTasks : shell.taskManager
+        controller: shell.controller
+        width: Math.min(420, shell.width - 24)
+        x: shell.width - width - 12
+        y: shell.height - height - (shell.adaptive ? 84 : 12)
     }
 
     ServerManager {

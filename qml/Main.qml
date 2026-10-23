@@ -41,6 +41,7 @@ ApplicationWindow {
         width: adaptive ? window.contentItem.width : window.contentItem.width / window.canvasScale
         height: adaptive ? Math.max(200, window.contentItem.height - window.keyboardOverlap) : window.contentItem.height / window.canvasScale
         controller: remote
+        taskManager: typeof tasks !== "undefined" ? tasks : null
         logsController: logs
         terminalController: typeof terminal !== "undefined" ? terminal : null
         disksController: typeof disks !== "undefined" ? disks : null

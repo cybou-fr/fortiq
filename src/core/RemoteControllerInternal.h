@@ -2,6 +2,7 @@
 // Internal to the RemoteController implementation units (Remote*.cpp).
 #include "RemoteController.h"
 #include "SecretStore.h"
+#include "TaskManager.h"
 #include "LocalDocument.h"
 #include "RemotePath.h"
 #include "../ssh/SshClient.h"

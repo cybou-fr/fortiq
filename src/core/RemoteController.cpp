@@ -12,10 +12,21 @@ RemoteController::RemoteController(QObject *parent)
     m_pool.setExpiryTimeout(-1);
     m_transferPool.setMaxThreadCount(1);
     m_transferPool.setExpiryTimeout(-1);
+    m_ownedTasks = std::make_unique<TaskManager>();
+    setTaskManager(m_ownedTasks.get());
+}
+
+void RemoteController::setTaskManager(TaskManager *tasks) {
+    if (!tasks || tasks == m_tasks) return;
+    if (m_tasks) disconnect(m_tasks, nullptr, this, nullptr);
+    m_tasks = tasks;
+    connect(m_tasks, &TaskManager::cancelRequested, this, &RemoteController::onTaskCancelRequested);
+    // A finished transfer no longer needs its job details.
+    connect(m_tasks, &TaskManager::finished, this, [this](int id) { m_transferJobs.remove(id); });
 }
 
 RemoteController::~RemoteController() {
-    for (Transfer &t : m_transfers) t.cancel->store(true);
+    for (Transfer &t : m_transferJobs) t.cancel->store(true);
     auto slot = m_session;
     (void)QtConcurrent::run(&m_pool, [slot] { slot->reset(); });
     auto transferSlot = m_transferSession;
@@ -171,21 +182,28 @@ void RemoteController::disconnectServer() {
     m_searchSession = std::make_shared<std::unique_ptr<SshSession>>();
     if (m_operationBusy) { m_operationBusy = false; emit operationBusyChanged(); }
     if (m_saving) { m_saving = false; emit savingChanged(); }
-    // Transfers are bound to this server: stop them, never redirect them.
-    for (Transfer &t : m_transfers) {
-        if (t.state == "queued" || t.state == "running" || t.state == "conflict") {
-            t.cancel->store(true);
-            const bool documentMayBePartial = t.state == "running" && !t.upload && isContentDocument(t.local);
-            t.state = t.state == "running" && (t.upload || documentMayBePartial) ? QStringLiteral("unknown") : QStringLiteral("cancelled");
-            t.message = documentMayBePartial
+    // Tasks are bound to this server: stop them, never redirect them. What may
+    // already have happened on the server is reported as unknown, not as failed.
+    for (const int id : m_tasks->activeIds(m_generation)) {
+        const QString state = m_tasks->task(id).value("state").toString();
+        const bool running = state == QLatin1String("running") || state == QLatin1String("cancelling");
+        if (Transfer *t = findTransfer(id)) {
+            t->cancel->store(true);
+            const bool documentMayBePartial = running && !t->upload && isContentDocument(t->local);
+            const QString message = documentMayBePartial
                 ? QStringLiteral("Déconnecté du serveur. Le document choisi peut être partiel ; vérifiez-le avant de réessayer.")
                 : QStringLiteral("Déconnecté du serveur.");
+            if (running && (t->upload || documentMayBePartial)) m_tasks->markUnknown(id, message);
+            else m_tasks->markCancelled(id, message);
+        } else if (running) {
+            m_tasks->markUnknown(id, QStringLiteral("Déconnecté du serveur pendant l'opération ; vérifiez le résultat sur le serveur."));
+        } else {
+            m_tasks->markCancelled(id, QStringLiteral("Déconnecté du serveur."));
         }
     }
     auto transferSlot = m_transferSession;
     (void)QtConcurrent::run(&m_transferPool, [transferSlot] { transferSlot->reset(); });
     m_transferSession = std::make_shared<std::unique_ptr<SshSession>>();
-    emit transfersChanged();
     closePreview();
     ++m_generation; // outstanding results can never bind to another server
     auto slot = m_session;

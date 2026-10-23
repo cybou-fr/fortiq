@@ -6,6 +6,7 @@
 // environment and are never printed.
 #include "core/LogsController.h"
 #include "core/RemoteController.h"
+#include "core/TaskManager.h"
 #include "core/TerminalController.h"
 #include "core/DisksController.h"
 #include "core/DocumentsController.h"
@@ -381,32 +382,34 @@ private slots:
         QTemporaryDir local;
         const QString file = local.filePath(QStringLiteral("queue-%1.txt").arg(QDateTime::currentMSecsSinceEpoch()));
         { QFile f(file); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("queue\n"); }
-        auto last = [&] { return controller.transfers().constLast().toMap(); };
+        auto last = [&] { return controller.tasks()->tasks().constLast().toMap(); };
+        // Settled for this test: finished, or waiting for the user's decision.
         auto finished = [&] {
-            const QString s = last().value("state").toString();
-            return s != "queued" && s != "running";
+            const auto t = last();
+            return !t.value("active").toBool() || !t.value("decision").toString().isEmpty();
         };
 
         controller.upload({ QUrl::fromLocalFile(file) }, remoteDir);
         QTRY_VERIFY_WITH_TIMEOUT(finished(), 15000);
-        QCOMPARE(last().value("state").toString(), QStringLiteral("done"));
+        QCOMPARE(last().value("state").toString(), QStringLiteral("succeeded"));
 
         controller.upload({ QUrl::fromLocalFile(file) }, remoteDir);
         QTRY_VERIFY_WITH_TIMEOUT(finished(), 15000);
-        QCOMPARE(last().value("state").toString(), QStringLiteral("conflict"));
+        QCOMPARE(last().value("state").toString(), QStringLiteral("queued"));
+        QCOMPARE(last().value("decision").toString(), QStringLiteral("conflict"));
         controller.resolveConflict(last().value("id").toInt(), QStringLiteral("keepBoth"));
         QTRY_VERIFY_WITH_TIMEOUT(finished(), 15000);
-        QCOMPARE(last().value("state").toString(), QStringLiteral("done"));
+        QCOMPARE(last().value("state").toString(), QStringLiteral("succeeded"));
         QVERIFY(last().value("message").toString().contains(QStringLiteral("(2)")));
 
         const QString saved = local.filePath(QStringLiteral("downloaded.txt"));
         controller.download(remoteDir + "/" + QFileInfo(file).fileName(), QUrl::fromLocalFile(saved));
         QTRY_VERIFY_WITH_TIMEOUT(finished(), 15000);
-        QCOMPARE(last().value("state").toString(), QStringLiteral("done"));
+        QCOMPARE(last().value("state").toString(), QStringLiteral("succeeded"));
         { QFile f(saved); QVERIFY(f.open(QIODevice::ReadOnly)); QCOMPARE(f.readAll(), QByteArray("queue\n")); }
 
         controller.clearFinishedTransfers();
-        QVERIFY(controller.transfers().isEmpty());
+        QVERIFY(controller.tasks()->tasks().isEmpty());
         controller.disconnectServer();
         settings.remove(pin);
     }
@@ -736,6 +739,13 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(!controller.searchBusy(), 15000);
         QCOMPARE(controller.searchResults().size(), 1);
         QCOMPARE(controller.searchScope(), remoteDir + "/search");
+        {
+            const QVariantMap t = controller.tasks()->tasks().constLast().toMap();
+            QCOMPARE(t.value("kind").toString(), QStringLiteral("search"));
+            QCOMPARE(t.value("title").toString(), QStringLiteral("monde"));
+            QCOMPARE(t.value("state").toString(), QStringLiteral("succeeded"));
+            QVERIFY(t.value("cancellable").toBool());
+        }
         // Browsing works while the search connection exists.
         controller.navigate(remoteDir);
         QTRY_VERIFY_WITH_TIMEOUT(controller.currentDirectory() == remoteDir && !controller.busy(), 15000);
@@ -745,6 +755,10 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(!controller.searchBusy(), 15000);
         controller.clearSearch();
         QVERIFY(!controller.searchActive());
+        // Whatever the race between the cancel and the result, no search task stays active.
+        QCOMPARE(controller.tasks()->activeCount(), 0);
+        const QString lastState = controller.tasks()->tasks().constLast().toMap().value("state").toString();
+        QVERIFY2(lastState == "cancelled" || lastState == "succeeded", qPrintable(lastState));
         controller.disconnectServer();
         settings.remove(pin);
     }
@@ -1108,6 +1122,19 @@ private slots:
         QVERIFY(finished.at(2).at(0).toBool());
         QTRY_VERIFY_WITH_TIMEOUT(!listed(name + "-b") && !controller.busy(), 15000);
         QVERIFY(controller.trashDirectory().endsWith(QStringLiteral("/.local/share/Trash/files")));
+
+        // Each operation is a task of the shared model: succeeded, in order, not cancellable.
+        const QVariantList taskList = controller.tasks()->tasks();
+        QCOMPARE(taskList.size(), 3);
+        const QStringList kinds { "createFolder", "rename", "trash" };
+        for (int i = 0; i < 3; ++i) {
+            const QVariantMap t = taskList.at(i).toMap();
+            QCOMPARE(t.value("kind").toString(), kinds.at(i));
+            QCOMPARE(t.value("state").toString(), QStringLiteral("succeeded"));
+            QVERIFY(!t.value("cancellable").toBool());
+            QCOMPARE(t.value("source").toString(), controller.serverLabel());
+        }
+        QCOMPARE(controller.tasks()->activeCount(), 0);
 
         controller.disconnectServer();
         settings.remove(pin);

@@ -432,15 +432,7 @@ Item {
         onClosed: { if (win.connected) win.controller.clearSearch(); win.view.forceActiveFocus() }
     }
 
-    TransferPanel {
-        anchors.right: parent.right; anchors.rightMargin: 12
-        anchors.bottom: parent.bottom; anchors.bottomMargin: statusBar.height + 8
-        width: Math.min(420, content.width - 24)
-        z: 9
-        visible: transfers.length > 0
-        controller: win.fixture ? (win.fixturePreview === "transfers" ? fixtureData.sampleQueue : null)
-                                : (win.connected || (win.controller && win.controller.transfers.length > 0) ? win.controller : null)
-    }
+    // Transfers, operations, saves and searches are listed by the shared TaskPanel of the shell.
 
 
     FileViewer {

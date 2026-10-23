@@ -24,21 +24,8 @@ Item {
         { name: "Brouillons", directory: true, path: "/home/demo/.local/share/Trash/files/Brouillons", mtime: 1760600000, size: 4096, mode: "drwxr-xr-x", owner: "demo" },
         { name: "capture.png", path: "/home/demo/.local/share/Trash/files/capture.png", mtime: 1760500000, size: 240000, mode: "-rw-r--r--", owner: "demo" }
     ]
-    readonly property var sampleTransfers: [
-        { id: 1, upload: true, name: "rapport-2026.pdf", remote: "/home/demo/Documents", state: "running", done: 3460000, total: 5200000, message: "" },
-        { id: 2, upload: false, name: "access.log", remote: "/var/log/nginx/access.log", state: "done", done: 812000, total: 812000, message: "Enregistré : C:/Users/vous/Downloads/access.log" },
-        { id: 3, upload: true, name: "Budget.xlsx", remote: "/home/demo", state: "conflict", done: 0, total: 48200, message: "« Budget.xlsx » existe déjà dans ce dossier." }
-    ]
-    readonly property QtObject sampleQueue: queue
     readonly property QtObject sampleSearch: search
     readonly property QtObject samplePreview: preview
-    QtObject {
-        id: queue
-        readonly property var transfers: data.sampleTransfers
-        function cancelTransfer(id) {}
-        function resolveConflict(id, policy) {}
-        function clearFinishedTransfers() {}
-    }
     QtObject {
         id: search
         readonly property bool searchActive: true

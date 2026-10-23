@@ -4,6 +4,7 @@
 #include <QProcess>
 #include "core/LogsController.h"
 #include "core/RemoteController.h"
+#include "core/TaskManager.h"
 #include "ssh/SshClient.h"
 
 namespace fortiq {
@@ -21,15 +22,21 @@ private slots:
     void documentDownloadDisconnectIsUncertain() {
         RemoteController remote;
         remote.m_connected = true;
+        QList<int> ids;
         for (const QString &path : {QString("content://provider/document/1"), QString("C:/native.txt")}) {
+            TaskManager::Spec spec;
+            spec.kind = "download"; spec.title = "file"; spec.generation = remote.connectionToken();
+            const int id = remote.tasks()->create(spec);
             RemoteController::Transfer job;
-            job.local = path; job.state = "running";
-            remote.m_transfers << job;
+            job.id = id; job.local = path;
+            remote.m_transferJobs.insert(id, job);
+            remote.tasks()->start(id);
+            ids << id;
         }
         remote.disconnectServer();
-        QCOMPARE(remote.m_transfers[0].state, QString("unknown"));
-        QVERIFY(remote.m_transfers[0].message.contains("partiel"));
-        QCOMPARE(remote.m_transfers[1].state, QString("cancelled"));
+        QCOMPARE(remote.tasks()->task(ids[0]).value("state").toString(), QString("unknown"));
+        QVERIFY(remote.tasks()->task(ids[0]).value("message").toString().contains("partiel"));
+        QCOMPARE(remote.tasks()->task(ids[1]).value("state").toString(), QString("cancelled"));
     }
     void linuxReaderScript() {
 #ifdef Q_OS_WIN
