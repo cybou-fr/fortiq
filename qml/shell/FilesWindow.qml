@@ -44,26 +44,7 @@ Item {
     readonly property bool inTrash: fixture ? fixturePreview === "trashview"
         : (connected && controller.trashDirectory.length > 0 && location === controller.trashDirectory)
     readonly property bool busy: controller !== null && controller.busy
-    readonly property var sampleEntries: [
-        { name: "Bureau", directory: true, path: "/home/demo/Bureau", mtime: 1760788800, size: 4096, mode: "drwxr-xr-x", owner: "demo" },
-        { name: "Documents", directory: true, path: "/home/demo/Documents", mtime: 1760781600, size: 4096, mode: "drwxr-xr-x", owner: "demo" },
-        { name: "Images", directory: true, path: "/home/demo/Images", mtime: 1760695200, size: 4096, mode: "drwxr-xr-x", owner: "demo" },
-        { name: "Vidéos", directory: true, path: "/home/demo/Vidéos", mtime: 1760608800, size: 4096, mode: "drwxr-xr-x", owner: "demo" },
-        { name: "Musique", directory: true, path: "/home/demo/Musique", mtime: 1760522400, size: 4096, mode: "drwxr-xr-x", owner: "demo" },
-        { name: "Téléchargements", directory: true, path: "/home/demo/Téléchargements", mtime: 1760788000, size: 4096, mode: "drwxr-xr-x", owner: "demo" },
-        { name: "Projets", directory: true, path: "/home/demo/Projets", mtime: 1760700000, size: 4096, mode: "drwxr-xr-x", owner: "demo" },
-        { name: "Travail", directory: true, path: "/home/demo/Travail", mtime: 1760600000, size: 4096, mode: "drwxr-xr-x", owner: "demo" },
-        { name: "Montagne.jpg", path: "/home/demo/Montagne.jpg", mtime: 1760780000, size: 2483200, mode: "-rw-r--r--", owner: "demo" },
-        { name: "Présentation.pdf", path: "/home/demo/Présentation.pdf", mtime: 1760770000, size: 1205000, mode: "-rw-r--r--", owner: "demo" },
-        { name: "Budget.xlsx", path: "/home/demo/Budget.xlsx", mtime: 1760760000, size: 48200, mode: "-rw-r--r--", owner: "demo" },
-        { name: "Notes.txt", path: "/home/demo/Notes.txt", mtime: 1760750000, size: 1830, mode: "-rw-r--r--", owner: "demo" }
-    ]
-    readonly property var sampleTrash: [
-        { name: "ancien-rapport.pdf", path: "/home/demo/.local/share/Trash/files/ancien-rapport.pdf", mtime: 1760700000, size: 820000, mode: "-rw-r--r--", owner: "demo" },
-        { name: "Brouillons", directory: true, path: "/home/demo/.local/share/Trash/files/Brouillons", mtime: 1760600000, size: 4096, mode: "drwxr-xr-x", owner: "demo" },
-        { name: "capture.png", path: "/home/demo/.local/share/Trash/files/capture.png", mtime: 1760500000, size: 240000, mode: "-rw-r--r--", owner: "demo" }
-    ]
-    readonly property var entries: fixture ? (fixturePreview === "trashview" ? sampleTrash : sampleEntries) : (connected ? controller.entries : [])
+    readonly property var entries: fixture ? (fixturePreview === "trashview" ? fixtureData.sampleTrash : fixtureData.sampleEntries) : (connected ? controller.entries : [])
     readonly property string location: fixture ? "/home/demo" : (connected ? controller.currentDirectory : "")
     readonly property string home: fixture ? "/home/demo" : (connected ? controller.homeDirectory : "")
 
@@ -198,6 +179,8 @@ Item {
         maximized = !maximized
     }
 
+    FilesFixtureData { id: fixtureData; fixturePreview: win.fixturePreview }
+
     onLocationChanged: { grid.currentIndex = -1; list.currentIndex = -1 }
     Component.onCompleted: if (fixture && fixturePreview === "trash")
         opDialog.openWith("Mettre à la corbeille ?", "« Budget.xlsx » sera déplacé dans la corbeille de demo@linux. Vous pourrez le restaurer depuis la Corbeille.",
@@ -212,7 +195,7 @@ Item {
         const ctrl = event.modifiers & Qt.ControlModifier
         const alt = event.modifiers & Qt.AltModifier
         if (!win.connected) return
-        if (ctrl && event.key === Qt.Key_F) { search.forceActiveFocus(); event.accepted = true }
+        if (ctrl && event.key === Qt.Key_F) { toolbar.searchField.forceActiveFocus(); event.accepted = true }
         else if (ctrl && event.key === Qt.Key_L) { win.editingPath = true; event.accepted = true }
         else if (ctrl && event.key === Qt.Key_H) { win.showHidden = !win.showHidden; event.accepted = true }
         else if (ctrl && event.key === Qt.Key_1) { win.viewMode = "grid"; event.accepted = true }
@@ -232,7 +215,7 @@ Item {
         else if (event.key === Qt.Key_Escape) { win.filterText = ""; win.editingPath = false; event.accepted = true }
         else if (event.text.length === 1 && event.text.trim().length === 1 && !ctrl && !alt) {
             // Type-to-filter, like a desktop file manager.
-            search.forceActiveFocus(); win.filterText += event.text; event.accepted = true
+            toolbar.searchField.forceActiveFocus(); win.filterText += event.text; event.accepted = true
         }
     }
 
@@ -252,268 +235,11 @@ Item {
         blurAmount: 0.9
     }
 
-    // ── sidebar ────────────────────────────────────────────────────────
-    Rectangle {
-        id: sidebar
-        visible: !win.drawer || win.navigationOpen
-        z: win.drawer ? 40 : 0
-        width: win.drawer ? Math.min(260, win.width - 32) : 172; height: parent.height
-        topLeftRadius: 16; bottomLeftRadius: 16
-        color: "#40050B18"
-        Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: "#1FFFFFFF" }
+    FilesSidebar { files: win }
 
-        // Empty sidebar space is a window handle; places and window controls
-        // above this area keep their own clicks and touch gestures.
-        WindowDragArea {
-            objectName: "filesSidebarDrag"
-            anchors.fill: parent
-            windowItem: win
-            movable: !win.adaptive && !win.maximized
-            onDoubleClicked: win.toggleMaximize()
-        }
-
-        Row {
-            visible: !win.adaptive
-            x: 14; y: 17; spacing: 9
-            Repeater {
-                model: [ { c: "#FF5F57", a: "close" }, { c: "#FEBC2E", a: "none" }, { c: "#28C840", a: "max" } ]
-                Rectangle {
-                    required property var modelData
-                    width: 12; height: 12; radius: 6; color: modelData.c
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: modelData.a === "close" ? win.closeRequested() : (modelData.a === "max" ? win.toggleMaximize() : null)
-                    }
-                }
-            }
-        }
-
-        Column {
-            x: 8; y: 46; width: parent.width - 16
-            spacing: 1
-            Text { x: 10; text: "EMPLACEMENTS"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2; font.family: Theme.fontFamily; bottomPadding: 4 }
-            Repeater {
-                model: [
-                    { g: "⌂", t: "Dossier personnel", p: "~" },
-                    { g: "/", t: "Racine", p: "/" },
-                    { g: "≣", t: "Journaux", p: "/var/log" },
-                    { g: "⚙", t: "Configuration", p: "/etc" },
-                    { g: "◷", t: "Temporaire", p: "/tmp" },
-                    { g: "⛁", t: "Services web", p: "/var/www" },
-                    { g: "⏏", t: "Médias", p: "/media" },
-                    { g: "🗑", t: "Corbeille", p: "trash" }
-                ]
-                Rectangle {
-                    required property var modelData
-                    readonly property string target: modelData.p === "~" ? win.home
-                        : (modelData.p === "trash" ? (win.connected ? win.controller.trashDirectory : "") : modelData.p)
-                    readonly property bool active: target.length > 0 && win.location === target
-                    width: parent.width; height: win.adaptive ? 44 : 29; radius: 7
-                    color: active ? Theme.selection : (placeMouse.containsMouse ? "#1AFFFFFF" : "transparent")
-                    SymbolGlyph { x: 10; anchors.verticalCenter: parent.verticalCenter; glyph: modelData.g; color: "white"; size: 13; width: 16 }
-                    Text { x: 33; anchors.verticalCenter: parent.verticalCenter; text: modelData.t; color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily }
-                    MouseArea {
-                        id: placeMouse
-                        anchors.fill: parent; hoverEnabled: true
-                        enabled: win.connected
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: { win.navigationOpen = false; win.filterText = ""; win.controller.navigate(parent.target) }
-                    }
-                }
-            }
-        }
-
-        Column {
-            visible: win.connected || win.fixture
-            anchors.bottom: parent.bottom; anchors.bottomMargin: 12
-            x: 16; width: parent.width - 32
-            spacing: 4
-            Text { text: "SERVEUR"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2; font.family: Theme.fontFamily }
-            Row {
-                spacing: 6
-                Rectangle { width: 7; height: 7; radius: 3.5; anchors.verticalCenter: parent.verticalCenter; color: "#4ADE80" }
-                Text {
-                    width: 120; elide: Text.ElideMiddle
-                    text: win.fixture ? "demo@linux" : (win.connected ? win.controller.serverLabel : "")
-                    color: Theme.ink; font.pixelSize: 11; font.family: Theme.fontFamily
-                }
-            }
-            Text {
-                visible: !win.fixture
-                text: "Se déconnecter"
-                color: "#9CC6FF"; font.pixelSize: 11; font.underline: discoMouse.containsMouse; font.family: Theme.fontFamily
-                MouseArea { id: discoMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.controller.disconnectServer() }
-            }
-        }
-    }
 
     // ── toolbar (also the drag handle) ─────────────────────────────────
-    Item {
-        id: toolbar
-        x: win.contentLeft; width: parent.width - x; height: win.adaptive ? adaptiveToolbar.implicitHeight : 48
-
-        WindowDragArea {
-            anchors.fill: parent
-            windowItem: win
-            movable: !win.adaptive && !win.maximized
-            onDoubleClicked: win.toggleMaximize()
-        }
-
-        Row {
-            id: nav
-            visible: !win.adaptive
-            x: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 2
-            ToolButtonGlass { glyph: "‹"; tip: "Précédent (Alt+←)"; enabledState: win.connected && win.controller.canGoBack; onClicked: win.controller.goBack() }
-            ToolButtonGlass { glyph: "›"; tip: "Suivant (Alt+→)"; enabledState: win.connected && win.controller.canGoForward; onClicked: win.controller.goForward() }
-            ToolButtonGlass { glyph: "↑"; tip: "Dossier parent (Alt+↑)"; enabledState: win.connected && win.location !== "/"; onClicked: win.controller.goUp() }
-        }
-
-        Rectangle {
-            id: pathBar
-            visible: !win.adaptive
-            anchors.left: nav.right; anchors.leftMargin: 6
-            anchors.right: tools.left; anchors.rightMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
-            height: 30; radius: 8
-            color: "#1AFFFFFF"
-            border.width: 1; border.color: win.editingPath ? Theme.accent : "#1FFFFFFF"
-            clip: true
-
-            Flickable {
-                id: crumbFlick
-                visible: !win.editingPath
-                anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6
-                contentWidth: crumbRow.width; contentHeight: height
-                flickableDirection: Flickable.HorizontalFlick
-                boundsBehavior: Flickable.StopAtBounds
-                onContentWidthChanged: contentX = Math.max(0, contentWidth - width)
-                Row {
-                    id: crumbRow
-                    height: parent.height
-                    Repeater {
-                        model: win.fixture ? [{ label: "⌂ Dossier personnel", path: "/home/demo" }] : win.crumbs()
-                        Row {
-                            required property var modelData
-                            required property int index
-                            height: crumbRow.height
-                            Text { visible: index > 1; text: "›"; color: "#7F93B5"; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter; rightPadding: 2 }
-                            Rectangle {
-                                height: 22; anchors.verticalCenter: parent.verticalCenter
-                                width: crumbText.implicitWidth + 12; radius: 5
-                                color: crumbMouse.containsMouse ? "#26FFFFFF" : "transparent"
-                                Text {
-                                    id: crumbText
-                                    anchors.centerIn: parent
-                                    text: modelData.label
-                                    color: Theme.ink
-                                    font.pixelSize: 12
-                                    font.weight: modelData.path === win.location ? Font.DemiBold : Font.Normal
-                                    font.family: Theme.fontFamily
-                                }
-                                MouseArea {
-                                    id: crumbMouse
-                                    anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                    onClicked: if (win.connected) win.controller.navigate(modelData.path)
-                                    onDoubleClicked: win.editingPath = true
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            MouseArea {
-                visible: !win.editingPath && win.connected
-                anchors.left: parent.left; anchors.leftMargin: Math.min(crumbRow.width + 8, parent.width)
-                anchors.right: parent.right; height: parent.height
-                cursorShape: Qt.IBeamCursor
-                onClicked: win.editingPath = true
-            }
-            TextInput {
-                id: pathInput
-                visible: win.editingPath
-                anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10
-                verticalAlignment: TextInput.AlignVCenter
-                color: Theme.ink; selectionColor: Theme.accent
-                font.pixelSize: 12; font.family: Theme.fontFamily
-                clip: true
-                onVisibleChanged: if (visible) { text = win.location; forceActiveFocus(); selectAll() }
-                onAccepted: { win.editingPath = false; win.controller.navigate(text); win.forceActiveFocus() }
-                onActiveFocusChanged: if (!activeFocus) win.editingPath = false
-                Keys.onEscapePressed: { win.editingPath = false; win.forceActiveFocus() }
-            }
-        }
-
-        Row {
-            id: tools
-            visible: !win.adaptive
-            anchors.right: parent.right; anchors.rightMargin: 10
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 2
-            Rectangle {
-                width: Math.max(100, Math.min(200, toolbar.width * 0.2)); height: 30; radius: 15
-                color: "#1AFFFFFF"
-                border.width: 1; border.color: search.activeFocus ? Theme.accent : "#1FFFFFFF"
-                SymbolGlyph { x: 10; anchors.verticalCenter: parent.verticalCenter; glyph: "⌕"; color: Theme.inkMuted; size: 15 }
-                TextInput {
-                    id: search
-                    x: 30; width: parent.width - 52
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: win.filterText
-                    onTextEdited: win.filterText = text
-                    color: Theme.ink; selectionColor: Theme.accent
-                    font.pixelSize: 12; font.family: Theme.fontFamily
-                    clip: true
-                    Keys.onEscapePressed: { win.filterText = ""; win.forceActiveFocus() }
-                    Keys.onDownPressed: { win.view.forceActiveFocus(); if (win.view.currentIndex < 0) win.view.currentIndex = 0 }
-                    // Enter: server search by name; Ctrl+Enter: by content.
-                    Keys.onReturnPressed: (e) => win.serverSearch(e.modifiers & Qt.ControlModifier ? "content" : "name")
-                    Keys.onEnterPressed: (e) => win.serverSearch(e.modifiers & Qt.ControlModifier ? "content" : "name")
-                    Text {
-                        visible: parent.text.length === 0
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "Filtrer / chercher"
-                        color: "#7F93B5"; font.pixelSize: 12; font.family: Theme.fontFamily
-                    }
-                }
-                Text {
-                    visible: win.filterText.length > 0
-                    anchors.right: parent.right; anchors.rightMargin: 9
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "×"; color: Theme.inkMuted; font.pixelSize: 15
-                    MouseArea { anchors.fill: parent; anchors.margins: -4; onClicked: win.filterText = "" }
-                }
-            }
-            Item { width: 6; height: 1 }
-            ToolButtonGlass { glyph: "grid"; tip: "Icônes (Ctrl+1)"; checked: win.viewMode === "grid"; onClicked: win.viewMode = "grid" }
-            ToolButtonGlass { glyph: "list"; tip: "Liste détaillée (Ctrl+2)"; checked: win.viewMode === "list"; onClicked: win.viewMode = "list" }
-            ToolButtonGlass { id: sortButton; glyph: "sort"; tip: "Trier"; onClicked: sortMenu.popup(sortButton, 0, sortButton.height + 4) }
-            ToolButtonGlass { glyph: "eye"; tip: "Fichiers cachés (Ctrl+H)"; checked: win.showHidden; onClicked: win.showHidden = !win.showHidden }
-            ToolButtonGlass { glyph: "↻"; tip: "Actualiser (F5)"; enabledState: win.connected; onClicked: win.controller.refresh() }
-            Item { width: 4; height: 1 }
-            ToolButtonGlass { glyph: "⤓"; tip: "Télécharger sur cet appareil (Ctrl+D)"; enabledState: win.connected && win.selected !== null && !win.selected.directory; onClicked: win.askDownload(win.selected) }
-            ToolButtonGlass { glyph: "⤒"; tip: "Envoyer des fichiers ici (Ctrl+U)"; enabledState: win.connected; onClicked: uploadDialog.open() }
-            ToolButtonGlass { glyph: "+"; tip: "Nouveau dossier (Ctrl+Maj+N)"; enabledState: win.connected; onClicked: win.askNewFolder() }
-        }
-
-        Menu {
-            id: sortMenu
-            palette.window: "#152238"; palette.windowText: "#F5F9FF"; palette.highlight: "#2D6FE0"
-            palette.text: "#F5F9FF"; palette.base: "#152238"; palette.light: "#152238"; palette.mid: "#2A3A58"
-            Repeater {
-                model: [ { k: "name", t: "Nom" }, { k: "mtime", t: "Date de modification" }, { k: "size", t: "Taille" } ]
-                MenuItem {
-                    required property var modelData
-                    text: (win.sortKey === modelData.k ? "✓  " : "     ") + modelData.t
-                    onTriggered: win.sortKey = modelData.k
-                }
-            }
-            MenuSeparator {}
-            MenuItem { text: (win.sortAscending ? "✓  " : "     ") + "Croissant"; onTriggered: win.sortAscending = true }
-            MenuItem { text: (!win.sortAscending ? "✓  " : "     ") + "Décroissant"; onTriggered: win.sortAscending = false }
-        }
-
-        Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: "#1AFFFFFF" }
-    }
+    FilesToolbar { id: toolbar; files: win; adaptiveHeight: adaptiveToolbar.implicitHeight }
 
     Rectangle {
         anchors.fill: parent; z: 35; visible: win.drawer && win.navigationOpen
@@ -542,203 +268,11 @@ Item {
             }
         }
 
-        Rectangle {
-            id: trashBanner
-            visible: win.inTrash
-            z: 4
-            x: 10; y: 8; width: parent.width - 20; height: 36; radius: 10
-            color: "#1FFFFFFF"
-            border.width: 1; border.color: "#26FFFFFF"
-            Text {
-                x: 12; anchors.verticalCenter: parent.verticalCenter
-                width: parent.width - trashActions.width - 30; elide: Text.ElideRight
-                text: "🗑  Corbeille · " + win.entries.length + " élément" + (win.entries.length > 1 ? "s" : "")
-                      + "  —  les éléments peuvent être restaurés à leur emplacement d'origine"
-                color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily
-            }
-            Row {
-                id: trashActions
-                anchors.right: parent.right; anchors.rightMargin: 6
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 6
-                Repeater {
-                    model: [
-                        { k: "restore", t: "Restaurer", on: win.selected !== null, danger: false },
-                        { k: "empty", t: "Vider la corbeille…", on: win.entries.length > 0, danger: true }
-                    ]
-                    Rectangle {
-                        required property var modelData
-                        height: 26; radius: 7
-                        width: bl.implicitWidth + 20
-                        opacity: modelData.on && !(win.connected && win.controller.operationBusy) ? 1 : 0.4
-                        color: modelData.danger ? (bm.containsMouse ? "#C2410C" : "#80C2410C") : (bm.containsMouse ? Theme.selection : "#802D6FE0")
-                        Text { id: bl; anchors.centerIn: parent; text: modelData.t; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
-                        MouseArea {
-                            id: bm
-                            anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                            enabled: modelData.on && win.connected && !win.controller.operationBusy
-                            onClicked: modelData.k === "restore" ? win.restore(win.selected) : win.askEmptyTrash()
-                        }
-                    }
-                }
-            }
-        }
+        FilesTrashBanner { files: win }
 
-        GridView {
-            id: grid
-            visible: win.viewMode === "grid"
-            anchors.fill: parent; anchors.margins: 10
-            anchors.topMargin: win.inTrash ? 52 : 10
-            cellWidth: Math.max(104, width / Math.max(1, Math.floor(width / 116)))
-            cellHeight: 108
-            model: win.shown
-            currentIndex: -1
-            keyNavigationEnabled: true
-            boundsBehavior: Flickable.StopAtBounds
-            cacheBuffer: 400
-            reuseItems: true
-            highlightFollowsCurrentItem: true
-            highlightMoveDuration: 0
-            highlight: Rectangle { radius: 10; color: "#402F8CFF"; border.width: 1; border.color: "#992F8CFF" }
-            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-            delegate: Item {
-                id: cell
-                required property var modelData
-                required property int index
-                width: grid.cellWidth; height: grid.cellHeight
-                Rectangle {
-                    anchors.fill: parent; anchors.margins: 3; radius: 10
-                    color: cellMouse.containsMouse && grid.currentIndex !== cell.index ? "#14FFFFFF" : "transparent"
-                }
-                FileIcon {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    y: 10; size: 52
-                    name: cell.modelData.name; directory: cell.modelData.directory === true; link: cell.modelData.link === true
-                    opacity: cell.modelData.hidden ? 0.6 : 1
-                }
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    y: 68; width: parent.width - 12
-                    horizontalAlignment: Text.AlignHCenter
-                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere; maximumLineCount: 2; elide: Text.ElideMiddle
-                    text: cell.modelData.name
-                    color: Theme.ink
-                    font.pixelSize: 12; font.family: Theme.fontFamily
-                }
-                MouseArea {
-                    id: cellMouse
-                    anchors.fill: parent; hoverEnabled: true
-                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                    onClicked: (m) => {
-                        grid.currentIndex = cell.index; grid.forceActiveFocus()
-                        if (m.button === Qt.RightButton) itemMenu.popup()
-                        else if (win.adaptive) win.open(cell.modelData)
-                    }
-                    onPressAndHold: { grid.currentIndex = cell.index; itemMenu.popup() }
-                    onDoubleClicked: win.open(cell.modelData)
-                }
-            }
-            Keys.onReturnPressed: win.open(win.selected)
-        }
+        FilesGrid { id: grid; files: win; onMenuRequested: itemMenu.popup() }
 
-        ListView {
-            id: list
-            visible: win.viewMode === "list"
-            anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6
-            anchors.topMargin: win.inTrash ? 50 : 0
-            model: win.shown
-            currentIndex: -1
-            keyNavigationEnabled: true
-            boundsBehavior: Flickable.StopAtBounds
-            reuseItems: true
-            cacheBuffer: 600
-            highlightMoveDuration: 0
-            highlight: Rectangle { radius: 6; color: "#402F8CFF" }
-            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-            readonly property real colDate: win.adaptive && win.width < 700 ? 0 : 132
-            readonly property real colSize: win.adaptive ? 68 : 76
-            readonly property real colMode: win.adaptive && win.width < 700 ? 0 : 88
-            readonly property real colName: width - colDate - colSize - colMode - 24
-            headerPositioning: ListView.OverlayHeader
-            header: Rectangle {
-                width: list.width; height: 28; z: 3
-                color: "#E6101A2C"
-                Row {
-                    x: 10; height: parent.height
-                    Repeater {
-                        model: [
-                            { k: "name", t: "Nom", w: list.colName },
-                            { k: "mtime", t: "Modifié", w: list.colDate },
-                            { k: "size", t: "Taille", w: list.colSize },
-                            { k: "", t: "Droits", w: list.colMode }
-                        ]
-                        Item {
-                            required property var modelData
-                            width: modelData.w; height: parent.height
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: modelData.t + (win.sortKey === modelData.k ? (win.sortAscending ? "  ▲" : "  ▼") : "")
-                                color: "#9FB2D0"; font.pixelSize: 11; font.weight: Font.DemiBold; font.family: Theme.fontFamily
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                enabled: modelData.k.length > 0
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (win.sortKey === modelData.k) win.sortAscending = !win.sortAscending
-                                    else { win.sortKey = modelData.k; win.sortAscending = modelData.k === "name" }
-                                }
-                            }
-                        }
-                    }
-                }
-                Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: "#1FFFFFFF" }
-            }
-            delegate: Item {
-                id: row
-                required property var modelData
-                required property int index
-                width: list.width; height: win.adaptive ? 48 : 30
-                Rectangle {
-                    anchors.fill: parent; radius: 6
-                    color: rowMouse.containsMouse && list.currentIndex !== row.index ? "#12FFFFFF"
-                         : (row.index % 2 ? "#08FFFFFF" : "transparent")
-                }
-                Row {
-                    x: 10; height: parent.height
-                    Item {
-                        width: list.colName; height: parent.height
-                        FileIcon {
-                            size: 20; anchors.verticalCenter: parent.verticalCenter
-                            name: row.modelData.name; directory: row.modelData.directory === true; link: row.modelData.link === true
-                        }
-                        Text {
-                            x: 30; width: parent.width - 36; anchors.verticalCenter: parent.verticalCenter
-                            elide: Text.ElideMiddle
-                            text: row.modelData.name
-                            color: row.modelData.hidden ? Theme.inkMuted : Theme.ink
-                            font.pixelSize: 12; font.family: Theme.fontFamily
-                        }
-                    }
-                    Text { visible: list.colDate > 0; width: list.colDate; anchors.verticalCenter: parent.verticalCenter; text: win.formatDate(row.modelData.mtime); color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily }
-                    Text { width: list.colSize; anchors.verticalCenter: parent.verticalCenter; text: row.modelData.directory ? "—" : win.formatSize(row.modelData.size); color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily }
-                    Text { visible: list.colMode > 0; width: list.colMode; anchors.verticalCenter: parent.verticalCenter; text: row.modelData.mode || ""; color: "#8FA2C2"; font.pixelSize: 11; font.family: "Consolas" }
-                }
-                MouseArea {
-                    id: rowMouse
-                    anchors.fill: parent; hoverEnabled: true
-                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                    onClicked: (m) => {
-                        list.currentIndex = row.index; list.forceActiveFocus()
-                        if (m.button === Qt.RightButton) itemMenu.popup()
-                        else if (win.adaptive) win.open(row.modelData)
-                    }
-                    onPressAndHold: { list.currentIndex = row.index; itemMenu.popup() }
-                    onDoubleClicked: win.open(row.modelData)
-                }
-            }
-            Keys.onReturnPressed: win.open(win.selected)
-        }
+        FilesList { id: list; files: win; onMenuRequested: itemMenu.popup() }
 
         Column {
             visible: !win.busy && win.shown.length === 0
@@ -798,18 +332,6 @@ Item {
         }
     }
 
-    readonly property var sampleTransfers: [
-        { id: 1, upload: true, name: "rapport-2026.pdf", remote: "/home/demo/Documents", state: "running", done: 3460000, total: 5200000, message: "" },
-        { id: 2, upload: false, name: "access.log", remote: "/var/log/nginx/access.log", state: "done", done: 812000, total: 812000, message: "Enregistré : C:/Users/vous/Downloads/access.log" },
-        { id: 3, upload: true, name: "Budget.xlsx", remote: "/home/demo", state: "conflict", done: 0, total: 48200, message: "« Budget.xlsx » existe déjà dans ce dossier." }
-    ]
-    QtObject {
-        id: sampleQueue
-        readonly property var transfers: win.sampleTransfers
-        function cancelTransfer(id) {}
-        function resolveConflict(id, policy) {}
-        function clearFinishedTransfers() {}
-    }
 
     Menu {
         id: itemMenu
@@ -870,7 +392,7 @@ Item {
 
     // Hint under the search field: the filter is local, Enter searches the server.
     Rectangle {
-        visible: win.connected && search.activeFocus && win.filterText.trim().length > 0
+        visible: win.connected && toolbar.searchField.activeFocus && win.filterText.trim().length > 0
         z: 11
         anchors.right: parent.right; anchors.rightMargin: 12
         y: toolbar.height - 4
@@ -894,21 +416,6 @@ Item {
         }
     }
 
-    QtObject {
-        id: sampleSearch
-        readonly property bool searchActive: true
-        readonly property bool searchBusy: false
-        readonly property string searchQuery: "rapport"
-        readonly property string searchMode: "content"
-        readonly property string searchScope: "/home/demo"
-        readonly property string searchInfo: "3 résultats  ·  rg"
-        readonly property var searchResults: [
-            { name: "Rapport été 2026.txt", path: "/home/demo/Documents/Rapport été 2026.txt", line: 2, text: "Voir le rapport mensuel joint, section 3." },
-            { name: "notes.md", path: "/home/demo/Projets/fortiq/notes.md", line: 14, text: "- envoyer le rapport à l'équipe avant vendredi" },
-            { name: "deploy.log", path: "/home/demo/Travail/logs/deploy.log", line: 188, text: "[INFO] rapport de déploiement écrit dans /var/tmp" }
-        ]
-        function cancelSearch() {}
-    }
 
     SearchResults {
         x: content.x; y: content.y
@@ -916,7 +423,7 @@ Item {
         z: 9
         bottomRightRadius: 16
         visible: (win.fixture && win.fixturePreview === "search") || (win.connected && win.controller.searchActive)
-        controller: win.fixture ? sampleSearch : (win.connected ? win.controller : null)
+        controller: win.fixture ? fixtureData.sampleSearch : (win.connected ? win.controller : null)
         onOpenEntry: (entry) => {
             if (entry.directory) { win.controller.clearSearch(); win.filterText = ""; win.controller.navigate(entry.path) }
             else win.controller.openFile(entry.path)
@@ -931,33 +438,10 @@ Item {
         width: Math.min(420, content.width - 24)
         z: 9
         visible: transfers.length > 0
-        controller: win.fixture ? (win.fixturePreview === "transfers" ? sampleQueue : null)
+        controller: win.fixture ? (win.fixturePreview === "transfers" ? fixtureData.sampleQueue : null)
                                 : (win.connected || (win.controller && win.controller.transfers.length > 0) ? win.controller : null)
     }
 
-    QtObject {
-        id: samplePreview
-        readonly property bool previewBusy: false
-        readonly property string previewKind: win.fixturePreview === "editor" ? "text" : win.fixturePreview
-        readonly property string previewPath: win.fixturePreview === "image" ? "/home/demo/Montagne.jpg" : "/home/demo/Notes.txt"
-        readonly property string previewInfo: win.fixturePreview === "image" ? "2,4 Mo" : "1,8 Ko — 12 lignes"
-        readonly property string previewImage: win.fixturePreview === "image" ? Qt.resolvedUrl("../../assets/wallpapers/aurora.jpg") : ""
-        readonly property bool previewEditable: win.fixturePreview === "text" || win.fixturePreview === "editor"
-        readonly property bool saving: false
-        readonly property string previewText: "# Notes — exemple de démonstration
-
-Réunion projet CYBOU : 14:00 – 15:00
-- vérifier les journaux de nginx
-- mettre à jour /etc/fortiq/notes.conf
-
-Привет, это тест UTF-8 ✓
-
-TODO:
-  1. Smart Files : aperçu
-  2. Logs : filtres
-Fin.
-"
-    }
 
     FileViewer {
         adaptive: win.adaptive
@@ -968,7 +452,7 @@ Fin.
         objectName: "fileViewer"
         visible: (win.fixture && ["text", "image", "editor"].indexOf(win.fixturePreview) >= 0) || (win.connected && win.controller.previewOpen)
         Component.onCompleted: if (win.fixture && win.fixturePreview === "editor") { startEditing(); dirty = true }
-        controller: win.fixture ? samplePreview : (win.connected ? win.controller : null)
+        controller: win.fixture ? fixtureData.samplePreview : (win.connected ? win.controller : null)
         bottomRightRadius: 16
         onClosed: { win.controller.closePreview(); win.view.forceActiveFocus() }
     }
@@ -992,35 +476,7 @@ Fin.
     }
 
     // ── status bar ─────────────────────────────────────────────────────
-    Item {
-        id: statusBar
-        x: win.contentLeft; y: parent.height - height
-        width: parent.width - x; height: 26
-        visible: win.fixture || win.connected
-        Rectangle { width: parent.width; height: 1; color: "#14FFFFFF" }
-        Text {
-            x: 14; anchors.verticalCenter: parent.verticalCenter
-            width: parent.width - 120; elide: Text.ElideRight
-            color: win.notice.length > 0 ? (win.noticeError ? "#FCA5A5" : "#86EFAC") : Theme.inkMuted
-            font.pixelSize: 11; font.family: Theme.fontFamily
-            text: {
-                if (win.notice.length > 0) return win.notice
-                const base = win.shown.length + " élément" + (win.shown.length > 1 ? "s" : "")
-                    + " · " + win.folderCount + " dossier" + (win.folderCount > 1 ? "s" : "")
-                if (!win.selected) return base
-                const s = win.selected
-                return base + "   ·   " + s.name + (s.directory ? "" : " — " + win.formatSize(s.size))
-                    + (s.owner ? " — " + s.owner : "") + (s.mode ? " — " + s.mode : "")
-            }
-        }
-        Text {
-            anchors.right: parent.right; anchors.rightMargin: 22
-            anchors.verticalCenter: parent.verticalCenter
-            color: "#7F93B5"
-            font.pixelSize: 10; font.family: Theme.fontFamily
-            text: win.fixture || !win.connected ? "SFTP" : (win.busy ? "chargement…" : "SFTP · " + win.controller.lastLatencyMs + " ms")
-        }
-    }
+    FilesStatusBar { id: statusBar; files: win }
 
     // ── resize grip ────────────────────────────────────────────────────
     MouseArea {

@@ -257,3 +257,10 @@ follow, journal/file scripts, apply), `LogsAnalysis.cpp` (repeat groups, journal
 `LogsInspector.cpp` (evidence-linked synthesis, incident inspector, report), `LogsServices.cpp` (service and source loading)
 and the internal `LogsControllerInternal.h`; moved verbatim by script. Verified: CTest 11/11, Logs QtTest **11 passed, 0 skipped**
 with `FORTIQ_TEST_WSL=Debian` (real Linux reader), and the live integration suite **27 passed, 0 failed, 3 skipped**.
+
+Refactor, step 4 (no behaviour change): `FilesWindow.qml` (1038 → 494 lines) now composes `FilesSidebar`, `FilesToolbar`,
+`FilesTrashBanner`, `FilesGrid`, `FilesList`, `FilesStatusBar` and `FilesFixtureData` (visual-only reference samples); the code
+was moved by script with `win` renamed to the injected `files` property, and the same ids/objectNames are kept. Verified: CTest
+11/11 (layout 47/47) and a pixel comparison of all 66 layout captures before/after: the 58 deterministic ones are identical
+(tolerance 24/255), the other 8 differ only by the live clock. Not covered by automated tests: the sort menu, context menu
+and drag-and-drop upload (moved verbatim, not exercised).

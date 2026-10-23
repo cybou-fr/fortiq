@@ -73,6 +73,13 @@ set(FORTIQ_SHELL_QML
     qml/shell/TopBar.qml
     qml/shell/ClockWidget.qml
     qml/shell/FilesWindow.qml
+    qml/shell/FilesSidebar.qml
+    qml/shell/FilesToolbar.qml
+    qml/shell/FilesTrashBanner.qml
+    qml/shell/FilesGrid.qml
+    qml/shell/FilesList.qml
+    qml/shell/FilesStatusBar.qml
+    qml/shell/FilesFixtureData.qml
     qml/shell/LauncherPanel.qml
     qml/shell/BrowserWindow.qml
     qml/shell/ControlCenter.qml
