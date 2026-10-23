@@ -1,0 +1,104 @@
+=== psql NULL marker in csv
+n,e,v
+<<N-7f3a>>,,x
+=== psql unaligned with separators (names + types)
+0000000   a 037   b 037   c 036   1 037   <   <   N   -   7   f   3   a
+0000020   >   > 037   x 036   (   1       r   o   w   )  \n
+0000035
+=== psql multiple statements in one -c / stdin script
+a
+1
+b,c
+two,<<N>>
+=== psql read-only start option still blocks write on stdin script
+ERROR:  cannot execute INSERT in a read-only transaction
+exit=1
+=== psql user can disable the guard (documented limitation)
+SET
+ ?column? 
+----------
+        1
+(1 row)
+
+exit=0
+=== psql BEGIN READ ONLY wrapper
+BEGIN
+ERROR:  cannot execute CREATE TABLE in a read-only transaction
+=== binary and special values
+b,c,f,d,arr,j
+\x00ff,a  ,1.5,t,"{1,2}","{""k"":1}"
+=== psql version flags
+psql (PostgreSQL) 17.11 (Debian 17.11-0+deb13u1)
+17.11 (Debian 17.11-0+deb13u1)
+=== install mariadb-server (disposable) and test --xml/--batch
+apt-exit=0
+-- batch raw (NULL ambiguity):
+id	name	note	score
+1	Zoë Müller	café "q", c;s	12.50
+2	Иван	NULL	NULL
+3	NULL	NULL	0.00
+4	tab	here	nl
+here	1.00
+-- batch (escaped):
+id	name	note	score
+1	Zoë Müller	café "q", c;s	12.50
+2	Иван	NULL	NULL
+3	NULL	NULL	0.00
+4	tab\there	nl\nhere	1.00
+-- xml:
+<?xml version="1.0"?>
+
+<resultset statement="select * from people
+" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <row>
+	<field name="id">1</field>
+	<field name="name">Zoë Müller</field>
+	<field name="note">café &quot;q&quot;, c;s</field>
+	<field name="score">12.50</field>
+  </row>
+
+  <row>
+	<field name="id">2</field>
+	<field name="name">Иван</field>
+	<field name="note" xsi:nil="true" />
+	<field name="score" xsi:nil="true" />
+  </row>
+
+  <row>
+	<field name="id">3</field>
+	<field name="name">NULL</field>
+	<field name="note">NULL</field>
+	<field name="score">0.00</field>
+  </row>
+
+  <row>
+	<field name="id">4</field>
+	<field name="name">tab	here</field>
+	<field name="note">nl
+here</field>
+	<field name="score">1.00</field>
+  </row>
+</resultset>
+-- error:
+--------------
+selct
+--------------
+
+ERROR 1064 (42000) at line 1: You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'selct' at line 1
+exit=1
+-- wrong password:
+ERROR 1045 (28000): Access denied for user 'fqdb'@'localhost' (using password: YES)
+exit=1
+-- read only guard:
+--------------
+insert into people(name) values('x')
+--------------
+
+ERROR 1792 (25006) at line 1: Cannot execute statement in a READ ONLY transaction
+exit=1
+-- schema:
+table_name	table_type
+people	BASE TABLE
+-- max rows / timeout:
+ERROR 1969 (70100) at line 1: Query execution was interrupted (max_statement_time exceeded)
+exit=1

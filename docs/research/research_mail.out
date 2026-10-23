@@ -1,0 +1,28 @@
+apt-exit=0
+notmuch 0.39
+isync 1.5.1
+msmtp version 1.8.28
+Processed 3 total files in almost no time.
+Added 2 new messages to the database.
+-- search json:
+[{"thread": "0000000000000001", "timestamp": 1792580400, "date_relative": "Wed. 13:00", "matched": 2, "total": 2, "authors": "Zoë Müller, bob@example.com", "subject": "Café au lait ✓", "query": ["id:m1@example.org id:m2@example.com", null], "tags": ["inbox", "unread"]}]
+
+-- show json (thread, body):
+[[[{"id": "m1@example.org", "match": true, "excluded": false, "filename": ["/home/fqshell/mailtest/Maildir/new/1.eml"], "timestamp": 1792576800, "date_relative": "Wed. 12:00", "tags": ["inbox", "unread"], "duplicate": 1, "body": [{"id": 1, "content-type": "multipart/alternative", "content": [{"id": 2, "content-type": "text/plain", "content": "Bonjour, plain text body."}, {"id": 3, "content-type": "text/html", "content-charset": "utf-8", "content-length": 121}]}], "crypto": {}, "headers": {"Subject": "Café au lait ✓", "From": "Zoë Müller <zoe@example.org>", "To": "me@example.net", "Date": "Wed, 21 Oct 2026 10:00:00 +0000"}}, [[{"id": "m2@example.com", "match": true, "excluded": false, "filename": ["/home/fqshell/mailtest/Maildir/new/2.eml"], "timestamp": 1792580400, "date_relative": "Wed. 13:00", "tags": ["inbox", "unread"], "duplicate": 1, "body": [{"id": 1, "content-type": "text/plain", "content": "Reply with an attachment mention.\n"}], "crypto": {}, "headers": {"Subject": "Re: Café au lait ✓", "From": "bob@example.com", "To": "me@example.net", "Date": "Wed, 21 Oct 2026 11:00:00 +0000"}}, []]]]]]
+
+-- tag:
+important
+inbox
+unread
+-- count:
+2
+-- search injection safety: query is data:
+[]
+
+-- mbsync config check (no server): 
+No channels defined. Try 'man mbsync'
+-- msmtp dry run options:
+  msmtp [option...] --serverinfo
+  -S, --serverinfo             print information about the server
+  -C, --file=filename          set configuration file
+  --passwordeval=[eval]        evaluate password for authentication

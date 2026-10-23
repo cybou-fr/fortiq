@@ -1,0 +1,125 @@
+=== postgres cluster
+PostgreSQL 17.11 (Debian 17.11-0+deb13u1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+=== psql modes (as fqdb)
+-- csv:
+id,name,note,born,score
+1,Zoë Müller,"café ""quoted"", comma;semi",1990-05-01,12.50
+2,Иван,"line1
+line2	tab",1985-12-31,
+3,NULL-test,,,0.00
+-- tuples-only unaligned tab:
+1	Zoë Müller	12.50
+2	Иван	
+3	NULL-test	0.00
+-- json via json_agg:
+[{"id":1,"name":"Zoë Müller","note":"café \"quoted\", comma;semi","born":"1990-05-01","score":12.50,"data":{"a": 1, "b": [1, 2]}}, 
+ {"id":2,"name":"Иван","note":"line1\nline2\ttab","born":"1985-12-31","score":null,"data":null}, 
+ {"id":3,"name":"NULL-test","note":null,"born":null,"score":0.00,"data":{}}]
+-- null vs empty in csv:
+n,e
+,
+-- row cap by wrapper:
+1000
+-- error (syntax):
+ERROR:  syntax error at or near "selct"
+LINE 1: selct 1
+        ^
+exit=1
+-- error (no table) with ON_ERROR_STOP:
+ERROR:  relation "nope" does not exist
+LINE 1: select * from nope
+                      ^
+exit=1
+-- wrong password:
+psql: error: connection to server at "127.0.0.1", port 5432 failed: FATAL:  password authentication failed for user "fqdb"
+connection to server at "127.0.0.1", port 5432 failed: FATAL:  password authentication failed for user "fqdb"
+exit=2
+-- connection refused:
+psql: error: connection to server at "127.0.0.1", port 59999 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
+exit=2
+-- read-only session:
+SET
+CREATE TABLE
+exit=0
+-- read-only via PGOPTIONS:
+ERROR:  cannot execute CREATE TABLE in a read-only transaction
+exit=1
+-- statement timeout:
+ERROR:  canceling statement due to statement timeout
+exit=1
+-- list databases:
+fqtest
+postgres
+-- schema introspection:
+table_name,table_type
+big,BASE TABLE
+people,BASE TABLE
+t2,BASE TABLE
+v_people,VIEW
+-- columns:
+column_name,data_type,is_nullable
+id,integer,NO
+name,text,YES
+note,text,YES
+born,date,YES
+score,numeric,YES
+data,jsonb,YES
+-- big output size (20000 rows):
+4788902
+-- ssl info:
+on
+-- processlist-ish:
+6
+=== sqlite3
+-- json:
+[{"id":1,"name":"Zoë","note":"a,b\"c","score":1.5,"b":"u0000uffffffffu0010"},
+{"id":2,"name":"Иван","note":null,"score":null,"b":null}]
+-- csv header:
+id,name,note,score
+1,"Zoë","a,b""c",1.5
+2,"Иван",,
+-- readonly open + write attempt:
+Error: stepping, attempt to write a readonly database (8)
+exit=8
+-- query_only pragma:
+Error: stepping, attempt to write a readonly database (8)
+exit=8
+-- syntax error:
+Error: in prepare, near "selct": syntax error
+  selct
+  ^--- error here
+exit=1
+-- missing file readonly:
+Error: unable to open database "/tmp/nope.db": unable to open database file
+exit=1
+-- schema:
+[{"name":"people","type":"table"}]
+-- columns:
+[{"cid":0,"name":"id","type":"INTEGER","notnull":0,"dflt_value":null,"pk":1},
+{"cid":1,"name":"name","type":"TEXT","notnull":0,"dflt_value":null,"pk":0},
+{"cid":2,"name":"note","type":"TEXT","notnull":0,"dflt_value":null,"pk":0},
+{"cid":3,"name":"score","type":"REAL","notnull":0,"dflt_value":null,"pk":0},
+{"cid":4,"name":"b","type":"BLOB","notnull":0,"dflt_value":null,"pk":0}]
+-- not a db:
+1
+exit=0
+-- timeout/bail:
+2
+=== mariadb client flags
+--defaults-extra-file=#   Read this file after the global files are read.
+  -B, --batch         Don't use history file. Disable interactive behavior.
+                      is combined with either 1) piped input, 2) the --batch
+                      (Defaults to on; use --skip-column-names to disable.)
+  -N, --skip-column-names 
+                      expired password sandbox mode even if --batch was
+  --connect-timeout=# Number of seconds before connection timeout.
+                      work in batch mode. Disable with --disable-pager. This
+                      --batch mode if verbose is not set (as then the query
+  -r, --raw           Write fields without conversion. Used with --batch.
+  --ssl               Enable SSL for connection (automatically enabled with
+                      (Defaults to on; use --skip-ssl to disable.)
+-- no server: connection error format:
+WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
+ERROR 2002 (HY000): Can't connect to server on '127.0.0.1' (115)
+exit=1

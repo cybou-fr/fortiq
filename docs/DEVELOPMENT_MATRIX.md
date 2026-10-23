@@ -23,12 +23,13 @@ Android arm64 debug APK прошёл базовые SSH/SFTP, поворот/IME
 | 07 | Search | §find§/§grep§/§rg§ (серверное) | R1 | не реализовано |
 | 02 | Editor | §cat§/§stat§/§mktemp§/§mv§ | R2 | не реализовано |
 | 03 | MDok / Markdown | SFTP, существующие safe-save primitives Files; Qt Markdown preview | R2 | [первый Markdown-срез](MDOK.md), PDF не реализован |
-| 04 | Mail | проверенная серверная CLI, §sendmail§/§mail§ | R2+ | не реализовано |
+| 04 | Mail | проверенная серверная CLI: §mbsync§ + §notmuch§ + §msmtp§ (кандидаты, [исследование](APPS_RESEARCH.md)) | R2+ | не реализовано; исследование 23.10.2026, выбор за владельцем |
 | 05 | Browser | **`curl` на сервере по SSH** ([BROWSER](BROWSER.md)); позже WebView с доказанным SSH SOCKS-only | R2+ (первый срез), R3+ (движок) | **первый срез 23.10.2026:** адресная строка, HTML/текст/JSON/изображения без JavaScript, режим чтения, панель ответа (заголовки, длительности, редиректы, TLS), история, задачи; проверено на тестовом Debian; JS/CSS/формы/cookies нет, Android на устройстве не запускался |
 | 06 | Viewer | §file§/§pdfinfo§/§pdftoppm§/SFTP | R2 | не реализовано |
 | 09 | Processes | §ps§ (чтение); §kill§ — позже ([SYSTEM](SYSTEM.md)) | R1.5+ | **первый срез 23.10.2026, только чтение:** список с CPU/памятью/состоянием, фильтр, сортировка, автообновление, детали процесса; сигналы и завершение процессов не реализованы |
 | 11 | Network | §ip -j§/§ss§/§getent§/§ping§/§tracepath§ ([NETWORK](NETWORK.md)) | R1.5+ | **первый срез 23.10.2026, только чтение:** интерфейсы, порты в прослушивании с оценкой доступности снаружи, маршруты, DNS, диагностика resolve/ping/trace на сервере (задачи); проверено на тестовом Debian; изменения сети, захват пакетов, сканер, файрвол не реализованы |
 | 13 | Disks | §lsblk§/§findmnt§, JSON по SSH | R2+ | [первый read-only обзор](DISKS.md): устройства/разделы, mounts, ёмкость; нет операций/SMART/du |
+| 15 | Databases / Messengers | §sqlite3§/§psql§/§mariadb§; §signal-cli§ jsonRpc ([исследование](APPS_RESEARCH.md)) | R2+ | не реализовано; исследование 23.10.2026: клиенты БД проверены на Debian 13, Signal требует Java 25 вне apt — решения за владельцем |
 | 14 | Server Setup | §apt-get§/§systemctl§/§fail2ban§/§ufw§ | R2+ после безопасного согласия | не реализовано |
 | AI | необязательная §ai§/llama.cpp | серверный §llama-cli§ + обёртка | позже | не реализовано |
 
