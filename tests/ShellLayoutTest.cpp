@@ -136,6 +136,36 @@ QtObject {
     function reload() { reloads = reloads + 1 }
     function setWindowActive(a) {}
 })";
+static const char kFakeDb[] = R"(import QtQml
+QtObject {
+    property bool canEdit: true
+    property bool secretStoreAvailable: true
+    property var profiles: [ { id: 'p1', serverId: 's', name: 'Local', engine: 'sqlite', path: '/home/u/a.db', host: '', port: 5432, user: '', database: '', hasPassword: false, summary: '/home/u/a.db' } ]
+    property string selectedId: 'p1'
+    property var selected: profiles[0]
+    property bool busy: false
+    property string status: 'Terminé · lecture seule'
+    property string error: ''
+    property var columns: ['id', 'name', 'score']
+    property var rows: [ [ '1', 'Zoë', '1.5' ], [ '2', null, null ] ]
+    property var numeric: [ true, false, true ]
+    property bool truncated: false
+    property string resultInfo: '2 ligne(s), 3 colonne(s)'
+    property var schema: [ { schema: '', name: 'people', kind: 'table', label: 'people', columns: [ { name: 'id', type: 'INTEGER', nullable: false }, { name: 'name', type: 'TEXT', nullable: true } ] } ]
+    property string schemaStatus: ''
+    property int timeoutSec: 15
+    property int maxRows: 500
+    property var calls: []
+    function select(id) { calls = calls.concat(['select:' + id]) }
+    function runQuery(sql) { calls = calls.concat(['run:' + sql]) }
+    function cancelQuery() {}
+    function loadSchema() {}
+    function setLimits(t, r) { calls = calls.concat(['limits:' + t + ':' + r]) }
+    function selectAllFor(o) { return 'SELECT * FROM "' + o.name + '" LIMIT 100' }
+    function saveProfile(p, pw, clear) { calls = calls.concat(['save:' + p.name + ':' + p.engine + ':' + p.host + ':' + p.port + ':' + p.user + ':' + p.database + ':' + pw]); return '' }
+    function removeProfile(id) {}
+    function setWindowActive(a) {}
+})";
 static const char kFakeRemote[] = R"(import QtQml
 QtObject { property bool connected: true; property string serverLabel: "fixture@server" })";
 #endif
@@ -356,6 +386,55 @@ private slots:
                 click(findByName(sysWin, "systemAuto"));
                 shell->setProperty("systemOpen", false);
                 shell->setProperty("systemController", QVariant::fromValue<QObject *>(nullptr));
+            }
+            {   // Bases de données: profile list, schema, read-only editor and the profile form.
+                QQmlComponent dbComponent(&engine), dbRemoteComponent(&engine);
+                dbComponent.setData(kFakeDb, QUrl());
+                dbRemoteComponent.setData(kFakeRemote, QUrl());
+                auto *fakeDb = dbComponent.create(); QVERIFY2(fakeDb, qPrintable(dbComponent.errorString()));
+                auto *dbRemote = dbRemoteComponent.create(); QVERIFY2(dbRemote, qPrintable(dbRemoteComponent.errorString()));
+                fakeDb->setParent(window); dbRemote->setParent(window);
+                shell->setProperty("dbController", QVariant::fromValue(fakeDb));
+                shell->setProperty("dbOpen", true);
+                shell->setProperty("foregroundApp", "db");
+                QTest::qWait(80);
+                auto *dbWin = shell->findChild<QQuickItem *>("dbWindow"); QVERIFY(dbWin); QVERIFY(dbWin->isVisible());
+                dbWin->setProperty("remote", QVariant::fromValue(dbRemote));
+                QVERIFY(dbWin->x() >= 0 && dbWin->y() >= 47 && dbWin->x() + dbWin->width() <= shell->width());
+                QTest::qWait(100);
+                auto click = [&](QQuickItem *item) {
+                    QVERIFY(item);
+                    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
+                    QTest::qWait(60);
+                };
+                auto *rows = findByName(dbWin, "dbRows"); QVERIFY(rows); QVERIFY(rows->isVisible());
+                QCOMPARE(rows->property("count").toInt(), 2);
+                QCOMPARE(dbWin->property("schemaRows").toList().size(), 1);          // collapsed: only the table
+                QVERIFY(findByName(dbWin, "dbInfo")); QVERIFY(!findByName(dbWin, "dbError")->isVisible());
+                QVERIFY(window->grabWindow().save(QString("layout-captures/%1-db.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+                // Ctrl+Enter runs the SQL in the editor; the SQL goes to the controller as typed.
+                auto *editor = findByName(dbWin, "dbEditor"); QVERIFY(editor);
+                editor->setProperty("text", "select 1");
+                editor->forceActiveFocus();
+                QTest::keyClick(window, Qt::Key_Return, Qt::ControlModifier);
+                QTRY_VERIFY(fakeDb->property("calls").toStringList().contains("run:select 1"));
+                // The profile form collects a PostgreSQL profile; the password goes to the controller once and the field is cleared.
+                click(findByName(dbWin, "dbNewProfile"));
+                auto *form = findByName(dbWin, "dbForm"); QVERIFY(form); QTRY_VERIFY(form->isVisible());
+                click(findByName(dbWin, "dbEngine_postgres"));
+                findByName(dbWin, "dbName")->setProperty("text", "Prod");
+                findByName(dbWin, "dbHost")->setProperty("text", "db.local");
+                findByName(dbWin, "dbPort")->setProperty("text", "5433");
+                findByName(dbWin, "dbUser")->setProperty("text", "ro");
+                findByName(dbWin, "dbDatabase")->setProperty("text", "app");
+                findByName(dbWin, "dbPassword")->setProperty("text", "s3cret");
+                QVERIFY(window->grabWindow().save(QString("layout-captures/%1-db-form.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+                click(findByName(dbWin, "dbFormSave"));
+                QTRY_VERIFY(!form->isVisible());
+                QVERIFY(fakeDb->property("calls").toStringList().contains("save:Prod:postgres:db.local:5433:ro:app:s3cret"));
+                QVERIFY(findByName(dbWin, "dbPassword")->property("text").toString().isEmpty());
+                shell->setProperty("dbOpen", false);
+                shell->setProperty("dbController", QVariant::fromValue<QObject *>(nullptr));
             }
             {   // Réseau: read-only sections and diagnostics that run on the server.
                 QQmlComponent netComponent(&engine), netRemoteComponent(&engine);

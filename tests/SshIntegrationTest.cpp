@@ -10,6 +10,8 @@
 #include "browser/BrowserController.h"
 #include "network/NetworkController.h"
 #include "system/SystemController.h"
+#include "db/DbController.h"
+#include "core/SecretStore.h"
 #include "core/TerminalController.h"
 #include "core/DisksController.h"
 #include "core/DocumentsController.h"
@@ -1251,6 +1253,183 @@ private slots:
         QCOMPARE(net.state(), QStringLiteral("disconnected"));
         QVERIFY(net.interfaces().isEmpty() && net.listeners().isEmpty() && net.probeOutput().isEmpty());
         settings.remove(pin);
+    }
+
+    // The Bases de données app against the test server: SQLite file and PostgreSQL 17 (role fqdb / base fqtest).
+    // Needs FORTIQ_IT_DB=1 and the PostgreSQL cluster running (`pg_ctlcluster 17 main start`).
+    void databaseAppIsReadOnlyAndBounded() {
+        if (qEnvironmentVariable("FORTIQ_IT_DB").isEmpty()) QSKIP("FORTIQ_IT_DB not set");
+        fortiq::RemoteController controller;
+        QSettings settings;
+        settings.remove("servers/profiles"); settings.remove("db/profiles");
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        const QString serverId = controller.saveServer({ { "name", "DB test" }, { "host", base.host }, { "port", base.port }, { "user", base.user }, { "keyPath", key } });
+        QVERIFY(!serverId.isEmpty());
+        controller.connectTo(serverId, key.isEmpty() ? base.password : QString());
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+
+        auto shell = [&](const QString &script) {
+            fortiq::SshSession session;
+            const SshResult opened = session.open(controller.connectionRequest());
+            if (opened.status != SshResult::Status::Ok) return opened;
+            return session.runScript(script.toUtf8(), 65536, {});
+        };
+        const SshResult made = shell(QStringLiteral("rm -f /tmp/fq_it.db /tmp/fq_pwned\n"
+            "sqlite3 /tmp/fq_it.db \"create table people(id integer primary key, name text, note text, score real); "
+            "insert into people values (1,'Zoë','it''s',1.5),(2,'Иван',NULL,NULL),(3,'NULL','',0);\"\n"));
+        QVERIFY2(made.status == SshResult::Status::Ok && made.code == "exit:0", qPrintable(made.message));
+
+        fortiq::DbController db(&controller);
+        auto run = [&](const QString &sql) {
+            db.runQuery(sql);
+            if (db.busy()) QTRY_VERIFY_WITH_TIMEOUT(!db.busy(), 30000);
+        };
+        auto cellOf = [&](int row, int col) { return db.rows().at(row).toList().at(col); };
+
+        // ---- SQLite ----
+        QVERIFY(!db.saveProfile({ { "name", "Fichier" }, { "engine", "sqlite" }, { "path", "relative.db" } }, QString(), false).isEmpty());
+        QVERIFY(db.saveProfile({ { "name", "Fichier" }, { "engine", "sqlite" }, { "path", "/tmp/fq_it.db" } }, QString(), false).isEmpty());
+        QCOMPARE(db.profiles().size(), 1);
+        QVERIFY(!db.selectedId().isEmpty());
+        db.loadSchema();
+        QTRY_VERIFY_WITH_TIMEOUT(!db.busy() && !db.schema().isEmpty(), 20000);
+        QCOMPARE(db.schema().first().toMap().value("name").toString(), QStringLiteral("people"));
+        QCOMPARE(db.schema().first().toMap().value("columns").toList().size(), 4);
+
+        const int tasksBefore = controller.tasks()->count();
+        run("select * from people order by id");
+        QVERIFY2(db.error().isEmpty(), qPrintable(db.error()));
+        QCOMPARE(db.rows().size(), 3);
+        QCOMPARE(db.columns(), QStringList({ "id", "name", "note", "score" }));
+        QCOMPARE(cellOf(0, 1).toString(), QString::fromUtf8("Zo\xC3\xAB"));
+        QCOMPARE(cellOf(0, 2).toString(), QStringLiteral("it's"));
+        QVERIFY(cellOf(1, 2).isNull());                         // NULL
+        QVERIFY(!cellOf(2, 1).isNull());                        // the text 'NULL'
+        QCOMPARE(cellOf(2, 1).toString(), QStringLiteral("NULL"));
+        QVERIFY(!cellOf(2, 2).isNull());
+        QCOMPARE(cellOf(2, 2).toString(), QString());           // empty string
+        QCOMPARE(controller.tasks()->count(), tasksBefore + 1);
+        QCOMPARE(controller.tasks()->tasks().constLast().toMap().value("kind").toString(), QStringLiteral("dbQuery"));
+        QVERIFY(!controller.tasks()->tasks().constLast().toMap().value("title").toString().contains("people"));   // the SQL never reaches the task list
+
+        // Refused before sending: no task, no change, nothing executed on the server.
+        const int tasksNow = controller.tasks()->count();
+        for (const QString &bad : { QStringLiteral("delete from people"), QStringLiteral("select 1; delete from people"),
+                                    QStringLiteral(".shell touch /tmp/fq_pwned"), QStringLiteral("select 1\n.shell touch /tmp/fq_pwned"),
+                                    QStringLiteral("drop table people"), QStringLiteral("attach database '/tmp/x' as x") }) {
+            db.runQuery(bad);
+            QVERIFY2(!db.busy() && !db.error().isEmpty(), qPrintable(bad));
+        }
+        QCOMPARE(controller.tasks()->count(), tasksNow);
+        // Second layer: a WITH ... DELETE passes the keyword check but sqlite3 -readonly refuses it.
+        run("with x as (select 1) delete from people");
+        QVERIFY(!db.error().isEmpty());
+        run("select count(*) from people");
+        QCOMPARE(cellOf(0, 0).toString(), QStringLiteral("3"));
+        QCOMPARE(QString::fromUtf8(shell(QStringLiteral("[ -e /tmp/fq_pwned ] && echo YES || echo NO\n")).data).trimmed(), QStringLiteral("NO"));
+
+        // Row limit and truncation flag.
+        db.setLimits(15, 5);
+        run("with recursive c(x) as (select 1 union all select x+1 from c limit 100) select x from c");
+        QCOMPARE(db.rows().size(), 5);
+        QVERIFY(db.truncated());
+        QVERIFY(db.resultInfo().contains("tronqué"));
+        // Time limit: an endless query ends with a clear message, the connection stays usable.
+        db.setLimits(2, 500);
+        QElapsedTimer timer; timer.start();
+        run("with recursive c(x) as (select 1 union all select x+1 from c) select count(*) from c");
+        QVERIFY2(db.error().contains("Délai"), qPrintable(db.error()));
+        QVERIFY(timer.elapsed() < 12000);
+        run("select 1 as one");
+        QVERIFY(db.error().isEmpty()); QCOMPARE(cellOf(0, 0).toString(), QStringLiteral("1"));
+        // Cancel
+        db.setLimits(60, 500);
+        db.runQuery("with recursive c(x) as (select 1 union all select x+1 from c) select count(*) from c");
+        QTRY_VERIFY_WITH_TIMEOUT(db.busy(), 5000);
+        QTest::qWait(500);
+        timer.restart();
+        db.cancelQuery();
+        QTRY_VERIFY_WITH_TIMEOUT(!db.busy(), 8000);
+        QVERIFY(timer.elapsed() < 8000);
+        QCOMPARE(controller.tasks()->tasks().constLast().toMap().value("state").toString(), QStringLiteral("cancelled"));
+        db.setLimits(15, 500);
+        // Missing file
+        QVERIFY(db.saveProfile({ { "name", "Absent" }, { "engine", "sqlite" }, { "path", "/tmp/fq_absent.db" } }, QString(), false).isEmpty());
+        run("select 1");
+        QVERIFY2(db.error().contains("n'existe pas"), qPrintable(db.error()));
+
+        // ---- PostgreSQL ----
+        QVERIFY(db.saveProfile({ { "name", "PG" }, { "engine", "postgres" }, { "host", "127.0.0.1" }, { "port", 5432 }, { "user", "fqdb" }, { "database", "fqtest" } },
+                               QStringLiteral("fqdb-test-pw"), false).isEmpty());
+        const QString pgId = db.selectedId();
+        QVERIFY(db.selected().value("hasPassword").toBool());
+        QVERIFY(!settings.value("db/profiles").toByteArray().contains("fqdb-test-pw"));   // the password is never in the settings
+        QVERIFY(fortiq::SecretStore::load("db-" + pgId).ok);
+        db.loadSchema();
+        QTRY_VERIFY_WITH_TIMEOUT(!db.busy() && !db.schema().isEmpty(), 20000);
+        bool hasPeople = false;
+        for (const QVariant &o : db.schema()) hasPeople |= o.toMap().value("name").toString() == "people";
+        QVERIFY(hasPeople);
+        run("select id, name, note, score from people order by id");
+        QVERIFY2(db.error().isEmpty(), qPrintable(db.error()));
+        QCOMPARE(db.rows().size(), 3);
+        QCOMPARE(cellOf(0, 1).toString(), QString::fromUtf8("Zo\xC3\xAB M\xC3\xBCller"));
+        QVERIFY(cellOf(1, 3).isNull());                        // numeric NULL
+        QVERIFY(cellOf(1, 2).toString().contains("line1"));
+        QVERIFY(db.numeric().first().toBool());
+        // The password is never on a command line of the server.
+        db.runQuery("select pg_sleep(4)");
+        QTRY_VERIFY_WITH_TIMEOUT(db.busy(), 5000);
+        QTest::qWait(1500);
+        const SshResult ps = shell(QStringLiteral("ps -eo args | grep -v grep | grep -c 'fqdb-test-pw'; true\n"));
+        QCOMPARE(QString::fromUtf8(ps.data).trimmed(), QStringLiteral("0"));
+        QTRY_VERIFY_WITH_TIMEOUT(!db.busy(), 15000);
+        // Layered guard: WITH ... INSERT passes the keyword check but the read-only session refuses it.
+        run("with x as (insert into people(name) values ('hack') returning *) select * from x");
+        QVERIFY2(db.error().contains("lecture seule"), qPrintable(db.error()));
+        run("select count(*) from people");
+        QCOMPARE(cellOf(0, 0).toString(), QStringLiteral("3"));
+        for (const QString &bad : { QStringLiteral("insert into people(name) values ('x')"), QStringLiteral("set default_transaction_read_only=off"),
+                                    QStringLiteral("select 1; select 2"), QStringLiteral("\\! touch /tmp/fq_pwned"), QStringLiteral("select 1 \\g") }) {
+            db.runQuery(bad);
+            QVERIFY2(!db.busy() && !db.error().isEmpty(), qPrintable(bad));
+        }
+        QCOMPARE(QString::fromUtf8(shell(QStringLiteral("[ -e /tmp/fq_pwned ] && echo YES || echo NO\n")).data).trimmed(), QStringLiteral("NO"));
+        // Server-side statement timeout.
+        db.setLimits(2, 500);
+        timer.restart();
+        run("select pg_sleep(30)");
+        QVERIFY2(db.error().contains("Délai"), qPrintable(db.error()));
+        QVERIFY(timer.elapsed() < 12000);
+        // Large output is bounded.
+        db.setLimits(30, 100);
+        run("select * from big");
+        QVERIFY2(db.error().isEmpty(), qPrintable(db.error()));
+        QVERIFY(db.rows().size() <= 100);
+        db.setLimits(15, 500);
+        // Wrong password: a clear message, no secret in it.
+        QVERIFY(db.saveProfile({ { "id", pgId }, { "name", "PG" }, { "engine", "postgres" }, { "host", "127.0.0.1" }, { "port", 5432 }, { "user", "fqdb" }, { "database", "fqtest" } },
+                               QStringLiteral("wrong-pw"), false).isEmpty());
+        run("select 1");
+        QVERIFY2(db.error().contains("Authentification"), qPrintable(db.error()));
+        QVERIFY(!db.error().contains("wrong-pw"));
+        // Changing the target drops the stored password (it must not be sent to a new host).
+        QVERIFY(db.saveProfile({ { "id", pgId }, { "name", "PG" }, { "engine", "postgres" }, { "host", "localhost" }, { "port", 5432 }, { "user", "fqdb" }, { "database", "fqtest" } },
+                               QString(), false).isEmpty());
+        QVERIFY(!db.selected().value("hasPassword").toBool());
+        QVERIFY(!fortiq::SecretStore::load("db-" + pgId).ok);
+
+        // ---- cleanup: disconnect clears results; removing the server removes its profiles ----
+        shell(QStringLiteral("rm -f /tmp/fq_it.db"));
+        controller.disconnectServer();
+        QVERIFY(db.rows().isEmpty() && db.schema().isEmpty() && db.selectedId().isEmpty());
+        controller.removeServer(serverId);
+        QVERIFY(db.profiles().isEmpty());
+        shell(QStringLiteral("rm -f /tmp/fq_it.db\n"));
+        settings.remove(pin); settings.remove("servers/profiles"); settings.remove("db/profiles");
     }
 
     // Needs FORTIQ_IT_WEB_BASE (for example http://127.0.0.1:8099): tests/fixtures/web_fixture.py running on the test server.

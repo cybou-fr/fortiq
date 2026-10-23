@@ -86,6 +86,7 @@ set(FORTIQ_SHELL_QML
     qml/shell/WebWindow.qml
     qml/shell/NetworkWindow.qml
     qml/shell/SystemWindow.qml
+    qml/shell/DbWindow.qml
     qml/shell/ControlCenter.qml
     qml/shell/WorkspaceSwitcher.qml
     qml/shell/AdaptiveFilesToolbar.qml
@@ -171,6 +172,8 @@ set(FORTIQ_NETWORK_PURE_SOURCES src/network/NetworkInfo.cpp src/network/NetworkI
 set(FORTIQ_NETWORK_SOURCES ${FORTIQ_NETWORK_PURE_SOURCES} src/network/NetworkController.cpp src/network/NetworkController.h)
 set(FORTIQ_SYSTEM_PURE_SOURCES src/system/SystemInfo.cpp src/system/SystemInfo.h)
 set(FORTIQ_SYSTEM_SOURCES ${FORTIQ_SYSTEM_PURE_SOURCES} src/system/SystemController.cpp src/system/SystemController.h)
+set(FORTIQ_DB_PURE_SOURCES src/db/DbInfo.cpp src/db/DbInfo.h)
+set(FORTIQ_DB_SOURCES ${FORTIQ_DB_PURE_SOURCES} src/db/DbController.cpp src/db/DbController.h)
 
 set(FORTIQ_REMOTE_SOURCES
     src/core/RemoteController.cpp
@@ -206,6 +209,7 @@ qt_add_executable(fortiq
     ${FORTIQ_BROWSER_SOURCES}
     ${FORTIQ_NETWORK_SOURCES}
     ${FORTIQ_SYSTEM_SOURCES}
+    ${FORTIQ_DB_SOURCES}
     ${FORTIQ_LOGS_SOURCES}
     src/core/LogsController.h
     src/core/TerminalController.cpp
@@ -301,7 +305,7 @@ if(BUILD_TESTING)
         ${FORTIQ_SSH_SOURCES} src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h
         src/core/LocalDocument.cpp src/core/LocalDocument.h
         ${FORTIQ_REMOTE_SOURCES} src/core/RemoteController.h src/core/SecretStore.cpp src/core/SecretStore.h src/core/TaskManager.cpp src/core/TaskManager.h
-        ${FORTIQ_LOGS_SOURCES} src/core/LogsController.h ${FORTIQ_BROWSER_SOURCES} ${FORTIQ_NETWORK_SOURCES} ${FORTIQ_SYSTEM_SOURCES})
+        ${FORTIQ_LOGS_SOURCES} src/core/LogsController.h ${FORTIQ_BROWSER_SOURCES} ${FORTIQ_NETWORK_SOURCES} ${FORTIQ_SYSTEM_SOURCES} ${FORTIQ_DB_SOURCES})
     target_include_directories(fortiq_ssh_it PRIVATE src)
     target_link_libraries(fortiq_ssh_it PRIVATE Qt6::Core Qt6::Network Qt6::Concurrent Qt6::Test ${FORTIQ_SSH_TARGET})
     add_test(NAME fortiq_ssh_integration COMMAND fortiq_ssh_it -o "${CMAKE_CURRENT_BINARY_DIR}/ssh-results.txt,txt" -o "-,txt")
@@ -344,6 +348,10 @@ if(BUILD_TESTING)
     target_compile_definitions(fortiq_system_tests PRIVATE FORTIQ_SYS_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/system")
     target_link_libraries(fortiq_system_tests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME fortiq_system COMMAND fortiq_system_tests -o "${CMAKE_CURRENT_BINARY_DIR}/system-results.txt,txt" -o "-,txt")
+    qt_add_executable(fortiq_db_tests tests/DbTest.cpp ${FORTIQ_DB_PURE_SOURCES})
+    target_include_directories(fortiq_db_tests PRIVATE src)
+    target_link_libraries(fortiq_db_tests PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME fortiq_db COMMAND fortiq_db_tests -o "${CMAKE_CURRENT_BINARY_DIR}/db-results.txt,txt" -o "-,txt")
     qt_add_executable(fortiq_document_tests tests/LocalDocumentTest.cpp src/core/LocalDocument.cpp src/core/LocalDocument.h)
     target_include_directories(fortiq_document_tests PRIVATE src)
     target_link_libraries(fortiq_document_tests PRIVATE Qt6::Core Qt6::Test)
@@ -362,7 +370,7 @@ if(BUILD_TESTING)
         file(TO_CMAKE_PATH "$ENV{WINDIR}/Fonts" FORTIQ_TEST_FONT_DIR)
         set_property(TEST fortiq_layout APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=${FORTIQ_TEST_FONT_DIR}")
         # Developer tests need the matching Qt Test runtime, absent from the app package.
-        set_tests_properties(fortiq_markdown fortiq_disks fortiq_terminal_history fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_credentials fortiq_tasks fortiq_browser fortiq_network fortiq_system fortiq_publication fortiq_documents fortiq_layout PROPERTIES
+        set_tests_properties(fortiq_markdown fortiq_disks fortiq_terminal_history fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_credentials fortiq_tasks fortiq_browser fortiq_network fortiq_system fortiq_db fortiq_publication fortiq_documents fortiq_layout PROPERTIES
             ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:$<TARGET_FILE_DIR:${FORTIQ_SSH_TARGET}>")
     endif()
 endif()

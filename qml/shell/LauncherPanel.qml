@@ -18,7 +18,7 @@ Glass {
     ]
     readonly property var appPinned: [
         { k: "files", t: "Fichiers" }, { k: "logs", t: "Journaux" }, { k: "terminal", t: "Terminal" },
-        { k: "browser", t: "Navigateur" }, { k: "network", t: "Réseau" }, { k: "system", t: "Système" }, { k: "disks", t: "Disques" }, { k: "editor", t: "Éditeur" }, { k: "docs", t: "MDok" }, { k: "settings", t: "Paramètres" }
+        { k: "browser", t: "Navigateur" }, { k: "network", t: "Réseau" }, { k: "system", t: "Système" }, { k: "db", t: "Bases" }, { k: "disks", t: "Disques" }, { k: "editor", t: "Éditeur" }, { k: "docs", t: "MDok" }, { k: "settings", t: "Paramètres" }
     ]
     readonly property var sampleRecent: [
         { k: "media", t: "Présentation CYBOU.pptx", w: "Il y a 12 min" }, { k: "sheet", t: "Budget 2026.xlsx", w: "Il y a 28 min" },
@@ -50,7 +50,7 @@ Glass {
                 AppIcon { anchors.horizontalCenter: parent.horizontalCenter; size: 38; kind: modelData.k }
                 MouseArea {
                     anchors.fill: parent
-                    enabled: !launcher.fixture && (["files","logs","terminal","disks","docs","browser","network","system"].indexOf(modelData.k)>=0)
+                    enabled: !launcher.fixture && (["files","logs","terminal","disks","docs","browser","network","system","db"].indexOf(modelData.k)>=0)
                     cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                     onClicked: launcher.launch(modelData.k)
                 }

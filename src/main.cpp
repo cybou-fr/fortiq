@@ -9,6 +9,7 @@
 #include "browser/BrowserController.h"
 #include "network/NetworkController.h"
 #include "system/SystemController.h"
+#include "db/DbController.h"
 #include <QSettings>
 #include <QUuid>
 #endif
@@ -146,9 +147,12 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("network", &network);
     fortiq::SystemController systemInfo(&controller);
     engine.rootContext()->setContextProperty("systemInfo", &systemInfo);
+    fortiq::DbController databases(&controller);
+    engine.rootContext()->setContextProperty("databases", &databases);
     fortiq::TerminalController terminal(&controller);
     engine.rootContext()->setContextProperty("terminal", &terminal);
 #else
+    engine.rootContext()->setContextProperty("databases", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("tasks", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("remote", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("logs", QVariant::fromValue<QObject *>(nullptr));

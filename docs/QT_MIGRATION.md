@@ -301,3 +301,9 @@ was moved by script with `win` renamed to the injected `files` property, and the
 11/11 (layout 47/47) and a pixel comparison of all 66 layout captures before/after: the 58 deterministic ones are identical
 (tolerance 24/255), the other 8 differ only by the live clock. Not covered by automated tests: the sort menu, context menu
 and drag-and-drop upload (moved verbatim, not exercised).
+
+23 October Databases (read-only, [DATABASES](DATABASES.md)): the Bases de données app runs SQL on the selected server through `sqlite3` and `psql` over SSH (SQLite files and
+PostgreSQL), with connection profiles bound to a saved server whose passwords live only in the client's protected store, a schema tree, a result table that tells NULL from an
+empty string, time and row limits and cancellable `dbQuery` tasks. Read-only is layered (SQL scanner that also refuses `\` and `.` meta-commands, `sqlite3 -readonly`, a read-only
+`psql` session with `statement_timeout`) and documented as an accident guard, not a security boundary. SQL and the password travel inside the stdin script only. Verified: `fortiq_db`
+19 unit tests, the live `databaseAppIsReadOnlyAndBounded` test on the Debian 13 fixture (live suite 31 passed, 3 skipped), a layout test, CTest 16/16 and the Android arm64 build. Not done: MariaDB, writes, export, query history; Android not run on a device.

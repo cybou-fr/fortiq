@@ -48,6 +48,7 @@ ApplicationWindow {
         browserController: typeof browser !== "undefined" ? browser : null
         networkController: typeof network !== "undefined" ? network : null
         systemController: typeof systemInfo !== "undefined" ? systemInfo : null
+        dbController: typeof databases !== "undefined" ? databases : null
         documentsController: typeof documents !== "undefined" ? documents : null
         fixture: shellFixture
         fixturePreview: shellFixturePreview
