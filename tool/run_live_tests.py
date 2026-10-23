@@ -3,6 +3,7 @@
 
 It never touches a real server: the fixture is a throw-away Debian (for example the WSL distro `fortiq-test`
 with sshd, PostgreSQL 17, notmuch, isync, msmtp, dovecot and tool/setup_mail_live_fixture.sh already run).
+Fixtures to prepare once as root on the disposable Debian: tool/setup_mail_live_fixture.sh, tool/setup_browser_policy_fixture.sh, tool/setup_db_roles_fixture.sh.
 The live tests delete files in the test user's home (~/Mail, ~/.msmtprc, ~/Downloads, ...): see docs/AUDIT_2026-10-23.md.
 
 Usage (Windows, after a build in build-msvc):

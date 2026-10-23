@@ -36,6 +36,8 @@ class DbController : public QObject {
     Q_PROPERTY(QString resultInfo READ resultInfo NOTIFY resultChanged)
     Q_PROPERTY(QVariantList schema READ schema NOTIFY schemaChanged)
     Q_PROPERTY(QString schemaStatus READ schemaStatus NOTIFY schemaChanged)
+    // What the connected database role may do (see docs/DATABASES.md): level ok | note | warning | danger | unknown.
+    Q_PROPERTY(QVariantMap roleCheck READ roleCheck NOTIFY roleChanged)
     Q_PROPERTY(int timeoutSec READ timeoutSec NOTIFY limitsChanged)
     Q_PROPERTY(int maxRows READ maxRows NOTIFY limitsChanged)
 
@@ -58,6 +60,7 @@ public:
     QString resultInfo() const { return m_resultInfo; }
     QVariantList schema() const { return m_schema; }
     QString schemaStatus() const { return m_schemaStatus; }
+    QVariantMap roleCheck() const { return m_roleCheck; }
     int timeoutSec() const { return m_limits.timeoutSec; }
     int maxRows() const { return m_limits.maxRows; }
 
@@ -69,6 +72,7 @@ public:
     Q_INVOKABLE void runQuery(const QString &sql);
     Q_INVOKABLE void cancelQuery();
     Q_INVOKABLE void loadSchema();
+    Q_INVOKABLE void checkRole();
     Q_INVOKABLE void setLimits(int timeoutSec, int maxRows);
     // "SELECT * FROM <quoted object> " text for the editor (identifiers from the database are quoted).
     Q_INVOKABLE QString selectAllFor(const QVariantMap &object) const;
@@ -80,6 +84,7 @@ signals:
     void resultChanged();
     void schemaChanged();
     void limitsChanged();
+    void roleChanged();
 
 private:
     void onRemoteChanged();
@@ -88,8 +93,8 @@ private:
     QList<DbProfile> allProfiles() const;
     void storeProfiles(const QList<DbProfile> &list);
     bool findProfile(const QString &id, DbProfile *out) const;
-    // Runs a built script on the worker; isSchema selects the parser and the (task-less) path.
-    void execute(const QByteArray &script, bool isSchema, const DbProfile &profile, const QString &nullMarker, int taskId);
+    // Runs a built script on the worker. mode: 0 = user query, 1 = schema, 2 = role check (the last two are task-less).
+    void execute(const QByteArray &script, int mode, const DbProfile &profile, const QString &nullMarker, int taskId);
 
     RemoteController *m_remote;
     QThreadPool m_pool;
@@ -101,5 +106,6 @@ private:
     DbLimits m_limits;
     DbResult m_result;
     QVariantList m_rows, m_schema;
+    QVariantMap m_roleCheck;
 };
 }  // namespace fortiq

@@ -347,3 +347,9 @@ unspecified addresses are never opened. curl no longer follows redirects: the cl
 (`-q`, `--noproxy '*'`); odd IPv4 spellings and IPv4 inside IPv6 / NAT64 / 6to4 are judged by the address they mean. Verified: `fortiq_browser` 108 checks, a layout test of the question, the live `browserAddressPolicy` test against a fixture with
 public-looking loopback aliases (nothing reaches the internal service before the answer; redirect public -> loopback asks; metadata never opens; the pinned address is the one connected to), live suite 38 passed / 3 skipped, CTest 18/18.
 Not done: a persistent allow-list of hosts, proxy-only servers, Android not run on a device.
+
+23 October Audit backlog 3 ([AUDIT_2026-10-23](AUDIT_2026-10-23.md) R4) — database role check ([DATABASES](DATABASES.md)): when a profile is opened FORTIQ reads what the connected role may do with a fixed catalogue query (superuser, file/program/write-all roles, write
+privileges on tables and views, create rights, replication) or, for SQLite, the SSH user's rights on the file, and shows a banner (ok / note / warning / danger / unknown) with the findings and a copyable read-only role recipe that FORTIQ never executes; the
+check never blocks anything and says plainly that function side effects are invisible to it. Found on the way: saving a new profile left the previous profile's rows, schema and results on screen (fixed, D8). Verified: 6 new unit tests, a layout test of the banner,
+the live `databaseRoleCheck` test on real roles (owner -> warning, read-only -> ok, file role -> warning, write-file and superuser -> danger, SQLite note/ok) including proof that the read-only role cannot write without any FORTIQ option, full live suite and CTest.
+Not done: MariaDB, side-effect functions are invisible to a catalogue query; Android not run on a device.

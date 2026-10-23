@@ -68,6 +68,21 @@ QByteArray buildPostgresScript(const DbProfile &p, const QString &password, cons
 // Fixed catalogue queries (not user SQL) for the schema tree.
 QByteArray buildSchemaScript(const DbProfile &p, const QString &password, const DbLimits &limits, const QString &nullMarker, const QString &delimiter);
 
+// ---- what the connected role can do (audit 23.10.2026, R4) ----
+// FORTIQ's read-only mode is a guard against accidents. The real guarantee is a database role that cannot write, so every time a
+// profile is opened FORTIQ reads what the role is allowed to do (a fixed catalogue query, nothing the user typed) and says it.
+struct RoleCheck {
+    bool ran = false;            // the check was executed and understood
+    QString level;               // "ok" | "note" | "warning" | "danger" | "unknown"
+    QString summary;             // one line for the banner
+    QStringList findings;        // one line per right found
+    QString recommendation;      // what to do (for PostgreSQL: a read-only role recipe, never executed by FORTIQ)
+};
+QByteArray buildRoleCheckScript(const DbProfile &profile, const QString &password, const DbLimits &limits, const QString &nullMarker, const QString &delimiter);
+RoleCheck assessRoleCheck(const DbProfile &profile, const QByteArray &output, const QString &nullMarker);
+QString readOnlyRoleRecipe(const DbProfile &profile);       // SQL text for an administrator; contains a placeholder password
+QVariantMap roleCheckToVariant(const RoleCheck &check);
+
 // ---- results ----
 struct DbColumn { QString name; bool numeric = false; };
 struct DbResult {

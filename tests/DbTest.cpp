@@ -179,6 +179,87 @@ private slots:
         }
     }
 
+    // ---- the connected role (audit R4) ----
+    static QByteArray roleRow(const QString &super, const QString &createrole, const QString &createdb, const QString &repl, const QString &bypass,
+                              const QString &risky, int writable, int total, int schemas, const QString &createDb) {
+        return ("rolsuper,rolcreaterole,rolcreatedb,rolreplication,rolbypassrls,risky_roles,writable_tables,total_tables,create_schemas,create_db\n"
+                + super + "," + createrole + "," + createdb + "," + repl + "," + bypass + "," + risky + "," + QString::number(writable) + "," + QString::number(total) + ","
+                + QString::number(schemas) + "," + createDb + "\n").toUtf8();
+    }
+    static DbProfile pgProfile() {
+        DbProfile p; p.engine = DbEngine::Postgres; p.host = "127.0.0.1"; p.port = 5432; p.user = "app"; p.database = "shop db"; return p;
+    }
+
+    void roleWithoutWriteRightsIsOk() {
+        const RoleCheck r = assessRoleCheck(pgProfile(), roleRow("f", "f", "f", "f", "f", "", 0, 12, 0, "f"), "<<N>>");
+        QVERIFY(r.ran);
+        QCOMPARE(r.level, QString("ok"));
+        QVERIFY(r.findings.isEmpty() && r.recommendation.isEmpty());
+        QVERIFY(r.summary.contains("aucun droit d'écriture"));
+        QVERIFY(r.summary.contains("effets de bord"));            // honest about what a catalogue query cannot see
+    }
+    void roleWithWriteRightsWarns() {
+        const RoleCheck r = assessRoleCheck(pgProfile(), roleRow("f", "f", "f", "f", "f", "", 3, 12, 0, "f"), "<<N>>");
+        QCOMPARE(r.level, QString("warning"));
+        QVERIFY(r.findings.join("\n").contains("3 table(s) ou vue(s) sur 12"));
+        QVERIFY(r.recommendation.contains("CREATE ROLE fortiq_ro"));
+        QVERIFY(r.recommendation.contains("\"shop db\""));         // the database name is quoted as an identifier
+        QVERIFY(r.recommendation.contains("ne l'exécute jamais"));
+        QCOMPARE(assessRoleCheck(pgProfile(), roleRow("f", "f", "f", "f", "f", "", 0, 5, 1, "f"), "<<N>>").level, QString("warning"));          // may create in a schema
+        QCOMPARE(assessRoleCheck(pgProfile(), roleRow("f", "f", "f", "f", "f", "", 0, 5, 0, "t"), "<<N>>").level, QString("warning"));          // may create schemas
+        QCOMPARE(assessRoleCheck(pgProfile(), roleRow("f", "t", "f", "f", "f", "", 0, 5, 0, "f"), "<<N>>").level, QString("warning"));          // createrole
+        QCOMPARE(assessRoleCheck(pgProfile(), roleRow("f", "f", "t", "f", "f", "", 0, 5, 0, "f"), "<<N>>").level, QString("warning"));          // createdb
+        QCOMPARE(assessRoleCheck(pgProfile(), roleRow("f", "f", "f", "t", "f", "", 0, 5, 0, "f"), "<<N>>").level, QString("warning"));          // replication
+    }
+    void powerfulRolesAreDangerous() {
+        const RoleCheck su = assessRoleCheck(pgProfile(), roleRow("t", "t", "t", "t", "t", "", 9, 9, 2, "t"), "<<N>>");
+        QCOMPARE(su.level, QString("danger"));
+        QVERIFY(su.findings.join("\n").contains("Superutilisateur"));
+        QVERIFY(su.summary.contains("très étendus"));
+        QVERIFY(!su.recommendation.isEmpty());
+        for (const char *role : { "pg_write_server_files", "pg_execute_server_program", "pg_write_all_data" })
+            QCOMPARE(assessRoleCheck(pgProfile(), roleRow("f", "f", "f", "f", "f", role, 0, 5, 0, "f"), "<<N>>").level, QString("danger"));
+        const RoleCheck two = assessRoleCheck(pgProfile(), roleRow("f", "f", "f", "f", "f", "\"pg_read_server_files,pg_signal_backend\"", 0, 5, 0, "f"), "<<N>>");
+        QCOMPARE(two.level, QString("warning"));                    // reading files / signalling sessions: a warning, not the worst level
+        QCOMPARE(two.findings.size(), 2);
+        QCOMPARE(assessRoleCheck(pgProfile(), roleRow("f", "f", "f", "f", "t", "", 0, 5, 0, "f"), "<<N>>").level, QString("note"));            // bypass RLS alone: a note
+    }
+    void unreadableRoleAnswerIsUnknownNotAnError() {
+        for (const char *garbage : { "", "ERROR: something", "a,b\n1,2\n", "rolsuper\n" }) {
+            const RoleCheck r = assessRoleCheck(pgProfile(), garbage, "<<N>>");
+            QVERIFY2(!r.ran && r.level == "unknown", garbage);
+            QVERIFY(r.summary.contains("non vérifiés"));
+        }
+    }
+    void sqliteFileRights() {
+        DbProfile p; p.engine = DbEngine::Sqlite; p.path = "/home/u/a.db";
+        const RoleCheck w = assessRoleCheck(p, "file_writable=1\ndir_writable=1\nowner=u\nuser=u\nmode=644\n", QString());
+        QVERIFY(w.ran); QCOMPARE(w.level, QString("note"));
+        QVERIFY(w.findings.join("\n").contains("peut écrire") && w.findings.join("\n").contains("remplacé"));
+        QVERIFY(w.recommendation.contains("lecture seule"));
+        const RoleCheck ro = assessRoleCheck(p, "file_writable=0\ndir_writable=0\nowner=root\nuser=u\nmode=644\n", QString());
+        QCOMPARE(ro.level, QString("ok"));
+        QCOMPARE(assessRoleCheck(p, "nonsense", QString()).level, QString("unknown"));
+        const QVariantMap map = roleCheckToVariant(w);
+        QCOMPARE(map.value("level").toString(), QString("note"));
+        QVERIFY(map.value("findings").toStringList().size() >= 1);
+    }
+    void roleScriptsAreFixedQueries() {
+        DbProfile p = pgProfile();
+        const QByteArray s = buildRoleCheckScript(p, "pw", { 10, 10 }, "<<N>>", "FQDELIMX");
+        QVERIFY(s.contains("has_table_privilege") && s.contains("pg_has_role(current_user") && s.contains("rolsuper"));
+        QVERIFY(s.contains("export PGPASSWORD='pw'"));                   // the password only as an environment assignment, as for queries
+        QVERIFY(s.contains("default_transaction_read_only=on"));        // the check itself runs in the read-only session
+        QVERIFY(!s.contains("insert") && !s.contains("update ") && !s.contains("create ") && !s.contains("alter "));
+        DbProfile sq; sq.engine = DbEngine::Sqlite; sq.path = "/home/u/it's.db";
+        const QByteArray f = buildRoleCheckScript(sq, QString(), { 10, 10 }, QString(), "D");
+        QVERIFY(f.contains("f='/home/u/it'\\''s.db'") && f.contains("-w \"$f\"") && f.contains("stat -c %U"));
+        QVERIFY(!f.contains("chmod") && !f.contains("sqlite3"));         // it only reads file rights
+        QVERIFY(readOnlyRoleRecipe(p).contains("GRANT CONNECT ON DATABASE \"shop db\" TO fortiq_ro;"));
+        DbProfile odd = pgProfile(); odd.database = "a\"b";
+        QVERIFY(readOnlyRoleRecipe(odd).contains("\"a\"\"b\""));          // identifiers from the profile are never pasted raw
+    }
+
     void limits() {
         const DbLimits l = clampLimits({ 0, 99999 });
         QCOMPARE(l.timeoutSec, 1); QCOMPARE(l.maxRows, 5000);

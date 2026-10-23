@@ -1,5 +1,6 @@
 #include "DbInfo.h"
 
+#include <QHash>
 #include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QSet>
@@ -247,6 +248,116 @@ QByteArray buildSchemaScript(const DbProfile &p, const QString &password, const 
          "join information_schema.tables t on t.table_schema = c.table_schema and t.table_name = c.table_name "
          "where c.table_schema not in ('pg_catalog','information_schema') order by c.table_schema, c.table_name, c.ordinal_position;\n" + d + "\n";
     return s;
+}
+
+QByteArray buildRoleCheckScript(const DbProfile &p, const QString &password, const DbLimits &limitsIn, const QString &nullMarker, const QString &delimiter) {
+    const DbLimits limits = clampLimits(limitsIn);
+    const QByteArray d = delimiter.toUtf8();
+    if (p.engine == DbEngine::Sqlite) {
+        // File rights of the SSH user on the database file: key=value lines.
+        QByteArray s = "export LC_ALL=C.UTF-8\nf=" + shQuote(p.path) + "\n";
+        s += "[ -e \"$f\" ] || { echo 'FQ-ERR no-file' >&2; exit 5; }\n"
+             "if [ -w \"$f\" ]; then echo 'file_writable=1'; else echo 'file_writable=0'; fi\n"
+             "if [ -w \"$(dirname -- \"$f\")\" ]; then echo 'dir_writable=1'; else echo 'dir_writable=0'; fi\n"
+             "echo \"owner=$(stat -c %U -- \"$f\" 2>/dev/null)\"\n"
+             "echo \"user=$(id -un)\"\n"
+             "echo \"mode=$(stat -c %a -- \"$f\" 2>/dev/null)\"\n";
+        return s;
+    }
+    const QByteArray tables = " from pg_class c join pg_namespace n on n.oid = c.relnamespace where c.relkind in ('r','p','v','f') "
+                              "and n.nspname not in ('pg_catalog','information_schema') and n.nspname not like 'pg_toast%'";
+    QByteArray s = pgPrologue(p, password, limits);
+    s += pgCommand(p, limits, nullMarker) + " <<'" + d + "'\n"
+         "select r.rolsuper, r.rolcreaterole, r.rolcreatedb, r.rolreplication, r.rolbypassrls, "
+         "coalesce((select string_agg(x.rolname, ',' order by x.rolname) from pg_roles x where x.rolname in "
+         "('pg_write_server_files','pg_read_server_files','pg_execute_server_program','pg_write_all_data','pg_signal_backend','pg_checkpoint','pg_maintain') "
+         "and pg_has_role(current_user, x.oid, 'USAGE')), '') as risky_roles, "
+         "(select count(*)" + tables + " and (has_table_privilege(c.oid,'INSERT') or has_table_privilege(c.oid,'UPDATE') or has_table_privilege(c.oid,'DELETE') or has_table_privilege(c.oid,'TRUNCATE'))) as writable_tables, "
+         "(select count(*)" + tables + ") as total_tables, "
+         "(select count(*) from pg_namespace n where n.nspname not in ('pg_catalog','information_schema') and n.nspname not like 'pg_toast%' and n.nspname not like 'pg_temp%' and has_schema_privilege(n.oid,'CREATE')) as create_schemas, "
+         "has_database_privilege(current_database(),'CREATE') as create_db "
+         "from pg_roles r where r.rolname = current_user;\n" + d + "\n";
+    return s;
+}
+
+QString readOnlyRoleRecipe(const DbProfile &p) {
+    if (p.engine == DbEngine::Sqlite)
+        return QStringLiteral("Pour une garantie réelle : donnez à l'utilisateur SSH de FORTIQ un accès en lecture seule au fichier (par exemple un groupe qui ne peut que lire, ou une copie du fichier), ou travaillez sur une copie.");
+    const QString db = quoteIdentifier(p.database.isEmpty() ? QStringLiteral("votre_base") : p.database);
+    return QStringLiteral(
+        "-- À exécuter par un administrateur PostgreSQL. FORTIQ ne l'exécute jamais.\n"
+        "CREATE ROLE fortiq_ro LOGIN PASSWORD 'CHANGEZ-MOI';\n"
+        "GRANT CONNECT ON DATABASE %1 TO fortiq_ro;\n"
+        "GRANT pg_read_all_data TO fortiq_ro;                 -- PostgreSQL 14 et plus. Avant : GRANT USAGE ON SCHEMA public TO fortiq_ro;\n"
+        "                                                     --   GRANT SELECT ON ALL TABLES IN SCHEMA public TO fortiq_ro;\n"
+        "ALTER ROLE fortiq_ro SET default_transaction_read_only = on;\n"
+        "REVOKE CREATE ON SCHEMA public FROM PUBLIC;          -- PostgreSQL 14 et avant : le schéma public est inscriptible par tous\n"
+        "-- Puis créez un profil FORTIQ avec l'utilisateur fortiq_ro.").arg(db);
+}
+
+RoleCheck assessRoleCheck(const DbProfile &p, const QByteArray &output, const QString &nullMarker) {
+    RoleCheck r;
+    auto unknown = [&](const QString &why) { r.ran = false; r.level = QStringLiteral("unknown"); r.summary = QStringLiteral("Droits du rôle non vérifiés : %1").arg(why); return r; };
+    if (p.engine == DbEngine::Sqlite) {
+        QHash<QString, QString> kv;
+        for (const QByteArray &line : output.split('\n')) {
+            const qsizetype eq = line.indexOf('=');
+            if (eq > 0) kv.insert(QString::fromUtf8(line.left(eq)).trimmed(), QString::fromUtf8(line.mid(eq + 1)).trimmed());
+        }
+        if (!kv.contains("file_writable")) return unknown(QStringLiteral("réponse illisible."));
+        r.ran = true;
+        const bool writable = kv.value("file_writable") == QLatin1String("1"), dirWritable = kv.value("dir_writable") == QLatin1String("1");
+        if (writable) {
+            r.level = QStringLiteral("note");
+            r.summary = QStringLiteral("Le fichier est modifiable par l'utilisateur SSH : le mode lecture seule de FORTIQ est une protection locale.");
+            r.findings << QStringLiteral("Propriétaire %1, droits %2 : l'utilisateur « %3 » peut écrire dans ce fichier.").arg(kv.value("owner"), kv.value("mode"), kv.value("user"));
+            if (dirWritable) r.findings << QStringLiteral("Le dossier est aussi modifiable (le fichier peut être remplacé).");
+            r.recommendation = readOnlyRoleRecipe(p);
+        } else {
+            r.level = QStringLiteral("ok");
+            r.summary = QStringLiteral("Le fichier est en lecture seule pour l'utilisateur SSH : aucune écriture n'est possible, même en dehors de FORTIQ.");
+        }
+        return r;
+    }
+    const DbResult t = parsePostgresCsv(output, nullMarker, 5, false);
+    if (!t.ok || t.rows.isEmpty()) return unknown(QStringLiteral("réponse vide (le rôle n'est pas visible dans pg_roles ?)."));
+    auto col = [&](const char *name) { return t.columns.indexOf(QLatin1String(name)); };
+    const QVariantList row = t.rows.first();
+    auto text = [&](const char *name) { const int i = col(name); return i >= 0 && i < row.size() ? row.at(i).toString() : QString(); };
+    auto flag = [&](const char *name) { return text(name) == QLatin1String("t"); };
+    if (col("rolsuper") < 0 || col("writable_tables") < 0) return unknown(QStringLiteral("colonnes inattendues."));
+    r.ran = true;
+    int rank = 0;   // 0 ok, 1 note, 2 warning, 3 danger
+    auto add = [&](int level, const QString &line) { rank = qMax(rank, level); r.findings << line; };
+    if (flag("rolsuper")) add(3, QStringLiteral("Superutilisateur PostgreSQL : accès à tout, y compris, selon la configuration, aux fichiers et aux programmes du serveur de base."));
+    const QStringList risky = text("risky_roles").split(QLatin1Char(','), Qt::SkipEmptyParts);
+    for (const QString &role : risky) {
+        const bool hard = role == QLatin1String("pg_write_server_files") || role == QLatin1String("pg_execute_server_program") || role == QLatin1String("pg_write_all_data");
+        add(hard ? 3 : 2, QStringLiteral("Membre de %1 (%2).").arg(role, hard ? QStringLiteral("écriture de données, de fichiers ou exécution de programmes") : QStringLiteral("droit étendu sur le serveur")));
+    }
+    const int writable = text("writable_tables").toInt(), total = text("total_tables").toInt(), schemas = text("create_schemas").toInt();
+    if (writable > 0) add(2, QStringLiteral("Droit d'écriture (INSERT, UPDATE, DELETE ou TRUNCATE) sur %1 table(s) ou vue(s) sur %2.").arg(writable).arg(total));
+    if (schemas > 0) add(2, QStringLiteral("Peut créer des objets dans %1 schéma(s).").arg(schemas));
+    if (flag("create_db")) add(2, QStringLiteral("Peut créer des schémas dans cette base."));
+    if (flag("rolcreaterole")) add(2, QStringLiteral("Peut créer des rôles."));
+    if (flag("rolcreatedb")) add(2, QStringLiteral("Peut créer des bases."));
+    if (flag("rolreplication")) add(2, QStringLiteral("Droit de réplication."));
+    if (flag("rolbypassrls")) add(1, QStringLiteral("Ignore la sécurité par ligne (row level security)."));
+    if (rank == 0) {
+        r.level = QStringLiteral("ok");
+        r.summary = QStringLiteral("Ce rôle n'a aucun droit d'écriture visible (tables, schémas, rôles). Des fonctions ou extensions peuvent encore avoir des effets de bord.");
+        return r;
+    }
+    r.level = rank >= 3 ? QStringLiteral("danger") : rank == 2 ? QStringLiteral("warning") : QStringLiteral("note");
+    r.summary = rank >= 3 ? QStringLiteral("Ce rôle a des droits très étendus : le mode lecture seule de FORTIQ n'est qu'une protection locale.")
+              : rank == 2 ? QStringLiteral("Ce rôle peut écrire dans la base : le mode lecture seule de FORTIQ n'est qu'une protection locale.")
+                          : QStringLiteral("Droit particulier noté pour ce rôle.");
+    if (rank >= 2) r.recommendation = readOnlyRoleRecipe(p);
+    return r;
+}
+
+QVariantMap roleCheckToVariant(const RoleCheck &c) {
+    return QVariantMap { { "ran", c.ran }, { "level", c.level }, { "summary", c.summary }, { "findings", c.findings }, { "recommendation", c.recommendation } };
 }
 
 // ---------------------------------------------------------------- parsing

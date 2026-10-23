@@ -2003,6 +2003,93 @@ private slots:
         settings.remove(pin);
     }
 
+    // Audit R4: what the connected database role may do is checked when a profile is opened and said plainly.
+    // Needs FORTIQ_IT_DB=1 and tool/setup_db_roles_fixture.sh run as root on the DISPOSABLE Debian (roles fqro, fqfile, fqwfile, fqsu).
+    void databaseRoleCheck() {
+        if (qEnvironmentVariable("FORTIQ_IT_DB").isEmpty()) QSKIP("FORTIQ_IT_DB not set");
+        fortiq::RemoteController controller;
+        QSettings settings;
+        settings.remove("servers/profiles"); settings.remove("db/profiles");
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        const QString serverId = controller.saveServer({ { "name", "Roles" }, { "host", base.host }, { "port", base.port }, { "user", base.user }, { "keyPath", key } });
+        controller.connectTo(serverId, key.isEmpty() ? base.password : QString());
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        fortiq::SshSession shellSession;
+        QVERIFY(shellSession.open(controller.connectionRequest()).status == SshResult::Status::Ok);
+        auto shell = [&](const QByteArray &script) { return shellSession.runScript(script, 65536, {}); };
+        fortiq::DbController db(&controller);
+
+        // Opening a profile (the window does saveProfile + loadSchema; select() does the same) runs the check by itself.
+        auto open = [&](const QString &user, const QString &password) -> QVariantMap {
+            const QString saved = db.saveProfile({ { "name", user }, { "engine", "postgres" }, { "host", "127.0.0.1" }, { "port", 5432 }, { "user", user }, { "database", "fqtest" } }, password, false);
+            if (!saved.isEmpty()) return QVariantMap { { "level", "SAVE-ERROR: " + saved } };
+            db.loadSchema();
+            for (int i = 0; i < 300 && (db.busy() || db.roleCheck().isEmpty()); ++i) QTest::qWait(100);
+            return db.roleCheck();
+        };
+        auto findings = [](const QVariantMap &r) { return r.value("findings").toStringList().join("\n"); };
+
+        // The role that owns the tables can write to all of them.
+        QVariantMap owner = open("fqdb", "fqdb-test-pw");
+        QCOMPARE(owner.value("level").toString(), QStringLiteral("warning"));
+        QVERIFY2(findings(owner).contains("Droit d'écriture"), qPrintable(findings(owner)));
+        QVERIFY(owner.value("recommendation").toString().contains("CREATE ROLE fortiq_ro"));
+        QVERIFY(owner.value("recommendation").toString().contains("GRANT CONNECT ON DATABASE \"fqtest\""));
+        // The recommended role: nothing to warn about.
+        QVariantMap ro = open("fqro", "fqro-test-pw");
+        QCOMPARE(ro.value("level").toString(), QStringLiteral("ok"));
+        QVERIFY(ro.value("findings").toStringList().isEmpty() && ro.value("recommendation").toString().isEmpty());
+        // File and program access are named.
+        QVariantMap fileRole = open("fqfile", "fqfile-test-pw");
+        QCOMPARE(fileRole.value("level").toString(), QStringLiteral("warning"));
+        QVERIFY2(findings(fileRole).contains("pg_read_server_files"), qPrintable(findings(fileRole)));
+        QVariantMap writeFile = open("fqwfile", "fqwfile-test-pw");
+        QCOMPARE(writeFile.value("level").toString(), QStringLiteral("danger"));
+        QVERIFY2(findings(writeFile).contains("pg_write_server_files"), qPrintable(findings(writeFile)));
+        QVariantMap superuser = open("fqsu", "fqsu-test-pw");
+        QCOMPARE(superuser.value("level").toString(), QStringLiteral("danger"));
+        QVERIFY2(findings(superuser).contains("Superutilisateur"), qPrintable(findings(superuser)));
+        QVERIFY(superuser.value("summary").toString().contains("très étendus"));
+
+        // The check never gets in the way: the profile stays usable, and the check itself changed nothing.
+        db.runQuery("select current_user");
+        QTRY_VERIFY_WITH_TIMEOUT(!db.busy(), 20000);
+        QVERIFY2(db.error().isEmpty(), qPrintable(db.error()));
+        QCOMPARE(db.rows().first().toList().first().toString(), QStringLiteral("fqsu"));
+        // Role-level protection, no FORTIQ involved: the read-only role cannot write even with a plain, writable session.
+        const QString denied = QString::fromUtf8(shell("PGPASSWORD=fqro-test-pw psql -h 127.0.0.1 -U fqro -d fqtest -c \"insert into people(name) values ('x')\" 2>&1\n").data);
+        QVERIFY2(denied.contains("permission denied"), qPrintable(denied));
+        // A wrong password is not a "check failed" banner: the schema read fails first and says why.
+        QVERIFY(db.saveProfile({ { "name", "bad" }, { "engine", "postgres" }, { "host", "127.0.0.1" }, { "port", 5432 }, { "user", "fqro" }, { "database", "fqtest" } }, "wrong", false).isEmpty());
+        db.loadSchema();
+        QTRY_VERIFY_WITH_TIMEOUT(!db.busy(), 30000);
+        QVERIFY2(db.schemaStatus().contains("Authentification"), qPrintable(db.schemaStatus()));
+        QVERIFY(db.roleCheck().isEmpty());                                                       // no check without a successful connection, nothing alarming
+
+        // SQLite: the file rights of the SSH user.
+        QCOMPARE(QString::fromUtf8(shell("rm -f /tmp/fq_role.db; sqlite3 /tmp/fq_role.db 'create table t(a);'; echo ready\n").data).trimmed(), QStringLiteral("ready"));
+        QVERIFY(db.saveProfile({ { "name", "file" }, { "engine", "sqlite" }, { "path", "/tmp/fq_role.db" } }, QString(), false).isEmpty());
+        db.loadSchema();
+        QTRY_VERIFY_WITH_TIMEOUT(!db.busy() && !db.roleCheck().isEmpty(), 30000);
+        QCOMPARE(db.roleCheck().value("level").toString(), QStringLiteral("note"));
+        QVERIFY(findings(db.roleCheck()).contains("peut écrire"));
+        QVERIFY(shell("chmod 444 /tmp/fq_role.db\n").code == "exit:0");
+        db.loadSchema();
+        QTRY_VERIFY_WITH_TIMEOUT(!db.busy() && db.roleCheck().value("level").toString() == "ok", 30000);
+        // Leaving the session clears it with everything else.
+        controller.disconnectServer();
+        QVERIFY(db.roleCheck().isEmpty());
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        fortiq::SshSession cleanup;
+        if (cleanup.open(controller.connectionRequest()).status == SshResult::Status::Ok) cleanup.runScript("rm -f /tmp/fq_role.db\n", 4096, {});
+        controller.removeServer(serverId);
+        settings.remove(pin); settings.remove("servers/profiles"); settings.remove("db/profiles");
+    }
+
     // The Bases de données app against the test server: SQLite file and PostgreSQL 17 (role fqdb / base fqtest).
     // Needs FORTIQ_IT_DB=1 and the PostgreSQL cluster running (`pg_ctlcluster 17 main start`).
     void databaseAppIsReadOnlyAndBounded() {

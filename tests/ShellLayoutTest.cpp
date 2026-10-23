@@ -156,6 +156,8 @@ QtObject {
     property string resultInfo: '2 ligne(s), 3 colonne(s)'
     property var schema: [ { schema: '', name: 'people', kind: 'table', label: 'people', columns: [ { name: 'id', type: 'INTEGER', nullable: false }, { name: 'name', type: 'TEXT', nullable: true } ] } ]
     property string schemaStatus: ''
+    property var roleCheck: ({ ran: true, level: 'warning', summary: 'Ce role peut ecrire dans la base : le mode lecture seule de FORTIQ nest quune protection locale.',
+        findings: ['Droit decriture sur 3 tables ou vues sur 12.'], recommendation: '-- recipe\nCREATE ROLE fortiq_ro LOGIN PASSWORD CHANGEZ-MOI;' })
     property int timeoutSec: 15
     property int maxRows: 500
     property var calls: []
@@ -566,6 +568,26 @@ private slots:
                 QCOMPARE(rows->property("count").toInt(), 2);
                 QCOMPARE(dbWin->property("schemaRows").toList().size(), 1);          // collapsed: only the table
                 QVERIFY(findByName(dbWin, "dbInfo")); QVERIFY(!findByName(dbWin, "dbError")->isVisible());
+                // The connected role: a banner says what it may do; details and a copyable read-only role recipe open on a click.
+                auto *role = findByName(dbWin, "dbRoleBanner"); QVERIFY(role); QTRY_VERIFY(role->isVisible());
+                QCOMPARE(role->height(), 30.0);
+                auto *recipe = findByName(dbWin, "dbRoleRecipe"); QVERIFY(recipe); QVERIFY(!recipe->isVisible());
+                QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, role->mapToScene(QPointF(role->width() / 2, 12)).toPoint());
+                QTRY_VERIFY(recipe->isVisible());
+                QTRY_VERIFY(role->height() > 60);
+                QVERIFY(recipe->property("text").toString().contains("CREATE ROLE fortiq_ro"));
+                QVERIFY(findByName(dbWin, "dbRoleCopy")->isVisible());
+                QVERIFY(window->grabWindow().save(QString("layout-captures/%1-db-role.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+                QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, role->mapToScene(QPointF(role->width() / 2, 12)).toPoint());
+                QTRY_VERIFY(!recipe->isVisible());
+                // A role without write rights gets a quiet confirmation; an unchecked one shows nothing alarming.
+                fakeDb->setProperty("roleCheck", QVariantMap { { "ran", true }, { "level", "ok" }, { "summary", "Ce role na aucun droit decriture visible." }, { "findings", QStringList() }, { "recommendation", "" } });
+                QTRY_COMPARE(role->height(), 30.0);
+                QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, role->mapToScene(QPointF(role->width() / 2, 12)).toPoint());
+                QVERIFY(!recipe->isVisible());                                                          // nothing to expand
+                fakeDb->setProperty("roleCheck", QVariantMap());
+                QTRY_VERIFY(!role->isVisible());
+                fakeDb->setProperty("roleCheck", QVariantMap { { "ran", true }, { "level", "warning" }, { "summary", "restore" }, { "findings", QStringList() }, { "recommendation", "" } });
                 QVERIFY(window->grabWindow().save(QString("layout-captures/%1-db.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
                 // Ctrl+Enter runs the SQL in the editor; the SQL goes to the controller as typed.
                 auto *editor = findByName(dbWin, "dbEditor"); QVERIFY(editor);

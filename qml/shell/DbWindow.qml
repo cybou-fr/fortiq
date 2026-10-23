@@ -169,11 +169,64 @@ Item {
         }
     }
 
+    // ── what the connected role may do (audit R4) ──────────────────────
+    Rectangle {
+        id: roleBanner
+        objectName: "dbRoleBanner"
+        readonly property var check: win.db ? win.db.roleCheck : ({})
+        readonly property string level: check.level !== undefined ? check.level : ""
+        property bool expanded: false
+        readonly property color tone: level === "danger" ? "#FCA5A5" : level === "warning" ? "#FCD34D" : level === "ok" ? "#4ADE80" : level === "note" ? "#8EC1FF" : "#94A3B8"
+        visible: win.connected && win.db !== null && win.hasProfile && level !== ""
+        x: win.contentLeft + 12; y: 52; width: parent.width - x - 12
+        height: visible ? (expanded && level !== "ok" ? bannerColumn.implicitHeight + 16 : 30) : 0
+        radius: 8; clip: true; color: Qt.rgba(tone.r, tone.g, tone.b, 0.12); border.width: 1; border.color: Qt.rgba(tone.r, tone.g, tone.b, 0.5)
+        Connections { target: win.db; ignoreUnknownSignals: true; function onRoleChanged() { roleBanner.expanded = roleBanner.level === "danger" } }
+        MouseArea { anchors.left: parent.left; anchors.right: parent.right; height: 30; enabled: roleBanner.level !== "ok"; onClicked: roleBanner.expanded = !roleBanner.expanded }
+        Column {
+            id: bannerColumn
+            x: 10; y: 8; width: parent.width - 20; spacing: 6
+            Row {
+                spacing: 8; width: parent.width
+                Text { text: roleBanner.level === "ok" ? "✓" : roleBanner.level === "unknown" ? "?" : "!"; color: roleBanner.tone; font.pixelSize: 13; font.bold: true }
+                Text {
+                    width: parent.width - 80; textFormat: Text.PlainText; color: Theme.ink; font.pixelSize: 11
+                    elide: roleBanner.expanded ? Text.ElideNone : Text.ElideRight; wrapMode: roleBanner.expanded ? Text.Wrap : Text.NoWrap
+                    text: roleBanner.check.summary ? roleBanner.check.summary : ""
+                }
+                Text { visible: roleBanner.level !== "ok"; text: roleBanner.expanded ? "Moins ▴" : "Détails ▾"; color: roleBanner.tone; font.pixelSize: 10 }
+            }
+            Repeater {
+                model: roleBanner.expanded && roleBanner.check.findings ? roleBanner.check.findings : []
+                Text { required property string modelData; width: bannerColumn.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; text: "• " + modelData; color: Theme.ink; font.pixelSize: 11 }
+            }
+            Text {
+                visible: roleBanner.expanded && roleBanner.check.recommendation !== undefined && roleBanner.check.recommendation !== ""
+                width: parent.width; wrapMode: Text.Wrap; color: Theme.inkMuted; font.pixelSize: 10
+                text: "Pour une vraie garantie, utilisez un rôle sans droit d'écriture. Recette (à faire exécuter par un administrateur) :"
+            }
+            TextEdit {
+                id: recipeText
+                objectName: "dbRoleRecipe"
+                visible: roleBanner.expanded && roleBanner.check.recommendation !== undefined && roleBanner.check.recommendation !== ""
+                width: parent.width; readOnly: true; selectByMouse: true; wrapMode: TextEdit.NoWrap; textFormat: TextEdit.PlainText
+                color: Theme.ink; font.pixelSize: 10; font.family: "Consolas"
+                text: roleBanner.check.recommendation ? roleBanner.check.recommendation : ""
+            }
+            Button {
+                objectName: "dbRoleCopy"
+                visible: recipeText.visible
+                text: "Copier la recette"
+                onClicked: { recipeText.selectAll(); recipeText.copy(); recipeText.deselect() }
+            }
+        }
+    }
+
     // ── workspace ──────────────────────────────────────────────────────
     Item {
         id: workspace
         visible: win.connected && win.db !== null && win.hasProfile
-        x: win.contentLeft + 12; y: 52; width: parent.width - x - 12; height: parent.height - y - 10
+        x: win.contentLeft + 12; y: 52 + (roleBanner.visible ? roleBanner.height + 6 : 0); width: parent.width - x - 12; height: parent.height - y - 10
 
         Rectangle {
             id: schemaPane

@@ -21,6 +21,7 @@ struct Outcome {
     QString openError;
     DbResult result;
     QList<DbObject> objects;
+    RoleCheck role;
     bool cancelled = false;
 };
 
@@ -123,7 +124,9 @@ void DbController::resetSession(bool clearSelection) {
     m_result = DbResult();
     m_rows.clear(); m_schema.clear();
     m_resultInfo.clear(); m_schemaStatus.clear(); m_error.clear();
+    m_roleCheck.clear();
     if (clearSelection) m_selectedId.clear();
+    emit roleChanged();
 }
 
 void DbController::onRemoteChanged() {
@@ -166,8 +169,9 @@ QString DbController::saveProfile(const QVariantMap &map, const QString &passwor
     }
     if (isNew) list << p; else list[index] = p;
     storeProfiles(list);
+    // Whatever was shown belonged to the previous profile (or to the previous settings of this one): nothing of it may stay under the new name.
+    resetSession(false);
     m_selectedId = p.id;
-    if (!isNew) { m_result = DbResult(); m_rows.clear(); m_schema.clear(); m_resultInfo.clear(); m_schemaStatus.clear(); }
     m_error.clear();
     m_status = QStringLiteral("Profil « %1 » enregistré.").arg(p.name);
     emit profilesChanged(); emit changed(); emit resultChanged(); emit schemaChanged();
@@ -226,7 +230,21 @@ void DbController::loadSchema() {
     const QByteArray script = buildSchemaScript(p, password, m_limits, marker, QStringLiteral("FQ") + randomToken(12));
     m_schemaStatus = QStringLiteral("Lecture du schéma…");
     emit schemaChanged();
-    execute(script, true, p, marker, 0);
+    execute(script, 1, p, marker, 0);
+}
+
+void DbController::checkRole() {
+    DbProfile p;
+    if (m_busy || !findProfile(m_selectedId, &p)) return;
+    QString password;
+    if (p.hasPassword) {
+        const SecretStore::Result r = SecretStore::load(secretKey(p.id));
+        if (!r.ok) return;   // loadSchema already told the user
+        password = r.secret;
+    }
+    const QString marker = QStringLiteral("<<FQ-NULL-") + randomToken(8) + QStringLiteral(">>");
+    const QByteArray script = buildRoleCheckScript(p, password, m_limits, marker, QStringLiteral("FQ") + randomToken(12));
+    execute(script, 2, p, marker, 0);
 }
 
 void DbController::runQuery(const QString &sql) {
@@ -263,7 +281,7 @@ void DbController::runQuery(const QString &sql) {
     }
     m_error.clear();
     m_status = QStringLiteral("Exécution sur le serveur… (limite %1 s)").arg(m_limits.timeoutSec);
-    execute(script, false, p, marker, taskId);
+    execute(script, 0, p, marker, taskId);
 }
 
 void DbController::cancelQuery() {
@@ -272,7 +290,7 @@ void DbController::cancelQuery() {
     else if (m_cancel) m_cancel->store(true);
 }
 
-void DbController::execute(const QByteArray &script, bool isSchema, const DbProfile &profile, const QString &marker, int taskId) {
+void DbController::execute(const QByteArray &script, int mode, const DbProfile &profile, const QString &marker, int taskId) {
     if (!m_remote->connected()) return;
     m_token = m_remote->connectionToken();
     const int token = m_token, seq = ++m_seq;
@@ -282,11 +300,13 @@ void DbController::execute(const QByteArray &script, bool isSchema, const DbProf
     auto slot = m_session;
     const DbLimits limits = m_limits;
     const DbEngine engine = profile.engine;
+    const DbProfile profileCopy = profile;
+    const bool isSchema = mode == 1, isRole = mode == 2;
     m_busy = true;
     emit changed();
 
     auto *watcher = new QFutureWatcher<Outcome>(this);
-    connect(watcher, &QFutureWatcher<Outcome>::finished, this, [this, watcher, seq, token, taskId, isSchema, engine, limits] {
+    connect(watcher, &QFutureWatcher<Outcome>::finished, this, [this, watcher, seq, token, taskId, isSchema, isRole, engine, limits] {
         const Outcome r = watcher->result();
         watcher->deleteLater();
         TaskManager *tasks = m_remote->tasks();
@@ -297,6 +317,7 @@ void DbController::execute(const QByteArray &script, bool isSchema, const DbProf
         m_busy = false;
         QString failure;
         if (r.cancelled || r.run.code == QLatin1String("cancelled")) {
+            if (isRole) { emit changed(); return; }
             if (isSchema) m_schemaStatus = QStringLiteral("Lecture du schéma annulée.");
             else { m_status = QStringLiteral("Requête annulée."); m_error.clear(); }
             if (tasks && taskId) tasks->markCancelled(taskId, QStringLiteral("Annulé."));
@@ -306,10 +327,18 @@ void DbController::execute(const QByteArray &script, bool isSchema, const DbProf
         if (!r.openError.isEmpty()) failure = r.openError;
         else if (r.run.status != SshResult::Status::Ok) failure = r.run.message.isEmpty() ? QStringLiteral("Connexion SSH perdue.") : r.run.message;
         else if (!r.run.truncated && r.run.code != QLatin1String("exit:0")) failure = describeDbFailure(engine, exitCodeOf(r.run.code), r.run.message, limits.timeoutSec);
+        if (isRole) {
+            // Never an error for the user: a check that could not run is said so and nothing else changes.
+            if (!failure.isEmpty()) { RoleCheck unknown; unknown.level = QStringLiteral("unknown"); unknown.summary = QStringLiteral("Droits du rôle non vérifiés : %1").arg(failure.section(QLatin1Char('\n'), 0, 0).left(200)); m_roleCheck = roleCheckToVariant(unknown); }
+            else m_roleCheck = roleCheckToVariant(r.role);
+            emit changed(); emit roleChanged();
+            return;
+        }
         if (isSchema) {
             if (!failure.isEmpty()) { m_schema.clear(); m_schemaStatus = failure; }
             else { m_schema = schemaToVariant(r.objects); m_schemaStatus = m_schema.isEmpty() ? QStringLiteral("Aucune table.") : QString(); }
             emit changed(); emit schemaChanged();
+            if (failure.isEmpty()) checkRole();   // what can this role do? asked once per opened profile
             return;
         }
         if (!failure.isEmpty()) {
@@ -333,7 +362,7 @@ void DbController::execute(const QByteArray &script, bool isSchema, const DbProf
         if (tasks && taskId) tasks->succeed(taskId, m_resultInfo);
         emit changed(); emit resultChanged();
     });
-    watcher->setFuture(QtConcurrent::run(&m_pool, [slot, request, script, cancel, isSchema, engine, limits, marker] {
+    watcher->setFuture(QtConcurrent::run(&m_pool, [slot, request, script, cancel, isSchema, isRole, engine, limits, marker, profileCopy] {
         Outcome out;
         if (cancel->load()) { out.cancelled = true; return out; }
         if (!*slot) *slot = std::make_unique<SshSession>();
@@ -345,7 +374,8 @@ void DbController::execute(const QByteArray &script, bool isSchema, const DbProf
         out.run = session.runScript(script, kMaxDbOutput, [cancel] { return !cancel->load(); });
         if (out.run.status != SshResult::Status::Ok || out.run.code == QLatin1String("cancelled")) return out;
         if (!out.run.truncated && out.run.code != QLatin1String("exit:0")) return out;
-        if (isSchema) out.objects = parseSchema(engine, out.run.data, marker);
+        if (isRole) out.role = assessRoleCheck(profileCopy, out.run.data, marker);
+        else if (isSchema) out.objects = parseSchema(engine, out.run.data, marker);
         else out.result = engine == DbEngine::Sqlite ? parseSqliteQuote(out.run.data, limits.maxRows, out.run.truncated)
                                                      : parsePostgresCsv(out.run.data, marker, limits.maxRows, out.run.truncated);
         return out;
