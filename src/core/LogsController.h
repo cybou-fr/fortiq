@@ -137,6 +137,11 @@ private:
     void apply(const SshResult &r, bool append, int seq);
     void recompute();
     void disconnected();
+    // Tasks (TaskManager): reads are transient (no line once done, session change = cancelled), the live follow is one task for as long as it runs.
+    int beginRead(const QString &kind, const QString &title);
+    void endRead(int taskId, bool current, const SshResult &result);
+    void beginFollowTask();
+    void endFollowTask(bool cancelled);
     QByteArray journalScript(bool append) const;
     QByteArray fileScript(bool append) const;
 
@@ -144,6 +149,7 @@ private:
     QThreadPool m_pool;
     std::shared_ptr<std::unique_ptr<SshSession>> m_session;
     QTimer m_followTimer;
+    int m_followTask = 0;
     int m_seq = 0;
     int m_sourcesSeq = 0;
     int m_token = -1;

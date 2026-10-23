@@ -1,5 +1,6 @@
 #include "TerminalController.h"
 #include "RemoteController.h"
+#include "TaskManager.h"
 #include "TerminalHistory.h"
 #include <QFutureWatcher>
 #include <QtConcurrentRun>
@@ -12,6 +13,10 @@ TerminalController::TerminalController(RemoteController *remote, QObject *parent
     m_pool.setMaxThreadCount(1); m_pool.setExpiryTimeout(-1);
     m_timer.setInterval(40);
     connect(&m_timer, &QTimer::timeout, this, &TerminalController::poll);
+    if (remote->tasks())
+        connect(remote->tasks(), &TaskManager::cancelRequested, this, [this](int id) {
+            if (id != 0 && id == m_task) { m_endHow = QStringLiteral("cancelled"); m_endMessage = QStringLiteral("Terminal fermé par l'utilisateur."); stop(); }
+        });
     connect(remote, &RemoteController::changed, this, [this] {
         if(m_historyToken>=0 && (!m_remote->connected() || m_remote->connectionToken()!=m_historyToken)) {
             m_historyToken=-1; m_history.clear(); m_historyStatus=QStringLiteral("Source SSH déconnectée."); emit historyChanged();
@@ -28,7 +33,18 @@ TerminalController::~TerminalController() {
     m_timer.stop(); auto slot = m_session;
     (void)QtConcurrent::run(&m_pool, [slot] { slot->reset(); }); m_pool.waitForDone();
 }
+// The shell session is one task for as long as it runs: closing it by the user is a cancel, a shell that ends is a success, a broken link a failure.
+void TerminalController::endTask(const QString &how, const QString &message) {
+    TaskManager *tasks = m_remote ? m_remote->tasks() : nullptr;
+    const int id = std::exchange(m_task, 0);
+    if (!tasks || id == 0) return;
+    if (how == "cancelled") tasks->markCancelled(id, message);
+    else if (how == "failed") tasks->fail(id, message);
+    else tasks->succeed(id, message);
+}
 void TerminalController::stop() {
+    endTask(m_endHow.isEmpty() ? QStringLiteral("succeeded") : m_endHow, m_endMessage.isEmpty() ? QStringLiteral("Terminal fermé.") : m_endMessage);
+    m_endHow.clear(); m_endMessage.clear();
     ++m_seq; m_timer.stop(); m_input.clear(); m_running = m_busy = m_pollBusy = false; m_serverToken = -1;
     auto slot = m_session;
     (void)QtConcurrent::run(&m_pool, [slot] { slot->reset(); });
@@ -61,7 +77,15 @@ void TerminalController::start() {
             : QStringLiteral("Historique Bash absent ou non accessible.");
         emit historyChanged();
         m_status = m_running ? QStringLiteral("Shell interactif distant · SSH") : r.message;
-        if (m_running) m_timer.start(); else m_serverToken = -1;
+        if (m_running) {
+            m_timer.start();
+            if (TaskManager *tasks = m_remote->tasks()) {
+                TaskManager::Spec spec;
+                spec.kind = QStringLiteral("terminal"); spec.title = QStringLiteral("Terminal · ") + m_remote->serverLabel(); spec.source = m_remote->serverLabel();
+                spec.generation = m_serverToken; spec.cancellable = true; spec.guards = true; spec.session = true;   // leaving ends the shell: ask first
+                m_task = tasks->begin(spec);
+            }
+        } else m_serverToken = -1;
         emit changed();
     });
     watcher->setFuture(QtConcurrent::run(&m_pool, [slot, req, columns, rows] {
@@ -83,6 +107,7 @@ void TerminalController::resize(int columns, int rows) {
 void TerminalController::send(const QByteArray &data) {
     if (!m_running || data.isEmpty()) return;
     if (data.size() + m_input.size() > 32768) {
+        m_endHow = QStringLiteral("failed"); m_endMessage = QStringLiteral("Entrée trop volumineuse : terminal fermé sans rejeu.");
         stop(); m_status = QStringLiteral("Entrée trop volumineuse : terminal fermé sans rejeu."); emit changed(); return;
     }
     m_input += data;
@@ -98,6 +123,8 @@ void TerminalController::poll() {
         m_pollBusy = false;
         if (!r.data.isEmpty()) emit output(r.data);
         if (r.status != SshResult::Status::Ok || !r.code.isEmpty()) {
+            m_endHow = r.status == SshResult::Status::Ok ? QStringLiteral("succeeded") : QStringLiteral("failed");
+            m_endMessage = r.status == SshResult::Status::Ok ? QStringLiteral("Shell terminé (%1).").arg(r.code) : r.message;
             stop(); m_status = r.status == SshResult::Status::Ok ? QStringLiteral("Shell terminé (%1).").arg(r.code) : r.message;
             emit changed();
         }

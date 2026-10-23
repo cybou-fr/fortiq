@@ -256,6 +256,7 @@ void DbController::runQuery(const QString &sql) {
         spec.source = m_remote->serverLabel();
         spec.destination = p.name;
         spec.cancellable = true;
+        spec.guards = false; spec.session = true;   // read-only query: leaving loses nothing and there is nothing to verify afterwards
         spec.generation = m_remote->connectionToken();
         taskId = m_task = tasks->create(spec);
         tasks->start(taskId);

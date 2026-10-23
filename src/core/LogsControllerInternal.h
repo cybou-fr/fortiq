@@ -2,6 +2,7 @@
 // Internal to the LogsController implementation units (Logs*.cpp).
 #include "LogsController.h"
 #include "RemoteController.h"
+#include "TaskManager.h"
 #include "../ssh/SshClient.h"
 
 #include <QDateTime>

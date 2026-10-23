@@ -332,3 +332,11 @@ the sqlite3 shell's `writefile()`/`readfile()`/`edit()`/`load_extension()` bypas
 and saved attachments were readable by other local users (now 0600), an interrupted send was forgotten after reconnecting (now "unknown" until dismissed; proven that the message really can be delivered), parser rows longer than the header,
 recipients starting with "-". New evidence: 88-statement adversarial database corpus against real clients, session-switch and late-reply tests across five apps, interrupted-send, failed-mutation and secrets-in-settings checks, structured HTML-attack
 and mutated-JSON/CSV property tests, the 28 publication tests actually run, and `tool/run_live_tests.py` to reproduce everything on a disposable Debian. Not done: device/clean-Windows qualification, CI, sanitizers, a real fuzzer, two distinct hosts.
+
+23 October Audit backlog 1 ([AUDIT_2026-10-23](AUDIT_2026-10-23.md) R2, R7): TaskManager tasks now carry three flags — `guards` (ending the session must ask: writes, transfers, sends, an open Terminal), `session` (a read, a view or an interactive
+session: a connection change settles it as cancelled, not "unknown") and `transient` (a successful or cancelled read leaves no line in the list; failures stay). Logs (loads, sources, service view, incident inspector as transient reads; live follow as
+one cancellable task), MDok (open = transient read; save and save-copy = guarding writes with success / conflict / unknown outcomes), Disks (cancellable transient read) and Terminal (the shell session as a guarding, cancellable task: closing it
+is a cancel, a shell that exits is a success, a failed link a failure) report to it; read-only database queries, diagnostics, page fetches and mail tests use the same flags. A modal `SessionGuard` lists the guarding tasks before logout, the
+"Se déconnecter" link, connecting to another server, removing the open server and closing the window, and "Attendre" changes nothing. Verified: `fortiq_tasks` 21 unit tests, layout test of the dialog (stay, Back, quit, continue, reads do not ask),
+live `everyAppReportsItsWorkToTheTaskManager` (all four apps, including a real save conflict and a real shell exit/drop), full live suite 37 passed / 3 skipped, CTest 18/18. Not done: Système has no task (instant read); the dialog was only exercised
+on the desktop layout; Android not run on a device.

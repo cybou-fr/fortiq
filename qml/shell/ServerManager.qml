@@ -17,6 +17,8 @@ Item {
     property Item focusedInput: null
     property Item backdrop
     property var controller: null
+    // function(label, proceed): asks the user first when running tasks would be interrupted (set by the shell).
+    property var confirmEnd: null
     property url wallpaperSource: ""
     property string timeText: ""
     property string dateText: ""
@@ -65,13 +67,20 @@ Item {
     property bool remember: false
     readonly property bool storeAvailable: !!controller && controller.secretStoreAvailable === true
     function connect(p) {
-        // Nothing typed and a secret remembered for this server: use the protected store.
-        if (p.secretSaved && secret.length === 0) controller.connectToSaved(p.id)
-        else if (remember && storeAvailable && secret.length > 0) controller.connectToRemembering(p.id, secret, true)
-        else controller.connectTo(p.id, secret)
+        // The typed secret leaves the form at once; the closure keeps it only until the user answers the question below.
+        const typed = secret, saveIt = remember
         secret = ""
         remember = false
         secretField.text = ""
+        const go = function() {
+            // Nothing typed and a secret remembered for this server: use the protected store.
+            if (p.secretSaved && typed.length === 0) controller.connectToSaved(p.id)
+            else if (saveIt && storeAvailable && typed.length > 0) controller.connectToRemembering(p.id, typed, true)
+            else controller.connectTo(p.id, typed)
+        }
+        // Connecting replaces an open session: ask when running tasks would be cut.
+        if (controller.connected && confirmEnd) confirmEnd("Changer de serveur", go)
+        else go()
     }
     function initial(p) { return (p.name && p.name.length > 0 ? p.name : p.user).charAt(0).toUpperCase() }
     function tint(p) {
@@ -328,7 +337,12 @@ Item {
                             id: rm; anchors.fill: parent; hoverEnabled: true
                             onClicked: {
                                 if (!mgr.selected) return
-                                if (mgr.confirmRemoveId === mgr.selected.id) { const id = mgr.selected.id; mgr.confirmRemoveId = ""; mgr.selectedId = ""; mgr.controller.removeServer(id) }
+                                if (mgr.confirmRemoveId === mgr.selected.id) {
+                                    const id = mgr.selected.id; mgr.confirmRemoveId = ""; mgr.selectedId = ""
+                                    // Removing the server of the open session ends it.
+                                    if (mgr.controller.connected && mgr.controller.activeServerId === id && mgr.confirmEnd) mgr.confirmEnd("Retirer ce serveur", function() { mgr.controller.removeServer(id) })
+                                    else mgr.controller.removeServer(id)
+                                }
                                 else mgr.confirmRemoveId = mgr.selected.id
                             }
                         }

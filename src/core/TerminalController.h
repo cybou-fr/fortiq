@@ -33,13 +33,15 @@ signals:
     void historyChanged();
 private:
     void poll();
+    void endTask(const QString &how, const QString &message);
     void maybeStart();
     RemoteController *m_remote;
     QThreadPool m_pool;
     QTimer m_timer;
     std::shared_ptr<std::unique_ptr<SshSession>> m_session;
     QByteArray m_input;
-    int m_seq = 0, m_serverToken = -1, m_columns = 80, m_rows = 24;
+    int m_seq = 0, m_serverToken = -1, m_columns = 80, m_rows = 24, m_task = 0;
+    QString m_endHow, m_endMessage;   // how the shell task ends (consumed by stop())
     bool m_running = false, m_busy = false, m_pollBusy = false, m_windowActive = false;
     int m_autoAttemptToken = -1;
     int m_historyToken = -1;

@@ -2,11 +2,33 @@
 #include "MarkdownData.h"
 #include "RemoteController.h"
 #include "RemotePath.h"
+#include "TaskManager.h"
 #include "../ssh/SshClient.h"
 #include <QtConcurrentRun>
 #include <QFutureWatcher>
 #include <QCryptographicHash>
 namespace fortiq {
+namespace {
+// Opening is a read (transient, nothing to verify after a session change); saving is a write that guards the session and may end "unknown".
+int beginDocTask(RemoteController *remote, const QString &kind, const QString &title, const QString &destination, bool read) {
+    TaskManager *tasks = remote->tasks();
+    if (!tasks) return 0;
+    TaskManager::Spec spec;
+    spec.kind = kind; spec.title = title; spec.source = remote->serverLabel(); spec.destination = destination;
+    spec.generation = remote->connectionToken(); spec.cancellable = false;
+    spec.guards = !read; spec.session = read; spec.transient = read;
+    return tasks->begin(spec);
+}
+void endDocTask(RemoteController *remote, int id, const char *how, const QString &message, const QString &code = {}) {
+    TaskManager *tasks = remote->tasks();
+    if (!tasks || id == 0) return;
+    const QString h = QString::fromLatin1(how);
+    if (h == "ok") tasks->succeed(id, message);
+    else if (h == "unknown") tasks->markUnknown(id, message);
+    else if (h == "cancelled") tasks->markCancelled(id, message);
+    else tasks->fail(id, message, code);
+}
+}
 DocumentsController::DocumentsController(RemoteController *remote,QObject *parent):QObject(parent),m_remote(remote) {
     m_pool.setMaxThreadCount(1);
     connect(remote,&RemoteController::changed,this,[this]{
@@ -35,11 +57,13 @@ void DocumentsController::open(const QString &path){
     if(!clean || !markdownPath(*clean)){m_status="Chemin absolu .md ou .markdown requis.";emit changed();return;}
     const auto request=m_remote->connectionRequest();const int token=m_remote->connectionToken(),seq=++m_seq;
     const auto label=m_remote->serverLabel();m_operationToken=token;m_busy=true;m_writing=false;m_status="Lecture du Markdown…";emit changed();
+    const int taskId=beginDocTask(m_remote,QStringLiteral("docOpen"),clean->section('/',-1),*clean,true);
     auto *watcher=new QFutureWatcher<SshResult>(this);
-    connect(watcher,&QFutureWatcher<SshResult>::finished,this,[this,watcher,seq,token,target=*clean,label]{
-        const auto result=watcher->result();watcher->deleteLater();if(seq!=m_seq || !m_remote->connected() || token!=m_remote->connectionToken())return;
+    connect(watcher,&QFutureWatcher<SshResult>::finished,this,[this,watcher,seq,token,target=*clean,label,taskId]{
+        const auto result=watcher->result();watcher->deleteLater();if(seq!=m_seq || !m_remote->connected() || token!=m_remote->connectionToken()){endDocTask(m_remote,taskId,"cancelled",QStringLiteral("Session changée."));return;}
         m_busy=false;
         const auto decoded=decodeMarkdown(result.data,result.truncated);
+        endDocTask(m_remote,taskId,(result.status==SshResult::Status::Ok && decoded.error.isEmpty())?"ok":"fail",result.status==SshResult::Status::Ok?decoded.error:result.message);
         if(result.status!=SshResult::Status::Ok || !decoded.error.isEmpty())m_status=result.status==SshResult::Status::Ok?decoded.error:result.message;
         else {
             m_path=target;m_text=m_base=decoded.text;m_bom=decoded.bom;m_crlf=decoded.crlf;m_hash=QCryptographicHash::hash(result.data,QCryptographicHash::Sha256);
@@ -60,12 +84,13 @@ void DocumentsController::write(const QString &path,bool copy){
     if(bytes.size()>MarkdownLimit || m_text.contains(QChar::Null)){m_status="Document supérieur à 256 Kio ou caractère NUL.";emit changed();return;}
     const auto request=m_remote->connectionRequest();const auto hash=m_hash;const auto text=m_text;
     const int token=m_remote->connectionToken(),seq=++m_seq;m_operationToken=token;m_busy=true;m_writing=true;m_status="Enregistrement sûr en cours…";emit changed();
+    const int taskId=beginDocTask(m_remote,copy?QStringLiteral("docSaveCopy"):QStringLiteral("docSave"),clean->section('/',-1),*clean,false);
     auto *watcher=new QFutureWatcher<SshResult>(this);
-    connect(watcher,&QFutureWatcher<SshResult>::finished,this,[this,watcher,seq,token,text]{
-        const auto result=watcher->result();watcher->deleteLater();if(seq!=m_seq || !m_remote->connected() || token!=m_remote->connectionToken())return;
+    connect(watcher,&QFutureWatcher<SshResult>::finished,this,[this,watcher,seq,token,text,taskId]{
+        const auto result=watcher->result();watcher->deleteLater();if(seq!=m_seq || !m_remote->connected() || token!=m_remote->connectionToken()){endDocTask(m_remote,taskId,"unknown",QStringLiteral("Session changée pendant l'enregistrement : résultat inconnu."));return;}
         m_busy=false;
-        if(result.status==SshResult::Status::Ok){m_path=result.directory;m_base=m_text=text;m_hash=result.data;m_new=false;m_status="Enregistré : "+m_path;emit changed();emit saved(m_path);}
-        else {m_unknown=result.code=="unknown";m_status=result.code=="conflict"?"Conflit : la version du serveur a changé. Brouillon conservé ; enregistrez une copie.":m_unknown?"Résultat inconnu. Aucun rejeu : vérifiez le fichier serveur. Brouillon conservé.":result.message;emit changed();}
+        if(result.status==SshResult::Status::Ok){endDocTask(m_remote,taskId,"ok",result.directory);m_path=result.directory;m_base=m_text=text;m_hash=result.data;m_new=false;m_status="Enregistré : "+m_path;emit changed();emit saved(m_path);}
+        else {endDocTask(m_remote,taskId,result.code=="unknown"?"unknown":"fail",result.code=="conflict"?QStringLiteral("Conflit : la version du serveur a changé."):result.message,result.code);m_unknown=result.code=="unknown";m_status=result.code=="conflict"?"Conflit : la version du serveur a changé. Brouillon conservé ; enregistrez une copie.":m_unknown?"Résultat inconnu. Aucun rejeu : vérifiez le fichier serveur. Brouillon conservé.":result.message;emit changed();}
     });
     watcher->setFuture(QtConcurrent::run(&m_pool,[request,target=*clean,bytes,hash,copy]{
         SshSession session;auto r=session.open(request);if(r.status!=SshResult::Status::Ok)return r;

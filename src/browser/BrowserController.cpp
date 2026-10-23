@@ -163,6 +163,7 @@ void BrowserController::navigate(const QString &url, bool record) {
         spec.source = m_remote->serverLabel();
         spec.destination = url;
         spec.cancellable = true;
+        spec.guards = false; spec.session = true;   // a page fetch: leaving loses nothing
         spec.generation = token;
         taskId = m_taskId = tasks->create(spec);
         tasks->start(taskId);

@@ -212,6 +212,67 @@ private slots:
         QCOMPARE(t.value("total").toDouble(), 2048.0);
         QVERIFY(t.value("cancellable").toBool());
         QCOMPARE(TaskManager::stateName(S::Cancelling), QString("cancelling"));
+        QVERIFY(t.value("guards").toBool());                  // defaults: a task guards the session,
+        QVERIFY(!t.value("session").toBool());                // is not a view,
+        QVERIFY(!t.value("transient").toBool());              // and stays in the list
+    }
+
+    void beginStartsAtOnce() {
+        TaskManager m;
+        const int id = m.begin(spec());
+        QCOMPARE(m.state(id).value(), S::Running);
+    }
+
+    // Reads that are not worth a line: success or cancellation removes them, a failure or an unknown outcome stays visible.
+    void transientTasksVanishOnSuccessAndCancel() {
+        TaskManager m;
+        QSignalSpy finished(&m, &TaskManager::finished);
+        auto readSpec = [&] { TaskManager::Spec s = spec("logsLoad"); s.transient = true; s.guards = false; s.session = true; return s; };
+        const int ok = m.begin(readSpec());
+        QCOMPARE(m.count(), 1);
+        QVERIFY(m.succeed(ok, "done"));
+        QCOMPARE(m.count(), 0);                                  // gone
+        QCOMPARE(finished.size(), 1);                            // but the owner still heard about it
+        QCOMPARE(finished.first().at(0).toInt(), ok);
+        QVERIFY(!m.exists(ok));
+        const int cancelled = m.begin(readSpec());
+        QVERIFY(m.markCancelled(cancelled, "stopped"));
+        QCOMPARE(m.count(), 0);
+        const int failed = m.begin(readSpec());
+        QVERIFY(m.fail(failed, "boom"));
+        QCOMPARE(m.count(), 1);                                  // failures stay
+        QCOMPARE(m.task(failed).value("state").toString(), QString("failed"));
+        const int unknown = m.begin(readSpec());
+        QVERIFY(m.markUnknown(unknown, "?"));
+        QCOMPARE(m.count(), 2);
+        QCOMPARE(m.activeCount(), 0);
+        m.clearFinished();
+        QCOMPARE(m.count(), 0);
+        // A non-transient task is never removed by itself.
+        const int kept = m.begin(spec());
+        QVERIFY(m.succeed(kept, "ok"));
+        QCOMPARE(m.count(), 1);
+    }
+
+    // What logout / switching server / quitting asks about: only active tasks that guard.
+    void guardingTasksAreTheOnesThatMatter() {
+        TaskManager m;
+        QCOMPARE(m.guardingCount(), 0);
+        TaskManager::Spec read = spec("logsLoad"); read.guards = false; read.session = true; read.transient = true;
+        const int r = m.begin(read);
+        QCOMPARE(m.activeCount(), 1);
+        QCOMPARE(m.guardingCount(), 0);                          // a running read does not ask for confirmation
+        const int save = m.begin(spec("docSave", false));
+        const int queued = m.create(spec("upload"));             // queued work also counts: it has not run yet but will
+        QCOMPARE(m.guardingCount(), 2);
+        const QVariantList list = m.guardingTasks();
+        QCOMPARE(list.size(), 2);
+        QCOMPARE(list.at(0).toMap().value("id").toInt(), save);
+        QCOMPARE(list.at(1).toMap().value("id").toInt(), queued);
+        QVERIFY(m.succeed(save, "saved"));
+        QVERIFY(m.markCancelled(queued, "x"));
+        QCOMPARE(m.guardingCount(), 0);
+        QVERIFY(m.succeed(r, "done"));
     }
 };
 }

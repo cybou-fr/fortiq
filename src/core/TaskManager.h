@@ -45,12 +45,22 @@ public:
         bool cancellable = true;
         int generation = 0;    // server session the task is bound to (never redirected)
         qint64 total = -1;     // bytes or items; -1 = indeterminate
+        // Whether ending the session (logout, server change, closing the app) must ask the user first. Writes, transfers and
+        // sends guard; reads, views and live follow do not (ending them loses nothing).
+        bool guards = true;
+        // A read, a view or an interactive session: nothing on the server needs checking afterwards, so a session change
+        // settles it as cancelled instead of unknown.
+        bool session = false;
+        // Reads that are not worth a line in the task list: a success or a cancel removes the task at once (failures stay).
+        bool transient = false;
     };
 
     explicit TaskManager(QObject *parent = nullptr);
 
     // Creates a Queued task and returns its id (> 0, unique for the process).
     int create(const Spec &spec);
+    // create() + start() for work that begins at once.
+    int begin(const Spec &spec);
 
     // --- owner reports; each returns false when the transition is not allowed ---
     bool start(int id);                                        // Queued (no pending decision) -> Running
@@ -74,6 +84,9 @@ public:
     Q_INVOKABLE QVariantMap task(int id) const;   // empty map when unknown
     std::optional<State> state(int id) const;     // nullopt for an unknown id
     bool exists(int id) const;
+    // Active tasks whose loss the user should confirm (Spec::guards): what logout / switching server / quitting asks about.
+    Q_INVOKABLE QVariantList guardingTasks() const;
+    Q_INVOKABLE int guardingCount() const;
     QList<int> activeIds() const;                 // non-terminal tasks
     QList<int> activeIds(int generation) const;   // ... of one server session
     QVariantList tasks() const;

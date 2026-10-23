@@ -87,6 +87,7 @@ set(FORTIQ_SHELL_QML
     qml/shell/NetworkWindow.qml
     qml/shell/SystemWindow.qml
     qml/shell/DbWindow.qml
+    qml/shell/SessionGuard.qml
     qml/shell/MailWindow.qml
     qml/shell/ControlCenter.qml
     qml/shell/WorkspaceSwitcher.qml

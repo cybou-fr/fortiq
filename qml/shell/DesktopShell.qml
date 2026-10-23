@@ -64,7 +64,13 @@ Item {
     // Ends the session like a Linux logout: unsaved MDok drafts are protected,
     // windows close, the SSH connection ends and the login screen returns.
     function logout() {
-        if (!allowAppClose()) return
+        if (!allowDocumentsClose()) return
+        confirmSessionEnd("Se déconnecter", function() { endSession() })
+    }
+    // Every way of ending the session (logout, disconnect link, another server, quitting) asks first when the TaskManager
+    // reports tasks that guard it; `proceed` runs at once when there are none.
+    function confirmSessionEnd(label, proceed) { sessionGuard.ask(label, proceed) }
+    function endSession() {
         sessionMenuOpen = false; launcherOpen = false; controlOpen = false
         filesOpen = false; logsOpen = false; terminalOpen = false; disksOpen = false; documentsOpen = false; webOpen = false; networkOpen = false; systemOpen = false; dbOpen = false; mailOpen = false
         if (controller) controller.disconnectServer()
@@ -151,6 +157,7 @@ Item {
         fixturePreview: shell.fixturePreview
         onCloseRequested: { shell.filesOpen = false; if (shell.adaptive && shell.logsOpen) shell.foregroundApp = "logs" }
         onRequestServers: shell.serversOpen = true
+        onRequestDisconnect: shell.confirmSessionEnd("Se déconnecter", function() { shell.controller.disconnectServer() })
         onRequestDocuments:path=>{shell.documentsOpen=true;shell.raiseApp("docs");documentsWindow.request("open",path)}
     }
 
@@ -280,10 +287,16 @@ Item {
         onCloseRequested:{shell.documentsOpen=false;if(shell.adaptive){shell.foregroundApp="files";shell.filesOpen=true}}
         onRequestServers:shell.serversOpen=true
     }
-    function allowAppClose(){
+    function allowDocumentsClose(){
         if(documentsController && (documentsController.dirty || documentsController.busy)){
             documentsOpen=true;raiseApp("docs");return documentsWindow.allowAppClose()
         }
+        return true
+    }
+    // Closing the window: unsaved MDok drafts first, then running tasks (asked once, then the app quits).
+    function allowAppClose(){
+        if (!allowDocumentsClose()) return false
+        if (taskManager && taskManager.guardingCount() > 0) { sessionGuard.ask("Quitter", function() { Qt.quit() }); return false }
         return true
     }
 
@@ -452,6 +465,7 @@ Item {
 
     ServerManager {
         id: serverManager
+        confirmEnd: shell.confirmSessionEnd
         adaptive: shell.adaptive
         anchors.fill: parent
         z: 100
@@ -468,8 +482,10 @@ Item {
         PropertyChanges { target: logsWindow; x: 8; y: shell.appTop; width: shell.width - 16; height: shell.appHeight }
         PropertyChanges { target: terminalWindow; x: 8; y: shell.appTop; width: shell.width - 16; height: shell.appHeight }
     }
+    SessionGuard { id: sessionGuard; anchors.fill: parent; manager: shell.taskManager }
     focus: true
     function handleBack() {
+        if (sessionGuard.visible) { sessionGuard.stay(); return true }
         if (Qt.inputMethod.visible) { Qt.inputMethod.hide(); return true }
         if (serversOpen) { serverManager.back(); return true }
         if (launcherOpen || controlOpen) { launcherOpen = false; controlOpen = false; return true }

@@ -406,6 +406,8 @@ void MailController::runAction(const QString &kind, const QString &title, const 
         spec.source = m_remote->serverLabel();
         spec.destination = destination;
         spec.cancellable = cancellable;
+        const bool readOnly = kind == QLatin1String("mailProbe") || kind == QLatin1String("mailTest");   // reads and connection tests
+        spec.guards = !readOnly; spec.session = readOnly;
         spec.generation = token;
         taskId = m_actionTask = tasks->create(spec);
         tasks->start(taskId);

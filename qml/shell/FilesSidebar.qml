@@ -92,7 +92,7 @@ Rectangle {
             visible: !files.fixture
             text: "Se déconnecter"
             color: "#9CC6FF"; font.pixelSize: 11; font.underline: discoMouse.containsMouse; font.family: Theme.fontFamily
-            MouseArea { id: discoMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: files.controller.disconnectServer() }
+            MouseArea { id: discoMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: files.requestDisconnect() }
         }
     }
 }

@@ -39,6 +39,12 @@ int TaskManager::create(const Spec &spec) {
     return t.id;
 }
 
+int TaskManager::begin(const Spec &spec) {
+    const int id = create(spec);
+    start(id);
+    return id;
+}
+
 bool TaskManager::start(int id) {
     Task *t = find(id);
     if (!t || t->state != State::Queued || !t->decision.isEmpty()) return false;
@@ -93,8 +99,13 @@ bool TaskManager::finish(Task &t, State state, const QString &message, const QSt
     t.decision.clear();
     t.finishedMs = QDateTime::currentMSecsSinceEpoch();
     const int id = t.id;
+    const bool vanish = t.spec.transient && (state == State::Succeeded || state == State::Cancelled);
     emit tasksChanged();
     emit finished(id, stateName(state));
+    if (vanish) {
+        m_tasks.removeIf([id](const Task &x) { return x.id == id; });   // `t` is gone after this line
+        emit tasksChanged();
+    }
     return true;
 }
 
@@ -177,7 +188,7 @@ QVariantMap TaskManager::toMap(const Task &t) {
         { "active", !isTerminal(t.state) }, { "cancellable", t.spec.cancellable },
         { "decision", t.decision }, { "message", t.message }, { "code", t.code },
         { "done", static_cast<double>(t.done) }, { "total", static_cast<double>(t.total) },
-        { "generation", t.spec.generation },
+        { "generation", t.spec.generation }, { "guards", t.spec.guards }, { "session", t.spec.session }, { "transient", t.spec.transient },
         { "created", static_cast<double>(t.createdMs) }, { "finished", static_cast<double>(t.finishedMs) } };
 }
 
@@ -190,6 +201,18 @@ QVariantList TaskManager::tasks() const {
     QVariantList out;
     for (const Task &t : m_tasks) out.push_back(toMap(t));
     return out;
+}
+
+QVariantList TaskManager::guardingTasks() const {
+    QVariantList out;
+    for (const Task &t : m_tasks) if (!isTerminal(t.state) && t.spec.guards) out.push_back(toMap(t));
+    return out;
+}
+
+int TaskManager::guardingCount() const {
+    int n = 0;
+    for (const Task &t : m_tasks) n += !isTerminal(t.state) && t.spec.guards;
+    return n;
 }
 
 }  // namespace fortiq

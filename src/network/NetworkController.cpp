@@ -157,6 +157,7 @@ void NetworkController::runProbe(const QString &kind, const QString &target) {
         spec.source = m_remote->serverLabel();
         spec.destination = m_probeTarget;
         spec.cancellable = true;
+        spec.guards = false; spec.session = true;   // a diagnostic: leaving loses nothing
         spec.generation = token;
         taskId = m_probeTask = tasks->create(spec);
         tasks->start(taskId);

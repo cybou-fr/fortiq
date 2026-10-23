@@ -755,6 +755,71 @@ private slots:
                 QVERIFY(!shell->property("sessionMenuOpen").toBool());
                 shell->setProperty("serversOpen", false);
             }
+            {   // Ending the session asks first while a task that guards it is running (audit backlog 1).
+                fortiq::TaskManager manager;
+                shell->setProperty("taskManager", QVariant::fromValue<QObject *>(&manager));
+                auto clickItem = [&](QQuickItem *item) {
+                    QVERIFY(item);
+                    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
+                    QTest::qWait(60);
+                };
+                fortiq::TaskManager::Spec save;
+                save.kind = "docSave"; save.title = "notes.md"; save.source = "user@host"; save.cancellable = false;   // a write: guards by default
+                const int saveId = manager.begin(save);
+                shell->setProperty("filesOpen", true);
+                shell->setProperty("sessionMenuOpen", true);
+                QTest::qWait(50);
+                auto *guard = findByName(shell, "sessionGuard"); QVERIFY(guard); QVERIFY(!guard->isVisible());
+                clickItem(findByName(shell, "logoutButton"));
+                QTRY_VERIFY(guard->isVisible());                                        // asked, nothing ended yet
+                QVERIFY(!shell->property("serversOpen").toBool());
+                QVERIFY(shell->property("filesOpen").toBool());
+                QCOMPARE(guard->property("tasks").toList().size(), 1);                  // exactly the one write is listed
+                QVERIFY(window->grabWindow().save(QString("layout-captures/%1-session-guard.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+                clickItem(findByName(shell, "sessionGuardStay"));                      // "Attendre": everything stays as it was
+                QVERIFY(!guard->isVisible());
+                QVERIFY(!shell->property("serversOpen").toBool());
+                QVERIFY(shell->property("filesOpen").toBool());
+                QCOMPARE(manager.state(saveId).value(), fortiq::TaskManager::State::Running);
+                // The Back key closes the question too.
+                shell->setProperty("sessionMenuOpen", true);
+                QTest::qWait(50);
+                clickItem(findByName(shell, "logoutButton"));
+                QTRY_VERIFY(guard->isVisible());
+                QVariant handled;
+                QVERIFY(QMetaObject::invokeMethod(shell, "handleBack", Q_RETURN_ARG(QVariant, handled)));
+                QVERIFY(handled.toBool()); QVERIFY(!guard->isVisible());
+                // Quitting asks as well (the window close handler uses allowAppClose).
+                QVariant allowed;
+                QVERIFY(QMetaObject::invokeMethod(shell, "allowAppClose", Q_RETURN_ARG(QVariant, allowed)));
+                QVERIFY(!allowed.toBool()); QVERIFY(guard->isVisible());
+                clickItem(findByName(shell, "sessionGuardStay"));
+                // "Se déconnecter quand même": the session ends, the task is not touched by the dialog.
+                shell->setProperty("sessionMenuOpen", true);
+                QTest::qWait(50);
+                clickItem(findByName(shell, "logoutButton"));
+                QTRY_VERIFY(guard->isVisible());
+                clickItem(findByName(shell, "sessionGuardGo"));
+                QTRY_VERIFY(shell->property("serversOpen").toBool());
+                QVERIFY(!shell->property("filesOpen").toBool());
+                QVERIFY(!guard->isVisible());
+                QCOMPARE(manager.state(saveId).value(), fortiq::TaskManager::State::Running);   // settling is the controllers' job (disconnect)
+                QVERIFY(manager.succeed(saveId, "done"));
+                // Reads, views and the live follow do not ask.
+                fortiq::TaskManager::Spec read;
+                read.kind = "logsLoad"; read.title = "Lecture"; read.guards = false; read.session = true; read.transient = true;
+                const int readId = manager.begin(read);
+                shell->setProperty("serversOpen", false);
+                shell->setProperty("filesOpen", true);
+                shell->setProperty("sessionMenuOpen", true);
+                QTest::qWait(50);
+                clickItem(findByName(shell, "logoutButton"));
+                QTRY_VERIFY(shell->property("serversOpen").toBool());
+                QVERIFY(!guard->isVisible());
+                QVERIFY(manager.succeed(readId, ""));
+                shell->setProperty("serversOpen", false);
+                shell->setProperty("taskManager", QVariant::fromValue<QObject *>(nullptr));
+            }
             shell->setProperty("fixture", true);
         }
         if (preview == "incident" && adaptive && size.width() < 700) {

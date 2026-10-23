@@ -8,6 +8,8 @@ LogsController::LogsController(RemoteController *remote, QObject *parent)
     m_pool.setExpiryTimeout(-1);
     m_followTimer.setInterval(3000);
     connect(&m_followTimer, &QTimer::timeout, this, &LogsController::poll);
+    if (m_remote->tasks())
+        connect(m_remote->tasks(), &TaskManager::cancelRequested, this, [this](int id) { if (id != 0 && id == m_followTask) setFollowing(false); });
     connect(m_remote, &RemoteController::changed, this, [this] {
         // Results are bound to the server they came from.
         if (!m_remote->connected()) { disconnected(); return; }
@@ -33,6 +35,7 @@ void LogsController::disconnected() {
     emit serviceChanged();
     emit sourcesChanged();
     m_followTimer.stop();
+    if (m_following) endFollowTask(true);
     m_following = false;
     m_busy = false;
     m_token = -1;
@@ -79,8 +82,57 @@ void LogsController::reload() {
 void LogsController::setFollowing(bool on) {
     if (on == m_following) return;
     m_following = on && m_remote->connected();
-    if (m_following) m_followTimer.start(); else m_followTimer.stop();
+    if (m_following) { m_followTimer.start(); beginFollowTask(); }
+    else { m_followTimer.stop(); endFollowTask(true); }
     emit changed();
+}
+
+int LogsController::beginRead(const QString &kind, const QString &title) {
+    TaskManager *tasks = m_remote->tasks();
+    if (!tasks) return 0;
+    TaskManager::Spec spec;
+    spec.kind = kind;
+    spec.title = title;
+    spec.source = m_remote->serverLabel();
+    spec.generation = m_remote->connectionToken();
+    spec.cancellable = false;   // short reads: a newer request or a session change replaces them
+    spec.guards = false;
+    spec.session = true;
+    spec.transient = true;
+    return tasks->begin(spec);
+}
+
+void LogsController::endRead(int taskId, bool current, const SshResult &r) {
+    TaskManager *tasks = m_remote ? m_remote->tasks() : nullptr;
+    if (!tasks || taskId == 0) return;
+    const QString err = r.message;
+    const bool ok = r.status == SshResult::Status::Ok
+        && (r.code == "exit:0" || r.truncated || err.contains("FORTIQ:missing") || err.contains("FORTIQ:denied") || err.contains("FORTIQ:gone"));
+    if (!current) tasks->markCancelled(taskId, QStringLiteral("Remplacé par une lecture plus récente ou session changée."));
+    else if (ok) tasks->succeed(taskId, QString());
+    else tasks->fail(taskId, r.message.isEmpty() ? QStringLiteral("Commande distante échouée (%1).").arg(r.code) : r.message);
+}
+
+void LogsController::beginFollowTask() {
+    TaskManager *tasks = m_remote->tasks();
+    if (!tasks || m_followTask != 0) return;
+    TaskManager::Spec spec;
+    spec.kind = QStringLiteral("logsFollow");
+    spec.title = QStringLiteral("Suivi en direct · ") + (m_source == "file" ? m_target : m_source);
+    spec.source = m_remote->serverLabel();
+    spec.generation = m_remote->connectionToken();
+    spec.cancellable = true;   // stopping it stops the follow
+    spec.guards = false;
+    spec.session = true;
+    m_followTask = tasks->begin(spec);
+}
+
+void LogsController::endFollowTask(bool cancelled) {
+    TaskManager *tasks = m_remote ? m_remote->tasks() : nullptr;
+    const int id = std::exchange(m_followTask, 0);
+    if (!tasks || id == 0) return;
+    if (cancelled) tasks->markCancelled(id, QStringLiteral("Suivi arrêté."));
+    else tasks->succeed(id, QStringLiteral("Terminé."));
 }
 
 void LogsController::poll() {
@@ -145,15 +197,17 @@ void LogsController::run(bool append) {
     }
     m_busy = true;
     if (!append) { m_state.clear(); m_stateText.clear(); }
+    const int taskId = append ? 0 : beginRead(QStringLiteral("logsLoad"), QStringLiteral("Lecture des journaux · ") + (m_source == "file" ? m_target : m_source));
     emit changed();
     const QByteArray script = m_source == "file" ? fileScript(append) : journalScript(append);
     const int token = m_remote->connectionToken();
     const ConnectionRequest req = m_remote->connectionRequest();
     auto slot = m_session;
     auto *watcher = new QFutureWatcher<SshResult>(this);
-    connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, token, append, seq] {
+    connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, token, append, seq, taskId] {
         const SshResult r = watcher->result();
         watcher->deleteLater();
+        endRead(taskId, seq == m_seq && accepts(token), r);
         if (accepts(token)) apply(r, append, seq);
     });
     watcher->setFuture(QtConcurrent::run(&m_pool, [slot, req, script] {

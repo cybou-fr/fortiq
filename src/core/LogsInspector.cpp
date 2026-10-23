@@ -208,10 +208,12 @@ void LogsController::runInspector() {
     const int token = m_remote->connectionToken();
     const ConnectionRequest req = m_remote->connectionRequest();
     auto slot = m_session;
+    const int taskId = beginRead(QStringLiteral("logsInspect"), QStringLiteral("Inspection autour d'un événement"));
     auto *watcher = new QFutureWatcher<SshResult>(this);
-    connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, token, seq, finish, limited] {
+    connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, token, seq, finish, limited, taskId] {
         const SshResult r = watcher->result();
         watcher->deleteLater();
+        endRead(taskId, seq == m_inspectorSeq && accepts(token), r);
         if (!accepts(token) || seq != m_inspectorSeq) return;
         if (r.status != SshResult::Status::Ok || r.code != "exit:0") {
             m_inspectorBusy = false;

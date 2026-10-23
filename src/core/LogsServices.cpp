@@ -54,10 +54,12 @@ void LogsController::loadService() {
     const ConnectionRequest req = m_remote->connectionRequest();
     const bool userScope = m_source == "userunit";
     auto slot = m_session;
+    const int taskId = beginRead(QStringLiteral("logsService"), QStringLiteral("Service · ") + m_target);
     auto *watcher = new QFutureWatcher<SshResult>(this);
-    connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, token, seq, userScope] {
+    connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, token, seq, userScope, taskId] {
         const SshResult r = watcher->result();
         watcher->deleteLater();
+        endRead(taskId, seq == m_serviceSeq && accepts(token), r);
         applyService(r, token, seq, userScope);
     });
     watcher->setFuture(QtConcurrent::run(&m_pool, [slot, req, script] {
@@ -109,10 +111,12 @@ void LogsController::loadSources() {
     const int token = m_remote->connectionToken();
     const ConnectionRequest req = m_remote->connectionRequest();
     auto slot = m_session;
+    const int taskId = beginRead(QStringLiteral("logsSources"), QStringLiteral("Liste des sources de journaux"));
     auto *watcher = new QFutureWatcher<SshResult>(this);
-    connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, token, seq] {
+    connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, token, seq, taskId] {
         const SshResult r = watcher->result();
         watcher->deleteLater();
+        endRead(taskId, seq == m_sourcesSeq && accepts(token), r);
         applySources(r, token, seq);
     });
     watcher->setFuture(QtConcurrent::run(&m_pool, [slot, req, script] {

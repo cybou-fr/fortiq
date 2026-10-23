@@ -195,6 +195,9 @@ void RemoteController::disconnectServer() {
                 : QStringLiteral("Déconnecté du serveur.");
             if (running && (t->upload || documentMayBePartial)) m_tasks->markUnknown(id, message);
             else m_tasks->markCancelled(id, message);
+        } else if (m_tasks->task(id).value("session").toBool()) {
+            // A read, a view or an interactive session: there is nothing to verify afterwards.
+            m_tasks->markCancelled(id, QStringLiteral("Déconnecté du serveur."));
         } else if (running) {
             m_tasks->markUnknown(id, QStringLiteral("Déconnecté du serveur pendant l'opération ; vérifiez le résultat sur le serveur."));
         } else {

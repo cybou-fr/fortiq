@@ -30,6 +30,7 @@ Item {
     signal requestDocuments(string path)
     signal closeRequested()
     signal requestServers()
+    signal requestDisconnect()
 
     property string viewMode: "grid"
     property string sortKey: "name"

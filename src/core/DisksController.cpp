@@ -1,6 +1,7 @@
 #include "DisksController.h"
 #include "DiskInfo.h"
 #include "RemoteController.h"
+#include "TaskManager.h"
 #include "../ssh/SshClient.h"
 #include <QFutureWatcher>
 #include <QtConcurrentRun>
@@ -19,6 +20,7 @@ DiskRows readRows(SshSession &session,const QByteArray &script,bool devices,cons
 }
 DisksController::DisksController(RemoteController *remote,QObject *parent):QObject(parent),m_remote(remote) {
     m_pool.setMaxThreadCount(1);
+    if(remote->tasks())connect(remote->tasks(),&TaskManager::cancelRequested,this,[this](int id){if(id!=0 && id==m_task && m_cancel)m_cancel->store(true);});
     connect(remote,&RemoteController::changed,this,[this]{
         if(m_remote->connected() && m_remote->connectionToken()==m_token)return;
         if(m_cancel)m_cancel->store(true);
@@ -35,11 +37,23 @@ void DisksController::reload() {
     m_token=m_remote->connectionToken();const int token=m_token,seq=++m_seq;
     const auto request=m_remote->connectionRequest();m_cancel=std::make_shared<std::atomic_bool>(false);auto cancel=m_cancel;
     m_busy=true;m_state="loading";m_status=QStringLiteral("Lecture des disques et systèmes de fichiers…");emit changed();
+    int taskId=0;
+    if(TaskManager *tasks=m_remote->tasks()){
+        TaskManager::Spec spec;spec.kind=QStringLiteral("disksRead");spec.title=QStringLiteral("Lecture des disques");spec.source=m_remote->serverLabel();
+        spec.generation=token;spec.cancellable=true;spec.guards=false;spec.session=true;spec.transient=true;
+        taskId=m_task=tasks->begin(spec);
+    }
     auto *watcher=new QFutureWatcher<Snapshot>(this);
-    connect(watcher,&QFutureWatcher<Snapshot>::finished,this,[this,watcher,seq,token]{
+    connect(watcher,&QFutureWatcher<Snapshot>::finished,this,[this,watcher,seq,token,taskId,cancel]{
         const auto result=watcher->result();watcher->deleteLater();
-        if(seq!=m_seq || !m_remote->connected() || token!=m_remote->connectionToken())return;
-        m_busy=false;m_devices=result.devices.rows;m_mounts=result.mounts.rows;m_versions=result.versions;
+        TaskManager *tasks=m_remote->tasks();
+        if(seq!=m_seq || !m_remote->connected() || token!=m_remote->connectionToken()){if(tasks && taskId)tasks->markCancelled(taskId,QStringLiteral("Session changée."));return;}
+        m_busy=false;
+        if(tasks && taskId){
+            if(cancel->load())tasks->markCancelled(taskId,QStringLiteral("Annulé."));
+            else if(!result.error.isEmpty() || (!result.devices.error.isEmpty() && !result.mounts.error.isEmpty()))tasks->fail(taskId,!result.error.isEmpty()?result.error:result.devices.error);
+            else tasks->succeed(taskId,QString());
+        }m_devices=result.devices.rows;m_mounts=result.mounts.rows;m_versions=result.versions;
         m_deviceError=result.devices.error;m_mountError=result.mounts.error;
         if(!result.error.isEmpty()){m_deviceError=m_mountError=result.error;}
         const int errors=int(!m_deviceError.isEmpty())+int(!m_mountError.isEmpty());

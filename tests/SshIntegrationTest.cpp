@@ -1781,13 +1781,13 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(db.busy(), 5000);
         controller.disconnectServer();                                  // the session ends while the query runs
         QVERIFY(!db.busy());
-        QVERIFY2(lastTaskState() == "unknown" || lastTaskState() == "cancelled", qPrintable(lastTaskState()));   // never "succeeded": nobody saw the result
+        QVERIFY2(lastTaskState() == "cancelled", qPrintable(lastTaskState()));   // never "succeeded": nobody saw the result
         connectTo(serverB);                                             // another server profile, a newer generation
         QTest::qWait(4500);                                             // the stale reply arrives now
         QVERIFY(db.rows().isEmpty() && db.columns().isEmpty() && db.error().isEmpty());
         QVERIFY(db.profiles().isEmpty());                               // the profile belongs to server A only
         QVERIFY(db.selectedId().isEmpty());
-        QVERIFY2(lastTaskState() == "unknown" || lastTaskState() == "cancelled", qPrintable(lastTaskState()));
+        QVERIFY2(lastTaskState() == "cancelled", qPrintable(lastTaskState()));
         // ... and server A's state comes back intact after reconnecting.
         controller.disconnectServer();
         connectTo(serverA);
@@ -1873,6 +1873,132 @@ private slots:
         QVERIFY(!fortiq::SecretStore::load("db-" + profileId).ok);
         controller.disconnectServer();
         settings.remove(pin); settings.remove("servers/profiles"); settings.remove("db/profiles"); settings.remove("mail/notmuchConfig"); settings.remove("mail/displayName");
+    }
+
+    // Audit backlog 1: Logs, MDok, Disks and Terminal report their work to the TaskManager, with the right guarding and settling rules.
+    void everyAppReportsItsWorkToTheTaskManager() {
+        fortiq::RemoteController controller;
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        fortiq::TaskManager *tm = controller.tasks();
+        QStringList seenKinds;                                   // every kind that was ever listed, even if it vanished (transient reads)
+        QObject::connect(tm, &fortiq::TaskManager::tasksChanged, [&] { for (const QVariant &t : tm->tasks()) if (!seenKinds.contains(t.toMap().value("kind").toString())) seenKinds << t.toMap().value("kind").toString(); });
+        auto kindState = [&](const QString &kind) { QString s; for (const QVariant &t : tm->tasks()) if (t.toMap().value("kind").toString() == kind) s = t.toMap().value("state").toString(); return s; };
+        auto kindId = [&](const QString &kind) { int id = 0; for (const QVariant &t : tm->tasks()) if (t.toMap().value("kind").toString() == kind) id = t.toMap().value("id").toInt(); return id; };
+        fortiq::SshSession shellSession;
+        QVERIFY(shellSession.open(controller.connectionRequest()).status == SshResult::Status::Ok);
+        auto shell = [&](const QByteArray &script) { return shellSession.runScript(script, 65536, {}); };
+        QString dir = QString::fromUtf8(shell("printf '%s' \"$HOME\"\n").data) + "/.fortiq-task-test";
+        QVERIFY(shell("rm -rf '" + dir.toUtf8() + "'; mkdir -p '" + dir.toUtf8() + "'; printf '# Titre\\ntexte\\n' > '" + dir.toUtf8() + "/note.md'\n").code == "exit:0");
+
+        // ---- Disks: a transient read, cancellable, silent once done ----
+        {
+            fortiq::DisksController disks(&controller);
+            disks.setWindowActive(true);
+            QTRY_VERIFY_WITH_TIMEOUT(disks.state() == "ready" || disks.state() == "partial" || disks.state() == "error", 30000);
+            QVERIFY(seenKinds.contains("disksRead"));
+            QCOMPARE(kindState("disksRead"), QString());         // success leaves no line behind
+            QCOMPARE(tm->activeCount(), 0);
+            disks.setWindowActive(false);
+        }
+        // ---- Logs: transient reads and the live follow as one cancellable task ----
+        {
+            fortiq::LogsController logs(&controller);
+            logs.loadSources();
+            logs.select("system");
+            QTRY_VERIFY_WITH_TIMEOUT(!logs.busy(), 40000);
+            QTRY_COMPARE_WITH_TIMEOUT(tm->activeCount(), 0, 20000);
+            QVERIFY(seenKinds.contains("logsLoad") && seenKinds.contains("logsSources"));
+            logs.setFollowing(true);
+            QVERIFY(logs.following());
+            QCOMPARE(kindState("logsFollow"), QStringLiteral("running"));
+            QCOMPARE(tm->guardingCount(), 0);                    // following does not guard the session
+            QVERIFY(tm->requestCancel(kindId("logsFollow")));    // the task panel's stop button stops the follow
+            QTRY_VERIFY(!logs.following());
+            QCOMPARE(kindState("logsFollow"), QStringLiteral("cancelled"));
+            logs.setFollowing(true);
+            QCOMPARE(kindState("logsFollow"), QStringLiteral("running"));
+            logs.setFollowing(false);                            // switching it off in the window ends the task too
+            QTRY_COMPARE(tm->activeCount(), 0);
+        }
+        tm->clearFinished();
+
+        // ---- MDok: open is a transient read, save is a guarding write with honest outcomes ----
+        {
+            fortiq::DocumentsController docs(&controller);
+            docs.open(dir + "/note.md");
+            QTRY_VERIFY_WITH_TIMEOUT(docs.hasDocument() && !docs.busy(), 20000);
+            QVERIFY(seenKinds.contains("docOpen"));
+            QCOMPARE(kindState("docOpen"), QString());
+            docs.setText(QStringLiteral("# Titre\nmodifi\xC3\xA9\n"));
+            docs.save();
+            QCOMPARE(kindState("docSave"), QStringLiteral("running"));
+            QCOMPARE(tm->guardingCount(), 1);                    // a save running when the user logs out must be confirmed
+            QTRY_VERIFY_WITH_TIMEOUT(!docs.busy(), 20000);
+            QCOMPARE(kindState("docSave"), QStringLiteral("succeeded"));
+            QCOMPARE(tm->guardingCount(), 0);
+            QCOMPARE(QString::fromUtf8(shell("cat '" + dir.toUtf8() + "/note.md'\n").data), QString::fromUtf8("# Titre\nmodifi\xC3\xA9\n"));
+            // A concurrent change on the server makes the next save a conflict: failed, with a code, never "succeeded".
+            QVERIFY(shell("printf '# Autre\\n' > '" + dir.toUtf8() + "/note.md'\n").code == "exit:0");
+            docs.setText(QStringLiteral("# Titre\nencore\n"));
+            docs.save();
+            QTRY_VERIFY_WITH_TIMEOUT(!docs.busy(), 20000);
+            const QVariantMap conflict = tm->task(kindId("docSave")).isEmpty() ? QVariantMap() : tm->tasks().constLast().toMap();
+            QCOMPARE(conflict.value("state").toString(), QStringLiteral("failed"));
+            QCOMPARE(conflict.value("code").toString(), QStringLiteral("conflict"));
+            QCOMPARE(QString::fromUtf8(shell("cat '" + dir.toUtf8() + "/note.md'\n").data), QStringLiteral("# Autre\n"));   // the other version is untouched
+            // Save-as copy is its own kind.
+            docs.saveAs(dir + "/copie.md");
+            QTRY_VERIFY_WITH_TIMEOUT(!docs.busy(), 20000);
+            QVERIFY(seenKinds.contains("docSaveCopy"));
+        }
+        tm->clearFinished();
+
+        // ---- Terminal: the shell session is a task that guards the session; closing it is not a failure ----
+        {
+            fortiq::TerminalController term(&controller);
+            term.setWindowActive(true);
+            QTRY_VERIFY_WITH_TIMEOUT(term.running(), 20000);
+            QCOMPARE(kindState("terminal"), QStringLiteral("running"));
+            QCOMPARE(tm->guardingCount(), 1);                    // logging out would end the shell: ask first
+            const QVariantMap running = tm->tasks().constLast().toMap();
+            QVERIFY(running.value("guards").toBool() && running.value("session").toBool() && running.value("cancellable").toBool());
+            term.stop();
+            QVERIFY(!term.running());
+            QCOMPARE(kindState("terminal"), QStringLiteral("succeeded"));
+            QCOMPARE(tm->guardingCount(), 0);
+            // Cancelling from the task panel closes the shell and is recorded as cancelled.
+            term.start();
+            QTRY_VERIFY_WITH_TIMEOUT(term.running(), 20000);
+            QVERIFY(tm->requestCancel(kindId("terminal") == 0 ? 0 : tm->tasks().constLast().toMap().value("id").toInt()));
+            QTRY_VERIFY(!term.running());
+            QCOMPARE(tm->tasks().constLast().toMap().value("state").toString(), QStringLiteral("cancelled"));
+            // A shell that exits on its own is a success of the task.
+            term.start();
+            QTRY_VERIFY_WITH_TIMEOUT(term.running(), 20000);
+            term.send("exit\n");
+            QTRY_VERIFY_WITH_TIMEOUT(!term.running(), 20000);
+            QCOMPARE(tm->tasks().constLast().toMap().value("state").toString(), QStringLiteral("succeeded"));
+            // A dropped connection is a cancel (a view has nothing to verify), never "unknown".
+            term.start();
+            QTRY_VERIFY_WITH_TIMEOUT(term.running(), 20000);
+            controller.disconnectServer();
+            QCOMPARE(tm->tasks().constLast().toMap().value("state").toString(), QStringLiteral("cancelled"));
+            QCOMPARE(tm->activeCount(), 0);
+        }
+        // Everything ended: no task is active and the guard has nothing to ask about.
+        QCOMPARE(tm->activeCount(), 0);
+        QCOMPARE(tm->guardingCount(), 0);
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        fortiq::SshSession cleanup;
+        if (cleanup.open(controller.connectionRequest()).status == SshResult::Status::Ok) cleanup.runScript("rm -rf '" + dir.toUtf8() + "'\n", 4096, {});
+        settings.remove(pin);
     }
 
     // The Bases de données app against the test server: SQLite file and PostgreSQL 17 (role fqdb / base fqtest).

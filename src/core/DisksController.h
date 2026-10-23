@@ -34,6 +34,7 @@ private:
     RemoteController *m_remote;
     QThreadPool m_pool;
     std::shared_ptr<std::atomic_bool> m_cancel;
+    int m_task=0;
     int m_seq=0,m_token=-1;
     bool m_busy=false,m_active=false;
     QString m_state="disconnected",m_status="Aucun serveur connecté",m_versions,m_updated,m_deviceError,m_mountError;
