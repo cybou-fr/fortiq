@@ -1,4 +1,5 @@
 #include "NetworkInfo.h"
+#include "../core/SafeCast.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -88,14 +89,14 @@ void mergeLinkStats(QList<NetInterface> &interfaces, const QByteArray &json) {
             if (n.name != name) continue;
             const QJsonObject rx = stats.value("rx").toObject(), tx = stats.value("tx").toObject();
             n.hasStats = true;
-            n.rxBytes = static_cast<qint64>(rx.value("bytes").toDouble());
-            n.rxPackets = static_cast<qint64>(rx.value("packets").toDouble());
-            n.rxErrors = static_cast<qint64>(rx.value("errors").toDouble());
-            n.rxDropped = static_cast<qint64>(rx.value("dropped").toDouble());
-            n.txBytes = static_cast<qint64>(tx.value("bytes").toDouble());
-            n.txPackets = static_cast<qint64>(tx.value("packets").toDouble());
-            n.txErrors = static_cast<qint64>(tx.value("errors").toDouble());
-            n.txDropped = static_cast<qint64>(tx.value("dropped").toDouble());
+            n.rxBytes = toInt64(rx.value("bytes").toDouble());
+            n.rxPackets = toInt64(rx.value("packets").toDouble());
+            n.rxErrors = toInt64(rx.value("errors").toDouble());
+            n.rxDropped = toInt64(rx.value("dropped").toDouble());
+            n.txBytes = toInt64(tx.value("bytes").toDouble());
+            n.txPackets = toInt64(tx.value("packets").toDouble());
+            n.txErrors = toInt64(tx.value("errors").toDouble());
+            n.txDropped = toInt64(tx.value("dropped").toDouble());
         }
     }
 }

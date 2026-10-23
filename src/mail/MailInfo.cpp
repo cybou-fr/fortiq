@@ -1,4 +1,5 @@
 #include "MailInfo.h"
+#include "../core/SafeCast.h"
 
 #include "../browser/HtmlSanitizer.h"
 
@@ -60,7 +61,7 @@ void collectPart(const QJsonObject &part, MailMessage &m, QString &text, QString
         MailAttachment a;
         a.name = part.value("filename").toString();
         a.type = type;
-        a.size = static_cast<qint64>(part.value("content-length").toDouble());
+        a.size = toInt64(part.value("content-length").toDouble());
         a.part = part.value("id").toInt();
         if (a.name.isEmpty()) a.name = QStringLiteral("(sans nom)");
         m.attachments.push_back(a);
@@ -77,7 +78,7 @@ void collectPart(const QJsonObject &part, MailMessage &m, QString &text, QString
         MailAttachment a;
         a.name = part.value("filename").toString().isEmpty() ? type : part.value("filename").toString();
         a.type = type;
-        a.size = static_cast<qint64>(part.value("content-length").toDouble());
+        a.size = toInt64(part.value("content-length").toDouble());
         a.part = part.value("id").toInt();
         m.attachments.push_back(a);
     }
@@ -94,7 +95,7 @@ void walk(const QJsonValue &value, int depth, QList<MailMessage> &out) {
         const QJsonObject o = arr.first().toObject();
         MailMessage m;
         m.id = o.value("id").toString();
-        m.timestamp = static_cast<qint64>(o.value("timestamp").toDouble());
+        m.timestamp = toInt64(o.value("timestamp").toDouble());
         m.depth = depth;
         m.match = o.value("match").toBool(true);
         const QJsonObject h = o.value("headers").toObject();
@@ -212,7 +213,7 @@ QList<MailThread> parseMailSearch(const QByteArray &json, bool *ok) {
         const QJsonObject o = v.toObject();
         MailThread t;
         t.id = o.value("thread").toString();
-        t.timestamp = static_cast<qint64>(o.value("timestamp").toDouble());
+        t.timestamp = toInt64(o.value("timestamp").toDouble());
         t.matched = o.value("matched").toInt();
         t.total = o.value("total").toInt();
         t.authors = o.value("authors").toString();

@@ -119,6 +119,8 @@ cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
 
+Фаззинг и санитайзеры: [FUZZING](docs/FUZZING.md) (`tool/fuzz_linux.sh`, `-DFORTIQ_SANITIZE=ON`).
+
 Все проверки, которые обязан пройти коммит в `main` (документы, компиляция скриптов, сборка, офлайн-тесты, по желанию layout-тест под нагрузкой), одной командой:
 `python tool/ci_check.py --qt-prefix <Qt kit> --toolchain <vcpkg.cmake> [--stress 2]`; та же команда запускается в `.github/workflows/ci.yml` (на GitHub пока не запускалась).
 

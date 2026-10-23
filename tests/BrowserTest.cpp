@@ -113,8 +113,8 @@ private slots:
         QCOMPARE(headerValue(r.headers, "missing"), QString());
     }
     void binaryBodiesAreCarriedByLength() {
-        QByteArray body("A\0FORTIQ-BODY 3\nBBB\r\n\0\xFF", 25);
-        const CurlResult r = parseCurlOutput(frame(0, "FORTIQ-META\t200\thttp://e.com/\tapplication/octet-stream\t25\t0\t1.2.3.4\t1.1\t\t0\t0\t0\t0\t0", "HTTP/1.1 200 OK\r\n\r\n", "", body));
+        QByteArray body("A\0FORTIQ-BODY 3\nBBB\r\n\0\xFF", 23);   // 23 bytes: the literal has no more (ASan caught a read of 25)
+        const CurlResult r = parseCurlOutput(frame(0, "FORTIQ-META\t200\thttp://e.com/\tapplication/octet-stream\t23\t0\t1.2.3.4\t1.1\t\t0\t0\t0\t0\t0", "HTTP/1.1 200 OK\r\n\r\n", "", body));
         QVERIFY(r.framed);
         QCOMPARE(r.body, body);
         QCOMPARE(r.tlsVerify, -1);     // plain http: no TLS verdict

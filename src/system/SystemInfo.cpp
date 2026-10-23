@@ -1,4 +1,5 @@
 #include "SystemInfo.h"
+#include "../core/SafeCast.h"
 
 #include <QHash>
 #include <QSet>
@@ -134,7 +135,7 @@ void parseOverviewSection(const QString &name, const QByteArray &body, SystemOve
         const QStringList p = text.split(QLatin1Char(' '), Qt::SkipEmptyParts);
         if (p.size() >= 3) { o.load1 = p.at(0).toDouble(); o.load5 = p.at(1).toDouble(); o.load15 = p.at(2).toDouble(); }
     } else if (name == QLatin1String("uptime")) {
-        o.uptimeSec = static_cast<qint64>(text.section(QLatin1Char(' '), 0, 0).toDouble());
+        o.uptimeSec = toInt64(text.section(QLatin1Char(' '), 0, 0).toDouble());
     } else if (name == QLatin1String("meminfo")) {
         for (const QString &line : text.split(QLatin1Char('\n'))) {
             const QString key = line.section(QLatin1Char(':'), 0, 0);

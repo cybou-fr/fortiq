@@ -1,0 +1,1 @@
+select $$a;b$$, $tag$ c $tag$, "id;" from "t" /* c; */ ; select 2

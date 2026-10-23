@@ -44,7 +44,13 @@ endif()
 # FORTIQ_SHELL_PREVIEW_ONLY builds just the Desktop Shell and the
 # fortiq_shell_preview capture tool, without libssh2. It exists for the
 # 1536x1024 golden-screenshot comparison and never ships to users.
+option(FORTIQ_FUZZ "Build the libFuzzer target (clang, with ASan/UBSan)" OFF)
+option(FORTIQ_SANITIZE "Build everything with AddressSanitizer + UndefinedBehaviorSanitizer (clang/gcc)" OFF)
 option(FORTIQ_SHELL_PREVIEW_ONLY "Build only the shell preview (no SSH)" OFF)
+if(FORTIQ_SANITIZE)
+    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined -g)
+    add_link_options(-fsanitize=address,undefined)
+endif()
 
 set(FORTIQ_SHELL_QML
     qml/shell/Theme.qml
@@ -367,6 +373,23 @@ if(BUILD_TESTING)
     target_include_directories(fortiq_mailsend_tests PRIVATE src)
     target_link_libraries(fortiq_mailsend_tests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME fortiq_mailsend COMMAND fortiq_mailsend_tests -o "${CMAKE_CURRENT_BINARY_DIR}/mailsend-results.txt,txt" -o "-,txt")
+    # Fuzzing and sanitizers (audit R-backlog 5, docs/FUZZING.md). The smoke driver runs everywhere; libFuzzer and -fsanitize need clang/gcc.
+    set(FORTIQ_FUZZ_SOURCES fuzz/fuzz_targets.cpp fuzz/fuzz_targets.h ${FORTIQ_BROWSER_PURE_SOURCES} ${FORTIQ_NETWORK_PURE_SOURCES} ${FORTIQ_SYSTEM_PURE_SOURCES}
+        ${FORTIQ_DB_PURE_SOURCES} ${FORTIQ_MAIL_PURE_SOURCES})
+    list(REMOVE_DUPLICATES FORTIQ_FUZZ_SOURCES)
+    qt_add_executable(fortiq_fuzz_smoke fuzz/fuzz_smoke.cpp ${FORTIQ_FUZZ_SOURCES})
+    target_include_directories(fortiq_fuzz_smoke PRIVATE src fuzz)
+    target_link_libraries(fortiq_fuzz_smoke PRIVATE Qt6::Core Qt6::Network)
+    add_test(NAME fortiq_fuzz_smoke COMMAND fortiq_fuzz_smoke "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/mail" "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/network"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/system" "${CMAKE_CURRENT_SOURCE_DIR}/fuzz/seeds" --iterations 4000)
+    if(FORTIQ_FUZZ)
+        qt_add_executable(fortiq_fuzz ${FORTIQ_FUZZ_SOURCES})
+        target_compile_definitions(fortiq_fuzz PRIVATE FORTIQ_LIBFUZZER)
+        target_include_directories(fortiq_fuzz PRIVATE src fuzz)
+        target_compile_options(fortiq_fuzz PRIVATE -fsanitize=fuzzer-no-link,address,undefined -fno-omit-frame-pointer -g)
+        target_link_options(fortiq_fuzz PRIVATE -fsanitize=fuzzer,address,undefined)
+        target_link_libraries(fortiq_fuzz PRIVATE Qt6::Core Qt6::Network)
+    endif()
     qt_add_executable(fortiq_document_tests tests/LocalDocumentTest.cpp src/core/LocalDocument.cpp src/core/LocalDocument.h)
     target_include_directories(fortiq_document_tests PRIVATE src)
     target_link_libraries(fortiq_document_tests PRIVATE Qt6::Core Qt6::Test)
@@ -379,8 +402,11 @@ if(BUILD_TESTING)
         FILES "${FORTIQ_BRAND_OUTPUT}/fortiq_mark.png")
     target_link_libraries(fortiq_layout_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Test fortiq_shellplugin)
     add_test(NAME fortiq_layout COMMAND fortiq_layout_tests -o "${CMAKE_CURRENT_BINARY_DIR}/layout-results.txt,txt" -o "-,txt")
-    set_tests_properties(fortiq_layout PROPERTIES ENVIRONMENT
-        "QT_QUICK_CONTROLS_STYLE=Fusion;QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_QPA_PLATFORM_PLUGIN_PATH=$<TARGET_FILE_DIR:Qt6::QOffscreenIntegrationPlugin>")
+    set(FORTIQ_LAYOUT_ENV "QT_QUICK_CONTROLS_STYLE=Fusion;QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    if(TARGET Qt6::QOffscreenIntegrationPlugin)   # Qt from the online installer; distribution packages find the plugin by themselves
+        list(APPEND FORTIQ_LAYOUT_ENV "QT_QPA_PLATFORM_PLUGIN_PATH=$<TARGET_FILE_DIR:Qt6::QOffscreenIntegrationPlugin>")
+    endif()
+    set_tests_properties(fortiq_layout PROPERTIES ENVIRONMENT "${FORTIQ_LAYOUT_ENV}")
     if(WIN32)
         file(TO_CMAKE_PATH "$ENV{WINDIR}/Fonts" FORTIQ_TEST_FONT_DIR)
         set_property(TEST fortiq_layout APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=${FORTIQ_TEST_FONT_DIR}")

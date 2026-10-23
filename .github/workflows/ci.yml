@@ -38,3 +38,21 @@ jobs:
         with:
           name: test-logs
           path: build-ci/**/*.txt
+
+  linux-sanitizers:
+    # Unit tests and the fuzz smoke run under AddressSanitizer + UndefinedBehaviorSanitizer (docs/FUZZING.md). Not yet run on GitHub.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Packages
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build qt6-base-dev qt6-declarative-dev qt6-declarative-dev-tools qt6-tools-dev qt6-tools-dev-tools libssh2-1-dev libssl-dev
+      - name: Build with sanitizers
+        run: |
+          CC=clang CXX=clang++ cmake -S . -B build-san -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON -DFORTIQ_SANITIZE=ON
+          cmake --build build-san
+      - name: Tests (the layout test needs the Windows kit and is covered by the other job)
+        env:
+          QT_QPA_PLATFORM: offscreen
+          ASAN_OPTIONS: detect_leaks=0
+        run: ctest --test-dir build-san -E "layout|brand|ssh_integration" --output-on-failure

@@ -46,7 +46,11 @@ private slots:
         const QUrl uri("content://com.android.providers.downloads.documents/document/primary%3AEt%C3%A9%2Fnotes%20%231.txt");
         QCOMPARE(localDocumentPath(uri), uri.toString(QUrl::FullyEncoded));
         QVERIFY(isContentDocument(localDocumentPath(uri)));
+#ifdef Q_OS_WIN
         QCOMPARE(localDocumentPath(QUrl::fromLocalFile(QString::fromUtf8("C:/Mes documents/été #1.txt"))), QString::fromUtf8("C:/Mes documents/été #1.txt"));
+#else
+        QCOMPARE(localDocumentPath(QUrl::fromLocalFile(QString::fromUtf8("/home/u/Mes documents/été #1.txt"))), QString::fromUtf8("/home/u/Mes documents/été #1.txt"));
+#endif
         QVERIFY(localDocumentPath(QUrl("https://example.test/key")).isEmpty());
         QVERIFY(localDocumentPath(QUrl("content:///no-provider")).isEmpty());
         QVERIFY(localDocumentPath(QUrl("content://provider/doc#fragment")).isEmpty());

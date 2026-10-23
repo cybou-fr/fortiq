@@ -1,4 +1,5 @@
 #include "LogsControllerInternal.h"
+#include "SafeCast.h"
 
 namespace fortiq {
 QString LogsController::templateOf(const QString &message) {
@@ -125,7 +126,7 @@ QVariantList LogsController::dailyCounts(const QVariantList &history, qint64 now
         int starts = 0, failures = 0, restarts = 0;
         for (const QVariant &v : history) {
             const QVariantMap h = v.toMap();
-            if (QDateTime::fromMSecsSinceEpoch(static_cast<qint64>(h.value("time").toDouble())).date() != d) continue;
+            if (QDateTime::fromMSecsSinceEpoch(toInt64(h.value("time").toDouble())).date() != d) continue;
             const QString k = h.value("kind").toString();
             if (k == "started") ++starts;
             else if (k == "failed" || k == "gaveup") ++failures;
