@@ -11,6 +11,7 @@
 #include "network/NetworkController.h"
 #include "system/SystemController.h"
 #include "db/DbController.h"
+#include "mail/MailController.h"
 #include "core/SecretStore.h"
 #include "core/TerminalController.h"
 #include "core/DisksController.h"
@@ -1253,6 +1254,113 @@ private slots:
         QCOMPARE(net.state(), QStringLiteral("disconnected"));
         QVERIFY(net.interfaces().isEmpty() && net.listeners().isEmpty() && net.probeOutput().isEmpty());
         settings.remove(pin);
+    }
+
+    // The Courrier app against the test server: a disposable notmuch database built by tool/make_mail_fixture.sh.
+    // Needs FORTIQ_IT_MAIL=1 and `notmuch` installed on the test server.
+    void mailAppReadsAndTags() {
+        if (qEnvironmentVariable("FORTIQ_IT_MAIL").isEmpty()) QSKIP("FORTIQ_IT_MAIL not set");
+        fortiq::RemoteController controller;
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+
+        auto shell = [&](const QByteArray &script) {
+            fortiq::SshSession session;
+            const SshResult opened = session.open(controller.connectionRequest());
+            if (opened.status != SshResult::Status::Ok) return opened;
+            return session.runScript(script, 262144, {});
+        };
+        QFile fixtureScript(QString::fromUtf8(QT_TESTCASE_SOURCEDIR) + "/tool/make_mail_fixture.sh");
+        QVERIFY(fixtureScript.open(QIODevice::ReadOnly));
+        const SshResult made = shell("rm -f /tmp/fq_mail_pwned\nbash -s -- /tmp/fq_mail_out <<'FQ_FIXTURE_END'\n" + fixtureScript.readAll().replace("\r\n", "\n") + "\nFQ_FIXTURE_END\n");
+        QVERIFY2(made.status == SshResult::Status::Ok && made.code == "exit:0", qPrintable(made.message + QString::fromUtf8(made.data)));
+        const QString config = QStringLiteral("/home/") + base.user + QStringLiteral("/mailfix/nm.conf");
+
+        fortiq::MailController mail(&controller);
+        mail.setWindowActive(true);
+        mail.setConfigPath(config);
+        QTRY_VERIFY_WITH_TIMEOUT(mail.state() == "ready" && !mail.threads().isEmpty() && !mail.folders().isEmpty(), 25000);
+        QCOMPARE(mail.threads().size(), 5);
+        auto folderCount = [&](const QString &k) { for (const QVariant &f : mail.folders()) if (f.toMap().value("key").toString() == k) return f.toMap().value("count").toInt(); return -2; };
+        QCOMPARE(folderCount("inbox"), 6);
+        QCOMPARE(folderCount("unread"), 5);
+        QCOMPARE(folderCount("flagged"), 1);
+        QVERIFY(mail.version().startsWith("notmuch"));
+        auto threadBySubject = [&](const QString &subject) { for (const QVariant &t : mail.threads()) if (t.toMap().value("subject").toString() == subject) return t.toMap(); return QVariantMap(); };
+
+        // Search: the text is data. A shell-looking query matches nothing and runs nothing.
+        mail.search("from:alice");
+        QTRY_COMPARE_WITH_TIMEOUT(mail.threads().size(), 1, 15000);
+        QCOMPARE(mail.threads().first().toMap().value("subject").toString(), QStringLiteral("Rapport"));
+        mail.search("$(touch /tmp/fq_mail_pwned) ; `touch /tmp/fq_mail_pwned` \"");
+        QTRY_VERIFY_WITH_TIMEOUT(!mail.busy(), 15000);
+        QCOMPARE(QString::fromUtf8(shell("[ -e /tmp/fq_mail_pwned ] && echo YES || echo NO\n").data).trimmed(), QStringLiteral("NO"));
+        mail.search(QString());
+        QTRY_COMPARE_WITH_TIMEOUT(mail.threads().size(), 5, 15000);
+
+        // Reading a conversation: decoded headers, attachments listed, replies nested; opening marks it read.
+        const QString zoeId = threadBySubject(QString::fromUtf8("Caf\xC3\xA9 au lait \xE2\x9C\x93")).value("id").toString();
+        QVERIFY(!zoeId.isEmpty());
+        mail.openThread(zoeId);
+        QTRY_COMPARE_WITH_TIMEOUT(mail.messages().size(), 2, 15000);
+        QVERIFY(mail.messages().at(0).toMap().value("from").toString().contains(QString::fromUtf8("Zo\xC3\xAB")));
+        QCOMPARE(mail.messages().at(1).toMap().value("depth").toInt(), 1);
+        QVERIFY(mail.messages().at(0).toMap().value("hasHtml").toBool());
+        QVERIFY(!mail.messages().at(0).toMap().value("html").toString().contains("script"));
+        QTRY_VERIFY_WITH_TIMEOUT(!mail.messages().at(0).toMap().value("unread").toBool(), 15000);      // marked read
+        QTRY_COMPARE_WITH_TIMEOUT(folderCount("unread"), 4, 15000);
+        QVERIFY(!threadBySubject(QString::fromUtf8("Caf\xC3\xA9 au lait \xE2\x9C\x93")).value("unread").toBool());
+
+        const QString reportId = threadBySubject("Rapport").value("id").toString();
+        mail.openThread(reportId);
+        QTRY_COMPARE_WITH_TIMEOUT(mail.messages().size(), 1, 15000);
+        const QVariantMap report = mail.messages().first().toMap();
+        QCOMPARE(report.value("attachments").toList().size(), 1);
+        QCOMPARE(report.value("attachments").toList().first().toMap().value("name").toString(), QString::fromUtf8("Rapport \xC3\xA9t\xC3\xA9.pdf"));
+        QCOMPARE(report.value("text").toString(), QString::fromUtf8("Voir le rapport en pi\xC3\xA8""ce jointe."));
+
+        // HTML-only mail: inert rich text, subject shown literally.
+        const QString promoId = threadBySubject("Offre <b>speciale</b>").value("id").toString();
+        QVERIFY(!promoId.isEmpty());
+        mail.openThread(promoId);
+        QTRY_COMPARE_WITH_TIMEOUT(mail.messages().size(), 1, 15000);
+        const QString html = mail.messages().first().toMap().value("html").toString();
+        QVERIFY(!html.isEmpty() && !html.contains("<script") && !html.contains("onload") && !html.contains("track.example") && !html.contains("javascript"));
+
+        // Tags: flag, unflag; archive removes the row from the inbox and only that tag changes.
+        mail.setTag(reportId, "flagged", false);
+        QTRY_COMPARE_WITH_TIMEOUT(folderCount("flagged"), 0, 15000);
+        mail.setTag(reportId, "flagged", true);
+        QTRY_COMPARE_WITH_TIMEOUT(folderCount("flagged"), 1, 15000);
+        mail.setTag(reportId, "inbox", false);
+        QTRY_COMPARE_WITH_TIMEOUT(folderCount("inbox"), 5, 15000);
+        QCOMPARE(mail.threads().size(), 4);
+        mail.setTag(reportId, "bogus", true);                 // tags outside the editable set never reach the server
+        mail.setTag("zz;rm", "unread", true);                 // nor do invalid ids
+        QTRY_VERIFY_WITH_TIMEOUT(!mail.busy(), 15000);
+        const SshResult counts = shell("export NOTMUCH_CONFIG='" + config.toUtf8() + "'\nnotmuch count -- 'tag:bogus'; notmuch count -- 'tag:flagged'\n");
+        QCOMPARE(QString::fromUtf8(counts.data).split('\n', Qt::SkipEmptyParts), QStringList({ "0", "1" }));
+        mail.openFolder("all");
+        QTRY_COMPARE_WITH_TIMEOUT(mail.threads().size(), 5, 15000);
+
+        // A wrong database path gives a clear message and no stale data.
+        mail.setConfigPath("/nonexistent/notmuch-config");
+        QTRY_COMPARE_WITH_TIMEOUT(mail.state(), QStringLiteral("error"), 15000);
+        QVERIFY2(mail.status().contains("notmuch"), qPrintable(mail.status()));
+        mail.setConfigPath(config);
+        QTRY_COMPARE_WITH_TIMEOUT(mail.state(), QStringLiteral("ready"), 15000);
+
+        // Disconnect clears everything.
+        controller.disconnectServer();
+        QCOMPARE(mail.state(), QStringLiteral("disconnected"));
+        QVERIFY(mail.threads().isEmpty() && mail.messages().isEmpty() && mail.folders().isEmpty());
+        settings.remove(pin);
+        settings.remove("mail/notmuchConfig");
     }
 
     // The Bases de données app against the test server: SQLite file and PostgreSQL 17 (role fqdb / base fqtest).

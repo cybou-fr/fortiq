@@ -166,6 +166,35 @@ QtObject {
     function removeProfile(id) {}
     function setWindowActive(a) {}
 })";
+static const char kFakeMail[] = R"(import QtQml
+QtObject {
+    property string state: 'ready'
+    property string status: 'notmuch 0.39'
+    property bool busy: false
+    property var folders: [ { key: 'inbox', title: 'Boîte de réception', query: 'tag:inbox', count: 5 }, { key: 'unread', title: 'Non lus', query: 'tag:unread', count: 4 }, { key: 'all', title: 'Tous les messages', query: '*', count: 6 } ]
+    property string folderKey: 'inbox'
+    property string query: ''
+    property var threads: [
+        { id: '01', when: '10:00', matched: 1, total: 1, authors: 'Alice', subject: 'Rapport', tags: ['inbox', 'unread', 'flagged', 'attachment'], unread: true, flagged: true, attachment: true },
+        { id: '02', when: '22 oct. 08:30', matched: 2, total: 2, authors: 'Zoë Müller, bob', subject: 'Café au lait', tags: ['inbox'], unread: false, flagged: false, attachment: false } ]
+    property bool hasMore: false
+    property string selectedThreadId: ''
+    property var messages: []
+    property bool threadBusy: false
+    property string threadStatus: ''
+    property var calls: []
+    function setWindowActive(a) {}
+    function refresh() { calls = calls.concat(['refresh']) }
+    function openFolder(k) { calls = calls.concat(['folder:' + k]) }
+    function search(t) { calls = calls.concat(['search:' + t]) }
+    function loadMore() {}
+    function openThread(id) { calls = calls.concat(['open:' + id]); selectedThreadId = id
+        messages = [ { id: 'a', depth: 0, match: true, from: 'Alice <alice@example.org>', to: 'me@example.net', cc: '', date: 'Thu, 22 Oct 2026 08:30:00 +0000', when: '10:00', subject: 'Rapport', tags: ['inbox', 'unread'], unread: true,
+            text: 'Voir le rapport.', html: '<p>Voir <a href=\"https://x.example\">le rapport</a>.</p>', htmlPlain: 'Voir le rapport.', hasText: true, hasHtml: true, htmlLinks: 1, htmlScripts: 0, htmlImages: 0,
+            attachments: [ { name: 'Rapport été.pdf', type: 'application/pdf', size: 24 } ] } ] }
+    function closeThread() { selectedThreadId = ''; messages = [] }
+    function setTag(id, tag, on) { calls = calls.concat(['tag:' + id + ':' + tag + ':' + on]) }
+})";
 static const char kFakeRemote[] = R"(import QtQml
 QtObject { property bool connected: true; property string serverLabel: "fixture@server" })";
 #endif
@@ -386,6 +415,51 @@ private slots:
                 click(findByName(sysWin, "systemAuto"));
                 shell->setProperty("systemOpen", false);
                 shell->setProperty("systemController", QVariant::fromValue<QObject *>(nullptr));
+            }
+            {   // Courrier: folders, thread list, reader, tag actions.
+                QQmlComponent mailComponent(&engine), mailRemoteComponent(&engine);
+                mailComponent.setData(kFakeMail, QUrl());
+                mailRemoteComponent.setData(kFakeRemote, QUrl());
+                auto *fakeMail = mailComponent.create(); QVERIFY2(fakeMail, qPrintable(mailComponent.errorString()));
+                auto *mailRemote = mailRemoteComponent.create(); QVERIFY2(mailRemote, qPrintable(mailRemoteComponent.errorString()));
+                fakeMail->setParent(window); mailRemote->setParent(window);
+                shell->setProperty("mailController", QVariant::fromValue(fakeMail));
+                shell->setProperty("mailOpen", true);
+                shell->setProperty("foregroundApp", "mail");
+                QTest::qWait(80);
+                auto *mailWin = shell->findChild<QQuickItem *>("mailWindow"); QVERIFY(mailWin); QVERIFY(mailWin->isVisible());
+                mailWin->setProperty("remote", QVariant::fromValue(mailRemote));
+                QVERIFY(mailWin->x() >= 0 && mailWin->y() >= 47 && mailWin->x() + mailWin->width() <= shell->width());
+                QTest::qWait(100);
+                auto click = [&](QQuickItem *item) {
+                    QVERIFY(item);
+                    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
+                    QTest::qWait(60);
+                };
+                auto *list = findByName(mailWin, "mailThreadList"); QVERIFY(list); QVERIFY(list->isVisible());
+                QCOMPARE(list->property("count").toInt(), 2);
+                QVERIFY(window->grabWindow().save(QString("layout-captures/%1-mail.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+                // Search runs the query typed in the box.
+                auto *search = findByName(mailWin, "mailSearch"); QVERIFY(search);
+                search->forceActiveFocus();
+                for (const char c : QByteArray("from:alice")) QTest::keyClick(window, c);
+                QTest::keyClick(window, Qt::Key_Return);
+                QTRY_VERIFY(fakeMail->property("calls").toStringList().contains("search:from:alice"));
+                // A thread opens in the reader; tag buttons ask the controller.
+                click(findByName(mailWin, "mailThread_01"));
+                QTRY_VERIFY(fakeMail->property("calls").toStringList().contains("open:01"));
+                auto *reader = findByName(mailWin, "mailReader"); QVERIFY(reader); QTRY_VERIFY(reader->isVisible());
+                auto *messages = findByName(mailWin, "mailMessages"); QVERIFY(messages);
+                QTRY_COMPARE(messages->property("count").toInt(), 1);
+                QVERIFY(window->grabWindow().save(QString("layout-captures/%1-mail-reader.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+                click(findByName(mailWin, "mailTag_unread"));
+                QVERIFY(fakeMail->property("calls").toStringList().contains("tag:01:unread:false"));      // the thread is unread: the button marks it read
+                click(findByName(mailWin, "mailTag_inbox"));
+                QVERIFY(fakeMail->property("calls").toStringList().contains("tag:01:inbox:false"));       // archive
+                click(findByName(mailWin, "mailFolder_unread"));
+                QVERIFY(fakeMail->property("calls").toStringList().contains("folder:unread"));
+                shell->setProperty("mailOpen", false);
+                shell->setProperty("mailController", QVariant::fromValue<QObject *>(nullptr));
             }
             {   // Bases de données: profile list, schema, read-only editor and the profile form.
                 QQmlComponent dbComponent(&engine), dbRemoteComponent(&engine);

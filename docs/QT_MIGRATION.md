@@ -307,3 +307,9 @@ PostgreSQL), with connection profiles bound to a saved server whose passwords li
 empty string, time and row limits and cancellable `dbQuery` tasks. Read-only is layered (SQL scanner that also refuses `\` and `.` meta-commands, `sqlite3 -readonly`, a read-only
 `psql` session with `statement_timeout`) and documented as an accident guard, not a security boundary. SQL and the password travel inside the stdin script only. Verified: `fortiq_db`
 19 unit tests, the live `databaseAppIsReadOnlyAndBounded` test on the Debian 13 fixture (live suite 31 passed, 3 skipped), a layout test, CTest 16/16 and the Android arm64 build. Not done: MariaDB, writes, export, query history; Android not run on a device.
+
+23 October Mail (read and tags, [MAIL](MAIL.md)): the Courrier app is a GUI over `notmuch` on the selected server (mail is fetched there by the user's own tools): folders with counts,
+search in notmuch syntax, conversations with decoded headers, nested replies, attachment names and safe HTML (the browser sanitizer: no scripts, styles, forms or remote images; links shown, never
+opened). The only changes are tags (read, flagged, archive, trash marker). Queries, ids and tags are single-quoted data after `--`. Verified: `fortiq_mail` 14 unit tests on real notmuch 0.39 outputs
+(`tool/make_mail_fixture.sh`), the live `mailAppReadsAndTags` test (live suite 32 passed, 3 skipped), a layout test, CTest 17/17 and the Android arm64 build. Not done: sending (`msmtp`), account
+wizard, sync, attachment download, PGP; Android not run on a device.

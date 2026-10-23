@@ -27,6 +27,8 @@ Item {
     property bool systemOpen: false
     property var dbController: null
     property bool dbOpen: false
+    property var mailController: null
+    property bool mailOpen: false
     property bool disksOpen: false
     property var documentsController:null
     property bool documentsOpen:false
@@ -64,7 +66,7 @@ Item {
     function logout() {
         if (!allowAppClose()) return
         sessionMenuOpen = false; launcherOpen = false; controlOpen = false
-        filesOpen = false; logsOpen = false; terminalOpen = false; disksOpen = false; documentsOpen = false; webOpen = false; networkOpen = false; systemOpen = false; dbOpen = false
+        filesOpen = false; logsOpen = false; terminalOpen = false; disksOpen = false; documentsOpen = false; webOpen = false; networkOpen = false; systemOpen = false; dbOpen = false; mailOpen = false
         if (controller) controller.disconnectServer()
         serversOpen = true
     }
@@ -72,7 +74,7 @@ Item {
         target: shell.controller
         function onChanged() { if (shell.controller.connected && shell.serversOpen && !shell.fixture) shell.serversOpen = false }
     }
-    property var windowOrder: ["files", "browser", "logs", "terminal", "disks", "docs", "web", "network", "system", "db"]
+    property var windowOrder: ["files", "browser", "logs", "terminal", "disks", "docs", "web", "network", "system", "db", "mail"]
     function raiseApp(app) {
         windowOrder = windowOrder.filter(key => key !== app).concat([app])
         foregroundApp = app
@@ -105,6 +107,7 @@ Item {
         else if (app === "network") { networkOpen = true; raiseApp("network"); launcherOpen = false }
         else if (app === "system") { systemOpen = true; raiseApp("system"); launcherOpen = false }
         else if (app === "db") { dbOpen = true; raiseApp("db"); launcherOpen = false }
+        else if (app === "mail") { mailOpen = true; raiseApp("mail"); launcherOpen = false }
         else if (app === "trash") {
             filesOpen = true; raiseApp("files")
             if (controller && controller.connected && controller.trashDirectory.length > 0) controller.navigate(controller.trashDirectory)
@@ -205,6 +208,18 @@ Item {
         onRequestServers: shell.serversOpen = true
     }
 
+    MailWindow {
+        id: mailWindow
+        visible: shell.mailOpen && (!shell.adaptive || shell.foregroundApp === "mail")
+        adaptive: shell.adaptive
+        x: shell.adaptive ? 8 : 300; y: shell.adaptive ? shell.appTop : 80
+        width: shell.adaptive ? shell.width - 16 : 1000; height: shell.adaptive ? shell.appHeight : 670
+        z: shell.windowOrder.indexOf("mail") + 1
+        backdrop: wallpaper; mailer: shell.mailController; remote: shell.controller
+        onCloseRequested: { shell.mailOpen = false; if (shell.adaptive) { shell.foregroundApp = "files"; shell.filesOpen = true } }
+        onRequestServers: shell.serversOpen = true
+    }
+
     DbWindow {
         id: dbWindow
         visible: shell.dbOpen && (!shell.adaptive || shell.foregroundApp === "db")
@@ -279,7 +294,7 @@ Item {
         z: 9
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         onPressed: mouse => {
-            const windows = [{key: "files", item: filesWindow}, {key: "browser", item: browserWindow}, {key: "logs", item: logsWindow}, {key: "terminal", item: terminalWindow}, {key:"disks",item:disksWindow}, {key:"docs",item:documentsWindow}, {key:"web",item:webWindow}, {key:"network",item:networkWindow}, {key:"system",item:systemWindow}, {key:"db",item:dbWindow}]
+            const windows = [{key: "files", item: filesWindow}, {key: "browser", item: browserWindow}, {key: "logs", item: logsWindow}, {key: "terminal", item: terminalWindow}, {key:"disks",item:disksWindow}, {key:"docs",item:documentsWindow}, {key:"web",item:webWindow}, {key:"network",item:networkWindow}, {key:"system",item:systemWindow}, {key:"db",item:dbWindow}, {key:"mail",item:mailWindow}]
             windows.sort((a, b) => b.item.z - a.item.z)
             for (const entry of windows) {
                 const p = entry.item.mapFromItem(shell, mouse.x, mouse.y)
@@ -356,7 +371,7 @@ Item {
         y: edge === "left" ? 59 : parent.height - height - 8
         width: edge === "left" ? 84 : (shell.fixture?560:Math.min(parent.width-16,appPanel.apps.length*60+84))
         height: edge === "left" ? parent.height - 59 - 8 : 70
-        running: ({ files: shell.filesOpen, logs: shell.logsOpen, terminal: shell.terminalOpen, disks:shell.disksOpen, docs:shell.documentsOpen, browser: shell.fixture ? shell.browserOpen : shell.webOpen, network: shell.networkOpen, system: shell.systemOpen, db: shell.dbOpen, launcher: shell.launcherOpen })
+        running: ({ files: shell.filesOpen, logs: shell.logsOpen, terminal: shell.terminalOpen, disks:shell.disksOpen, docs:shell.documentsOpen, browser: shell.fixture ? shell.browserOpen : shell.webOpen, network: shell.networkOpen, system: shell.systemOpen, db: shell.dbOpen, mail: shell.mailOpen, launcher: shell.launcherOpen })
         onLaunch: (app) => shell.launch(app)
         onMoveTo: (edge) => {
             shell.panelEdge = edge
@@ -463,6 +478,10 @@ Item {
         if (foregroundApp === "disks") {
             if(disksWindow.handleBack())return true
             foregroundApp="files";filesOpen=true;return true
+        }
+        if (foregroundApp === "mail") {
+            if (mailWindow.handleBack()) return true
+            foregroundApp = "files"; filesOpen = true; return true
         }
         if (foregroundApp === "db") {
             if (dbWindow.handleBack()) return true
