@@ -251,3 +251,9 @@ pipeline, navigation, disconnect), `RemoteProfiles.cpp` (saved servers, remember
 `fortiq_ssh_integration` suite **27 passed, 0 failed, 3 skipped** (logs service fixtures) against the disposable WSL
 `fortiq-test` server, with a key login, the upload/trash/save/search fixtures under `/home/fqshell/it`, and a throw-away
 `fqshell` password set on that disposable distro for the run.
+
+Refactor, step 3 (no behaviour change): `LogsController.cpp` is split into `LogsController.cpp` (state, sources, filters,
+follow, journal/file scripts, apply), `LogsAnalysis.cpp` (repeat groups, journal-line and service parsing, history/daily counts),
+`LogsInspector.cpp` (evidence-linked synthesis, incident inspector, report), `LogsServices.cpp` (service and source loading)
+and the internal `LogsControllerInternal.h`; moved verbatim by script. Verified: CTest 11/11, Logs QtTest **11 passed, 0 skipped**
+with `FORTIQ_TEST_WSL=Debian` (real Linux reader), and the live integration suite **27 passed, 0 failed, 3 skipped**.

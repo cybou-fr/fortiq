@@ -142,6 +142,13 @@ else()
     set(FORTIQ_SSH_TARGET fortiq_libssh2)
 endif()
 
+set(FORTIQ_LOGS_SOURCES
+    src/core/LogsController.cpp
+    src/core/LogsAnalysis.cpp
+    src/core/LogsInspector.cpp
+    src/core/LogsServices.cpp
+)
+
 set(FORTIQ_REMOTE_SOURCES
     src/core/RemoteController.cpp
     src/core/RemoteProfiles.cpp
@@ -171,7 +178,7 @@ qt_add_executable(fortiq
     src/core/RemoteController.h
     src/core/SecretStore.cpp
     src/core/SecretStore.h
-    src/core/LogsController.cpp
+    ${FORTIQ_LOGS_SOURCES}
     src/core/LogsController.h
     src/core/TerminalController.cpp
     src/core/TerminalController.h
@@ -266,7 +273,7 @@ if(BUILD_TESTING)
         ${FORTIQ_SSH_SOURCES} src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h
         src/core/LocalDocument.cpp src/core/LocalDocument.h
         ${FORTIQ_REMOTE_SOURCES} src/core/RemoteController.h src/core/SecretStore.cpp src/core/SecretStore.h
-        src/core/LogsController.cpp src/core/LogsController.h)
+        ${FORTIQ_LOGS_SOURCES} src/core/LogsController.h)
     target_include_directories(fortiq_ssh_it PRIVATE src)
     target_link_libraries(fortiq_ssh_it PRIVATE Qt6::Core Qt6::Network Qt6::Concurrent Qt6::Test ${FORTIQ_SSH_TARGET})
     add_test(NAME fortiq_ssh_integration COMMAND fortiq_ssh_it -o "${CMAKE_CURRENT_BINARY_DIR}/ssh-results.txt,txt" -o "-,txt")
@@ -274,7 +281,7 @@ if(BUILD_TESTING)
         ${FORTIQ_SSH_SOURCES} src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h
         src/core/LocalDocument.cpp src/core/LocalDocument.h
         ${FORTIQ_REMOTE_SOURCES} src/core/RemoteController.h src/core/SecretStore.cpp src/core/SecretStore.h
-        src/core/LogsController.cpp src/core/LogsController.h)
+        ${FORTIQ_LOGS_SOURCES} src/core/LogsController.h)
     target_include_directories(fortiq_logs_tests PRIVATE src)
     target_link_libraries(fortiq_logs_tests PRIVATE Qt6::Core Qt6::Network Qt6::Concurrent Qt6::Test ${FORTIQ_SSH_TARGET})
     add_test(NAME fortiq_logs COMMAND fortiq_logs_tests -o "${CMAKE_CURRENT_BINARY_DIR}/logs-results.txt,txt" -o "-,txt")
