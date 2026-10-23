@@ -28,12 +28,17 @@ QtObject {
     property string pendingFingerprint: ""
     property string statusText: ""
     property string serverLabel: "vps-1"
+    property bool secretStoreAvailable: true
     property var calls: []
     property var servers: [
         { id: "a", name: "vps-1", host: "vps.example", port: 22, user: "debian", keyPath: "", active: false, pinned: true },
-        { id: "b", name: "Maison", host: "192.0.2.10", port: 2222, user: "root", keyPath: "C:/k/id_ed25519", active: false, pinned: false } ]
+        { id: "b", name: "Maison", host: "192.0.2.10", port: 2222, user: "root", keyPath: "C:/k/id_ed25519", active: false, pinned: false },
+        { id: "c", name: "Coffre", host: "203.0.113.5", port: 22, user: "ops", keyPath: "", active: false, pinned: true, secretSaved: true } ]
     signal changed()
     function connectTo(id, secret) { calls = calls.concat([id + ":" + secret]) }
+    function connectToRemembering(id, secret, remember) { calls = calls.concat(["remember:" + id + ":" + secret]) }
+    function connectToSaved(id) { calls = calls.concat(["saved:" + id]) }
+    function forgetSecret(id) { calls = calls.concat(["forget:" + id]) }
     function trustHost() {}
     function saveServer(o) { return "x" }
     function removeServer(id) {}
@@ -217,6 +222,20 @@ private slots:
                 auto *keyTile = findByName(login, "loginTile_b"); QVERIFY(keyTile);
                 QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, keyTile->mapToScene(QPointF(keyTile->width() / 2, 50)).toPoint());
                 QTRY_COMPARE(fake->property("calls").toStringList(), (QStringList{"a:pw1", "b:"}));
+                // A remembered secret connects at once through the protected store; no typing needed.
+                auto *savedTile = findByName(login, "loginTile_c"); QVERIFY(savedTile);
+                QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, savedTile->mapToScene(QPointF(savedTile->width() / 2, 50)).toPoint());
+                QTRY_COMPARE(fake->property("calls").toStringList(), (QStringList{"a:pw1", "b:", "saved:c"}));
+                QVERIFY(findByName(login, "loginForget")->isVisible());
+                // "Se souvenir" sends the typed secret to the controller with remember = true.
+                auto *plainTile = findByName(login, "loginTile_a"); QVERIFY(plainTile);
+                QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, plainTile->mapToScene(QPointF(plainTile->width() / 2, 50)).toPoint());
+                auto *box = findByName(login, "loginRemember"); QVERIFY(box); QVERIFY(box->isVisible());
+                QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, box->mapToScene(QPointF(box->width() / 2, box->height() / 2)).toPoint());
+                secretInput->forceActiveFocus();
+                for (const char c : {'p', 'w', '2'}) QTest::keyClick(window, c);
+                QTest::keyClick(window, Qt::Key_Return);
+                QTRY_COMPARE(fake->property("calls").toStringList(), (QStringList{"a:pw1", "b:", "saved:c", "remember:a:pw2"}));
                 // Logout from the session menu closes the windows and returns to the login screen.
                 login->setProperty("controller", QVariant::fromValue<QObject *>(nullptr));
                 shell->setProperty("serversOpen", false);

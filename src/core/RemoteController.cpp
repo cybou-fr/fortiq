@@ -1,4 +1,5 @@
 #include "RemoteController.h"
+#include "SecretStore.h"
 #include "LocalDocument.h"
 #include "RemotePath.h"
 #include "../ssh/SshClient.h"
@@ -94,6 +95,20 @@ QVariantList RemoteController::servers() const {
     return out;
 }
 
+bool RemoteController::secretStoreAvailable() const { return SecretStore::available(); }
+
+void RemoteController::setSecretSaved(const QString &id, bool saved) {
+    QVariantList list = loadProfiles();
+    bool changed = false;
+    for (QVariant &v : list) {
+        QVariantMap p = v.toMap();
+        if (p.value("id").toString() != id || p.value("secretSaved").toBool() == saved) continue;
+        p.insert("secretSaved", saved);
+        v = p; changed = true;
+    }
+    if (changed) storeProfiles(list);
+}
+
 QString RemoteController::saveServer(const QVariantMap &profile) {
     const QString host = profile.value("host").toString().trimmed();
     const QString user = profile.value("user").toString().trimmed();
@@ -110,10 +125,26 @@ QString RemoteController::saveServer(const QVariantMap &profile) {
     const QString name = profile.value("name").toString().trimmed();
     const QVariantMap stored { { "id", id }, { "name", name.isEmpty() ? host : name }, { "host", host },
                                { "port", port }, { "user", user }, { "keyPath", key } };
+    QVariantMap toStore = stored;
     QVariantList list = loadProfiles();
     bool replaced = false;
-    for (QVariant &v : list) if (v.toMap().value("id") == id) { v = stored; replaced = true; }
-    if (!replaced) list << stored;
+    bool forget = false;
+    for (QVariant &v : list) {
+        if (v.toMap().value("id") != id) continue;
+        const QVariantMap old = v.toMap();
+        // A remembered secret belongs to one account on one server: if the
+        // target changes it must never be sent to the new one.
+        const bool sameTarget = old.value("host").toString().toLower() == host.toLower()
+            && old.value("port").toInt() == port && old.value("user").toString() == user
+            && old.value("keyPath").toString() == key;
+        if (old.value("secretSaved").toBool()) {
+            if (sameTarget) toStore.insert("secretSaved", true);
+            else forget = true;
+        }
+        v = toStore; replaced = true;
+    }
+    if (!replaced) list << toStore;
+    if (forget) SecretStore::remove(id);
     storeProfiles(list);
     return id;
 }
@@ -122,7 +153,37 @@ void RemoteController::removeServer(const QString &id) {
     QVariantList list = loadProfiles();
     list.removeIf([&](const QVariant &v) { return v.toMap().value("id").toString() == id; });
     storeProfiles(list);
+    SecretStore::remove(id);
     if (id == m_activeServerId && m_connected) disconnectServer();
+}
+
+void RemoteController::forgetSecret(const QString &id) {
+    const SecretStore::Result r = SecretStore::remove(id);
+    if (!r.ok) { m_status = QStringLiteral("Could not delete the remembered password: ") + r.error; emit changed(); return; }
+    setSecretSaved(id, false);
+}
+
+void RemoteController::connectToSaved(const QString &id) {
+    const SecretStore::Result r = SecretStore::load(id);
+    if (!r.ok) {
+        // A missing entry means the flag is stale: drop it so the prompt asks again.
+        if (r.notFound) setSecretSaved(id, false);
+        m_status = r.notFound ? QStringLiteral("The remembered password is no longer in the Windows Credential Manager; enter it again.")
+                              : QStringLiteral("Could not read the remembered password: ") + r.error;
+        emit changed();
+        return;
+    }
+    connectTo(id, r.secret);
+}
+
+void RemoteController::connectToRemembering(const QString &id, const QString &password, bool remember) {
+    if (remember && !SecretStore::available()) {
+        m_status = SecretStore::unavailableReason();
+        emit changed();
+        return; // explicit: connecting without saving would hide that the request was not honoured
+    }
+    connectTo(id, password);
+    m_rememberPending = remember && !password.isEmpty() && m_activeServerId == id;
 }
 
 void RemoteController::connectTo(const QString &id, const QString &password) {
@@ -245,6 +306,12 @@ void RemoteController::request(Kind kind, const QString &directory, bool record)
             m_home = result.home;
             m_entries = result.entries;
             m_status = result.message;
+            if (kind == Kind::Open && m_rememberPending && !m_activeServerId.isEmpty()) {
+                m_rememberPending = false;
+                const SecretStore::Result saved = SecretStore::save(m_activeServerId, m_password);
+                if (saved.ok) setSecretSaved(m_activeServerId, true);
+                else m_status = QStringLiteral("Connected, but the password could not be remembered: ") + saved.error;
+            }
             if (kind == Kind::Open) {
                 QSettings settings;
                 settings.setValue("bootstrap/lastHost", m_host);
@@ -255,6 +322,7 @@ void RemoteController::request(Kind kind, const QString &directory, bool record)
         } else {
             m_status = result.message;
             if (kind == Kind::Open) {
+                m_rememberPending = false;
                 m_connected = false;
                 m_entries.clear();
                 m_currentDirectory.clear();
@@ -828,6 +896,7 @@ void RemoteController::clearSearch() {
 }
 
 void RemoteController::disconnectServer() {
+    m_rememberPending = false;
     clearSearch();
     auto searchSlot = m_searchSession;
     (void)QtConcurrent::run(&m_searchPool, [searchSlot] { searchSlot->reset(); });

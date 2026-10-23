@@ -44,7 +44,7 @@ Android arm64 debug APK прошёл базовые SSH/SFTP, поворот/IME
 | 04 | TaskManager / операции / §unknown§ | очередь Files и исход unknown есть; общего TaskManager нет |
 | 05 | ResourceLocation / FileService | частично: SFTP список и пути; типизированная multi-server модель не реализована |
 | 06 | QML Desktop Shell, окна, dock, launcher | **срез R0.2 в исходниках:** все регионы эталона, фикстура, захват и diff; **не принят** (обои, иконки, шрифт, §4 адаптации) |
-| 07 | Secure credentials | не реализовано (пароль в RAM) |
+| 07 | Secure credentials | **Windows (23.10.2026):** по желанию пароль/фраза ключа хранится в Windows Credential Manager (`SecretStore`), «Se souvenir»/«Oublier» на экране входа; **Android Keystore и ssh-agent не реализованы** — на Android запись отклоняется явной ошибкой, без файла. Без галочки пароль остаётся в RAM |
 | 08 | WorkspaceState только на Linux | не реализовано |
 | 09 | Лицензирование Lemon Squeezy | не реализовано в Qt |
 | 10 | Подготовка сервера с подтверждением и откатом | не реализовано |

@@ -1,5 +1,14 @@
 # FORTIQ — Qt 6 / C++20 migration, Windows & Android first
 
+23 October remembered secrets (Windows): the login screen has "Se souvenir du mot de passe". After a successful login
+the password (or key passphrase) is stored in the Windows Credential Manager (`SecretStore`, target `FORTIQ/ssh/<server id>`,
+per-user DPAPI, never in QSettings or a file); the profile keeps only a `secretSaved` flag. Clicking a server with a remembered
+secret connects at once; "Oublier" deletes it. Removing a server deletes it; editing host, port, user or key path drops it so it
+can never reach another target. If the store is unavailable (Android and other platforms today) remembering is refused with an
+explicit message and nothing is written. **Not done: Android Keystore, ssh-agent/Pageant.** Verified: `fortiq_credentials` QtTest
+(real Credential Manager round trip incl. Unicode/quotes, 5000-byte refusal, edit/remove/forget rules, nothing in QSettings) and the
+layout test with a fake controller; not run against a live server, nor on a clean machine.
+
 23 October login (owner decision): connecting to a server now works like a Linux login. A full-screen login
 screen (`ServerManager.qml`, saved servers as account tiles, password or key-passphrase prompt, first-use
 fingerprint step, add/edit/remove) is shown at start and after logout; it replaces the previous Servers dialog,
@@ -203,7 +212,7 @@ Qt WebEngine and Windows WebView2 do not provide a single browser component suit
 
 ### Credential limitations in R0.1
 
-- Password or local private-key file (unencrypted or passphrase); no ssh-agent yet. Password remains only in process RAM until disconnect; no persistent work data/cache is written.
+- Password or local private-key file (unencrypted or passphrase); no ssh-agent yet. Password remains in process RAM until disconnect unless the user ticks "Se souvenir" on Windows (Credential Manager, see above); no persistent work data/cache is written.
 - A new host requires explicit SHA-256 fingerprint acceptance *after independent verification*. Only a pin is written to QSettings; changed pins are not silently reset. No known_hosts migration yet.
 - Each folder listing makes a short SSH/SFTP connection, so throughput/latency is not production-grade. Persistent authenticated SSH and cancellation are R0.2.
 - Non-UTF8 SFTP names are skipped instead of sent as lossy Qt paths; arbitrary-byte filename support needs a byte-safe path identity.

@@ -62,9 +62,15 @@ Item {
         editingId = ""
         selectedId = id
     }
+    property bool remember: false
+    readonly property bool storeAvailable: !!controller && controller.secretStoreAvailable === true
     function connect(p) {
-        controller.connectTo(p.id, secret)
+        // Nothing typed and a secret remembered for this server: use the protected store.
+        if (p.secretSaved && secret.length === 0) controller.connectToSaved(p.id)
+        else if (remember && storeAvailable && secret.length > 0) controller.connectToRemembering(p.id, secret, true)
+        else controller.connectTo(p.id, secret)
         secret = ""
+        remember = false
         secretField.text = ""
     }
     function initial(p) { return (p.name && p.name.length > 0 ? p.name : p.user).charAt(0).toUpperCase() }
@@ -76,7 +82,7 @@ Item {
     }
 
     onServersChanged: pickDefault()
-    onVisibleChanged: if (visible) { pickDefault(); secretField.text = ""; secret = "" }
+    onVisibleChanged: if (visible) { pickDefault(); secretField.text = ""; secret = ""; remember = false }
     Component.onCompleted: { pickDefault(); if (servers.length === 0 && controller) startEdit(null) }
     Connections {
         target: mgr.controller
@@ -161,9 +167,9 @@ Item {
                             id: tm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 mgr.selectedId = tile.modelData.id; mgr.confirmRemoveId = ""; secretField.text = ""; mgr.secret = ""
-                                // A key account connects at once (no passphrase); if the key
-                                // needs one, the error appears and the prompt takes it.
-                                if (tile.modelData.keyPath && !mgr.busy) mgr.connect(tile.modelData)
+                                // A remembered secret, or a key account without passphrase, connects
+                                // at once; if the key needs a passphrase the error appears and the prompt takes it.
+                                if ((tile.modelData.secretSaved || tile.modelData.keyPath) && !mgr.busy) mgr.connect(tile.modelData)
                                 else secretField.forceActiveFocus()
                             }
                         }
@@ -209,7 +215,8 @@ Item {
                             Text {
                                 visible: parent.text.length === 0
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: mgr.selected && mgr.selected.keyPath ? "Phrase de passe de la clé (si demandée)" : "Mot de passe SSH"
+                                text: mgr.selected && mgr.selected.secretSaved ? "Mot de passe enregistré — Entrée pour se connecter"
+                                    : (mgr.selected && mgr.selected.keyPath ? "Phrase de passe de la clé (si demandée)" : "Mot de passe SSH")
                                 color: "#9FB1CE"; font.pixelSize: 14; font.family: Theme.fontFamily
                             }
                         }
@@ -221,6 +228,39 @@ Item {
                         opacity: mgr.busy ? 0.5 : 1
                         Text { anchors.centerIn: parent; text: mgr.busy ? "…" : "→"; color: "white"; font.pixelSize: 20 }
                         MouseArea { id: sm; anchors.fill: parent; hoverEnabled: true; enabled: !mgr.busy; onClicked: if (mgr.selected) mgr.connect(mgr.selected) }
+                    }
+                }
+                // Remember the secret in the protected store (Windows Credential Manager).
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter; spacing: 8
+                    visible: mgr.selected !== null && !mgr.selected.secretSaved
+                    Rectangle {
+                        id: rememberBox
+                        objectName: "loginRemember"
+                        visible: mgr.storeAvailable
+                        width: 18; height: 18; radius: 4
+                        color: mgr.remember ? Theme.accent : "#26FFFFFF"; border.width: 1; border.color: "#66FFFFFF"
+                        Text { anchors.centerIn: parent; visible: mgr.remember; text: "✓"; color: "white"; font.pixelSize: 12; font.bold: true }
+                        MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: mgr.remember = !mgr.remember }
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: mgr.storeAvailable ? (mgr.selected && mgr.selected.keyPath ? "Se souvenir de la phrase de passe (coffre Windows)" : "Se souvenir du mot de passe (coffre Windows)")
+                                                 : "Mot de passe non enregistrable : aucun coffre sécurisé sur cette plateforme"
+                        color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
+                        MouseArea { anchors.fill: parent; enabled: mgr.storeAvailable; onClicked: mgr.remember = !mgr.remember }
+                    }
+                }
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter; spacing: 8
+                    visible: mgr.selected !== null && mgr.selected.secretSaved === true
+                    Text { anchors.verticalCenter: parent.verticalCenter; text: "🔒 Mot de passe enregistré dans le coffre Windows"; color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily }
+                    Rectangle {
+                        objectName: "loginForget"
+                        height: 22; radius: 11; width: fl.implicitWidth + 20
+                        color: fm.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
+                        Text { id: fl; anchors.centerIn: parent; text: "Oublier"; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
+                        MouseArea { id: fm; anchors.fill: parent; hoverEnabled: true; onClicked: if (mgr.selected) mgr.controller.forgetSecret(mgr.selected.id) }
                     }
                 }
                 Text {

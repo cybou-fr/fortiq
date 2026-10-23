@@ -59,6 +59,8 @@ class RemoteController : public QObject {
     // password, no working data. Pins stay keyed by host:port.
     Q_PROPERTY(QVariantList servers READ servers NOTIFY serversChanged)
     Q_PROPERTY(QString activeServerId READ activeServerId NOTIFY changed)
+    // Protected store for remembered passwords / key passphrases (Windows Credential Manager).
+    Q_PROPERTY(bool secretStoreAvailable READ secretStoreAvailable CONSTANT)
     Q_PROPERTY(QString rememberedHost READ rememberedHost CONSTANT)
     Q_PROPERTY(QString rememberedUser READ rememberedUser CONSTANT)
     Q_PROPERTY(int rememberedPort READ rememberedPort CONSTANT)
@@ -118,6 +120,14 @@ public:
     // Connects to a saved server; password is the SSH password, or the key
     // passphrase when the profile has a key path (may be empty).
     Q_INVOKABLE void connectTo(const QString &id, const QString &password);
+    // Same, and after a successful login stores the secret in the protected store
+    // (never in QSettings or a file). A store failure is reported; the login itself stands.
+    Q_INVOKABLE void connectToRemembering(const QString &id, const QString &password, bool remember);
+    // Connects with the secret remembered for this server; reports an error if it cannot be read.
+    Q_INVOKABLE void connectToSaved(const QString &id);
+    // Deletes the remembered secret of this server.
+    Q_INVOKABLE void forgetSecret(const QString &id);
+    bool secretStoreAvailable() const;
     // Any clean absolute folder; the server enforces permissions.
     Q_INVOKABLE void navigate(const QString &path);
     Q_INVOKABLE void openDirectory(const QString &path) { navigate(path); }
@@ -193,6 +203,8 @@ private:
     QString m_host;
     QString m_user;
     QString m_password;
+    bool m_rememberPending = false;   // store m_password for m_activeServerId after the next successful login
+    void setSecretSaved(const QString &id, bool saved);
     QString m_keyPath;
     QString m_pendingFingerprint;
     QString m_status = QStringLiteral("No Linux server connected.");
