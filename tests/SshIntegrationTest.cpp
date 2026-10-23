@@ -1363,6 +1363,186 @@ private slots:
         settings.remove("mail/notmuchConfig");
     }
 
+    // Mail slice 2 against the test server: the account wizard, msmtp sending and mbsync + notmuch.
+    // Needs FORTIQ_IT_MAILSEND=1 and tool/setup_mail_live_fixture.sh run as root on the DISPOSABLE test Debian
+    // (dovecot on 127.0.0.1:1143, SMTP sink on 127.0.0.1:2525). It deletes ~/.mbsyncrc, ~/.msmtprc, ~/.notmuch-config,
+    // ~/Mail and ~/sinkout of the test user: never run it against a real mailbox.
+    void mailSendAndWizard() {
+        if (qEnvironmentVariable("FORTIQ_IT_MAILSEND").isEmpty()) QSKIP("FORTIQ_IT_MAILSEND not set");
+        const QString password = QStringLiteral("Zq\"7 #x\\y$z;w");     // throwaway password of the fixture user
+        fortiq::RemoteController controller;
+        QSettings settings;
+        settings.remove("mail/notmuchConfig"); settings.remove("mail/displayName");
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+
+        auto shell = [&](const QByteArray &script) {
+            fortiq::SshSession session;
+            const SshResult opened = session.open(controller.connectionRequest());
+            if (opened.status != SshResult::Status::Ok) return opened;
+            return session.runScript(script, 1048576, {});
+        };
+        auto text = [&](const QByteArray &script) { return QString::fromUtf8(shell(script).data).trimmed(); };
+        QVERIFY2(text("cd ~ && rm -rf .mbsyncrc* .msmtprc* .notmuch-config* Mail sinkout/*.eml sinkout/*.env sinkout/auth_failed .msmtprc.d; echo cleaned\n") == "cleaned", "cleanup");
+        // A pre-existing msmtp configuration of the user, group-readable, must survive untouched (except its mode).
+        QVERIFY(shell("printf 'defaults\\ntls on\\n\\naccount other\\nhost smtp.other.example\\nfrom other@example.org\\n' > ~/.msmtprc; chmod 644 ~/.msmtprc\n").code == "exit:0");
+
+        fortiq::MailController mail(&controller);
+        auto waitIdle = [&] { QTRY_VERIFY_WITH_TIMEOUT(!mail.actionBusy(), 60000); };
+
+        // ---- probe: what exists on the server, no secrets ----
+        mail.probeSetup("live");
+        QTest::qWait(100); waitIdle();
+        QVERIFY2(mail.setupState().value("ok").toBool(), qPrintable(mail.setupState().value("problem").toString()));
+        QVERIFY(mail.setupState().value("hasMsmtprc").toBool());
+        QVERIFY(!mail.setupState().value("hasMbsyncrc").toBool());
+        QVERIFY(!mail.setupState().value("hasNotmuchConfig").toBool());
+        QVERIFY(mail.setupState().value("msmtp").toString().startsWith("msmtp"));
+        QVERIFY(mail.setupState().value("mbsync").toString().contains("1."));
+        const QString home = mail.setupState().value("home").toString();
+        QVERIFY(home.startsWith("/home/"));
+
+        // ---- preview: the exact files, nothing written ----
+        QVariantMap spec { { "name", "live" }, { "displayName", QString::fromUtf8("Zo\xC3\xAB Test") }, { "email", "me@example.net" },
+                           { "imapHost", "127.0.0.1" }, { "imapPort", 1143 }, { "imapSecurity", "none" }, { "imapUser", "fqmail" },
+                           { "smtpHost", "127.0.0.1" }, { "smtpPort", 2525 }, { "smtpSecurity", "none" }, { "smtpUser", "fqmail" }, { "password", password } };
+        QVERIFY(!mail.previewSetup({ { "name", "bad name" } }).isEmpty());
+        QVERIFY(mail.setupFiles().isEmpty());
+        QVERIFY2(mail.previewSetup(spec).isEmpty(), "preview");
+        QCOMPARE(mail.setupFiles().size(), 3);
+        for (const QVariant &f : mail.setupFiles()) QVERIFY(!f.toMap().value("shown").toString().contains("Zq\"7"));   // masked
+        QCOMPARE(text("[ -e ~/.mbsyncrc ] && echo Y || echo N\n"), QStringLiteral("N"));                           // nothing written without consent
+        QCOMPARE(text("[ -e ~/.notmuch-config ] && echo Y || echo N\n"), QStringLiteral("N"));
+
+        // ---- consent for two files only ----
+        mail.applySetup({ "mbsyncrc", "msmtprc" });
+        waitIdle();
+        QVERIFY2(mail.actionStatus().startsWith("Écrit"), qPrintable(mail.actionStatus()));
+        QVERIFY(mail.setupFiles().isEmpty());                                                                       // the password left the preview
+        QCOMPARE(text("stat -c %a ~/.mbsyncrc ~/.msmtprc | tr '\\n' ' '\n"), QStringLiteral("600 600"));
+        QCOMPARE(text("[ -e ~/.notmuch-config ] && echo Y || echo N\n"), QStringLiteral("N"));                      // not ticked: not written
+        const QString msmtprc = text("cat ~/.msmtprc\n");
+        QVERIFY(msmtprc.contains("account other\nhost smtp.other.example\nfrom other@example.org"));              // foreign content preserved
+        QVERIFY(msmtprc.contains("# >>> FORTIQ account live") && msmtprc.contains("password \"Zq\"7 #x\\y$z;w\""));
+        QCOMPARE(text("ls ~/.msmtprc.fortiq-bak-* | wc -l\n"), QStringLiteral("1"));                                  // backup of the previous file
+        QCOMPARE(text("grep -c 'password' ~/.msmtprc.fortiq-bak-* | tr -d '\\n'\n"), QStringLiteral("0"));
+        QCOMPARE(text("ls ~/.mbsyncrc.fortiq-bak-* 2>/dev/null | wc -l\n"), QStringLiteral("0"));                    // no previous .mbsyncrc: no backup
+        // The same wizard run twice keeps one block (idempotent) and the other account.
+        QTRY_VERIFY_WITH_TIMEOUT(mail.setupState().value("blockMsmtp").toBool(), 20000);
+        QVERIFY(mail.previewSetup(spec).isEmpty());
+        mail.applySetup({ "mbsyncrc", "msmtprc", "notmuch" });
+        waitIdle();
+        QCOMPARE(text("grep -c '# >>> FORTIQ account live' ~/.msmtprc ~/.mbsyncrc | tr '\\n' ' '\n").replace(home, ""), QStringLiteral("/.msmtprc:1 /.mbsyncrc:1"));
+        QCOMPARE(text("grep -c 'account other' ~/.msmtprc\n"), QStringLiteral("1"));
+        QVERIFY(text("cat ~/.notmuch-config\n").contains("path=" + home + "/Mail"));
+        // An existing notmuch configuration is never overwritten.
+        QTRY_VERIFY_WITH_TIMEOUT(mail.setupState().value("hasNotmuchConfig").toBool(), 20000);
+        QVERIFY(mail.previewSetup(spec).isEmpty());
+        QCOMPARE(mail.setupFiles().size(), 2);
+        mail.clearSetup();
+        QVERIFY(mail.setupFiles().isEmpty());
+
+        // ---- tests of the connections ----
+        mail.testSmtp("live"); waitIdle();
+        QVERIFY2(mail.actionStatus().contains("SMTP répond"), qPrintable(mail.actionStatus()));
+        QVERIFY(mail.actionOutput().contains("127.0.0.1"));
+        mail.testImap("live"); waitIdle();
+        QVERIFY2(mail.actionStatus().contains("IMAP réussie"), qPrintable(mail.actionStatus()));
+        QVERIFY2(mail.actionOutput().contains("INBOX"), qPrintable(mail.actionOutput()));
+
+        // ---- sync: mbsync (pull only) then notmuch new ----
+        mail.setWindowActive(true);
+        mail.syncNow("live"); waitIdle();
+        QVERIFY2(mail.actionStatus().contains("relevé"), qPrintable(mail.actionStatus() + mail.actionOutput()));
+        QVERIFY(mail.actionOutput().contains("notmuch new"));
+        QTRY_VERIFY_WITH_TIMEOUT(mail.state() == "ready" && !mail.accounts().isEmpty(), 30000);
+        QCOMPARE(mail.accounts().size(), 2);                                                                          // other + live
+        QCOMPARE(text("find ~/Mail/live/INBOX/new ~/Mail/live/INBOX/cur -type f | wc -l\n"), QStringLiteral("1"));
+        mail.search(QString());
+        QTRY_VERIFY_WITH_TIMEOUT(!mail.threads().isEmpty(), 20000);
+        QCOMPARE(mail.threads().first().toMap().value("subject").toString(), QStringLiteral("Message from IMAP"));
+        const QString threadId = mail.threads().first().toMap().value("id").toString();
+        mail.openThread(threadId);
+        QTRY_VERIFY_WITH_TIMEOUT(!mail.messages().isEmpty(), 20000);
+        const QVariantMap original = mail.messages().first().toMap();
+        QTRY_VERIFY_WITH_TIMEOUT(!mail.busy(), 20000);
+
+        // ---- reply draft ----
+        const QVariantMap draft = mail.replyDraft(original);
+        QCOMPARE(draft.value("subject").toString(), QStringLiteral("Re: Message from IMAP"));
+        QCOMPARE(draft.value("to").toString(), QStringLiteral("Alice <alice@example.org>"));
+        QVERIFY(draft.value("body").toString().contains("> hello from the imap server"));
+        QCOMPARE(draft.value("inReplyTo").toString(), QStringLiteral("imap1@example.org"));
+
+        // ---- sending: invalid drafts never reach the server ----
+        const int tasksBefore = controller.tasks()->count();
+        QVERIFY(!mail.send({ { "account", "live" }, { "to", "not an address" }, { "subject", "x" } }).isEmpty());
+        QVERIFY(!mail.send({ { "account", "ghost" }, { "to", "a@b.org" } }).isEmpty());
+        QVERIFY(!mail.send({ { "account", "live" }, { "to", "a@b.org\nBcc: evil@x.org" } }).isEmpty());
+        QCOMPARE(controller.tasks()->count(), tasksBefore);
+        QCOMPARE(text("ls ~/sinkout 2>/dev/null | grep -c eml\n"), QStringLiteral("0"));
+
+        // ---- a real send through msmtp to the sink ----
+        QVERIFY2(mail.send({ { "account", "live" }, { "to", "you@example.org, o'brien@example.org" }, { "cc", "cc@example.org" }, { "bcc", "hidden@example.org" },
+                             { "subject", QString::fromUtf8("R\xC3\xA9sum\xC3\xA9 \xE2\x9C\x93") }, { "body", QString::fromUtf8("Bonjour\nligne 2 \xC3\xA9") },
+                             { "inReplyTo", "imap1@example.org" } }).isEmpty(), "send");
+        QTRY_VERIFY_WITH_TIMEOUT(mail.sendState() != "sending", 60000);
+        QVERIFY2(mail.sendState() == "sent", qPrintable(mail.sendState() + " " + mail.sendStatus()));
+        QCOMPARE(controller.tasks()->tasks().constLast().toMap().value("kind").toString(), QStringLiteral("mailSend"));
+        QCOMPARE(controller.tasks()->tasks().constLast().toMap().value("state").toString(), QStringLiteral("succeeded"));
+        QCOMPARE(text("ls ~/sinkout | grep -c eml\n"), QStringLiteral("1"));
+        const QString env = text("cat $(ls -t ~/sinkout/*.env | head -1)\n");
+        QVERIFY2(env.contains("from me@example.net"), qPrintable(env));
+        for (const char *rcpt : { "rcpt you@example.org", "rcpt o'brien@example.org", "rcpt cc@example.org", "rcpt hidden@example.org" }) QVERIFY2(env.contains(rcpt), rcpt);
+        const QString eml = text("cat $(ls -t ~/sinkout/*.eml | head -1)\n");
+        QVERIFY(eml.contains("From: =?UTF-8?B?") || eml.contains("From: "));
+        QVERIFY(!eml.contains("hidden@example.org"));                                                                 // Bcc stays in the envelope
+        QVERIFY(eml.contains("In-Reply-To: <imap1@example.org>"));
+        QVERIFY(eml.contains("Subject: =?UTF-8?B?"));
+        // The stored copy and the replied tag, checked with notmuch on the server.
+        const QString nm = "export NOTMUCH_CONFIG=" + home + "/.notmuch-config\n";
+        QCOMPARE(text(nm.toUtf8() + "notmuch count -- 'tag:sent'\n"), QStringLiteral("1"));
+        QCOMPARE(text(nm.toUtf8() + "notmuch count -- 'tag:replied and id:imap1@example.org'\n"), QStringLiteral("1"));
+        QCOMPARE(text(nm.toUtf8() + "notmuch show --format=text --body=true -- tag:sent | grep -c 'Résumé' \n"), QStringLiteral("1"));
+        const QString subjectLine = text(nm.toUtf8() + "notmuch search --output=summary --format=text -- tag:sent | head -1\n");
+        QVERIFY2(subjectLine.contains(QString::fromUtf8("R\xC3\xA9sum\xC3\xA9 \xE2\x9C\x93")), qPrintable(subjectLine));       // headers and body decode correctly
+        QCOMPARE(text(nm.toUtf8() + "notmuch show --format=text --body=true -- tag:sent | grep -c 'ligne 2 é'\n"), QStringLiteral("1"));
+
+        // ---- wrong password: a clear error and no claim of delivery ----
+        QVariantMap bad = spec;
+        bad.insert("name", "badpw"); bad.insert("password", "wrong-password");
+        mail.probeSetup("badpw"); QTest::qWait(100); waitIdle();
+        QVERIFY(mail.previewSetup(bad).isEmpty());
+        mail.applySetup({ "mbsyncrc", "msmtprc" }); waitIdle();
+        QTRY_VERIFY_WITH_TIMEOUT(mail.accounts().size() == 3, 20000);
+        QVERIFY(mail.send({ { "account", "badpw" }, { "to", "x@example.org" }, { "subject", "nope" }, { "body", "x" } }).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(mail.sendState() != "sending", 60000);
+        QCOMPARE(mail.sendState(), QStringLiteral("failed"));
+        QVERIFY2(mail.sendStatus().contains("Authentification"), qPrintable(mail.sendStatus()));
+        QVERIFY(!mail.sendStatus().contains("wrong-password"));
+        QCOMPARE(controller.tasks()->tasks().constLast().toMap().value("state").toString(), QStringLiteral("failed"));
+        QCOMPARE(text("ls ~/sinkout | grep -c eml\n"), QStringLiteral("1"));                                         // still only the first message
+        QCOMPARE(text(nm.toUtf8() + "notmuch count -- 'tag:sent'\n"), QStringLiteral("1"));                           // no copy of an unsent message
+        mail.resetSend();
+
+        // ---- a new session clears everything, including any preview ----
+        QVERIFY(mail.previewSetup(spec).isEmpty());
+        controller.disconnectServer();
+        QVERIFY(mail.setupFiles().isEmpty() && mail.accounts().isEmpty() && mail.threads().isEmpty());
+        QCOMPARE(mail.sendState(), QStringLiteral("idle"));
+        QVERIFY(!mail.previewSetup(spec).isEmpty());                                                                  // no server: refused
+
+        // cleanup of the test user's mail configuration
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        shell("cd ~ && rm -rf .mbsyncrc* .msmtprc* .notmuch-config* Mail\n");
+        settings.remove(pin); settings.remove("mail/displayName");
+    }
+
     // The Bases de données app against the test server: SQLite file and PostgreSQL 17 (role fqdb / base fqtest).
     // Needs FORTIQ_IT_DB=1 and the PostgreSQL cluster running (`pg_ctlcluster 17 main start`).
     void databaseAppIsReadOnlyAndBounded() {

@@ -313,3 +313,11 @@ search in notmuch syntax, conversations with decoded headers, nested replies, at
 opened). The only changes are tags (read, flagged, archive, trash marker). Queries, ids and tags are single-quoted data after `--`. Verified: `fortiq_mail` 14 unit tests on real notmuch 0.39 outputs
 (`tool/make_mail_fixture.sh`), the live `mailAppReadsAndTags` test (live suite 32 passed, 3 skipped), a layout test, CTest 17/17 and the Android arm64 build. Not done: sending (`msmtp`), account
 wizard, sync, attachment download, PGP; Android not run on a device.
+
+23 October Mail, slice 2 ([MAIL](MAIL.md)): sending and the account wizard. The client builds the message (RFC 2047 headers, UTF-8 base64 body, Bcc in the envelope only, header-injection checks) and `msmtp` on the
+server delivers it from the stdin script; a copy goes to Sent with `notmuch insert` and the parent gets `replied`; a timeout or a dropped SSH link is reported as "unknown", never as sent or failed. The wizard
+writes `~/.mbsyncrc` (Sync Pull), `~/.msmtprc` and, only if absent, `~/.notmuch-config` with the password inside the files (mode 0600, the owner's decision) only after the exact text is shown (password masked until
+revealed) and the user ticks each file and a consent box; existing files keep their content (FORTIQ manages its own marked block, timestamped backup, atomic replace). Connection tests (`msmtp --serverinfo`, `mbsync -l`)
+and a sync (`mbsync` then `notmuch new`) run as tasks. Verified: `fortiq_mailsend` 17 unit tests, the live `mailSendAndWizard` test against dovecot and an SMTP sink on the disposable Debian (live suite 33 passed,
+3 skipped, repeated twice), a layout test, CTest 18/18. Real findings: msmtp treats " #" as a comment (the password is written quoted), refuses `auth on` without TLS, and mbsync needs `\` and `"` escaped.
+Not done: attachments (download and send), reply-all/forward/drafts, PGP, OAuth accounts; Android not run on a device.

@@ -13,6 +13,13 @@ Item {
     property bool navigationOpen: false
     property bool showHtml: false
     property string hoveredLink: ""
+    property bool composeOpen: false
+    property string composeReplyTo: ""
+    property string composeError: ""
+    property bool wizardOpen: false
+    property string wizardError: ""
+    property var wizardKeys: ({})
+    property bool previewPending: false
     readonly property bool connected: remote !== null && remote.connected
     readonly property bool drawer: adaptive && width < 900
     readonly property real contentLeft: drawer ? 0 : 196
@@ -33,9 +40,57 @@ Item {
     onMailerChanged: sync()
     Component.onCompleted: sync()
     function handleBack() {
+        if (wizardOpen) { closeWizard(); return true }
+        if (composeOpen) { composeOpen = false; return true }
         if (navigationOpen) { navigationOpen = false; return true }
         if (readerShown && stacked) { mailer.closeThread(); return true }
         return false
+    }
+    function openCompose(draft) {
+        const d = draft || {}
+        toField.text = d.to || ""; ccField.text = ""; bccField.text = ""
+        subjectField.text = d.subject || ""; bodyField.text = d.body || ""
+        composeReplyTo = d.inReplyTo || ""; composeError = ""
+        if (mailer) mailer.resetSend()
+        composeOpen = true
+        if (composeReplyTo !== "") { bodyField.cursorPosition = 0; bodyField.forceActiveFocus() } else toField.forceActiveFocus()
+    }
+    function submitCompose() {
+        if (!mailer) return
+        const account = mailer.accounts[accountBox.currentIndex]
+        composeError = mailer.send({ account: account ? account.name : "", to: toField.text, cc: ccField.text, bcc: bccField.text,
+                                     subject: subjectField.text, body: bodyField.text, inReplyTo: composeReplyTo })
+    }
+    function replyToLast() {
+        if (!mailer || mailer.messages.length === 0) return
+        openCompose(mailer.replyDraft(mailer.messages[mailer.messages.length - 1]))
+    }
+    function openWizard() {
+        if (!mailer) return
+        wizardError = ""; wizardOpen = true
+        mailer.clearSetup()
+        mailer.probeSetup(wName.text.trim())
+    }
+    function closeWizard() {
+        if (mailer) mailer.clearSetup()
+        wPassword.text = ""; wSmtpPassword.text = ""
+        wizardOpen = false
+    }
+    function wizardSpec() {
+        return { name: wName.text, displayName: wDisplay.text, email: wEmail.text,
+                 imapHost: wImapHost.text, imapPort: parseInt(wImapPort.text), imapSecurity: wImapSec.model[wImapSec.currentIndex].k, imapUser: wImapUser.text,
+                 smtpHost: wSmtpHost.text, smtpPort: parseInt(wSmtpPort.text), smtpSecurity: wSmtpSec.model[wSmtpSec.currentIndex].k, smtpUser: wSmtpUser.text,
+                 password: wPassword.text, smtpPassword: wSmtpPassword.text }
+    }
+    function wizardPreview() { wizardError = ""; previewPending = true; mailer.probeSetup(wName.text.trim()) }
+    function finishPreview() {
+        if (!mailer.setupState.ok) { wizardError = mailer.setupState.problem; return }
+        wizardError = mailer.previewSetup(wizardSpec())
+    }
+    function checkedKeys() {
+        const out = []
+        for (const k in wizardKeys) if (wizardKeys[k]) out.push(k)
+        return out
     }
     function tagOf(thread, tag) { return thread !== null && thread.tags.indexOf(tag) >= 0 }
 
@@ -97,10 +152,22 @@ Item {
             x: (win.drawer ? 54 : 14) + (win.stacked && win.readerShown ? 46 : 0); width: Math.max(0, parent.width - x - 60); anchors.verticalCenter: parent.verticalCenter
             text: "Courrier · " + (win.connected ? win.remote.serverLabel : "Aucun serveur"); elide: Text.ElideMiddle; textFormat: Text.PlainText; color: Theme.ink; font.pixelSize: 14
         }
-        ToolButtonGlass {
-            anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
-            touch: win.adaptive; glyph: "↻"; tip: "Actualiser"
-            enabledState: win.connected && win.mailer !== null && !win.mailer.busy; onClicked: win.mailer.refresh()
+        Row {
+            anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 2
+            ToolButtonGlass {
+                objectName: "mailNew"
+                touch: win.adaptive; glyph: "✎"; tip: "Nouveau message"
+                enabledState: win.connected && win.mailer !== null; onClicked: win.openCompose(null)
+            }
+            ToolButtonGlass {
+                objectName: "mailAccounts"
+                touch: win.adaptive; glyph: "⚙"; tip: "Comptes"
+                enabledState: win.connected && win.mailer !== null; onClicked: win.openWizard()
+            }
+            ToolButtonGlass {
+                touch: win.adaptive; glyph: "↻"; tip: "Actualiser"
+                enabledState: win.connected && win.mailer !== null && !win.mailer.busy; onClicked: win.mailer.refresh()
+            }
         }
     }
 
@@ -177,6 +244,13 @@ Item {
         Row {
             id: actions
             spacing: 4
+            Rectangle {
+                objectName: "mailReply"
+                height: win.adaptive ? 44 : 28; radius: 8; width: replyLabel.implicitWidth + 18
+                color: replyMouse.containsMouse ? "#33FFFFFF" : "#1AFFFFFF"
+                Text { id: replyLabel; anchors.centerIn: parent; text: "Répondre"; color: Theme.ink; font.pixelSize: 11 }
+                MouseArea { id: replyMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.replyToLast() }
+            }
             Repeater {
                 model: [
                     { tag: "unread", on: "Marquer comme lu", off: "Marquer comme non lu" },
@@ -271,5 +345,231 @@ Item {
         visible: win.connected && win.mailer !== null && win.mailer.state === "error" && win.mailer.folders.length === 0
         x: win.contentLeft + 20; y: 110; width: parent.width - x - 20; wrapMode: Text.WordWrap; textFormat: Text.PlainText
         text: win.mailer ? win.mailer.status : ""; color: "#FCA5A5"; font.pixelSize: 13
+    }
+
+    // ── send result banner ─────────────────────────────────────────────
+    Rectangle {
+        id: sendBanner
+        objectName: "mailSendBanner"
+        visible: win.mailer !== null && !win.composeOpen && (win.mailer.sendState === "sent" || win.mailer.sendState === "warning" || win.mailer.sendState === "unknown" || win.mailer.sendState === "failed")
+        z: 20
+        anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 14
+        width: Math.min(parent.width - 24, 560); height: bannerText.implicitHeight + 24; radius: 10
+        color: "#F0121C30"; border.width: 1
+        border.color: win.mailer && (win.mailer.sendState === "sent") ? "#804ADE80" : "#80FCA5A5"
+        Text { id: bannerText; x: 12; y: 12; width: parent.width - 90; wrapMode: Text.Wrap; textFormat: Text.PlainText; text: win.mailer ? win.mailer.sendStatus : ""; color: Theme.ink; font.pixelSize: 12 }
+        Button { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: "OK"; onClicked: win.mailer.resetSend() }
+    }
+
+    // ── compose ────────────────────────────────────────────────────────
+    Rectangle {
+        id: composePanel
+        objectName: "mailCompose"
+        visible: win.composeOpen
+        z: 50
+        anchors.centerIn: parent
+        width: Math.min(parent.width - 24, 640); height: Math.min(parent.height - 24, composeColumn.implicitHeight + 28)
+        radius: 14; color: "#F0121C30"; border.width: 1; border.color: "#40DCEBFF"
+        MouseArea { anchors.fill: parent }
+        Flickable {
+            anchors.fill: parent; anchors.margins: 14; clip: true; contentWidth: width; contentHeight: composeColumn.implicitHeight; boundsBehavior: Flickable.StopAtBounds
+            Column {
+                id: composeColumn
+                width: parent.width; spacing: 8
+                Text { text: win.composeReplyTo !== "" ? "Répondre" : "Nouveau message"; color: Theme.ink; font.pixelSize: 16 }
+                Text {
+                    visible: !win.mailer || win.mailer.accounts.length === 0; width: parent.width; wrapMode: Text.Wrap; color: "#FCD34D"; font.pixelSize: 11
+                    text: "Aucun compte d'envoi trouvé sur ce serveur (~/.msmtprc). Ouvrez « Comptes » pour en créer un."
+                }
+                ComboBox {
+                    id: accountBox
+                    objectName: "mailComposeAccount"
+                    width: parent.width
+                    model: win.mailer ? win.mailer.accounts : []
+                    textRole: "name"
+                    displayText: currentIndex >= 0 && win.mailer && currentIndex < win.mailer.accounts.length ? "De : " + win.mailer.accounts[currentIndex].name + "  <" + win.mailer.accounts[currentIndex].from + ">" : "De : —"
+                }
+                TextField { id: toField; objectName: "mailComposeTo"; width: parent.width; placeholderText: "À (adresses séparées par des virgules)"; selectByMouse: true }
+                Row {
+                    width: parent.width; spacing: 6
+                    TextField { id: ccField; objectName: "mailComposeCc"; width: (parent.width - 6) / 2; placeholderText: "Cc"; selectByMouse: true }
+                    TextField { id: bccField; objectName: "mailComposeBcc"; width: (parent.width - 6) / 2; placeholderText: "Cci (invisible pour les autres)"; selectByMouse: true }
+                }
+                TextField { id: subjectField; objectName: "mailComposeSubject"; width: parent.width; placeholderText: "Objet"; selectByMouse: true }
+                Rectangle {
+                    width: parent.width; height: 200; radius: 8; color: "#30182740"; border.width: 1; border.color: bodyField.activeFocus ? Theme.accent : "#25DCEBFF"
+                    ScrollView {
+                        anchors.fill: parent; anchors.margins: 4; clip: true
+                        TextArea { id: bodyField; objectName: "mailComposeBody"; color: Theme.ink; font.pixelSize: 12; wrapMode: TextEdit.Wrap; selectByMouse: true; background: null }
+                    }
+                }
+                Text {
+                    width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; font.pixelSize: 11
+                    visible: win.composeError !== "" || (win.mailer && (win.mailer.sendState === "sending" || win.mailer.sendState === "failed" || win.mailer.sendState === "unknown"))
+                    color: win.composeError !== "" || (win.mailer && win.mailer.sendState !== "sending") ? "#FCA5A5" : Theme.inkMuted
+                    text: win.composeError !== "" ? win.composeError : (win.mailer ? win.mailer.sendStatus : "")
+                }
+                Text {
+                    width: parent.width; wrapMode: Text.Wrap; color: Theme.inkMuted; font.pixelSize: 10
+                    text: "Le message est construit ici puis envoyé par msmtp depuis le serveur Linux ; une copie est enregistrée dans le dossier Sent."
+                }
+                Row {
+                    spacing: 8
+                    Button {
+                        objectName: "mailComposeSend"
+                        text: win.mailer && win.mailer.sendState === "sending" ? "Envoi…" : "Envoyer"
+                        enabled: win.mailer !== null && win.mailer.sendState !== "sending" && !win.mailer.actionBusy && win.mailer.accounts.length > 0
+                        onClicked: win.submitCompose()
+                    }
+                    Button { text: "Annuler"; enabled: !win.mailer || win.mailer.sendState !== "sending"; onClicked: win.composeOpen = false }
+                }
+            }
+        }
+    }
+
+    // ── account wizard ─────────────────────────────────────────────────
+    Rectangle {
+        id: wizardPanel
+        objectName: "mailWizard"
+        visible: win.wizardOpen
+        z: 60
+        anchors.centerIn: parent
+        width: Math.min(parent.width - 24, 760); height: parent.height - 24
+        radius: 14; color: "#F5121C30"; border.width: 1; border.color: "#40DCEBFF"
+        MouseArea { anchors.fill: parent }
+        Flickable {
+            id: wizardFlick
+            objectName: "mailWizFlick"
+            anchors.fill: parent; anchors.margins: 14; clip: true; contentWidth: width; contentHeight: wizardColumn.implicitHeight + 8; boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+            Column {
+                id: wizardColumn
+                width: parent.width - 12; spacing: 8
+                Text { text: "Compte courrier (serveur Linux)"; color: Theme.ink; font.pixelSize: 16 }
+                Text {
+                    width: parent.width; wrapMode: Text.Wrap; color: Theme.inkMuted; font.pixelSize: 11
+                    text: "Écrit ~/.mbsyncrc (réception IMAP, lecture seule côté serveur de courrier : Sync Pull), ~/.msmtprc (envoi) et, s'il manque, ~/.notmuch-config. Le mot de passe est enregistré dans ces fichiers, en mode 0600. Rien n'est écrit avant que vous ayez vu le contenu exact et donné votre accord."
+                }
+                Text {
+                    visible: win.mailer !== null && win.mailer.setupState.ok === true; width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; color: Theme.inkMuted; font.pixelSize: 10
+                    text: win.mailer && win.mailer.setupState.ok ? "Serveur : " + (win.mailer.setupState.mbsync || "mbsync absent") + " · " + (win.mailer.setupState.msmtp || "msmtp absent") + " · " + (win.mailer.setupState.notmuch || "notmuch absent") + " · courrier dans " + win.mailer.setupState.mailRoot : ""
+                }
+                TextField { id: wName; objectName: "mailWizName"; width: parent.width; placeholderText: "Nom du compte (ex. perso)"; selectByMouse: true; text: "perso" }
+                Row {
+                    width: parent.width; spacing: 6
+                    TextField { id: wDisplay; objectName: "mailWizDisplay"; width: (parent.width - 6) / 2; placeholderText: "Nom affiché (expéditeur)"; selectByMouse: true }
+                    TextField { id: wEmail; objectName: "mailWizEmail"; width: (parent.width - 6) / 2; placeholderText: "Adresse e-mail"; selectByMouse: true }
+                }
+                Text { text: "Réception (IMAP)"; color: Theme.ink; font.pixelSize: 12; font.bold: true }
+                Row {
+                    width: parent.width; spacing: 6
+                    TextField { id: wImapHost; objectName: "mailWizImapHost"; width: parent.width - 80 - 140 - 12; placeholderText: "Serveur IMAP"; selectByMouse: true }
+                    TextField { id: wImapPort; objectName: "mailWizImapPort"; width: 80; placeholderText: "Port"; selectByMouse: true; text: "993" }
+                    ComboBox {
+                        id: wImapSec; objectName: "mailWizImapSec"; width: 140
+                        model: [ { k: "tls", t: "SSL/TLS" }, { k: "starttls", t: "STARTTLS" }, { k: "none", t: "Aucun (localhost)" } ]; textRole: "t"
+                        onActivated: wImapPort.text = currentIndex === 0 ? "993" : "143"
+                    }
+                }
+                TextField { id: wImapUser; objectName: "mailWizImapUser"; width: parent.width; placeholderText: "Utilisateur IMAP"; selectByMouse: true }
+                Text { text: "Envoi (SMTP)"; color: Theme.ink; font.pixelSize: 12; font.bold: true }
+                Row {
+                    width: parent.width; spacing: 6
+                    TextField { id: wSmtpHost; objectName: "mailWizSmtpHost"; width: parent.width - 80 - 140 - 12; placeholderText: "Serveur SMTP"; selectByMouse: true }
+                    TextField { id: wSmtpPort; objectName: "mailWizSmtpPort"; width: 80; placeholderText: "Port"; selectByMouse: true; text: "587" }
+                    ComboBox {
+                        id: wSmtpSec; objectName: "mailWizSmtpSec"; width: 140
+                        model: [ { k: "starttls", t: "STARTTLS" }, { k: "tls", t: "SSL/TLS" }, { k: "none", t: "Aucun (localhost)" } ]; textRole: "t"
+                        onActivated: wSmtpPort.text = currentIndex === 0 ? "587" : "465"
+                    }
+                }
+                TextField { id: wSmtpUser; objectName: "mailWizSmtpUser"; width: parent.width; placeholderText: "Utilisateur SMTP (vide = identique à IMAP)"; selectByMouse: true }
+                TextField { id: wPassword; objectName: "mailWizPassword"; width: parent.width; echoMode: TextInput.Password; placeholderText: "Mot de passe"; selectByMouse: true }
+                TextField { id: wSmtpPassword; objectName: "mailWizSmtpPassword"; width: parent.width; echoMode: TextInput.Password; placeholderText: "Mot de passe SMTP (vide = identique)"; selectByMouse: true }
+                Text { visible: win.wizardError !== ""; width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; color: "#FCA5A5"; font.pixelSize: 11; text: win.wizardError }
+                Row {
+                    spacing: 8
+                    Button { objectName: "mailWizPreview"; text: "Aperçu des fichiers"; enabled: win.mailer !== null && !win.mailer.actionBusy; onClicked: win.wizardPreview() }
+                    Button { text: "Fermer"; onClicked: win.closeWizard() }
+                }
+
+                // preview with the exact content
+                Column {
+                    id: previewColumn
+                    objectName: "mailWizFiles"
+                    visible: win.mailer !== null && win.mailer.setupFiles.length > 0
+                    width: parent.width; spacing: 8
+                    Rectangle { width: parent.width; height: 1; color: "#25DCEBFF" }
+                    Text { width: parent.width; wrapMode: Text.Wrap; color: Theme.ink; font.pixelSize: 12; text: "Contenu exact qui sera écrit (mot de passe masqué tant que vous ne le révélez pas) :" }
+                    CheckBox {
+ palette.windowText: Theme.ink
+ id: revealBox; objectName: "mailWizReveal"; text: "Révéler le mot de passe dans l'aperçu" }
+                    Repeater {
+                        model: win.mailer ? win.mailer.setupFiles : []
+                        Column {
+                            required property var modelData
+                            width: previewColumn.width; spacing: 4
+                            CheckBox {
+ palette.windowText: Theme.ink
+
+                                objectName: "mailWizWrite_" + modelData.key
+                                checked: true
+                                text: "Écrire " + modelData.path + (modelData.kind === "block" ? "  (seul le bloc FORTIQ de ce compte est ajouté ou remplacé ; le reste du fichier est conservé, avec une sauvegarde)" : "  (nouveau fichier)")
+                                onToggled: { const k = Object.assign({}, win.wizardKeys); k[modelData.key] = checked; win.wizardKeys = k }
+                                Component.onCompleted: { const k = Object.assign({}, win.wizardKeys); k[modelData.key] = checked; win.wizardKeys = k }
+                            }
+                            Rectangle {
+                                width: parent.width; height: Math.min(260, fileText.implicitHeight + 16); radius: 8; color: "#30182740"; border.width: 1; border.color: "#25DCEBFF"
+                                Flickable {
+                                    anchors.fill: parent; anchors.margins: 8; clip: true; contentWidth: fileText.implicitWidth; contentHeight: fileText.implicitHeight; boundsBehavior: Flickable.StopAtBounds
+                                    Text { id: fileText; objectName: "mailWizText_" + modelData.key; textFormat: Text.PlainText; text: revealBox.checked ? modelData.content : modelData.shown; color: Theme.ink; font.pixelSize: 11; font.family: "Consolas" }
+                                }
+                            }
+                        }
+                    }
+                    CheckBox {
+ palette.windowText: Theme.ink
+ id: consentBox; objectName: "mailWizConsent"; text: "J'ai relu le contenu exact ci-dessus et j'autorise son écriture sur le serveur (mode 0600)" }
+                    Button {
+                        objectName: "mailWizWrite"
+                        text: "Écrire sur le serveur"
+                        enabled: consentBox.checked && win.mailer !== null && !win.mailer.actionBusy && win.checkedKeys().length > 0
+                        onClicked: { win.mailer.applySetup(win.checkedKeys()); consentBox.checked = false; wPassword.text = ""; wSmtpPassword.text = "" }
+                    }
+                }
+
+                // tests and first sync
+                Rectangle { width: parent.width; height: 1; color: "#25DCEBFF" }
+                Row {
+                    spacing: 8
+                    Button { objectName: "mailWizTestSmtp"; text: "Tester SMTP"; enabled: win.mailer !== null && !win.mailer.actionBusy; onClicked: win.mailer.testSmtp(wName.text.trim()) }
+                    Button { objectName: "mailWizTestImap"; text: "Tester IMAP"; enabled: win.mailer !== null && !win.mailer.actionBusy; onClicked: win.mailer.testImap(wName.text.trim()) }
+                    Button { objectName: "mailWizSync"; text: "Relever maintenant"; enabled: win.mailer !== null && !win.mailer.actionBusy; onClicked: win.mailer.syncNow(wName.text.trim()) }
+                    Button { visible: win.mailer !== null && win.mailer.actionBusy; text: "Annuler"; onClicked: win.mailer.cancelAction() }
+                }
+                Text {
+                    objectName: "mailWizStatus"
+                    visible: win.mailer !== null && win.mailer.actionStatus !== ""; width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; color: Theme.ink; font.pixelSize: 11
+                    text: win.mailer ? win.mailer.actionStatus : ""
+                }
+                Rectangle {
+                    visible: win.mailer !== null && win.mailer.actionOutput !== ""
+                    width: parent.width; height: Math.min(200, outText.implicitHeight + 16); radius: 8; color: "#30182740"; border.width: 1; border.color: "#25DCEBFF"
+                    Flickable {
+                        anchors.fill: parent; anchors.margins: 8; clip: true; contentWidth: outText.implicitWidth; contentHeight: outText.implicitHeight; boundsBehavior: Flickable.StopAtBounds
+                        Text { id: outText; objectName: "mailWizOutput"; textFormat: Text.PlainText; text: win.mailer ? win.mailer.actionOutput : ""; color: Theme.inkMuted; font.pixelSize: 10; font.family: "Consolas" }
+                    }
+                }
+            }
+        }
+    }
+
+    Connections {
+        target: win.mailer
+        ignoreUnknownSignals: true
+        function onSendChanged() { if (win.mailer && win.composeOpen && (win.mailer.sendState === "sent" || win.mailer.sendState === "warning")) win.composeOpen = false }
+        function onActionChanged() {
+            if (win.mailer && !win.mailer.actionBusy && win.previewPending) { win.previewPending = false; win.finishPreview() }
+        }
     }
 }

@@ -1,6 +1,8 @@
 #pragma once
 
+#include "MailAccount.h"
 #include "MailInfo.h"
+#include "MailSend.h"
 
 #include <QObject>
 #include <QStringList>
@@ -9,6 +11,7 @@
 #include <QVariantMap>
 
 #include <atomic>
+#include <functional>
 #include <memory>
 
 namespace fortiq {
@@ -37,6 +40,17 @@ class MailController : public QObject {
     Q_PROPERTY(QString threadStatus READ threadStatus NOTIFY threadChanged)
     Q_PROPERTY(QString configPath READ configPath NOTIFY changed)
     Q_PROPERTY(bool markReadOnOpen READ markReadOnOpen WRITE setMarkReadOnOpen NOTIFY changed)
+    // sending
+    Q_PROPERTY(QVariantList accounts READ accounts NOTIFY accountsChanged)            // msmtp accounts of the server: {name, from}
+    Q_PROPERTY(QString displayName READ displayName WRITE setDisplayName NOTIFY accountsChanged)
+    Q_PROPERTY(QString sendState READ sendState NOTIFY sendChanged)                   // idle | sending | sent | warning | failed | unknown
+    Q_PROPERTY(QString sendStatus READ sendStatus NOTIFY sendChanged)
+    // account wizard and tests
+    Q_PROPERTY(bool actionBusy READ actionBusy NOTIFY actionChanged)
+    Q_PROPERTY(QString actionStatus READ actionStatus NOTIFY actionChanged)
+    Q_PROPERTY(QString actionOutput READ actionOutput NOTIFY actionChanged)           // text of the last test / sync / write
+    Q_PROPERTY(QVariantMap setupState READ setupState NOTIFY setupChanged)            // what the server has (never secrets)
+    Q_PROPERTY(QVariantList setupFiles READ setupFiles NOTIFY setupChanged)           // exact files previewed, awaiting the user's consent
 
 public:
     explicit MailController(RemoteController *remote, QObject *parent = nullptr);
@@ -59,6 +73,16 @@ public:
     QString configPath() const { return m_configPath; }
     bool markReadOnOpen() const { return m_markRead; }
     void setMarkReadOnOpen(bool on);
+    QVariantList accounts() const { return m_accountsVariant; }
+    QString displayName() const { return m_displayName; }
+    void setDisplayName(const QString &name);
+    QString sendState() const { return m_sendState; }
+    QString sendStatus() const { return m_sendStatus; }
+    bool actionBusy() const { return m_actionBusy; }
+    QString actionStatus() const { return m_actionStatus; }
+    QString actionOutput() const { return m_actionOutput; }
+    QVariantMap setupState() const { return m_setupStateVariant; }
+    QVariantList setupFiles() const { return setupFilesToVariant(m_previewFiles); }
 
     Q_INVOKABLE void setWindowActive(bool active);
     Q_INVOKABLE void refresh();
@@ -71,13 +95,36 @@ public:
     Q_INVOKABLE void setTag(const QString &threadId, const QString &tag, bool on);
     Q_INVOKABLE void setConfigPath(const QString &path);
 
+    // ---- sending ----
+    // draft: account, to, cc, bcc, subject, body, inReplyTo. The message is built here and sent by msmtp
+    // on the server; the call returns an error text at once when the draft is invalid (nothing is sent).
+    Q_INVOKABLE QString send(const QVariantMap &draft);
+    Q_INVOKABLE QVariantMap replyDraft(const QVariantMap &message) const;
+    Q_INVOKABLE void resetSend();
+
+    // ---- account wizard ----
+    Q_INVOKABLE void probeSetup(const QString &accountName);      // reads what exists on the server (no secrets)
+    // Validates the form and builds the exact files; nothing is written. Returns an error text, empty on success.
+    Q_INVOKABLE QString previewSetup(const QVariantMap &spec);
+    // Writes the previewed files named in `keys` (the user's consent). Anything not previewed is refused.
+    Q_INVOKABLE void applySetup(const QStringList &keys);
+    Q_INVOKABLE void clearSetup();                                  // forgets the preview (and the password in it)
+    Q_INVOKABLE void testSmtp(const QString &account);
+    Q_INVOKABLE void testImap(const QString &account);
+    Q_INVOKABLE void syncNow(const QString &account);               // mbsync (pull only) then notmuch new
+    Q_INVOKABLE void cancelAction();
+
 signals:
     void changed();
     void threadsChanged();
     void threadChanged();
+    void accountsChanged();
+    void sendChanged();
+    void actionChanged();
+    void setupChanged();
 
 private:
-    enum class Kind { Overview, Search, More, Thread, Tag };
+    enum class Kind { Overview, Search, More, Thread, Tag, Accounts };
     struct Job {
         Kind kind;
         QByteArray script;
@@ -86,6 +133,7 @@ private:
         int seq = 0, gen = 0;
     };
     struct Outcome;
+    struct ActionOutcome;
 
     void onRemoteChanged();
     void resetAll(const QString &state, const QString &status);
@@ -94,6 +142,10 @@ private:
     void finish(const Job &job, const Outcome &out);
     void startSearch(const QString &query, const QString &folderKey);
     void applyLocalTags(const QString &threadId, const QStringList &add, const QStringList &remove);
+    // One long action at a time (send, write, test, sync) on its own SSH session and thread.
+    void runAction(const QString &kind, const QString &title, const QString &destination, bool cancellable, const QByteArray &script, qint64 maxOutput,
+                   std::function<void(const ActionOutcome &, int taskId)> done);
+    void setActionStatus(const QString &status, const QString &output = QString());
 
     RemoteController *m_remote;
     QThreadPool m_pool;
@@ -107,5 +159,18 @@ private:
     QVariantList m_folders, m_threadsVariant, m_messagesVariant;
     QList<MailThread> m_threads;
     int m_offset = 0;
+    // sending / wizard
+    QThreadPool m_actionPool;
+    std::shared_ptr<std::unique_ptr<SshSession>> m_actionSession;
+    std::shared_ptr<std::atomic_bool> m_actionCancel;
+    int m_actionSeq = 0, m_actionTask = 0;
+    bool m_actionBusy = false;
+    QString m_displayName, m_sendState = QStringLiteral("idle"), m_sendStatus, m_actionStatus, m_actionOutput;
+    QVariantList m_accountsVariant;
+    QList<MailSendAccount> m_accounts;
+    MailSetupState m_setupState;
+    QVariantMap m_setupStateVariant;
+    QList<MailSetupFile> m_previewFiles;
+    QString m_previewAccount;
 };
 }  // namespace fortiq

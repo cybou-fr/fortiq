@@ -194,6 +194,30 @@ QtObject {
             attachments: [ { name: 'Rapport été.pdf', type: 'application/pdf', size: 24 } ] } ] }
     function closeThread() { selectedThreadId = ''; messages = [] }
     function setTag(id, tag, on) { calls = calls.concat(['tag:' + id + ':' + tag + ':' + on]) }
+    signal sendChanged()
+    signal actionChanged()
+    property var accounts: [ { name: 'perso', from: 'me@example.net' } ]
+    property string displayName: ''
+    property string sendState: 'idle'
+    property string sendStatus: ''
+    property bool actionBusy: false
+    property string actionStatus: ''
+    property string actionOutput: ''
+    property var setupState: ({})
+    property var setupFiles: []
+    function replyDraft(m) { return { to: m.from, subject: 'Re: ' + m.subject, body: '\n\n> ' + m.text, inReplyTo: m.id } }
+    function resetSend() { sendState = 'idle'; sendStatus = '' }
+    function send(d) { calls = calls.concat(['send:' + d.account + ':' + d.to + ':' + d.subject + ':' + d.inReplyTo]); sendState = 'sent'; sendStatus = 'Message envoyé'; sendChanged(); return '' }
+    function probeSetup(n) { calls = calls.concat(['probe:' + n]); setupState = { ok: true, home: '/home/u', mbsync: 'mbsync 1.5.1', msmtp: 'msmtp 1.8', notmuch: 'notmuch 0.39', mailRoot: '/home/u/Mail' }; actionChanged() }
+    function previewSetup(spec) { calls = calls.concat(['preview:' + spec.name + ':' + spec.imapSecurity + ':' + spec.smtpSecurity + ':' + spec.imapPort + ':' + spec.smtpPort])
+        setupFiles = [ { key: 'mbsyncrc', path: '/home/u/.mbsyncrc', kind: 'block', shown: 'Pass \"********\"', content: 'Pass \"secret\"' },
+                       { key: 'msmtprc', path: '/home/u/.msmtprc', kind: 'block', shown: 'password ********', content: 'password secret' } ]; return '' }
+    function applySetup(keys) { calls = calls.concat(['apply:' + keys.join(',')]) }
+    function clearSetup() { setupFiles = [] }
+    function testSmtp(a) { calls = calls.concat(['smtp:' + a]) }
+    function testImap(a) { calls = calls.concat(['imap:' + a]) }
+    function syncNow(a) { calls = calls.concat(['sync:' + a]) }
+    function cancelAction() {}
 })";
 static const char kFakeRemote[] = R"(import QtQml
 QtObject { property bool connected: true; property string serverLabel: "fixture@server" })";
@@ -458,6 +482,50 @@ private slots:
                 QVERIFY(fakeMail->property("calls").toStringList().contains("tag:01:inbox:false"));       // archive
                 click(findByName(mailWin, "mailFolder_unread"));
                 QVERIFY(fakeMail->property("calls").toStringList().contains("folder:unread"));
+                // Reply opens the composer prefilled; sending goes through the controller and closes it.
+                click(findByName(mailWin, "mailReply"));
+                auto *compose = findByName(mailWin, "mailCompose"); QVERIFY(compose); QTRY_VERIFY(compose->isVisible());
+                QCOMPARE(findByName(mailWin, "mailComposeSubject")->property("text").toString(), QString("Re: Rapport"));
+                QCOMPARE(findByName(mailWin, "mailComposeTo")->property("text").toString(), QString("Alice <alice@example.org>"));
+                QVERIFY(window->grabWindow().save(QString("layout-captures/%1-mail-compose.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+                findByName(mailWin, "mailComposeTo")->setProperty("text", "bob@example.org");
+                click(findByName(mailWin, "mailComposeSend"));
+                QVERIFY(fakeMail->property("calls").toStringList().contains("send:perso:bob@example.org:Re: Rapport:a"));
+                QTRY_VERIFY(!compose->isVisible());
+                QVERIFY(findByName(mailWin, "mailSendBanner")->isVisible());
+                // The account wizard: nothing is written before the exact text is shown and the consent box is ticked.
+                fakeMail->setProperty("sendState", "idle");
+                click(findByName(mailWin, "mailAccounts"));
+                auto *wizard = findByName(mailWin, "mailWizard"); QVERIFY(wizard); QTRY_VERIFY(wizard->isVisible());
+                QVERIFY(fakeMail->property("calls").toStringList().contains("probe:perso"));
+                findByName(mailWin, "mailWizEmail")->setProperty("text", "me@example.net");
+                findByName(mailWin, "mailWizImapHost")->setProperty("text", "imap.example.net");
+                findByName(mailWin, "mailWizImapUser")->setProperty("text", "me@example.net");
+                findByName(mailWin, "mailWizSmtpHost")->setProperty("text", "smtp.example.net");
+                findByName(mailWin, "mailWizPassword")->setProperty("text", "secret");
+                click(findByName(mailWin, "mailWizPreview"));
+                QTRY_VERIFY(fakeMail->property("calls").toStringList().contains("preview:perso:tls:starttls:993:587"));
+                auto *files = findByName(mailWin, "mailWizFiles"); QVERIFY(files); QTRY_VERIFY(files->isVisible());
+                auto *shown = findByName(mailWin, "mailWizText_msmtprc"); QVERIFY(shown);
+                QCOMPARE(shown->property("text").toString(), QString("password ********"));       // masked by default
+                auto *write = findByName(mailWin, "mailWizWrite"); QVERIFY(write);
+                QVERIFY(!write->property("enabled").toBool());                                      // no consent yet
+                QVERIFY(window->grabWindow().save(QString("layout-captures/%1-mail-wizard.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+                click(findByName(mailWin, "mailWizReveal"));
+                QCOMPARE(shown->property("text").toString(), QString("password secret"));          // exact text on request
+                auto *wizardFlick = findByName(mailWin, "mailWizFlick"); QVERIFY(wizardFlick);
+                wizardFlick->setProperty("contentY", wizardFlick->property("contentHeight").toDouble() - wizardFlick->height());   // the consent box sits below the files
+                QTest::qWait(80);
+                QVERIFY(window->grabWindow().save(QString("layout-captures/%1-mail-wizard-bottom.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+                click(findByName(mailWin, "mailWizConsent"));
+                QTRY_VERIFY(write->property("enabled").toBool());
+                click(write);
+                QTRY_VERIFY(fakeMail->property("calls").toStringList().contains("apply:mbsyncrc,msmtprc"));
+                QVERIFY(findByName(mailWin, "mailWizPassword")->property("text").toString().isEmpty());   // the password field is cleared once submitted
+                click(findByName(mailWin, "mailWizTestSmtp"));
+                QVERIFY(fakeMail->property("calls").toStringList().contains("smtp:perso"));
+                click(findByName(mailWin, "mailWizSync"));
+                QVERIFY(fakeMail->property("calls").toStringList().contains("sync:perso"));
                 shell->setProperty("mailOpen", false);
                 shell->setProperty("mailController", QVariant::fromValue<QObject *>(nullptr));
             }

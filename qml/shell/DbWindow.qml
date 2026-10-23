@@ -367,7 +367,9 @@ Item {
                     enabled: win.db !== null && win.db.secretStoreAvailable
                     placeholderText: win.db && !win.db.secretStoreAvailable ? "Stockage protégé indisponible sur cette plateforme" : (win.formHadPassword ? "Mot de passe enregistré (laisser vide pour le garder)" : "Mot de passe (enregistré dans le stockage protégé)")
                 }
-                CheckBox { id: clearPassword; visible: win.formEngine === "postgres" && win.formHadPassword; text: "Effacer le mot de passe enregistré" }
+                CheckBox {
+ palette.windowText: Theme.ink
+ id: clearPassword; visible: win.formEngine === "postgres" && win.formHadPassword; text: "Effacer le mot de passe enregistré" }
                 Text {
                     visible: win.formEngine === "postgres"; width: parent.width; wrapMode: Text.WordWrap; color: Theme.inkMuted; font.pixelSize: 10
                     text: "La connexion est ouverte depuis le serveur Linux (psql), pas depuis ce poste. Le mot de passe n'est jamais dans la ligne de commande ni dans un journal."
