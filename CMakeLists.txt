@@ -197,6 +197,9 @@ if(ANDROID)
     endif()
     set(FORTIQ_ANDROID_SDK "36" CACHE STRING "Stable Android compile/target SDK")
     configure_file(android/AndroidManifest.xml "${FORTIQ_ANDROID_PACKAGE_OUTPUT}/AndroidManifest.xml" COPYONLY)
+    # Java side of the remembered-secret store (Android Keystore AES-GCM).
+    configure_file(android/src/fr/cybou/fortiq/SecretVault.java
+        "${FORTIQ_ANDROID_PACKAGE_OUTPUT}/src/fr/cybou/fortiq/SecretVault.java" COPYONLY)
     set_target_properties(fortiq PROPERTIES
         QT_ANDROID_COMPILE_SDK_VERSION "android-${FORTIQ_ANDROID_SDK}"
         QT_ANDROID_TARGET_SDK_VERSION "${FORTIQ_ANDROID_SDK}"

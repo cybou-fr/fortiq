@@ -245,7 +245,7 @@ Item {
                     }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: mgr.storeAvailable ? (mgr.selected && mgr.selected.keyPath ? "Se souvenir de la phrase de passe (coffre Windows)" : "Se souvenir du mot de passe (coffre Windows)")
+                        text: mgr.storeAvailable ? (mgr.selected && mgr.selected.keyPath ? "Se souvenir de la phrase de passe (coffre sécurisé)" : "Se souvenir du mot de passe (coffre sécurisé)")
                                                  : "Mot de passe non enregistrable : aucun coffre sécurisé sur cette plateforme"
                         color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
                         MouseArea { anchors.fill: parent; enabled: mgr.storeAvailable; onClicked: mgr.remember = !mgr.remember }
@@ -254,7 +254,7 @@ Item {
                 Row {
                     anchors.horizontalCenter: parent.horizontalCenter; spacing: 8
                     visible: mgr.selected !== null && mgr.selected.secretSaved === true
-                    Text { anchors.verticalCenter: parent.verticalCenter; text: "🔒 Mot de passe enregistré dans le coffre Windows"; color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily }
+                    Text { anchors.verticalCenter: parent.verticalCenter; text: "🔒 Mot de passe enregistré dans le coffre sécurisé"; color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily }
                     Rectangle {
                         objectName: "loginForget"
                         height: 22; radius: 11; width: fl.implicitWidth + 20

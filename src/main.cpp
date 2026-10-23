@@ -4,6 +4,9 @@
 #include "core/TerminalController.h"
 #include "core/DisksController.h"
 #include "core/DocumentsController.h"
+#include "core/SecretStore.h"
+#include <QSettings>
+#include <QUuid>
 #endif
 
 #include "core/BackNavigationFilter.h"
@@ -24,6 +27,43 @@
 #include <cstdio>
 
 Q_IMPORT_QML_PLUGIN(Fortiq_ShellPlugin)
+
+#ifndef FORTIQ_NO_SSH
+// Developer diagnostic (`--secret-store-selftest`): exercises the protected
+// secret store of this platform with a throw-away entry and reports PASS/FAIL
+// on stdout and in the log (logcat on Android). Touches no saved server.
+static bool secretStoreSelfTest(QString &report) {
+    using fortiq::SecretStore;
+    const QString id = QStringLiteral("selftest-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const QString other = id + QStringLiteral("-other");
+    const QString secret = QString::fromUtf8("p\u00e4ss w\u00f6rd \u041f\u0440\u0438\u0432\u0435\u0442 \"q\" 'x' $(y)");
+    auto fail = [&](const QString &why) { report = QStringLiteral("FAIL: ") + why; SecretStore::remove(id); SecretStore::remove(other); return false; };
+    if (!SecretStore::available()) { report = QStringLiteral("UNAVAILABLE: ") + SecretStore::unavailableReason(); return false; }
+    if (!SecretStore::load(id).notFound) return fail(QStringLiteral("unexpected entry before save"));
+    if (const auto s = SecretStore::save(id, secret); !s.ok) return fail(QStringLiteral("save: ") + s.error);
+    const auto loaded = SecretStore::load(id);
+    if (!loaded.ok || loaded.secret != secret) return fail(QStringLiteral("round trip mismatch: ") + loaded.error);
+#ifdef Q_OS_ANDROID
+    {   // The blob is bound to its server id and protected against tampering.
+        QSettings settings;
+        const QString k = QStringLiteral("secrets/") + id;
+        const QByteArray blob = settings.value(k).toByteArray();
+        if (blob.isEmpty()) return fail(QStringLiteral("no ciphertext stored"));
+        if (QByteArray::fromBase64(blob).contains(secret.toUtf8())) return fail(QStringLiteral("plaintext found in stored blob"));
+        settings.setValue(QStringLiteral("secrets/") + other, blob);
+        if (SecretStore::load(other).ok) return fail(QStringLiteral("blob accepted under another server id"));
+        QByteArray raw = QByteArray::fromBase64(blob);
+        raw[raw.size() - 1] = char(raw.at(raw.size() - 1) ^ 0x01);
+        settings.setValue(k, raw.toBase64());
+        if (SecretStore::load(id).ok) return fail(QStringLiteral("tampered blob accepted"));
+    }
+#endif
+    if (!SecretStore::remove(id).ok || !SecretStore::load(id).notFound) return fail(QStringLiteral("remove"));
+    SecretStore::remove(other);
+    report = QStringLiteral("PASS");
+    return true;
+}
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -54,8 +94,19 @@ int main(int argc, char *argv[])
         "Bundled wallpaper (aurora, desert, city), 'none' for the placeholder, or an image file.", "name|path");
     QCommandLineOption fixturePreviewOption("fixture-preview",
         "With --reference-fixture: show the file viewer (text, image) or the transfer queue with samples.", "text|image|editor|transfers|trash|trashview|search|logs|incident|service|panelleft");
-    parser.addOptions({ fixtureOption, screenshotOption, wallpaperOption, fixturePreviewOption });
+    QCommandLineOption secretSelfTestOption("secret-store-selftest",
+        "Developer diagnostic: test the protected secret store with a throw-away entry, print the result and exit.");
+    parser.addOptions({ fixtureOption, screenshotOption, wallpaperOption, fixturePreviewOption, secretSelfTestOption });
     parser.process(app);
+#ifndef FORTIQ_NO_SSH
+    if (parser.isSet(secretSelfTestOption)) {
+        QString report;
+        const bool ok = secretStoreSelfTest(report);
+        qInfo().noquote() << "SECRETSTORE-SELFTEST" << report;
+        std::printf("SECRETSTORE-SELFTEST %s\n", qPrintable(report));
+        return ok ? 0 : 4;
+    }
+#endif
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("shellFixture", parser.isSet(fixtureOption));

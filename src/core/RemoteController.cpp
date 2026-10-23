@@ -168,7 +168,7 @@ void RemoteController::connectToSaved(const QString &id) {
     if (!r.ok) {
         // A missing entry means the flag is stale: drop it so the prompt asks again.
         if (r.notFound) setSecretSaved(id, false);
-        m_status = r.notFound ? QStringLiteral("The remembered password is no longer in the Windows Credential Manager; enter it again.")
+        m_status = r.notFound ? QStringLiteral("The remembered password is no longer in the protected store; enter it again.")
                               : QStringLiteral("Could not read the remembered password: ") + r.error;
         emit changed();
         return;

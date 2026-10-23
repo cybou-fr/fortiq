@@ -4,10 +4,17 @@
 the password (or key passphrase) is stored in the Windows Credential Manager (`SecretStore`, target `FORTIQ/ssh/<server id>`,
 per-user DPAPI, never in QSettings or a file); the profile keeps only a `secretSaved` flag. Clicking a server with a remembered
 secret connects at once; "Oublier" deletes it. Removing a server deletes it; editing host, port, user or key path drops it so it
-can never reach another target. If the store is unavailable (Android and other platforms today) remembering is refused with an
-explicit message and nothing is written. **Not done: Android Keystore, ssh-agent/Pageant.** Verified: `fortiq_credentials` QtTest
+can never reach another target. If the store is unavailable (platforms other than Windows and Android) remembering is refused with an
+explicit message and nothing is written. **Android (23.10.2026):** `fr.cybou.fortiq.SecretVault` (Java, `android/src`)
+keeps one non-exportable AES-256-GCM key in the Android Keystore; the app stores only `iv || ciphertext` in its private
+settings, bound to the server id as authenticated data (a blob copied to another id, or altered, is rejected). The C++ side
+calls it through JNI. **Not done: ssh-agent/Pageant.** Verified: `fortiq_credentials` QtTest
 (real Credential Manager round trip incl. Unicode/quotes, 5000-byte refusal, edit/remove/forget rules, nothing in QSettings) and the
-layout test with a fake controller; not run against a live server, nor on a clean machine.
+layout test with a fake controller; not run against a live server, nor on a clean machine. Android: the developer flag
+`fortiq --secret-store-selftest` (throw-away entry, prints PASS/FAIL, exit code 0/4) passed on the FortiqTablet emulator
+(API 37, arm64 translation, 23.10.2026): Unicode/quote round trip, no plaintext in the stored blob, blob rejected under another
+server id, tampered blob rejected, remove. Not verified: a full login with "Se souvenir" on Android (no SSH test account was
+used), survival across a device reboot, a physical device, key invalidation after a screen-lock change.
 
 23 October login (owner decision): connecting to a server now works like a Linux login. A full-screen login
 screen (`ServerManager.qml`, saved servers as account tiles, password or key-passphrase prompt, first-use
