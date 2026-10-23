@@ -223,6 +223,15 @@ private slots:
                 shell->setProperty("filesOpen", true);
                 shell->setProperty("sessionMenuOpen", true);
                 QTest::qWait(50);
+                QVERIFY(window->grabWindow().save(QString("layout-captures/%1-session.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+                auto *pill = findByName(shell, "sessionPill"); QVERIFY(pill); QVERIFY(pill->isVisible());
+                QVERIFY(pill->x() + pill->width() > shell->width() - 20);                  // at the right, where the avatar was
+                shell->setProperty("sessionMenuOpen", false);
+                QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, pill->mapToScene(QPointF(pill->width() / 2, pill->height() / 2)).toPoint());
+                QTRY_VERIFY(shell->property("serversOpen").toBool());   // not connected: the pill leads to the login screen
+                shell->setProperty("serversOpen", false);
+                shell->setProperty("sessionMenuOpen", true);
+                QTest::qWait(50);
                 auto *logout = findByName(shell, "logoutButton"); QVERIFY(logout); QVERIFY(logout->isVisible());
                 QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, logout->mapToScene(QPointF(logout->width() / 2, logout->height() / 2)).toPoint());
                 QTRY_VERIFY(shell->property("serversOpen").toBool());

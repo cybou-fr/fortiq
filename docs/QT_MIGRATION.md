@@ -3,9 +3,10 @@
 23 October login (owner decision): connecting to a server now works like a Linux login. A full-screen login
 screen (`ServerManager.qml`, saved servers as account tiles, password or key-passphrase prompt, first-use
 fingerprint step, add/edit/remove) is shown at start and after logout; it replaces the previous Servers dialog,
-so Files/login no longer appear together. The top-bar server name or avatar opens a session menu with
+so Files/login no longer appear together. The top-bar indicator opens a session menu with
 "Se déconnecter", which protects unsaved MDok drafts, closes all windows, ends the SSH session and returns to the
-login screen. A dropped connection does not log out: windows stay, the menu offers logout. Layout QtTest covers
+login screen. The connection indicator (dot + server name, ▾) sits at the right of the top bar in place of the user avatar and
+opens that menu; the reference scene keeps the sketch layout. A dropped connection does not log out: windows stay, the menu offers logout. Layout QtTest covers
 the login screen, secret entry and logout with a fake controller; the real connect-then-close path is not
 covered by an automated test and was not run against a live server in this slice.
 

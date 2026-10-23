@@ -313,8 +313,10 @@ Item {
     }
 
     TopBar {
+        id: topBar
         z: 10
         compact: shell.adaptive
+        pillRight: !shell.fixture
         width: parent.width
         serverLabel: shell.fixture ? "Linux"
             : (shell.controller && shell.controller.connected ? shell.controller.serverLabel : "Aucun serveur")
@@ -326,7 +328,7 @@ Item {
             else shell.serversOpen = true
         }
         MouseArea {
-            x: shell.adaptive ? parent.width - 44 : 1100; width: shell.adaptive ? 44 : 380; height: parent.height
+            x: shell.adaptive ? parent.width - 44 : 1100; width: shell.adaptive ? 44 : Math.max(0, topBar.indicatorLeft - 1100); height: parent.height
             onClicked: shell.controlOpen = !shell.controlOpen
         }
     }
@@ -337,7 +339,7 @@ Item {
         objectName: "sessionMenu"
         z: 11
         visible: shell.sessionMenuOpen && !shell.fixture
-        x: shell.adaptive ? 8 : 58; y: 52
+        x: shell.width - width - 12; y: 52
         width: Math.min(280, shell.width - 16); height: 96
         backdrop: wallpaper
         radius: 14
