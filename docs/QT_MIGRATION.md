@@ -236,3 +236,10 @@ Qt WebEngine and Windows WebView2 do not provide a single browser component suit
 ## Old documents
 
 **Authority:** [SSH_FRONTEND_CONTRACT](SSH_FRONTEND_CONTRACT.md) defines work transport and persistence; [UI SPEC](UI_SPEC_V1.md) visual fidelity; [PRODUCT_SCOPE](PRODUCT_SCOPE.md) product scope; [Smart Files](SMART_FILES_SPEC.md) and [Logs](LOGS_INTELLIGENCE_SPEC.md) feature contracts; this migration and [DEVELOPMENT_MATRIX](DEVELOPMENT_MATRIX.md) milestones; [README](../README.md) only current implemented source status. Historical Flutter tests at `flutter-final` do not qualify Qt features.
+
+23 October refactor, step 1 (no behaviour change): `src/ssh/SshClient.cpp` (1383 lines) is split into
+`SshSession.cpp` (connect, host-key pin, auth, list, read), `SshTerminal.cpp`, `SshTransfers.cpp` (download/upload),
+`SshFileOps.cpp` (mkdir/rename), `SshTrash.cpp`, `SshEdit.cpp` (safe save/copy), `SshExec.cpp` (search, runScript) and the
+internal `SshInternal.h`; the code was moved verbatim by script. The public header is unchanged. Verified: Windows build,
+CTest 11/11, and the live `fortiq_publication` suite **28/28** against the disposable WSL `fortiq-test` SFTP server (the
+distro must be kept running during the test or sshd stops). The general `fortiq_ssh_integration` suite stayed skipped.

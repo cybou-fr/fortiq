@@ -22,7 +22,7 @@ Android arm64, установщик Windows.
 2. Нет квалификации на чистой Windows, физическом Android, touch/IME.
 3. Секреты только в RAM; нет защищённого хранилища, ssh-agent и теста зашифрованных ключей.
 4. Нет общего TaskManager, WorkspaceState на сервере, лицензирования и подготовки сервера.
-5. Крупные файлы: `SshClient.cpp` (≈1400 строк), `LogsController.cpp`, `RemoteController.cpp`, `FilesWindow.qml`.
+5. Крупные файлы: `SshClient.cpp` (≈1400 строк; разбит 23.10.2026, см. QT_MIGRATION), `LogsController.cpp`, `RemoteController.cpp`, `FilesWindow.qml`.
 6. Серверный инструмент для Mail не выбран; SSH-SOCKS для Browser на Android не доказан.
 7. Открыты подпись кода, размер пакета и коммерческая лицензия Qt.
 
