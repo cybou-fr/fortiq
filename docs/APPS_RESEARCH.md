@@ -16,7 +16,7 @@
 | PostgreSQL | `psql` | 17 | PostgreSQL License | `--csv` + `-P null=<случайный маркер>`; JSON-обёртки не нужны |
 | MariaDB/MySQL | `mariadb` / `mysql` | 11.8.6 | GPL-2.0 | `--xml` (единственный способ отличить NULL от строки «NULL»); `--batch` неоднозначен |
 
-Проверенные факты (скрипты и их вывод сохранены в [docs/research/](research/): `research_db.sh`/`.out`, `research_db2.sh`/`.out`, `research_mail.sh`/`.out`; запускаются от root на одноразовом Debian):
+Проверенные факты (скрипты и их вывод сохранены в [research_db.sh](research/research_db.sh) / [.out](research/research_db.out), [research_db2.sh](research/research_db2.sh) / [.out](research/research_db2.out), [research_mail.sh](research/research_mail.sh) / [.out](research/research_mail.out); запускаются от root на одноразовом Debian):
 
 - **psql `--csv`:** NULL и пустая строка в CSV выглядят одинаково; **`-P null='<<N-7f3a>>'`** делает NULL однозначным (маркер генерируется случайно на запрос и передаётся как данные). Многострочные значения и кавычки корректно экранируются.
   Несколько операторов в одном вводе выводятся последовательными таблицами (разбор нужен). Коды выхода: 1 — ошибка SQL, 2 — ошибка соединения; сообщения английские, с `LINE n:` и указателем.
