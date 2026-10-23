@@ -185,6 +185,8 @@ qt_add_executable(fortiq
     src/core/RemoteController.h
     src/core/SecretStore.cpp
     src/core/SecretStore.h
+    src/core/TaskManager.cpp
+    src/core/TaskManager.h
     ${FORTIQ_LOGS_SOURCES}
     src/core/LogsController.h
     src/core/TerminalController.cpp
@@ -279,7 +281,7 @@ if(BUILD_TESTING)
         src/core/DocumentsController.cpp src/core/DocumentsController.h
         ${FORTIQ_SSH_SOURCES} src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h
         src/core/LocalDocument.cpp src/core/LocalDocument.h
-        ${FORTIQ_REMOTE_SOURCES} src/core/RemoteController.h src/core/SecretStore.cpp src/core/SecretStore.h
+        ${FORTIQ_REMOTE_SOURCES} src/core/RemoteController.h src/core/SecretStore.cpp src/core/SecretStore.h src/core/TaskManager.cpp src/core/TaskManager.h
         ${FORTIQ_LOGS_SOURCES} src/core/LogsController.h)
     target_include_directories(fortiq_ssh_it PRIVATE src)
     target_link_libraries(fortiq_ssh_it PRIVATE Qt6::Core Qt6::Network Qt6::Concurrent Qt6::Test ${FORTIQ_SSH_TARGET})
@@ -287,7 +289,7 @@ if(BUILD_TESTING)
     qt_add_executable(fortiq_logs_tests tests/LogsControllerTest.cpp
         ${FORTIQ_SSH_SOURCES} src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h
         src/core/LocalDocument.cpp src/core/LocalDocument.h
-        ${FORTIQ_REMOTE_SOURCES} src/core/RemoteController.h src/core/SecretStore.cpp src/core/SecretStore.h
+        ${FORTIQ_REMOTE_SOURCES} src/core/RemoteController.h src/core/SecretStore.cpp src/core/SecretStore.h src/core/TaskManager.cpp src/core/TaskManager.h
         ${FORTIQ_LOGS_SOURCES} src/core/LogsController.h)
     target_include_directories(fortiq_logs_tests PRIVATE src)
     target_link_libraries(fortiq_logs_tests PRIVATE Qt6::Core Qt6::Network Qt6::Concurrent Qt6::Test ${FORTIQ_SSH_TARGET})
@@ -295,7 +297,7 @@ if(BUILD_TESTING)
     qt_add_executable(fortiq_credentials_tests tests/CredentialsTest.cpp
         ${FORTIQ_SSH_SOURCES} src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h
         src/core/LocalDocument.cpp src/core/LocalDocument.h
-        ${FORTIQ_REMOTE_SOURCES} src/core/RemoteController.h src/core/SecretStore.cpp src/core/SecretStore.h)
+        ${FORTIQ_REMOTE_SOURCES} src/core/RemoteController.h src/core/SecretStore.cpp src/core/SecretStore.h src/core/TaskManager.cpp src/core/TaskManager.h)
     target_include_directories(fortiq_credentials_tests PRIVATE src)
     target_link_libraries(fortiq_credentials_tests PRIVATE Qt6::Core Qt6::Network Qt6::Concurrent Qt6::Test ${FORTIQ_SSH_TARGET})
     add_test(NAME fortiq_credentials COMMAND fortiq_credentials_tests -o "${CMAKE_CURRENT_BINARY_DIR}/credentials-results.txt,txt" -o "-,txt")
@@ -305,6 +307,10 @@ if(BUILD_TESTING)
     target_include_directories(fortiq_publication_tests PRIVATE src tests)
     target_link_libraries(fortiq_publication_tests PRIVATE Qt6::Core Qt6::Network Qt6::Test ${FORTIQ_SSH_TARGET})
     add_test(NAME fortiq_publication COMMAND fortiq_publication_tests -o "${CMAKE_CURRENT_BINARY_DIR}/publication-results.txt,txt" -o "-,txt")
+    qt_add_executable(fortiq_task_tests tests/TaskManagerTest.cpp src/core/TaskManager.cpp src/core/TaskManager.h)
+    target_include_directories(fortiq_task_tests PRIVATE src)
+    target_link_libraries(fortiq_task_tests PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME fortiq_tasks COMMAND fortiq_task_tests -o "${CMAKE_CURRENT_BINARY_DIR}/task-results.txt,txt" -o "-,txt")
     qt_add_executable(fortiq_document_tests tests/LocalDocumentTest.cpp src/core/LocalDocument.cpp src/core/LocalDocument.h)
     target_include_directories(fortiq_document_tests PRIVATE src)
     target_link_libraries(fortiq_document_tests PRIVATE Qt6::Core Qt6::Test)
@@ -323,7 +329,7 @@ if(BUILD_TESTING)
         file(TO_CMAKE_PATH "$ENV{WINDIR}/Fonts" FORTIQ_TEST_FONT_DIR)
         set_property(TEST fortiq_layout APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=${FORTIQ_TEST_FONT_DIR}")
         # Developer tests need the matching Qt Test runtime, absent from the app package.
-        set_tests_properties(fortiq_markdown fortiq_disks fortiq_terminal_history fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_credentials fortiq_publication fortiq_documents fortiq_layout PROPERTIES
+        set_tests_properties(fortiq_markdown fortiq_disks fortiq_terminal_history fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_credentials fortiq_tasks fortiq_publication fortiq_documents fortiq_layout PROPERTIES
             ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:$<TARGET_FILE_DIR:${FORTIQ_SSH_TARGET}>")
     endif()
 endif()
