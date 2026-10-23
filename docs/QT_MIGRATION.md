@@ -353,3 +353,7 @@ privileges on tables and views, create rights, replication) or, for SQLite, the 
 check never blocks anything and says plainly that function side effects are invisible to it. Found on the way: saving a new profile left the previous profile's rows, schema and results on screen (fixed, D8). Verified: 6 new unit tests, a layout test of the banner,
 the live `databaseRoleCheck` test on real roles (owner -> warning, read-only -> ok, file role -> warning, write-file and superuser -> danger, SQLite note/ok) including proof that the read-only role cannot write without any FORTIQ option, full live suite and CTest.
 Not done: MariaDB, side-effect functions are invisible to a catalogue query; Android not run on a device.
+
+24 October Audit backlog 4 ([AUDIT_2026-10-23](AUDIT_2026-10-23.md) R6) — layout-test stability and CI: the layout test no longer sleeps fixed times (44 `qWait` calls removed); after each action the scene is brought up to date (`settle`: events + one synchronous render) and checks wait for their condition (`QTRY_*`, 20 s bound reached only on a real failure);
+the task-panel Cancel click repeats until it takes effect (it arrived before the panel was in place under load). `tool/stress_layout.py` runs the check under CPU load; `tool/ci_check.py` is the gate (docs consistency, scripts compile, configure/build, ctest, optional stress);
+`.github/workflows/ci.yml` runs it on Windows. Not done: the workflow was never executed on GitHub (YAML parsed locally only); live tests and Android are not part of CI.

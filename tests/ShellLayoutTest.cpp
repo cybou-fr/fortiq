@@ -16,6 +16,18 @@
 #endif
 Q_IMPORT_QML_PLUGIN(Fortiq_ShellPlugin)
 
+// The tests used to sleep a fixed time after every interaction and failed when the machine was busy (a game running, a build):
+// the sleep was shorter than the work. Now they wait for conditions, with a generous bound that is only ever reached on a real failure.
+#define QTRY_V(cond) QTRY_VERIFY_WITH_TIMEOUT(cond, 20000)
+#define QTRY_C(actual, expected) QTRY_COMPARE_WITH_TIMEOUT(actual, expected, 20000)
+// Lets the scene catch up with what the test just did: queued events are delivered and one synchronous render runs polish, bindings
+// and the scene-graph sync (grabWindow). QML here has no animations, so after this the items are where they will be.
+static void settle(QQuickWindow *window) {
+    QCoreApplication::processEvents();
+    (void)window->grabWindow();
+    QCoreApplication::processEvents();
+}
+
 static QQuickItem *findByName(QQuickItem *root, const QString &name) {
     if (root->objectName() == name) return root;
     for (QQuickItem *child : root->childItems()) if (auto *hit = findByName(child, name)) return hit;
@@ -263,7 +275,7 @@ private slots:
         engine.loadFromModule("Fortiq.App", "Main");
         QVERIFY(!engine.rootObjects().isEmpty());
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first()); QVERIFY(window);
-        window->resize(size); QTest::qWait(200);
+        window->resize(size); settle(window);
         auto *shell = window->findChild<QQuickItem *>("desktopShell"); QVERIFY(shell);
         if(preview=="docs") { shell->setProperty("documentsOpen",true);shell->setProperty("foregroundApp","docs"); }
         if(preview=="disks") { shell->setProperty("disksOpen",true);shell->setProperty("foregroundApp","disks"); }
@@ -298,7 +310,7 @@ private slots:
         if (preview == "servers") {
             auto *manager = shell->findChild<QQuickItem *>("serverManager"); QVERIFY(manager);
             shell->setProperty("serversOpen", true); manager->setProperty("editingId", "new");
-            QTest::qWait(50);
+            settle(window);
             // Window-level Back must work with focus in a form, also at master width.
             // The login screen cannot be dismissed: there is no session to go back to.
             QTest::keyRelease(window, Qt::Key_Back);
@@ -328,13 +340,13 @@ private slots:
             files->setX(before.x()); files->setY(before.y());
             shell->setProperty("fixture", false);
             shell->setProperty("logsOpen", true);
-            QTest::qWait(30);
+            settle(window);
             QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
                 files->mapToScene(QPointF(100, 20)).toPoint());
-            QTRY_VERIFY(files->z() > logs->z());
+            QTRY_V(files->z() > logs->z());
             QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
                 logs->mapToScene(QPointF(25, 80)).toPoint());
-            QTRY_VERIFY(logs->z() > files->z());
+            QTRY_V(logs->z() > files->z());
             const auto logPosition=logs->position();
             const auto logStart=logs->mapToScene(QPointF(80,560)).toPoint();
             QTest::mousePress(window,Qt::LeftButton,Qt::NoModifier,logStart);
@@ -342,7 +354,7 @@ private slots:
             QVERIFY(logs->x()>logPosition.x()); QVERIFY(logs->y()>logPosition.y());
             logs->setPosition(logPosition);
             QVERIFY(QMetaObject::invokeMethod(shell, "launch", Q_ARG(QVariant, QVariant("files"))));
-            QTRY_VERIFY(files->z() > logs->z());
+            QTRY_V(files->z() > logs->z());
             // The passive activation handler must not consume child clicks.
             QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
                 files->mapToScene(QPointF(20, 23)).toPoint());
@@ -350,7 +362,7 @@ private slots:
             shell->setProperty("filesOpen", true);
             shell->setProperty("logsOpen", false);
             shell->setProperty("launcherOpen", true);
-            QTest::qWait(50);
+            settle(window);
             auto *launcher = shell->findChild<QQuickItem *>("launcherPanel"); QVERIFY(launcher);
             QVERIFY(launcher->x() >= 0);
             QVERIFY(launcher->y() + launcher->height() < shell->height() - 70);
@@ -358,7 +370,7 @@ private slots:
             QCOMPARE(appPanelItem->x(), (shell->width() - appPanelItem->width()) / 2);   // bottom panel is centred
             QCOMPARE(launcher->x(), appPanelItem->x());                                  // the launcher opens above it
             shell->setProperty("controlOpen", true);
-            QTest::qWait(50);
+            settle(window);
             auto *control = shell->findChild<QQuickItem *>("controlCenter"); QVERIFY(control);
             QCOMPARE(control->x() + control->width(), shell->width() - 8);   // floating card against the right edge
             auto *switcher = shell->findChild<QQuickItem *>("backgroundSwitcher"); QVERIFY(switcher);
@@ -375,7 +387,7 @@ private slots:
                 auto *choice = find(switcher, QString("backgroundChoice%1").arg(index)); QVERIFY(choice);
                 QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
                     choice->mapToScene(QPointF(choice->width() / 2, choice->height() / 2)).toPoint());
-                QTRY_COMPARE(shell->property("wallpaperName").toString(), (QStringList{"aurora", "desert", "city"}.at(index)));
+                QTRY_C(shell->property("wallpaperName").toString(), (QStringList{"aurora", "desert", "city"}.at(index)));
             }
             QVERIFY(control->height() < 800);                           // fits its content, no empty tail
             // Presses inside the panel keep it open; a press elsewhere closes it and the launcher.
@@ -383,10 +395,10 @@ private slots:
             QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, control->mapToScene(QPointF(150, 300)).toPoint());
             QVERIFY(shell->property("controlOpen").toBool());
             QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(40, 700));
-            QTRY_VERIFY(!shell->property("controlOpen").toBool());
-            QTRY_VERIFY(!shell->property("launcherOpen").toBool());
+            QTRY_V(!shell->property("controlOpen").toBool());
+            QTRY_V(!shell->property("launcherOpen").toBool());
             shell->setProperty("controlOpen", true);
-            QTest::qWait(400);
+            settle(window);
             QVERIFY(window->grabWindow().save(QString("layout-captures/%1-control-selected.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
             {   // Système: processes (filter, sort, details), services and the overview, all read-only.
                 QQmlComponent sysComponent(&engine), sysRemoteComponent(&engine);
@@ -398,17 +410,17 @@ private slots:
                 shell->setProperty("systemController", QVariant::fromValue(fakeSys));
                 shell->setProperty("systemOpen", true);
                 shell->setProperty("foregroundApp", "system");
-                QTest::qWait(80);
+                settle(window);
                 auto *sysWin = shell->findChild<QQuickItem *>("systemWindow"); QVERIFY(sysWin); QVERIFY(sysWin->isVisible());
                 sysWin->setProperty("remote", QVariant::fromValue(sysRemote));
                 QVERIFY(sysWin->x() >= 0 && sysWin->y() >= 47 && sysWin->x() + sysWin->width() <= shell->width());
-                QTest::qWait(100);
+                settle(window);
                 auto *procList = findByName(sysWin, "systemProcessList"); QVERIFY(procList); QVERIFY(procList->isVisible());
                 QCOMPARE(procList->property("count").toInt(), 2);                    // the kernel thread is hidden by default
                 auto click = [&](QQuickItem *item) {
                     QVERIFY(item);
                     QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
-                    QTest::qWait(60);
+                    settle(window);
                 };
                 click(findByName(sysWin, "systemKernel"));
                 QCOMPARE(procList->property("count").toInt(), 3);
@@ -422,13 +434,13 @@ private slots:
                 auto *filter = findByName(sysWin, "systemFilter"); QVERIFY(filter);
                 filter->forceActiveFocus();
                 for (const char c : QByteArray("ngin")) QTest::keyClick(window, c);
-                QTRY_COMPARE(procList->property("count").toInt(), 1);
+                QTRY_C(procList->property("count").toInt(), 1);
                 QVERIFY(QMetaObject::invokeMethod(procList, "forceLayout"));
                 QQuickItem *row = nullptr;
                 QVERIFY(QMetaObject::invokeMethod(procList, "itemAtIndex", Q_RETURN_ARG(QQuickItem *, row), Q_ARG(int, 0)));
                 click(row);
                 auto *detail = findByName(sysWin, "systemDetail"); QVERIFY(detail);
-                QTRY_VERIFY(detail->isVisible());
+                QTRY_V(detail->isVisible());
                 QVERIFY(window->grabWindow().save(QString("layout-captures/%1-system.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
                 // Services: failed ones first, filter chips.
                 click(findByName(sysWin, "systemSection_services"));
@@ -439,7 +451,7 @@ private slots:
                 click(findByName(sysWin, "systemServiceFilter_active"));
                 QCOMPARE(sysWin->property("shownServices").toList().size(), 1);
                 click(findByName(sysWin, "systemSection_overview"));
-                QTest::qWait(60);
+                settle(window);
                 // The auto-refresh switch asks the controller for new data while the window is open.
                 const int before = fakeSys->property("reloads").toInt();
                 click(findByName(sysWin, "systemSection_processes"));
@@ -459,15 +471,15 @@ private slots:
                 shell->setProperty("mailController", QVariant::fromValue(fakeMail));
                 shell->setProperty("mailOpen", true);
                 shell->setProperty("foregroundApp", "mail");
-                QTest::qWait(80);
+                settle(window);
                 auto *mailWin = shell->findChild<QQuickItem *>("mailWindow"); QVERIFY(mailWin); QVERIFY(mailWin->isVisible());
                 mailWin->setProperty("remote", QVariant::fromValue(mailRemote));
                 QVERIFY(mailWin->x() >= 0 && mailWin->y() >= 47 && mailWin->x() + mailWin->width() <= shell->width());
-                QTest::qWait(100);
+                settle(window);
                 auto click = [&](QQuickItem *item) {
                     QVERIFY(item);
                     QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
-                    QTest::qWait(60);
+                    settle(window);
                 };
                 auto *list = findByName(mailWin, "mailThreadList"); QVERIFY(list); QVERIFY(list->isVisible());
                 QCOMPARE(list->property("count").toInt(), 2);
@@ -477,18 +489,18 @@ private slots:
                 search->forceActiveFocus();
                 for (const char c : QByteArray("from:alice")) QTest::keyClick(window, c);
                 QTest::keyClick(window, Qt::Key_Return);
-                QTRY_VERIFY(fakeMail->property("calls").toStringList().contains("search:from:alice"));
+                QTRY_V(fakeMail->property("calls").toStringList().contains("search:from:alice"));
                 // A thread opens in the reader; tag buttons ask the controller.
                 click(findByName(mailWin, "mailThread_01"));
-                QTRY_VERIFY(fakeMail->property("calls").toStringList().contains("open:01"));
-                auto *reader = findByName(mailWin, "mailReader"); QVERIFY(reader); QTRY_VERIFY(reader->isVisible());
+                QTRY_V(fakeMail->property("calls").toStringList().contains("open:01"));
+                auto *reader = findByName(mailWin, "mailReader"); QVERIFY(reader); QTRY_V(reader->isVisible());
                 auto *messages = findByName(mailWin, "mailMessages"); QVERIFY(messages);
-                QTRY_COMPARE(messages->property("count").toInt(), 1);
+                QTRY_C(messages->property("count").toInt(), 1);
                 QVERIFY(window->grabWindow().save(QString("layout-captures/%1-mail-reader.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
                 // Attachments stay on the server: one button saves there, the other asks where to put it on this computer.
                 click(findByName(mailWin, "mailAttachServer_0"));
                 QCOMPARE(fakeMail->property("calls").toStringList().filter("attach-server:a:3:Rapport").size(), 1);
-                auto *attachStatus = findByName(mailWin, "mailAttachStatus"); QVERIFY(attachStatus); QTRY_VERIFY(attachStatus->isVisible());
+                auto *attachStatus = findByName(mailWin, "mailAttachStatus"); QVERIFY(attachStatus); QTRY_V(attachStatus->isVisible());
                 QVERIFY(findByName(mailWin, "mailAttachPc_0")->isVisible());
                 QVERIFY(window->grabWindow().save(QString("layout-captures/%1-mail-attachment.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
                 click(findByName(mailWin, "mailTag_unread"));
@@ -499,19 +511,19 @@ private slots:
                 QVERIFY(fakeMail->property("calls").toStringList().contains("folder:unread"));
                 // Reply opens the composer prefilled; sending goes through the controller and closes it.
                 click(findByName(mailWin, "mailReply"));
-                auto *compose = findByName(mailWin, "mailCompose"); QVERIFY(compose); QTRY_VERIFY(compose->isVisible());
+                auto *compose = findByName(mailWin, "mailCompose"); QVERIFY(compose); QTRY_V(compose->isVisible());
                 QCOMPARE(findByName(mailWin, "mailComposeSubject")->property("text").toString(), QString("Re: Rapport"));
                 QCOMPARE(findByName(mailWin, "mailComposeTo")->property("text").toString(), QString("Alice <alice@example.org>"));
                 QVERIFY(window->grabWindow().save(QString("layout-captures/%1-mail-compose.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
                 findByName(mailWin, "mailComposeTo")->setProperty("text", "bob@example.org");
                 click(findByName(mailWin, "mailComposeSend"));
                 QVERIFY(fakeMail->property("calls").toStringList().contains("send:perso:bob@example.org:Re: Rapport:a"));
-                QTRY_VERIFY(!compose->isVisible());
+                QTRY_V(!compose->isVisible());
                 QVERIFY(findByName(mailWin, "mailSendBanner")->isVisible());
                 // The account wizard: nothing is written before the exact text is shown and the consent box is ticked.
                 fakeMail->setProperty("sendState", "idle");
                 click(findByName(mailWin, "mailAccounts"));
-                auto *wizard = findByName(mailWin, "mailWizard"); QVERIFY(wizard); QTRY_VERIFY(wizard->isVisible());
+                auto *wizard = findByName(mailWin, "mailWizard"); QVERIFY(wizard); QTRY_V(wizard->isVisible());
                 QVERIFY(fakeMail->property("calls").toStringList().contains("probe:perso"));
                 findByName(mailWin, "mailWizEmail")->setProperty("text", "me@example.net");
                 findByName(mailWin, "mailWizImapHost")->setProperty("text", "imap.example.net");
@@ -519,8 +531,8 @@ private slots:
                 findByName(mailWin, "mailWizSmtpHost")->setProperty("text", "smtp.example.net");
                 findByName(mailWin, "mailWizPassword")->setProperty("text", "secret");
                 click(findByName(mailWin, "mailWizPreview"));
-                QTRY_VERIFY(fakeMail->property("calls").toStringList().contains("preview:perso:tls:starttls:993:587"));
-                auto *files = findByName(mailWin, "mailWizFiles"); QVERIFY(files); QTRY_VERIFY(files->isVisible());
+                QTRY_V(fakeMail->property("calls").toStringList().contains("preview:perso:tls:starttls:993:587"));
+                auto *files = findByName(mailWin, "mailWizFiles"); QVERIFY(files); QTRY_V(files->isVisible());
                 auto *shown = findByName(mailWin, "mailWizText_msmtprc"); QVERIFY(shown);
                 QCOMPARE(shown->property("text").toString(), QString("password ********"));       // masked by default
                 auto *write = findByName(mailWin, "mailWizWrite"); QVERIFY(write);
@@ -530,12 +542,12 @@ private slots:
                 QCOMPARE(shown->property("text").toString(), QString("password secret"));          // exact text on request
                 auto *wizardFlick = findByName(mailWin, "mailWizFlick"); QVERIFY(wizardFlick);
                 wizardFlick->setProperty("contentY", wizardFlick->property("contentHeight").toDouble() - wizardFlick->height());   // the consent box sits below the files
-                QTest::qWait(80);
+                settle(window);
                 QVERIFY(window->grabWindow().save(QString("layout-captures/%1-mail-wizard-bottom.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
                 click(findByName(mailWin, "mailWizConsent"));
-                QTRY_VERIFY(write->property("enabled").toBool());
+                QTRY_V(write->property("enabled").toBool());
                 click(write);
-                QTRY_VERIFY(fakeMail->property("calls").toStringList().contains("apply:mbsyncrc,msmtprc"));
+                QTRY_V(fakeMail->property("calls").toStringList().contains("apply:mbsyncrc,msmtprc"));
                 QVERIFY(findByName(mailWin, "mailWizPassword")->property("text").toString().isEmpty());   // the password field is cleared once submitted
                 click(findByName(mailWin, "mailWizTestSmtp"));
                 QVERIFY(fakeMail->property("calls").toStringList().contains("smtp:perso"));
@@ -554,39 +566,39 @@ private slots:
                 shell->setProperty("dbController", QVariant::fromValue(fakeDb));
                 shell->setProperty("dbOpen", true);
                 shell->setProperty("foregroundApp", "db");
-                QTest::qWait(80);
+                settle(window);
                 auto *dbWin = shell->findChild<QQuickItem *>("dbWindow"); QVERIFY(dbWin); QVERIFY(dbWin->isVisible());
                 dbWin->setProperty("remote", QVariant::fromValue(dbRemote));
                 QVERIFY(dbWin->x() >= 0 && dbWin->y() >= 47 && dbWin->x() + dbWin->width() <= shell->width());
-                QTest::qWait(100);
+                settle(window);
                 auto click = [&](QQuickItem *item) {
                     QVERIFY(item);
                     QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
-                    QTest::qWait(60);
+                    settle(window);
                 };
                 auto *rows = findByName(dbWin, "dbRows"); QVERIFY(rows); QVERIFY(rows->isVisible());
                 QCOMPARE(rows->property("count").toInt(), 2);
                 QCOMPARE(dbWin->property("schemaRows").toList().size(), 1);          // collapsed: only the table
                 QVERIFY(findByName(dbWin, "dbInfo")); QVERIFY(!findByName(dbWin, "dbError")->isVisible());
                 // The connected role: a banner says what it may do; details and a copyable read-only role recipe open on a click.
-                auto *role = findByName(dbWin, "dbRoleBanner"); QVERIFY(role); QTRY_VERIFY(role->isVisible());
+                auto *role = findByName(dbWin, "dbRoleBanner"); QVERIFY(role); QTRY_V(role->isVisible());
                 QCOMPARE(role->height(), 30.0);
                 auto *recipe = findByName(dbWin, "dbRoleRecipe"); QVERIFY(recipe); QVERIFY(!recipe->isVisible());
                 QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, role->mapToScene(QPointF(role->width() / 2, 12)).toPoint());
-                QTRY_VERIFY(recipe->isVisible());
-                QTRY_VERIFY(role->height() > 60);
+                QTRY_V(recipe->isVisible());
+                QTRY_V(role->height() > 60);
                 QVERIFY(recipe->property("text").toString().contains("CREATE ROLE fortiq_ro"));
                 QVERIFY(findByName(dbWin, "dbRoleCopy")->isVisible());
                 QVERIFY(window->grabWindow().save(QString("layout-captures/%1-db-role.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
                 QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, role->mapToScene(QPointF(role->width() / 2, 12)).toPoint());
-                QTRY_VERIFY(!recipe->isVisible());
+                QTRY_V(!recipe->isVisible());
                 // A role without write rights gets a quiet confirmation; an unchecked one shows nothing alarming.
                 fakeDb->setProperty("roleCheck", QVariantMap { { "ran", true }, { "level", "ok" }, { "summary", "Ce role na aucun droit decriture visible." }, { "findings", QStringList() }, { "recommendation", "" } });
-                QTRY_COMPARE(role->height(), 30.0);
+                QTRY_C(role->height(), 30.0);
                 QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, role->mapToScene(QPointF(role->width() / 2, 12)).toPoint());
                 QVERIFY(!recipe->isVisible());                                                          // nothing to expand
                 fakeDb->setProperty("roleCheck", QVariantMap());
-                QTRY_VERIFY(!role->isVisible());
+                QTRY_V(!role->isVisible());
                 fakeDb->setProperty("roleCheck", QVariantMap { { "ran", true }, { "level", "warning" }, { "summary", "restore" }, { "findings", QStringList() }, { "recommendation", "" } });
                 QVERIFY(window->grabWindow().save(QString("layout-captures/%1-db.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
                 // Ctrl+Enter runs the SQL in the editor; the SQL goes to the controller as typed.
@@ -594,10 +606,10 @@ private slots:
                 editor->setProperty("text", "select 1");
                 editor->forceActiveFocus();
                 QTest::keyClick(window, Qt::Key_Return, Qt::ControlModifier);
-                QTRY_VERIFY(fakeDb->property("calls").toStringList().contains("run:select 1"));
+                QTRY_V(fakeDb->property("calls").toStringList().contains("run:select 1"));
                 // The profile form collects a PostgreSQL profile; the password goes to the controller once and the field is cleared.
                 click(findByName(dbWin, "dbNewProfile"));
-                auto *form = findByName(dbWin, "dbForm"); QVERIFY(form); QTRY_VERIFY(form->isVisible());
+                auto *form = findByName(dbWin, "dbForm"); QVERIFY(form); QTRY_V(form->isVisible());
                 click(findByName(dbWin, "dbEngine_postgres"));
                 findByName(dbWin, "dbName")->setProperty("text", "Prod");
                 findByName(dbWin, "dbHost")->setProperty("text", "db.local");
@@ -607,7 +619,7 @@ private slots:
                 findByName(dbWin, "dbPassword")->setProperty("text", "s3cret");
                 QVERIFY(window->grabWindow().save(QString("layout-captures/%1-db-form.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
                 click(findByName(dbWin, "dbFormSave"));
-                QTRY_VERIFY(!form->isVisible());
+                QTRY_V(!form->isVisible());
                 QVERIFY(fakeDb->property("calls").toStringList().contains("save:Prod:postgres:db.local:5433:ro:app:s3cret"));
                 QVERIFY(findByName(dbWin, "dbPassword")->property("text").toString().isEmpty());
                 shell->setProperty("dbOpen", false);
@@ -623,17 +635,17 @@ private slots:
                 shell->setProperty("networkController", QVariant::fromValue(fakeNet));
                 shell->setProperty("networkOpen", true);
                 shell->setProperty("foregroundApp", "network");
-                QTest::qWait(80);
+                settle(window);
                 auto *netWin = shell->findChild<QQuickItem *>("networkWindow"); QVERIFY(netWin); QVERIFY(netWin->isVisible());
                 netWin->setProperty("remote", QVariant::fromValue(netRemote));
                 QVERIFY(netWin->x() >= 0 && netWin->y() >= 47 && netWin->x() + netWin->width() <= shell->width());
-                QTest::qWait(80);
+                settle(window);
                 auto *netList = findByName(netWin, "networkList"); QVERIFY(netList); QVERIFY(netList->isVisible());
                 QCOMPARE(netList->property("count").toInt(), 2);                    // lo and eth0
                 auto clickSection = [&](const char *key) {
                     auto *item = findByName(netWin, QString("networkSection_%1").arg(key)); QVERIFY(item);
                     QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
-                    QTest::qWait(60);
+                    settle(window);
                 };
                 clickSection("ports");
                 QCOMPARE(netList->property("count").toInt(), 2);
@@ -648,9 +660,9 @@ private slots:
                 for (const char c : QByteArray("example.org")) QTest::keyClick(window, c);
                 auto *ping = findByName(netWin, "networkProbe_ping"); QVERIFY(ping);
                 QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, ping->mapToScene(QPointF(ping->width() / 2, ping->height() / 2)).toPoint());
-                QTRY_COMPARE(fakeNet->property("calls").toStringList(), QStringList{ "probe:ping:example.org" });
+                QTRY_C(fakeNet->property("calls").toStringList(), QStringList{ "probe:ping:example.org" });
                 auto *output = findByName(netWin, "networkProbeOutput"); QVERIFY(output);
-                QTRY_VERIFY(output->property("text").toString().contains("4 packets transmitted"));
+                QTRY_V(output->property("text").toString().contains("4 packets transmitted"));
                 shell->setProperty("networkOpen", false);
                 shell->setProperty("networkController", QVariant::fromValue<QObject *>(nullptr));
             }
@@ -664,11 +676,11 @@ private slots:
                 shell->setProperty("browserController", QVariant::fromValue(fakeBrowser));
                 shell->setProperty("webOpen", true);
                 shell->setProperty("foregroundApp", "web");
-                QTest::qWait(80);
+                settle(window);
                 auto *web = shell->findChild<QQuickItem *>("webWindow"); QVERIFY(web); QVERIFY(web->isVisible());
                 web->setProperty("remote", QVariant::fromValue(fakeRemote));
                 QVERIFY(web->x() >= 0 && web->y() >= 47 && web->x() + web->width() <= shell->width());
-                QTest::qWait(80);
+                settle(window);
                 auto *html = findByName(web, "webHtml"); QVERIFY(html); QVERIFY(html->isVisible());
                 QVERIFY(html->property("text").toString().contains("Hello page"));
                 QVERIFY(!html->property("text").toString().contains("<script"));
@@ -678,22 +690,22 @@ private slots:
                 address->setProperty("text", QString());
                 for (const char c : QByteArray("example.org/a")) QTest::keyClick(window, c);
                 QTest::keyClick(window, Qt::Key_Return);
-                QTRY_COMPARE(fakeBrowser->property("calls").toStringList(), QStringList{ "open:example.org/a" });
+                QTRY_C(fakeBrowser->property("calls").toStringList(), QStringList{ "open:example.org/a" });
                 // A link clicked in the page is handed over unresolved (the controller applies the rules).
                 QVERIFY(QMetaObject::invokeMethod(html, "linkActivated", Q_ARG(QString, QString("https://example.com/more"))));
-                QTRY_COMPARE(fakeBrowser->property("calls").toStringList(), (QStringList{ "open:example.org/a", "link:https://example.com/more" }));
+                QTRY_C(fakeBrowser->property("calls").toStringList(), (QStringList{ "open:example.org/a", "link:https://example.com/more" }));
                 // Response details open beside the page and list the headers.
                 auto *infoButton = findByName(web, "webInfo"); QVERIFY(infoButton);
                 QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, infoButton->mapToScene(QPointF(infoButton->width() / 2, infoButton->height() / 2)).toPoint());
                 auto *infoPanel = findByName(web, "webInfoPanel"); QVERIFY(infoPanel);
-                QTRY_VERIFY(infoPanel->isVisible());
-                QTest::qWait(150);
+                QTRY_V(infoPanel->isVisible());
+                settle(window);
                 QVERIFY(window->grabWindow().save(QString("layout-captures/%1-web.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
                 // An error page is explicit and never shows stale content.
                 fakeBrowser->setProperty("kind", "error");
                 fakeBrowser->setProperty("state", "error");
                 fakeBrowser->setProperty("status", "Nom d'hôte introuvable depuis le serveur (DNS).");
-                QTest::qWait(80);
+                settle(window);
                 QVERIFY(!html->isVisible());
                 // An internal address is asked about before anything is fetched: two answers, nothing else is reachable meanwhile.
                 auto *confirm = findByName(web, "webConfirm"); QVERIFY(confirm); QVERIFY(!confirm->isVisible());
@@ -701,25 +713,25 @@ private slots:
                     { "reason", "Cette adresse est interne au serveur : 127.0.0.1 (boucle locale (localhost))." },
                     { "details", QVariantList { QVariantMap { { "ip", "127.0.0.1" }, { "label", "boucle locale (localhost)" }, { "cls", "internal" } } } } });
                 fakeBrowser->setProperty("state", "confirm");
-                QTRY_VERIFY(confirm->isVisible());
+                QTRY_V(confirm->isVisible());
                 QVERIFY(window->grabWindow().save(QString("layout-captures/%1-web-confirm.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
                 auto clickItem = [&](QQuickItem *item) {
                     QVERIFY(item);
                     QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
-                    QTest::qWait(60);
+                    settle(window);
                 };
                 clickItem(findByName(web, "webConfirmCancel"));
-                QTRY_VERIFY(fakeBrowser->property("calls").toStringList().contains("cancel-confirm"));
+                QTRY_V(fakeBrowser->property("calls").toStringList().contains("cancel-confirm"));
                 QVERIFY(!confirm->isVisible());
                 fakeBrowser->setProperty("pendingConfirm", QVariantMap { { "url", "http://127.0.0.1:8080/admin" }, { "host", "127.0.0.1" }, { "port", 8080 }, { "hop", 0 }, { "from", "" }, { "reason", "interne" }, { "details", QVariantList() } });
                 fakeBrowser->setProperty("state", "confirm");
-                QTRY_VERIFY(confirm->isVisible());
+                QTRY_V(confirm->isVisible());
                 clickItem(findByName(web, "webConfirmOpen"));
-                QTRY_VERIFY(fakeBrowser->property("calls").toStringList().contains("confirm"));
+                QTRY_V(fakeBrowser->property("calls").toStringList().contains("confirm"));
                 QVERIFY(!confirm->isVisible());
                 // Back closes the question as a refusal.
                 fakeBrowser->setProperty("state", "confirm");
-                QTRY_VERIFY(confirm->isVisible());
+                QTRY_V(confirm->isVisible());
                 QVariant handled;
                 QVERIFY(QMetaObject::invokeMethod(web, "handleBack", Q_RETURN_ARG(QVariant, handled)));
                 QVERIFY(handled.toBool());
@@ -735,20 +747,24 @@ private slots:
                 const int id = manager.create(spec);
                 manager.start(id);
                 manager.setProgress(id, 10, 100);
-                QTest::qWait(60);
+                settle(window);
                 auto *panel = shell->findChild<QQuickItem *>("taskPanel"); QVERIFY(panel);
                 QVERIFY(panel->isVisible());
                 QVERIFY(panel->x() >= 0 && panel->x() + panel->width() <= shell->width());
                 QVERIFY(panel->y() >= 0 && panel->y() + panel->height() <= shell->height());
                 auto *cancel = findByName(panel, "taskCancel"); QVERIFY(cancel); QVERIFY(cancel->isVisible());
-                QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, cancel->mapToScene(QPointF(cancel->width() / 2, cancel->height() / 2)).toPoint());
-                QTRY_COMPARE(manager.state(id).value(), fortiq::TaskManager::State::Cancelling);   // a request, not a stop
+                // the click is repeated until it has an effect: the first one can arrive before the panel has taken its place on a busy machine
+                QTRY_V([&] {
+                    if (manager.state(id).value() == fortiq::TaskManager::State::Running)
+                        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, cancel->mapToScene(QPointF(cancel->width() / 2, cancel->height() / 2)).toPoint());
+                    return manager.state(id).value() == fortiq::TaskManager::State::Cancelling;   // a request, not a stop
+                }());
                 manager.markCancelled(id, "stopped");
                 auto *clear = findByName(panel, "taskClear");
-                QTRY_VERIFY(clear && clear->isVisible()); QTest::qWait(80);
+                QTRY_V(clear && clear->isVisible()); settle(window);
                 QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, clear->mapToScene(QPointF(clear->width() / 2, clear->height() / 2)).toPoint());
-                QTRY_COMPARE(manager.count(), 0);
-                QTRY_VERIFY(!panel->isVisible());
+                QTRY_C(manager.count(), 0);
+                QTRY_V(!panel->isVisible());
                 shell->setProperty("taskManager", QVariant::fromValue<QObject *>(nullptr));
             }
             {   // Login screen: connecting works like logging in to Linux, and logout returns to it.
@@ -756,27 +772,27 @@ private slots:
                 fakeComponent.setData(kFakeController, QUrl());
                 auto *fake = fakeComponent.create(); QVERIFY2(fake, qPrintable(fakeComponent.errorString())); fake->setParent(window);
                 shell->setProperty("serversOpen", true);
-                QTest::qWait(100);
+                settle(window);
                 auto *login = shell->findChild<QQuickItem *>("serverManager"); QVERIFY(login);
                 login->setProperty("controller", QVariant::fromValue(fake));   // only the login screen sees the fake
-                QTest::qWait(50);
+                settle(window);
                 QVERIFY(login->isVisible());
                 QCOMPARE(login->width(), shell->width()); QCOMPARE(login->height(), shell->height());   // replaces the desktop
                 auto *secretInput = findByName(login, "loginSecret"); QVERIFY(secretInput); QVERIFY(secretInput->isVisible());
-                QTest::qWait(300);
+                settle(window);
                 QVERIFY(window->grabWindow().save(QString("layout-captures/%1-login.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
                 secretInput->forceActiveFocus();
                 for (const char c : {'p', 'w', '1'}) QTest::keyClick(window, c);
                 QTest::keyClick(window, Qt::Key_Return);
-                QTRY_COMPARE(fake->property("calls").toStringList(), QStringList{"a:pw1"});
+                QTRY_C(fake->property("calls").toStringList(), QStringList{"a:pw1"});
                 // Clicking a key account connects at once.
                 auto *keyTile = findByName(login, "loginTile_b"); QVERIFY(keyTile);
                 QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, keyTile->mapToScene(QPointF(keyTile->width() / 2, 50)).toPoint());
-                QTRY_COMPARE(fake->property("calls").toStringList(), (QStringList{"a:pw1", "b:"}));
+                QTRY_C(fake->property("calls").toStringList(), (QStringList{"a:pw1", "b:"}));
                 // A remembered secret connects at once through the protected store; no typing needed.
                 auto *savedTile = findByName(login, "loginTile_c"); QVERIFY(savedTile);
                 QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, savedTile->mapToScene(QPointF(savedTile->width() / 2, 50)).toPoint());
-                QTRY_COMPARE(fake->property("calls").toStringList(), (QStringList{"a:pw1", "b:", "saved:c"}));
+                QTRY_C(fake->property("calls").toStringList(), (QStringList{"a:pw1", "b:", "saved:c"}));
                 QVERIFY(findByName(login, "loginForget")->isVisible());
                 // "Se souvenir" sends the typed secret to the controller with remember = true.
                 auto *plainTile = findByName(login, "loginTile_a"); QVERIFY(plainTile);
@@ -786,25 +802,25 @@ private slots:
                 secretInput->forceActiveFocus();
                 for (const char c : {'p', 'w', '2'}) QTest::keyClick(window, c);
                 QTest::keyClick(window, Qt::Key_Return);
-                QTRY_COMPARE(fake->property("calls").toStringList(), (QStringList{"a:pw1", "b:", "saved:c", "remember:a:pw2"}));
+                QTRY_C(fake->property("calls").toStringList(), (QStringList{"a:pw1", "b:", "saved:c", "remember:a:pw2"}));
                 // Logout from the session menu closes the windows and returns to the login screen.
                 login->setProperty("controller", QVariant::fromValue<QObject *>(nullptr));
                 shell->setProperty("serversOpen", false);
                 shell->setProperty("filesOpen", true);
                 shell->setProperty("sessionMenuOpen", true);
-                QTest::qWait(50);
+                settle(window);
                 QVERIFY(window->grabWindow().save(QString("layout-captures/%1-session.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
                 auto *pill = findByName(shell, "sessionPill"); QVERIFY(pill); QVERIFY(pill->isVisible());
                 QVERIFY(pill->x() + pill->width() > shell->width() - 20);                  // at the right, where the avatar was
                 shell->setProperty("sessionMenuOpen", false);
                 QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, pill->mapToScene(QPointF(pill->width() / 2, pill->height() / 2)).toPoint());
-                QTRY_VERIFY(shell->property("serversOpen").toBool());   // not connected: the pill leads to the login screen
+                QTRY_V(shell->property("serversOpen").toBool());   // not connected: the pill leads to the login screen
                 shell->setProperty("serversOpen", false);
                 shell->setProperty("sessionMenuOpen", true);
-                QTest::qWait(50);
+                settle(window);
                 auto *logout = findByName(shell, "logoutButton"); QVERIFY(logout); QVERIFY(logout->isVisible());
                 QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, logout->mapToScene(QPointF(logout->width() / 2, logout->height() / 2)).toPoint());
-                QTRY_VERIFY(shell->property("serversOpen").toBool());
+                QTRY_V(shell->property("serversOpen").toBool());
                 QVERIFY(!shell->property("filesOpen").toBool());
                 QVERIFY(!shell->property("sessionMenuOpen").toBool());
                 shell->setProperty("serversOpen", false);
@@ -815,17 +831,17 @@ private slots:
                 auto clickItem = [&](QQuickItem *item) {
                     QVERIFY(item);
                     QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
-                    QTest::qWait(60);
+                    settle(window);
                 };
                 fortiq::TaskManager::Spec save;
                 save.kind = "docSave"; save.title = "notes.md"; save.source = "user@host"; save.cancellable = false;   // a write: guards by default
                 const int saveId = manager.begin(save);
                 shell->setProperty("filesOpen", true);
                 shell->setProperty("sessionMenuOpen", true);
-                QTest::qWait(50);
+                settle(window);
                 auto *guard = findByName(shell, "sessionGuard"); QVERIFY(guard); QVERIFY(!guard->isVisible());
                 clickItem(findByName(shell, "logoutButton"));
-                QTRY_VERIFY(guard->isVisible());                                        // asked, nothing ended yet
+                QTRY_V(guard->isVisible());                                        // asked, nothing ended yet
                 QVERIFY(!shell->property("serversOpen").toBool());
                 QVERIFY(shell->property("filesOpen").toBool());
                 QCOMPARE(guard->property("tasks").toList().size(), 1);                  // exactly the one write is listed
@@ -837,9 +853,9 @@ private slots:
                 QCOMPARE(manager.state(saveId).value(), fortiq::TaskManager::State::Running);
                 // The Back key closes the question too.
                 shell->setProperty("sessionMenuOpen", true);
-                QTest::qWait(50);
+                settle(window);
                 clickItem(findByName(shell, "logoutButton"));
-                QTRY_VERIFY(guard->isVisible());
+                QTRY_V(guard->isVisible());
                 QVariant handled;
                 QVERIFY(QMetaObject::invokeMethod(shell, "handleBack", Q_RETURN_ARG(QVariant, handled)));
                 QVERIFY(handled.toBool()); QVERIFY(!guard->isVisible());
@@ -850,11 +866,11 @@ private slots:
                 clickItem(findByName(shell, "sessionGuardStay"));
                 // "Se déconnecter quand même": the session ends, the task is not touched by the dialog.
                 shell->setProperty("sessionMenuOpen", true);
-                QTest::qWait(50);
+                settle(window);
                 clickItem(findByName(shell, "logoutButton"));
-                QTRY_VERIFY(guard->isVisible());
+                QTRY_V(guard->isVisible());
                 clickItem(findByName(shell, "sessionGuardGo"));
-                QTRY_VERIFY(shell->property("serversOpen").toBool());
+                QTRY_V(shell->property("serversOpen").toBool());
                 QVERIFY(!shell->property("filesOpen").toBool());
                 QVERIFY(!guard->isVisible());
                 QCOMPARE(manager.state(saveId).value(), fortiq::TaskManager::State::Running);   // settling is the controllers' job (disconnect)
@@ -866,9 +882,9 @@ private slots:
                 shell->setProperty("serversOpen", false);
                 shell->setProperty("filesOpen", true);
                 shell->setProperty("sessionMenuOpen", true);
-                QTest::qWait(50);
+                settle(window);
                 clickItem(findByName(shell, "logoutButton"));
-                QTRY_VERIFY(shell->property("serversOpen").toBool());
+                QTRY_V(shell->property("serversOpen").toBool());
                 QVERIFY(!guard->isVisible());
                 QVERIFY(manager.succeed(readId, ""));
                 shell->setProperty("serversOpen", false);
@@ -886,7 +902,7 @@ private slots:
             QVERIFY(doc->x()>=0 && doc->y()>=47);QVERIFY(doc->x()+doc->width()<=shell->width());
             auto *button=doc->findChild<QQuickItem *>("documentsConnectButton");QVERIFY(button);QVERIFY(button->isVisible());
             QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,button->mapToScene(QPointF(button->width()/2,button->height()/2)).toPoint());
-            QTRY_VERIFY(shell->property("serversOpen").toBool());shell->setProperty("serversOpen",false);
+            QTRY_V(shell->property("serversOpen").toBool());shell->setProperty("serversOpen",false);
             QQmlComponent component(&engine);
 #ifndef Q_MOC_RUN // moc cannot parse this raw string
             component.setData(R"(import QtQml
@@ -918,8 +934,8 @@ private slots:
             shell->setProperty("documentsController",QVariant::fromValue(fixture));doc->setProperty("remote",QVariant::fromValue(fixture));
             auto *editor=doc->findChild<QQuickItem *>("documentsEditor");QVERIFY(editor);
             auto *render=doc->findChild<QQuickItem *>("documentsPreview");QVERIFY(render);
-            QTest::qWait(220);QString rendered;
-            QVERIFY(QMetaObject::invokeMethod(render,"plainText",Q_RETURN_ARG(QString,rendered)));QVERIFY(rendered.contains("Title") && rendered.contains("bold") && !rendered.contains("**bold**"));
+            QString rendered;
+            QTRY_V([&] { rendered.clear(); return QMetaObject::invokeMethod(render,"plainText",Q_RETURN_ARG(QString,rendered)) && rendered.contains("Title") && rendered.contains("bold") && !rendered.contains("**bold**"); }());   // the preview renders asynchronously
             render->setProperty("source",QString(64001,'x'));QVERIFY(render->property("limited").toBool());
             editor->setProperty("text",QString::fromUtf8("# Modifié\nПривет **texte**\n"));QVERIFY(fixture->property("dirty").toBool());
             editor->forceActiveFocus();QTest::keyClick(window,Qt::Key_S,Qt::ControlModifier);QVERIFY(!fixture->property("dirty").toBool());
@@ -933,7 +949,7 @@ private slots:
             editor->setProperty("text",QString::fromUtf8("# Projet Été\n\n**Objectif** : Bonjour Привет.\n\n- Document serveur\n- Enregistrement sûr\n\n> Note de travail\n"));
             fixture->setProperty("base",fixture->property("text"));
             if(adaptive)doc->setProperty("previewMode",true);
-            QTest::qWait(220);
+            settle(window);
             QVERIFY(window->grabWindow().save(QString("layout-captures/%1-mdok.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
         }
         if(preview=="disks") {
@@ -943,7 +959,7 @@ private slots:
             QCOMPARE(sidebar->isVisible(),!disk->property("drawer").toBool());
             auto *button=disk->findChild<QQuickItem *>("disksConnectButton");QVERIFY(button);QVERIFY(button->isVisible());
             QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,button->mapToScene(QPointF(button->width()/2,button->height()/2)).toPoint());
-            QTRY_VERIFY(shell->property("serversOpen").toBool());shell->setProperty("serversOpen",false);
+            QTRY_V(shell->property("serversOpen").toBool());shell->setProperty("serversOpen",false);
             if(disk->property("drawer").toBool()) {
                 disk->setProperty("navigationOpen",true);QVERIFY(sidebar->isVisible());
                 QTest::keyRelease(window,Qt::Key_Back);QVERIFY(!disk->property("navigationOpen").toBool());
@@ -970,7 +986,7 @@ private slots:
             fixture->setProperty("mounts",QVariantList{QVariantMap{{"target",mountPath},{"source","/dev/sda1"},{"fstype","ext4"},{"sizeText","1.0 Gio"},{"usedText","0.5 Gio"},{"availText","0.4 Gio"},{"fraction",0.5}}});
             fixture->setProperty("devices",QVariantList{QVariantMap{{"path","/dev/sda1"},{"type","part"},{"fstype","ext4"},{"label","<b>plain text</b>"},{"sizeText","1.0 Gio"},{"readOnlyKnown",true},{"readOnly",false},{"pkname","sda"},{"mountpoint",mountPath}}});
             disk->setProperty("disks",QVariant::fromValue(fixture));disk->setProperty("remote",QVariant::fromValue(fixture));
-            QTest::qWait(30);
+            settle(window);
             auto *list=disk->findChild<QQuickItem *>("disksList");QVERIFY(list);QCOMPARE(list->property("count").toInt(),1);
             std::function<QQuickItem *(QQuickItem *)> visualFind=[&](QQuickItem *item)->QQuickItem *{
                 if(item->objectName()=="disksOpenFiles")return item;
@@ -981,7 +997,7 @@ private slots:
             QSignalSpy openPath(disk,SIGNAL(openPath(QString)));
             QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,open->mapToScene(QPointF(open->width()/2,open->height()/2)).toPoint());
             QCOMPARE(openPath.size(),1);QCOMPARE(openPath.first().first().toString(),mountPath);
-            disk->setProperty("section","devices");QTest::qWait(30);
+            disk->setProperty("section","devices");settle(window);
             QVERIFY(window->grabWindow().save(QString("layout-captures/%1-disks.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
         }
         if(preview=="terminal") {
@@ -994,7 +1010,7 @@ private slots:
             auto *connectButton=term->findChild<QQuickItem *>("terminalConnectButton");QVERIFY(connectButton);
             QVERIFY(connectButton->isVisible());
             QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,connectButton->mapToScene(QPointF(connectButton->width()/2,connectButton->height()/2)).toPoint());
-            QTRY_VERIFY(shell->property("serversOpen").toBool());shell->setProperty("serversOpen",false);
+            QTRY_V(shell->property("serversOpen").toBool());shell->setProperty("serversOpen",false);
             auto *surface=term->findChild<QQuickItem *>("terminalSurface");QVERIFY(surface);
             surface->setVisible(true); // exercise VT input independently of a real SSH fixture
             surface->setProperty("inputEnabled",true);
@@ -1004,17 +1020,17 @@ private slots:
             QVERIFY(text.contains("HELLO") && text.contains("RED") && !text.contains(QChar(27)));
             surface->forceActiveFocus();
             QTest::keyClick(window,Qt::Key_F,Qt::ControlModifier|Qt::ShiftModifier);
-            QTRY_VERIFY(term->property("searchOpen").toBool());
+            QTRY_V(term->property("searchOpen").toBool());
             auto *searchInput=term->findChild<QQuickItem *>("terminalSearchInput");QVERIFY(searchInput);
             QVERIFY(searchInput->hasActiveFocus());
             for(char c:QByteArray("HELLO"))QTest::keyClick(window,c);
-            QTRY_COMPARE(surface->property("searchStatus").toString(),QString("1 / 1"));
+            QTRY_C(surface->property("searchStatus").toString(),QString("1 / 1"));
             QVERIFY(QMetaObject::invokeMethod(surface,"selectedText",Q_RETURN_ARG(QString,text)));QCOMPARE(text,QString("HELLO"));
             QVERIFY(bytes.isEmpty());
             QTest::keyClick(window,Qt::Key_Escape);QVERIFY(!term->property("searchOpen").toBool());
             QCOMPARE(shell->property("foregroundApp").toString(),QString("terminal"));QVERIFY(term->isVisible());
             QVERIFY(surface->hasActiveFocus());
-            QTest::qWait(30); // settle the search bar's adaptive grid resize before dragging
+            settle(window); // settle the search bar's adaptive grid resize before dragging
             QTest::keyClick(window,Qt::Key_F,Qt::ControlModifier);
             QVERIFY(!bytes.isEmpty());QCOMPARE(bytes.last().first().toByteArray(),QByteArray(1,char(6)));bytes.clear();
             const qreal cw=surface->width()/surface->property("columns").toInt();
@@ -1041,7 +1057,7 @@ private slots:
             const QString command=QString::fromUtf8("printf 'été Привет'");
             auto *history=term->findChild<QQuickItem *>("terminalHistory");QVERIFY(history);
             history->setProperty("model",QVariantList{QVariantMap{{"text",command}}});
-            term->setProperty("navigationOpen",true);QTest::qWait(30);
+            term->setProperty("navigationOpen",true);settle(window);
             QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,history->mapToScene(QPointF(30,12)).toPoint());
             QByteArray typed;for(const auto &event:bytes)typed+=event.first().toByteArray();
             QCOMPARE(typed,command.toUtf8());QVERIFY(surface->hasActiveFocus());
@@ -1068,9 +1084,9 @@ private slots:
             QVERIFY(QMetaObject::invokeMethod(surface,"feed",Q_ARG(QByteArray,output)));
             QVERIFY(surface->property("scrollbackLines").toInt()>0);
             auto *outputScroll=term->findChild<QQuickItem *>("terminalOutputScroll");QVERIFY(outputScroll);
-            QTRY_VERIFY(outputScroll->isVisible());
+            QTRY_V(outputScroll->isVisible());
             QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,outputScroll->mapToScene(QPointF(outputScroll->width()/2,5)).toPoint());
-            QTRY_VERIFY(surface->property("scrollOffset").toInt()>0);
+            QTRY_V(surface->property("scrollOffset").toInt()>0);
             QVERIFY(QMetaObject::invokeMethod(surface,"scrollTo",Q_ARG(int,0)));
             bytes.clear();QTest::keyClick(window,Qt::Key_PageUp,Qt::ShiftModifier);
             QVERIFY(surface->property("scrollOffset").toInt()>0);QVERIFY(bytes.isEmpty());
@@ -1142,8 +1158,8 @@ private slots:
             QVERIFY(bytes.isEmpty());
             QVERIFY(QMetaObject::invokeMethod(surface,"reset"));QVERIFY(surface->property("searchStatus").toString().isEmpty());
         }
-        window->resize(QSize(844,390)); QTest::qWait(30);
-        window->resize(size); QTest::qWait(30);
+        window->resize(QSize(844,390)); settle(window);
+        window->resize(size); settle(window);
         QCOMPARE(files->findChild<QQuickItem *>("fileViewer"), editor);
         if (preview == "editor") QVERIFY(editor->property("dirty").toBool());
         if (adaptive && preview == "editor") {

@@ -119,6 +119,9 @@ cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
 
+Все проверки, которые обязан пройти коммит в `main` (документы, компиляция скриптов, сборка, офлайн-тесты, по желанию layout-тест под нагрузкой), одной командой:
+`python tool/ci_check.py --qt-prefix <Qt kit> --toolchain <vcpkg.cmake> [--stress 2]`; та же команда запускается в `.github/workflows/ci.yml` (на GitHub пока не запускалась).
+
 Перед запуском на Windows положить рядом с `fortiq.exe` библиотеки Qt и libssh2/OpenSSL, иначе
 появится ошибка «Qt6Quick.dll was not found»:
 
