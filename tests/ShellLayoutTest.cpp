@@ -213,6 +213,10 @@ private slots:
                 for (const char c : {'p', 'w', '1'}) QTest::keyClick(window, c);
                 QTest::keyClick(window, Qt::Key_Return);
                 QTRY_COMPARE(fake->property("calls").toStringList(), QStringList{"a:pw1"});
+                // Clicking a key account connects at once.
+                auto *keyTile = findByName(login, "loginTile_b"); QVERIFY(keyTile);
+                QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, keyTile->mapToScene(QPointF(keyTile->width() / 2, 50)).toPoint());
+                QTRY_COMPARE(fake->property("calls").toStringList(), (QStringList{"a:pw1", "b:"}));
                 // Logout from the session menu closes the windows and returns to the login screen.
                 login->setProperty("controller", QVariant::fromValue<QObject *>(nullptr));
                 shell->setProperty("serversOpen", false);

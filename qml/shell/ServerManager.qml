@@ -133,6 +133,7 @@ Item {
                     model: mgr.servers
                     Item {
                         id: tile
+                        objectName: "loginTile_" + modelData.id
                         required property var modelData
                         readonly property bool current: mgr.selectedId === modelData.id
                         width: 150; height: 156
@@ -158,7 +159,13 @@ Item {
                         }
                         MouseArea {
                             id: tm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                            onClicked: { mgr.selectedId = tile.modelData.id; mgr.confirmRemoveId = ""; secretField.text = ""; mgr.secret = ""; secretField.forceActiveFocus() }
+                            onClicked: {
+                                mgr.selectedId = tile.modelData.id; mgr.confirmRemoveId = ""; secretField.text = ""; mgr.secret = ""
+                                // A key account connects at once (no passphrase); if the key
+                                // needs one, the error appears and the prompt takes it.
+                                if (tile.modelData.keyPath && !mgr.busy) mgr.connect(tile.modelData)
+                                else secretField.forceActiveFocus()
+                            }
                         }
                     }
                 }
