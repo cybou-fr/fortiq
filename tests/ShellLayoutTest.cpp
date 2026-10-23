@@ -191,7 +191,7 @@ QtObject {
     function openThread(id) { calls = calls.concat(['open:' + id]); selectedThreadId = id
         messages = [ { id: 'a', depth: 0, match: true, from: 'Alice <alice@example.org>', to: 'me@example.net', cc: '', date: 'Thu, 22 Oct 2026 08:30:00 +0000', when: '10:00', subject: 'Rapport', tags: ['inbox', 'unread'], unread: true,
             text: 'Voir le rapport.', html: '<p>Voir <a href=\"https://x.example\">le rapport</a>.</p>', htmlPlain: 'Voir le rapport.', hasText: true, hasHtml: true, htmlLinks: 1, htmlScripts: 0, htmlImages: 0,
-            attachments: [ { name: 'Rapport été.pdf', type: 'application/pdf', size: 24 } ] } ] }
+            attachments: [ { name: 'Rapport été.pdf', type: 'application/pdf', size: 24, part: 3 } ] } ] }
     function closeThread() { selectedThreadId = ''; messages = [] }
     function setTag(id, tag, on) { calls = calls.concat(['tag:' + id + ':' + tag + ':' + on]) }
     signal sendChanged()
@@ -218,6 +218,10 @@ QtObject {
     function testImap(a) { calls = calls.concat(['imap:' + a]) }
     function syncNow(a) { calls = calls.concat(['sync:' + a]) }
     function cancelAction() {}
+    property string attachStatus: ''
+    function attachmentFileName(n) { return n }
+    function saveAttachmentToServer(id, part, name) { calls = calls.concat(['attach-server:' + id + ':' + part + ':' + name]); attachStatus = 'Enregistré sur le serveur : /home/u/Downloads/' + name }
+    function downloadAttachment(id, part, name, url) { calls = calls.concat(['attach-pc:' + id + ':' + part + ':' + name]) }
 })";
 static const char kFakeRemote[] = R"(import QtQml
 QtObject { property bool connected: true; property string serverLabel: "fixture@server" })";
@@ -476,6 +480,12 @@ private slots:
                 auto *messages = findByName(mailWin, "mailMessages"); QVERIFY(messages);
                 QTRY_COMPARE(messages->property("count").toInt(), 1);
                 QVERIFY(window->grabWindow().save(QString("layout-captures/%1-mail-reader.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+                // Attachments stay on the server: one button saves there, the other asks where to put it on this computer.
+                click(findByName(mailWin, "mailAttachServer_0"));
+                QCOMPARE(fakeMail->property("calls").toStringList().filter("attach-server:a:3:Rapport").size(), 1);
+                auto *attachStatus = findByName(mailWin, "mailAttachStatus"); QVERIFY(attachStatus); QTRY_VERIFY(attachStatus->isVisible());
+                QVERIFY(findByName(mailWin, "mailAttachPc_0")->isVisible());
+                QVERIFY(window->grabWindow().save(QString("layout-captures/%1-mail-attachment.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
                 click(findByName(mailWin, "mailTag_unread"));
                 QVERIFY(fakeMail->property("calls").toStringList().contains("tag:01:unread:false"));      // the thread is unread: the button marks it read
                 click(findByName(mailWin, "mailTag_inbox"));

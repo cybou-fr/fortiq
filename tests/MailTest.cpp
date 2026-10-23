@@ -103,6 +103,8 @@ private slots:
         QCOMPARE(m[0].attachments.size(), 1);
         QCOMPARE(m[0].attachments[0].name, QString::fromUtf8("Rapport \xC3\xA9t\xC3\xA9.pdf"));
         QCOMPARE(m[0].attachments[0].type, QString("application/pdf"));
+        QCOMPARE(m[0].attachments[0].part, 3);
+        QCOMPARE(messagesToVariant(m).first().toMap().value("attachments").toList().first().toMap().value("part").toInt(), 3);
         QVERIFY(m[0].html.isEmpty());
     }
 

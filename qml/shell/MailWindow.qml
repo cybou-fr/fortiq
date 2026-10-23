@@ -1,5 +1,7 @@
 import QtQuick
 import QtQuick.Controls
+import QtCore
+import QtQuick.Dialogs
 
 // Courrier (lecture et étiquettes): interface graphique pour notmuch sur le serveur.
 // Rien n'est envoyé, déplacé ni supprimé; seules les étiquettes changent (docs/MAIL.md).
@@ -20,6 +22,9 @@ Item {
     property string wizardError: ""
     property var wizardKeys: ({})
     property bool previewPending: false
+    property string dlMessage: ""
+    property int dlPart: 0
+    property string dlName: ""
     readonly property bool connected: remote !== null && remote.connected
     readonly property bool drawer: adaptive && width < 900
     readonly property real contentLeft: drawer ? 0 : 196
@@ -91,6 +96,14 @@ Item {
         const out = []
         for (const k in wizardKeys) if (wizardKeys[k]) out.push(k)
         return out
+    }
+    function sizeText(bytes) {
+        return bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + " Mio" : Math.max(1, Math.round(bytes / 1024)) + " Kio"
+    }
+    function askDownload(messageId, part, name) {
+        dlMessage = messageId; dlPart = part; dlName = name
+        downloadDialog.currentFile = StandardPaths.writableLocation(StandardPaths.DownloadLocation) + "/" + mailer.attachmentFileName(name)
+        downloadDialog.open()
     }
     function tagOf(thread, tag) { return thread !== null && thread.tags.indexOf(tag) >= 0 }
 
@@ -270,14 +283,20 @@ Item {
             }
         }
         Text {
+            id: attachStatusText
+            objectName: "mailAttachStatus"
+            y: actions.height + 4; width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; font.pixelSize: 11; color: "#8EC1FF"
+            visible: win.mailer !== null && win.mailer.attachStatus !== ""; text: win.mailer ? win.mailer.attachStatus : ""
+        }
+        Text {
             id: threadStatus
-            y: actions.height + 6; width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText; font.pixelSize: 11; color: Theme.inkMuted
+            y: actions.height + 6 + (attachStatusText.visible ? attachStatusText.implicitHeight + 4 : 0); width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText; font.pixelSize: 11; color: Theme.inkMuted
             visible: win.mailer && win.mailer.threadStatus !== ""; text: win.mailer ? win.mailer.threadStatus : ""
         }
         ListView {
             id: messageList
             objectName: "mailMessages"
-            y: actions.height + 6 + (threadStatus.visible ? threadStatus.implicitHeight + 6 : 0)
+            y: actions.height + 6 + (attachStatusText.visible ? attachStatusText.implicitHeight + 4 : 0) + (threadStatus.visible ? threadStatus.implicitHeight + 6 : 0)
             width: parent.width; height: Math.max(0, parent.height - y - (win.hoveredLink !== "" ? 22 : 0))
             clip: true; spacing: 8; model: win.mailer ? win.mailer.messages : []
             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
@@ -289,14 +308,46 @@ Item {
                 opacity: modelData.match ? 1 : 0.8
                 Column {
                     id: card
+                    readonly property string messageId: modelData.id
                     x: 12; y: 10; width: parent.width - 24; spacing: 4
                     Text { width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; text: modelData.subject; color: Theme.ink; font.pixelSize: 14; font.bold: true }
                     Text { width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; text: "De : " + modelData.from; color: Theme.ink; font.pixelSize: 11 }
                     Text { width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; text: "À : " + modelData.to + (modelData.cc !== "" ? "   Cc : " + modelData.cc : ""); color: Theme.inkMuted; font.pixelSize: 10 }
                     Text { width: parent.width; textFormat: Text.PlainText; text: modelData.date; color: Theme.inkMuted; font.pixelSize: 10 }
                     Text {
-                        visible: modelData.attachments.length > 0; width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; font.pixelSize: 11; color: "#FCD34D"
-                        text: "Pièces jointes (non téléchargeables dans ce premier module) : " + modelData.attachments.map(a => a.name).join(", ")
+                        visible: modelData.attachments.length > 0; width: parent.width; textFormat: Text.PlainText; font.pixelSize: 11; color: "#FCD34D"
+                        text: "Pièces jointes (elles restent sur le serveur) :"
+                    }
+                    Repeater {
+                        model: modelData.attachments
+                        Item {
+                            required property var modelData
+                            required property int index
+                            width: card.width; height: win.adaptive ? 48 : 30
+                            Text {
+                                x: 0; width: parent.width - 232; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideMiddle; textFormat: Text.PlainText
+                                text: modelData.name + (modelData.size > 0 ? "  (≈ " + win.sizeText(modelData.size) + ")" : ""); color: Theme.ink; font.pixelSize: 11
+                            }
+                            Rectangle {
+                                objectName: "mailAttachServer_" + index
+                                visible: modelData.part > 0
+                                anchors.right: attachPc.left; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter
+                                height: win.adaptive ? 44 : 26; radius: 8; width: serverLabel.implicitWidth + 16
+                                color: serverMouse.containsMouse ? "#33FFFFFF" : "#1AFFFFFF"
+                                Text { id: serverLabel; anchors.centerIn: parent; text: "Sur le serveur"; color: Theme.ink; font.pixelSize: 11 }
+                                MouseArea { id: serverMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.mailer.saveAttachmentToServer(card.messageId, modelData.part, modelData.name) }
+                            }
+                            Rectangle {
+                                id: attachPc
+                                objectName: "mailAttachPc_" + index
+                                visible: modelData.part > 0
+                                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                height: win.adaptive ? 44 : 26; radius: 8; width: pcLabel.implicitWidth + 16
+                                color: pcMouse.containsMouse ? "#33FFFFFF" : "#1AFFFFFF"
+                                Text { id: pcLabel; anchors.centerIn: parent; text: "Sur ce poste…"; color: Theme.ink; font.pixelSize: 11 }
+                                MouseArea { id: pcMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.askDownload(card.messageId, modelData.part, modelData.name) }
+                            }
+                        }
                     }
                     Rectangle { width: parent.width; height: 1; color: "#25DCEBFF" }
                     Text {
@@ -345,6 +396,13 @@ Item {
         visible: win.connected && win.mailer !== null && win.mailer.state === "error" && win.mailer.folders.length === 0
         x: win.contentLeft + 20; y: 110; width: parent.width - x - 20; wrapMode: Text.WordWrap; textFormat: Text.PlainText
         text: win.mailer ? win.mailer.status : ""; color: "#FCA5A5"; font.pixelSize: 13
+    }
+
+    FileDialog {
+        id: downloadDialog
+        title: "Enregistrer « " + win.dlName + " » sur ce poste"
+        fileMode: FileDialog.SaveFile
+        onAccepted: win.mailer.downloadAttachment(win.dlMessage, win.dlPart, win.dlName, selectedFile)
     }
 
     // ── send result banner ─────────────────────────────────────────────

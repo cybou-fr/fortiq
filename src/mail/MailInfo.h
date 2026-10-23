@@ -27,6 +27,7 @@ struct MailThread {
 struct MailAttachment {
     QString name, type;
     qint64 size = 0;           // encoded size reported by notmuch (approximate)
+    int part = 0;              // MIME part number for `notmuch show --part`
 };
 
 struct MailMessage {

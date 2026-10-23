@@ -321,3 +321,8 @@ revealed) and the user ticks each file and a consent box; existing files keep th
 and a sync (`mbsync` then `notmuch new`) run as tasks. Verified: `fortiq_mailsend` 17 unit tests, the live `mailSendAndWizard` test against dovecot and an SMTP sink on the disposable Debian (live suite 33 passed,
 3 skipped, repeated twice), a layout test, CTest 18/18. Real findings: msmtp treats " #" as a comment (the password is written quoted), refuses `auth on` without TLS, and mbsync needs `\` and `"` escaped.
 Not done: attachments (download and send), reply-all/forward/drafts, PGP, OAuth accounts; Android not run on a device.
+
+23 October Mail, slice 3 ([MAIL](MAIL.md)): attachments stay on the server. "Sur le serveur" writes the decoded MIME part (`notmuch show --format=raw --part=N`) into `~/Downloads` there without overwriting; "Sur ce poste" extracts it
+to a private temporary copy on the server and fetches it with the ordinary Files download task (progress, cancel, conflict prompt), removing the copy when that task ends. File names are sanitized and quoted, only
+`~/.cache/fortiq-mail/att.*` can be removed. Verified: unit tests for names, scripts and the cleanup guard, the live `mailAttachmentsStayOnTheServer` test (decoded content, collisions, hostile name, bad part, real download
+task with a conflict, temporary copy gone; live suite 34 passed, 3 skipped), a layout test, CTest 18/18. Not done: attaching files to outgoing mail, opening attachments in place; Android not run on a device.

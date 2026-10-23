@@ -1543,6 +1543,106 @@ private slots:
         settings.remove(pin); settings.remove("mail/displayName");
     }
 
+    // Attachments stay on the server: saved into ~/Downloads there, or fetched to this computer as a download task.
+    // Needs FORTIQ_IT_MAIL=1 (uses the disposable notmuch database of tool/make_mail_fixture.sh).
+    void mailAttachmentsStayOnTheServer() {
+        if (qEnvironmentVariable("FORTIQ_IT_MAIL").isEmpty()) QSKIP("FORTIQ_IT_MAIL not set");
+        fortiq::RemoteController controller;
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        auto shell = [&](const QByteArray &script) {
+            fortiq::SshSession session;
+            const SshResult opened = session.open(controller.connectionRequest());
+            if (opened.status != SshResult::Status::Ok) return opened;
+            return session.runScript(script, 262144, {});
+        };
+        auto text = [&](const QByteArray &script) { return QString::fromUtf8(shell(script).data).trimmed(); };
+        QFile fixtureScript(QString::fromUtf8(QT_TESTCASE_SOURCEDIR) + "/tool/make_mail_fixture.sh");
+        QVERIFY(fixtureScript.open(QIODevice::ReadOnly));
+        const SshResult made = shell("bash -s -- /tmp/fq_mail_out <<'FQ_FIXTURE_END'\n" + fixtureScript.readAll().replace("\r\n", "\n") + "\nFQ_FIXTURE_END\n");
+        QVERIFY2(made.status == SshResult::Status::Ok && made.code == "exit:0", qPrintable(made.message));
+        QCOMPARE(text("cd ~ && rm -rf Downloads .cache/fortiq-mail; echo cleaned\n"), QStringLiteral("cleaned"));
+        const QString home = text("printf '%s' \"$HOME\"\n");
+
+        fortiq::MailController mail(&controller);
+        mail.setWindowActive(true);
+        mail.setConfigPath(home + "/mailfix/nm.conf");
+        QTRY_VERIFY_WITH_TIMEOUT(mail.state() == "ready" && !mail.threads().isEmpty(), 25000);
+        QString threadId;
+        for (const QVariant &t : mail.threads()) if (t.toMap().value("subject").toString() == "Rapport") threadId = t.toMap().value("id").toString();
+        QVERIFY(!threadId.isEmpty());
+        mail.openThread(threadId);
+        QTRY_VERIFY_WITH_TIMEOUT(!mail.messages().isEmpty(), 20000);
+        const QVariantMap message = mail.messages().first().toMap();
+        const QVariantMap attachment = message.value("attachments").toList().first().toMap();
+        const QString name = attachment.value("name").toString();
+        QCOMPARE(name, QString::fromUtf8("Rapport \xC3\xA9t\xC3\xA9.pdf"));
+        const int part = attachment.value("part").toInt();
+        QVERIFY(part >= 2);
+        const QString messageId = message.value("id").toString();
+        auto waitIdle = [&] { QTRY_VERIFY_WITH_TIMEOUT(!mail.actionBusy(), 30000); };
+
+        // ---- on the server: decoded content, never overwriting, safe names ----
+        mail.saveAttachmentToServer(messageId, part, name); waitIdle();
+        QVERIFY2(mail.attachStatus().startsWith("Enregistr"), qPrintable(mail.attachStatus()));
+        QVERIFY(mail.attachStatus().contains(home + "/Downloads/"));
+        QCOMPARE(text("head -c 8 ~/Downloads/*.pdf\n"), QStringLiteral("%PDF-1.4"));                                          // base64 decoded
+        QCOMPARE(text("stat -c %a ~/Downloads/*.pdf\n"), QStringLiteral("644"));
+        mail.saveAttachmentToServer(messageId, part, name); waitIdle();
+        QCOMPARE(text("ls ~/Downloads | wc -l\n"), QStringLiteral("2"));
+        QVERIFY(text("ls ~/Downloads\n").contains(QString::fromUtf8("Rapport \xC3\xA9t\xC3\xA9 (1).pdf")));
+        mail.saveAttachmentToServer(messageId, part, "../../etc/evil\\name"); waitIdle();                           // a hostile name stays inside the folder
+        QVERIFY(text("ls ~/Downloads\n").contains("_.._etc_evil_name"));
+        QCOMPARE(text("ls ~/Downloads | wc -l\n"), QStringLiteral("3"));
+        QCOMPARE(text("[ -e ~/etc ] && echo Y || echo N\n"), QStringLiteral("N"));
+        // A wrong part or an unknown message saves nothing and says so.
+        mail.saveAttachmentToServer(messageId, 99, "x.bin"); waitIdle();
+        QVERIFY2(mail.attachStatus().contains("introuvable"), qPrintable(mail.attachStatus()));
+        mail.saveAttachmentToServer("nope@example.org", part, "x.bin"); waitIdle();
+        QVERIFY2(mail.attachStatus().contains("notmuch"), qPrintable(mail.attachStatus()));
+        QCOMPARE(text("ls ~/Downloads | wc -l\n"), QStringLiteral("3"));
+        QCOMPARE(text("ls -A ~/Downloads | grep -c fortiq-part\n"), QStringLiteral("0"));                          // no temporary leftovers
+
+        // ---- to this computer: an ordinary download task, then the temporary copy is removed ----
+        QTemporaryDir local;
+        QVERIFY(local.isValid());
+        const QString target = local.filePath("received.pdf");
+        const int tasksBefore = controller.tasks()->count();
+        mail.downloadAttachment(messageId, part, name, QUrl::fromLocalFile(target));
+        QTRY_VERIFY_WITH_TIMEOUT(controller.tasks()->count() >= tasksBefore + 2, 30000);     // the extraction task and the download task
+        QTRY_VERIFY_WITH_TIMEOUT(controller.tasks()->activeCount() == 0, 30000);
+        QCOMPARE(controller.tasks()->tasks().constLast().toMap().value("kind").toString(), QStringLiteral("download"));
+        QCOMPARE(controller.tasks()->tasks().constLast().toMap().value("state").toString(), QStringLiteral("succeeded"));
+        QFile received(target);
+        QVERIFY(received.open(QIODevice::ReadOnly));
+        QCOMPARE(received.readAll(), QByteArray("%PDF-1.4\n% fake\n"));
+        QTRY_COMPARE_WITH_TIMEOUT(text("ls ~/.cache/fortiq-mail 2>/dev/null | grep -c att.\n"), QStringLiteral("0"), 15000);   // the temporary copy is gone
+        // Downloading onto an existing file is a conflict, not an overwrite; the temporary copy is still removed.
+        mail.downloadAttachment(messageId, part, name, QUrl::fromLocalFile(target));
+        QTRY_VERIFY_WITH_TIMEOUT(controller.tasks()->tasks().constLast().toMap().value("kind").toString() == "download", 30000);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.tasks()->tasks().constLast().toMap().value("decision").toString() == "conflict"
+                                 || controller.tasks()->tasks().constLast().toMap().value("active").toBool() == false, 30000);
+        const int conflictId = controller.tasks()->tasks().constLast().toMap().value("id").toInt();
+        if (controller.tasks()->task(conflictId).value("decision").toString() == "conflict") controller.resolveConflict(conflictId, "skip");
+        QTRY_VERIFY_WITH_TIMEOUT(controller.tasks()->activeCount() == 0, 30000);
+        QTRY_COMPARE_WITH_TIMEOUT(text("ls ~/.cache/fortiq-mail 2>/dev/null | grep -c att.\n"), QStringLiteral("0"), 15000);
+        received.close();
+        QVERIFY(received.open(QIODevice::ReadOnly));
+        QCOMPARE(received.readAll(), QByteArray("%PDF-1.4\n% fake\n"));                                           // unchanged
+
+        controller.disconnectServer();
+        QVERIFY(mail.attachStatus().isEmpty());
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        shell("cd ~ && rm -rf Downloads .cache/fortiq-mail\n");
+        settings.remove(pin); settings.remove("mail/notmuchConfig");
+    }
+
     // The Bases de données app against the test server: SQLite file and PostgreSQL 17 (role fqdb / base fqtest).
     // Needs FORTIQ_IT_DB=1 and the PostgreSQL cluster running (`pg_ctlcluster 17 main start`).
     void databaseAppIsReadOnlyAndBounded() {

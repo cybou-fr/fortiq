@@ -173,7 +173,7 @@ set(FORTIQ_NETWORK_PURE_SOURCES src/network/NetworkInfo.cpp src/network/NetworkI
 set(FORTIQ_NETWORK_SOURCES ${FORTIQ_NETWORK_PURE_SOURCES} src/network/NetworkController.cpp src/network/NetworkController.h)
 set(FORTIQ_SYSTEM_PURE_SOURCES src/system/SystemInfo.cpp src/system/SystemInfo.h)
 set(FORTIQ_SYSTEM_SOURCES ${FORTIQ_SYSTEM_PURE_SOURCES} src/system/SystemController.cpp src/system/SystemController.h)
-set(FORTIQ_MAIL_PURE_SOURCES src/mail/MailInfo.cpp src/mail/MailInfo.h src/mail/MailSend.cpp src/mail/MailSend.h src/mail/MailAccount.cpp src/mail/MailAccount.h)
+set(FORTIQ_MAIL_PURE_SOURCES src/mail/MailInfo.cpp src/mail/MailInfo.h src/mail/MailSend.cpp src/mail/MailSend.h src/mail/MailAccount.cpp src/mail/MailAccount.h src/mail/MailAttachment.cpp src/mail/MailAttachment.h)
 set(FORTIQ_MAIL_SOURCES ${FORTIQ_MAIL_PURE_SOURCES} src/mail/MailController.cpp src/mail/MailController.h)
 set(FORTIQ_DB_PURE_SOURCES src/db/DbInfo.cpp src/db/DbInfo.h)
 set(FORTIQ_DB_SOURCES ${FORTIQ_DB_PURE_SOURCES} src/db/DbController.cpp src/db/DbController.h)

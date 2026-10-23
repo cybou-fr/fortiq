@@ -1,10 +1,13 @@
 #pragma once
 
 #include "MailAccount.h"
+#include "MailAttachment.h"
 #include "MailInfo.h"
 #include "MailSend.h"
 
+#include <QHash>
 #include <QObject>
+#include <QUrl>
 #include <QStringList>
 #include <QThreadPool>
 #include <QVariantList>
@@ -46,6 +49,7 @@ class MailController : public QObject {
     Q_PROPERTY(QString sendState READ sendState NOTIFY sendChanged)                   // idle | sending | sent | warning | failed | unknown
     Q_PROPERTY(QString sendStatus READ sendStatus NOTIFY sendChanged)
     // account wizard and tests
+    Q_PROPERTY(QString attachStatus READ attachStatus NOTIFY attachChanged)
     Q_PROPERTY(bool actionBusy READ actionBusy NOTIFY actionChanged)
     Q_PROPERTY(QString actionStatus READ actionStatus NOTIFY actionChanged)
     Q_PROPERTY(QString actionOutput READ actionOutput NOTIFY actionChanged)           // text of the last test / sync / write
@@ -79,6 +83,7 @@ public:
     QString sendState() const { return m_sendState; }
     QString sendStatus() const { return m_sendStatus; }
     bool actionBusy() const { return m_actionBusy; }
+    QString attachStatus() const { return m_attachStatus; }
     QString actionStatus() const { return m_actionStatus; }
     QString actionOutput() const { return m_actionOutput; }
     QVariantMap setupState() const { return m_setupStateVariant; }
@@ -114,6 +119,13 @@ public:
     Q_INVOKABLE void syncNow(const QString &account);               // mbsync (pull only) then notmuch new
     Q_INVOKABLE void cancelAction();
 
+    // ---- attachments (they stay on the server) ----
+    // Writes the decoded part into ~/Downloads on the server (never overwrites: "name (1).ext").
+    Q_INVOKABLE void saveAttachmentToServer(const QString &messageId, int part, const QString &name);
+    // Extracts to a temporary copy on the server, downloads it to `localFile` as an ordinary download task, then removes the copy.
+    Q_INVOKABLE void downloadAttachment(const QString &messageId, int part, const QString &name, const QUrl &localFile);
+    Q_INVOKABLE QString attachmentFileName(const QString &name) const;
+
 signals:
     void changed();
     void threadsChanged();
@@ -121,6 +133,7 @@ signals:
     void accountsChanged();
     void sendChanged();
     void actionChanged();
+    void attachChanged();
     void setupChanged();
 
 private:
@@ -146,6 +159,8 @@ private:
     void runAction(const QString &kind, const QString &title, const QString &destination, bool cancellable, const QByteArray &script, qint64 maxOutput,
                    std::function<void(const ActionOutcome &, int taskId)> done);
     void setActionStatus(const QString &status, const QString &output = QString());
+    void setAttachStatus(const QString &text);
+    void cleanupTemp(const QString &directory);
 
     RemoteController *m_remote;
     QThreadPool m_pool;
@@ -165,6 +180,8 @@ private:
     std::shared_ptr<std::atomic_bool> m_actionCancel;
     int m_actionSeq = 0, m_actionTask = 0;
     bool m_actionBusy = false;
+    QHash<int, QString> m_tempCopies;   // download task id -> temporary directory on the server
+    QString m_attachStatus;
     QString m_displayName, m_sendState = QStringLiteral("idle"), m_sendStatus, m_actionStatus, m_actionOutput;
     QVariantList m_accountsVariant;
     QList<MailSendAccount> m_accounts;

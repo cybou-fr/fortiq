@@ -61,6 +61,7 @@ void collectPart(const QJsonObject &part, MailMessage &m, QString &text, QString
         a.name = part.value("filename").toString();
         a.type = type;
         a.size = static_cast<qint64>(part.value("content-length").toDouble());
+        a.part = part.value("id").toInt();
         if (a.name.isEmpty()) a.name = QStringLiteral("(sans nom)");
         m.attachments.push_back(a);
         return;
@@ -77,6 +78,7 @@ void collectPart(const QJsonObject &part, MailMessage &m, QString &text, QString
         a.name = part.value("filename").toString().isEmpty() ? type : part.value("filename").toString();
         a.type = type;
         a.size = static_cast<qint64>(part.value("content-length").toDouble());
+        a.part = part.value("id").toInt();
         m.attachments.push_back(a);
     }
 }
@@ -249,7 +251,7 @@ QVariantList messagesToVariant(const QList<MailMessage> &messages) {
     const qint64 now = QDateTime::currentSecsSinceEpoch();
     for (const MailMessage &m : messages) {
         QVariantList attachments;
-        for (const MailAttachment &a : m.attachments) attachments.push_back(QVariantMap { { "name", a.name }, { "type", a.type }, { "size", a.size } });
+        for (const MailAttachment &a : m.attachments) attachments.push_back(QVariantMap { { "name", a.name }, { "type", a.type }, { "size", a.size }, { "part", a.part } });
         out.push_back(QVariantMap { { "id", m.id }, { "depth", qMin(m.depth, 6) }, { "match", m.match }, { "from", m.from }, { "to", m.to }, { "cc", m.cc },
                                     { "date", m.date }, { "when", mailDateText(m.timestamp, now) }, { "subject", m.subject.isEmpty() ? QStringLiteral("(sans objet)") : m.subject },
                                     { "tags", m.tags }, { "unread", m.tags.contains(QLatin1String("unread")) },

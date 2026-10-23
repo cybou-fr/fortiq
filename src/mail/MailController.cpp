@@ -49,8 +49,16 @@ MailController::MailController(RemoteController *remote, QObject *parent)
     m_state = QStringLiteral("disconnected");
     m_status = QStringLiteral("Aucun serveur connecté");
     connect(remote, &RemoteController::changed, this, &MailController::onRemoteChanged);
-    if (remote->tasks())
+    if (remote->tasks()) {
         connect(remote->tasks(), &TaskManager::cancelRequested, this, [this](int id) { if (id == m_actionTask && m_actionCancel) m_actionCancel->store(true); });
+        connect(remote->tasks(), &TaskManager::finished, this, [this](int id, const QString &) {
+            const auto it = m_tempCopies.find(id);
+            if (it == m_tempCopies.end()) return;
+            const QString directory = it.value();
+            m_tempCopies.erase(it);
+            cleanupTemp(directory);
+        });
+    }
 }
 
 MailController::~MailController() {
@@ -87,12 +95,12 @@ void MailController::resetAll(const QString &state, const QString &status) {
     m_selectedThread.clear(); m_threadStatus.clear(); m_version.clear(); m_query.clear();
     m_folderKey = QStringLiteral("inbox");
     m_hasMore = false; m_offset = 0;
-    m_accounts.clear(); m_accountsVariant.clear();
+    m_accounts.clear(); m_accountsVariant.clear(); m_tempCopies.clear(); m_attachStatus.clear();
     m_previewFiles.clear(); m_previewAccount.clear(); m_setupState = MailSetupState(); m_setupStateVariant.clear();
     m_actionBusy = false; m_sendState = QStringLiteral("idle"); m_sendStatus.clear(); m_actionStatus.clear(); m_actionOutput.clear();
     m_state = state;
     m_status = status;
-    emit changed(); emit threadsChanged(); emit threadChanged(); emit accountsChanged(); emit sendChanged(); emit actionChanged(); emit setupChanged();
+    emit changed(); emit threadsChanged(); emit threadChanged(); emit accountsChanged(); emit sendChanged(); emit actionChanged(); emit setupChanged(); emit attachChanged();
 }
 
 void MailController::onRemoteChanged() {
@@ -176,6 +184,7 @@ void MailController::openThread(const QString &threadId) {
     m_selectedThread = threadId;
     m_messagesVariant.clear();
     m_threadStatus = QStringLiteral("Lecture du message…");
+    m_attachStatus.clear();
     ++m_threadGen;
     emit threadChanged();
     enqueue(Job { Kind::Thread, buildMailThreadScript(threadId, m_configPath), threadId, {}, {}, m_seq, m_threadGen });
@@ -630,6 +639,81 @@ void MailController::cancelAction() {
     if (!m_actionBusy) return;
     if (m_actionTask != 0 && m_remote->tasks()) m_remote->tasks()->requestCancel(m_actionTask);
     else if (m_actionCancel) m_actionCancel->store(true);
+}
+
+// ---------------------------------------------------------------- attachments
+QString MailController::attachmentFileName(const QString &name) const { return sanitizeAttachmentName(name); }
+
+void MailController::setAttachStatus(const QString &text) {
+    m_attachStatus = text;
+    emit attachChanged();
+}
+
+void MailController::cleanupTemp(const QString &directory) {
+    const QByteArray script = buildAttachmentCleanupScript(directory);
+    if (script.isEmpty() || !m_remote->connected()) return;   // after a disconnect the next extraction removes stale copies (older than a day)
+    auto slot = m_actionSession;
+    const ConnectionRequest request = m_remote->connectionRequest();
+    (void)QtConcurrent::run(&m_actionPool, [slot, request, script] {
+        if (!*slot) *slot = std::make_unique<SshSession>();
+        SshSession &session = **slot;
+        if (!session.isOpen() && session.open(request).status != SshResult::Status::Ok) return;
+        session.runScript(script, 4096, {});
+    });
+}
+
+void MailController::saveAttachmentToServer(const QString &messageId, int part, const QString &name) {
+    const QByteArray script = buildAttachmentSaveScript(messageId, part, name, QStringLiteral("server"), m_configPath);
+    if (script.isEmpty()) { setAttachStatus(QStringLiteral("Pièce jointe invalide.")); return; }
+    if (m_actionBusy) { setAttachStatus(QStringLiteral("Une autre action est en cours sur le serveur.")); return; }
+    setAttachStatus(QStringLiteral("Enregistrement sur le serveur…"));
+    runAction(QStringLiteral("mailAttachment"), QStringLiteral("Pièce jointe · ") + sanitizeAttachmentName(name), QStringLiteral("~/Downloads"), false, script, 64 * 1024,
+              [this](const ActionOutcome &out, int taskId) {
+        TaskManager *tasks = m_remote->tasks();
+        const int exitCode = exitCodeOf(out.run);
+        const AttachmentSaved saved = parseAttachmentSaved(out.run.data);
+        if (!out.openError.isEmpty() || out.run.status != SshResult::Status::Ok || exitCode != 0 || !saved.ok) {
+            const QString text = !out.openError.isEmpty() ? out.openError : describeAttachmentFailure(exitCode, out.run.message);
+            setAttachStatus(text);
+            if (tasks && taskId) tasks->fail(taskId, text);
+            return;
+        }
+        const QString text = QStringLiteral("Enregistré sur le serveur : %1 (%2 octets).").arg(saved.path).arg(saved.size);
+        setAttachStatus(text);
+        if (tasks && taskId) tasks->succeed(taskId, saved.path, saved.size);
+    });
+}
+
+void MailController::downloadAttachment(const QString &messageId, int part, const QString &name, const QUrl &localFile) {
+    const QByteArray script = buildAttachmentSaveScript(messageId, part, name, QStringLiteral("temp"), m_configPath);
+    if (script.isEmpty() || localFile.isEmpty()) { setAttachStatus(QStringLiteral("Pièce jointe invalide.")); return; }
+    if (m_actionBusy) { setAttachStatus(QStringLiteral("Une autre action est en cours sur le serveur.")); return; }
+    setAttachStatus(QStringLiteral("Préparation sur le serveur…"));
+    runAction(QStringLiteral("mailAttachment"), QStringLiteral("Pièce jointe · ") + sanitizeAttachmentName(name), QStringLiteral("ce poste"), false, script, 64 * 1024,
+              [this, localFile](const ActionOutcome &out, int taskId) {
+        TaskManager *tasks = m_remote->tasks();
+        const int exitCode = exitCodeOf(out.run);
+        const AttachmentSaved saved = parseAttachmentSaved(out.run.data);
+        if (!out.openError.isEmpty() || out.run.status != SshResult::Status::Ok || exitCode != 0 || !saved.ok) {
+            const QString text = !out.openError.isEmpty() ? out.openError : describeAttachmentFailure(exitCode, out.run.message);
+            setAttachStatus(text);
+            if (tasks && taskId) tasks->fail(taskId, text);
+            return;
+        }
+        // The extraction is done; the transfer to this computer is an ordinary download task (progress, conflict, cancel),
+        // and the temporary copy on the server is removed when that task ends, whatever the outcome.
+        if (tasks && taskId) tasks->succeed(taskId, QStringLiteral("Prête à télécharger."));
+        const int before = tasks ? tasks->count() : 0;
+        m_remote->download(saved.path, localFile);
+        if (tasks && tasks->count() > before) {
+            const int downloadId = tasks->tasks().constLast().toMap().value("id").toInt();
+            m_tempCopies.insert(downloadId, saved.path.left(saved.path.lastIndexOf(QLatin1Char('/'))));
+            setAttachStatus(QStringLiteral("Téléchargement vers ce poste lancé (voir le panneau des tâches)."));
+        } else {
+            cleanupTemp(saved.path.left(saved.path.lastIndexOf(QLatin1Char('/'))));
+            setAttachStatus(QStringLiteral("Le téléchargement n'a pas pu démarrer."));
+        }
+    });
 }
 
 }  // namespace fortiq

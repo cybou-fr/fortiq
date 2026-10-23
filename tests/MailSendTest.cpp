@@ -1,4 +1,5 @@
 #include "mail/MailAccount.h"
+#include "mail/MailAttachment.h"
 #include "mail/MailSend.h"
 
 #include <QTimeZone>
@@ -281,6 +282,49 @@ private slots:
         QCOMPARE(none.mailRoot(), QString("/home/u/Mail"));
         QVERIFY(!parseSetupProbe("garbage").ok);
         QVERIFY(!parseSetupProbe("#section home\nrelative\n#section end\n").ok);
+    }
+
+    void attachmentNames() {
+        QCOMPARE(sanitizeAttachmentName("report.pdf"), QString("report.pdf"));
+        QCOMPARE(sanitizeAttachmentName(QString::fromUtf8("Rapport \xC3\xA9t\xC3\xA9.pdf")), QString::fromUtf8("Rapport \xC3\xA9t\xC3\xA9.pdf"));
+        QCOMPARE(sanitizeAttachmentName("../../etc/passwd"), QString("_.._etc_passwd"));
+        QCOMPARE(sanitizeAttachmentName("..\\..\\win.ini"), QString("_.._win.ini"));
+        QCOMPARE(sanitizeAttachmentName(".bashrc"), QString("bashrc"));
+        QCOMPARE(sanitizeAttachmentName("a\nb\tc.txt"), QString("a_b_c.txt"));
+        QCOMPARE(sanitizeAttachmentName("   "), QString("piece-jointe"));
+        QCOMPARE(sanitizeAttachmentName("..."), QString("piece-jointe"));
+        QCOMPARE(sanitizeAttachmentName("name: x*?.txt"), QString("name_ x__.txt"));
+        const QString cut = sanitizeAttachmentName(QString(300, 'a') + ".tar.gz");
+        QVERIFY(cut.endsWith(".gz"));
+        QVERIFY(cut.size() <= 120);
+    }
+
+    void attachmentScripts() {
+        const QByteArray s = buildAttachmentSaveScript("m3@example.org", 3, "Rapport.pdf", "server", QString());
+        QVERIFY(s.contains("notmuch show --format=raw --part=3 -- 'id:m3@example.org' > \"$tmp\""));
+        QVERIFY(s.contains("dir=\"$HOME/Downloads\"") && s.contains("name='Rapport.pdf'"));
+        QVERIFY(s.contains("final=\"$dir/$stem ($i)$ext\""));                 // never overwrites
+        QVERIFY(s.contains("chmod 644") && !s.contains("rm -rf"));
+        const QByteArray t = buildAttachmentSaveScript("m3@example.org", 3, "x'y.pdf", "temp", "/home/u/nm.conf");
+        QVERIFY(t.contains("name='x'\\''y.pdf'") && t.contains("NOTMUCH_CONFIG='/home/u/nm.conf'"));
+        QVERIFY(t.contains("mktemp -d \"$base/att.XXXXXX\"") && t.contains("chmod 600") && t.contains("-mmin +1440"));
+        QVERIFY(buildAttachmentSaveScript("bad id", 3, "a", "server", QString()).isEmpty());
+        QVERIFY(buildAttachmentSaveScript("m@x.org", 0, "a", "server", QString()).isEmpty());
+        QVERIFY(buildAttachmentSaveScript("m@x.org", 3, "a", "elsewhere", QString()).isEmpty());
+        const AttachmentSaved ok = parseAttachmentSaved("#path /home/u/Downloads/Rapport.pdf\n#size 16\n");
+        QVERIFY(ok.ok && ok.size == 16 && ok.path == "/home/u/Downloads/Rapport.pdf");
+        QVERIFY(!parseAttachmentSaved("#path relative\n#size 5\n").ok);
+        QVERIFY(!parseAttachmentSaved("").ok);
+        QVERIFY(describeAttachmentFailure(7, "FQ-ERR empty").contains("introuvable ou vide"));
+        QVERIFY(describeAttachmentFailure(6, "FQ-ERR notmuch").contains("notmuch"));
+        QVERIFY(describeAttachmentFailure(5, "FQ-ERR mkdir").contains(QString::fromUtf8("\xC3\x89""criture impossible")));
+        // Only a temporary directory made by FORTIQ can be removed.
+        QVERIFY(isAttachmentTempDirectory("/home/u/.cache/fortiq-mail/att.Ab12Cd"));
+        for (const char *bad : { "/home/u", "/home/u/.cache/fortiq-mail/att.Ab12Cd/../..", "/home/u/.cache/fortiq-mail/", "/home/u/.cache/fortiq-mail/att.x", "/etc/att.Ab12Cd", "/home/u/.cache/fortiq-mail/att.Ab12Cd/sub" })
+            QVERIFY2(!isAttachmentTempDirectory(bad), bad);
+        QVERIFY(buildAttachmentCleanupScript("/home/u").isEmpty());
+        const QByteArray c = buildAttachmentCleanupScript("/home/u/.cache/fortiq-mail/att.Ab12Cd");
+        QVERIFY(c.contains("case \"$d\" in \"$HOME\"/.cache/fortiq-mail/att.*) rm -rf -- \"$d\" ;; esac"));
     }
 
     void actionScripts() {
