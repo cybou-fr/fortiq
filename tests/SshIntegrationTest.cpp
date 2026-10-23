@@ -9,6 +9,7 @@
 #include "core/TaskManager.h"
 #include "browser/BrowserController.h"
 #include "network/NetworkController.h"
+#include "system/SystemController.h"
 #include "core/TerminalController.h"
 #include "core/DisksController.h"
 #include "core/DocumentsController.h"
@@ -1139,6 +1140,54 @@ private slots:
         QCOMPARE(controller.tasks()->activeCount(), 0);
 
         controller.disconnectServer();
+        settings.remove(pin);
+    }
+
+    // The System app reads processes, services and the overview of the test server (read-only).
+    void systemAppReadsTheServer() {
+        fortiq::RemoteController controller;
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        fortiq::SystemController sys(&controller);
+        sys.setWindowActive(true);
+        QTRY_COMPARE_WITH_TIMEOUT(sys.state(), QStringLiteral("ready"), 20000);
+        const QVariantMap o = sys.overview();
+        QVERIFY(!o.value("hostname").toString().isEmpty());
+        QVERIFY(o.value("cores").toInt() >= 1);
+        QVERIFY(o.value("memFraction").toDouble() > 0 && o.value("memFraction").toDouble() < 1.0);
+        QVERIFY(!o.value("uptime").toString().isEmpty());
+        QVERIFY(sys.processes().size() >= 5);
+        bool hasInit = false, hasSshd = false;
+        double previousCpu = 1e9;
+        for (const QVariant &v : sys.processes()) {
+            const QVariantMap p = v.toMap();
+            hasInit |= p.value("pid").toInt() == 1;
+            hasSshd |= p.value("name").toString() == "sshd" || p.value("command").toString().contains("sshd");
+            QVERIFY(p.value("cpu").toDouble() <= previousCpu);        // ps --sort=-pcpu
+            previousCpu = p.value("cpu").toDouble();
+        }
+        QVERIFY(hasInit);
+        QVERIFY(hasSshd);
+        QVERIFY(sys.hasSystemd());
+        bool sshService = false;
+        for (const QVariant &v : sys.services()) sshService |= v.toMap().value("unit").toString().startsWith("ssh");
+        QVERIFY(sshService);
+        // Refreshing reuses the connection and keeps the data.
+        const QString firstUpdate = sys.updated();
+        QTest::qWait(1100);
+        sys.reload();
+        QTRY_VERIFY_WITH_TIMEOUT(!sys.busy() && sys.updated() != firstUpdate, 15000);
+        QCOMPARE(sys.state(), QStringLiteral("ready"));
+        // Read-only: no task, and a new session clears everything.
+        QCOMPARE(controller.tasks()->count(), 0);
+        controller.disconnectServer();
+        QCOMPARE(sys.state(), QStringLiteral("disconnected"));
+        QVERIFY(sys.processes().isEmpty() && sys.services().isEmpty() && sys.overview().isEmpty());
         settings.remove(pin);
     }
 

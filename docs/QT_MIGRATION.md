@@ -258,6 +258,12 @@ follow, journal/file scripts, apply), `LogsAnalysis.cpp` (repeat groups, journal
 and the internal `LogsControllerInternal.h`; moved verbatim by script. Verified: CTest 11/11, Logs QtTest **11 passed, 0 skipped**
 with `FORTIQ_TEST_WSL=Debian` (real Linux reader), and the live integration suite **27 passed, 0 failed, 3 skipped**.
 
+23 October System (read-only, [SYSTEM](SYSTEM.md)): the Système app lists processes (CPU, memory, state, threads, command; filter, sort, auto-refresh every 5 s,
+details of the selected one), systemd services (failed first, filters) and an overview (load against cores, memory/swap, uptime, OS, systemd state) of the selected
+server, over one persistent SSH session. Existing tools only (`ps`, `systemctl list-units`, /proc files); the script contains no command that changes anything
+(tested). Verified: `fortiq_system` 12 unit tests with real Debian outputs, the live `systemAppReadsTheServer` test, a layout test with a fake controller, CTest 15/15.
+Not done: stopping/restarting services, signals to processes, user services, process tree; Android not run on a device.
+
 23 October Network (read-only, [NETWORK](NETWORK.md)): the Réseau app shows interfaces (addresses, counters), listening ports with who can reach them
 (all interfaces / local only / one address), routes and DNS of the selected server, and runs resolve/ping/trace there as cancellable tasks. Existing tools
 only (`ip -j`, `ss`, `getent`, `dig`, `ping`, `mtr`/`tracepath`); targets are validated before anything is sent. Verified: `fortiq_network` 14 unit tests with

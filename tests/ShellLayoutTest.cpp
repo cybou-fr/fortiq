@@ -112,6 +112,30 @@ QtObject {
     function runProbe(k, t) { calls = calls.concat(['probe:' + k + ':' + t]); probeKind = k; probeTarget = t; probeOutput = '4 packets transmitted'; probeStatus = 'Terminé.' }
     function cancelProbe() {}
 })";
+static const char kFakeSystem[] = R"(import QtQml
+QtObject {
+    property bool busy: false
+    property string state: 'ready'
+    property string status: 'Lecture seule'
+    property string updated: '12:00:00'
+    property bool hasSystemd: true
+    property var notes: []
+    property var overview: ({ hostname: 'srv-test', os: 'Debian GNU/Linux 13', kernel: '6.6.0', cores: 4, load1: 0.5, load5: 1.5, load15: 2.0, loadRatio: 0.125,
+        uptime: '3 j 4 h', uptimeSec: 273600, memTotal: '8.00 Gio', memUsed: '2.00 Gio', memAvailable: '6.00 Gio', memFraction: 0.25,
+        swapTotal: '1.00 Gio', swapUsed: '0 Kio', swapFraction: 0, systemdState: 'running', processes: 3, running: 1, zombies: 0,
+        services: 3, activeServices: 1, failedServices: 1 })
+    property var processes: [
+        { pid: 700, ppid: 1, user: 'www-data', state: 'Sl', cpu: 12.5, mem: 3.1, rssKb: 250000, rss: '244 Mio', elapsed: '3 h 10 min', elapsedSec: 11400, threads: 8, command: '/usr/sbin/nginx -g daemon on;', name: 'nginx', kernel: false },
+        { pid: 1, ppid: 0, user: 'root', state: 'Ss', cpu: 0.0, mem: 0.1, rssKb: 9000, rss: '8.8 Mio', elapsed: '3 j 4 h', elapsedSec: 273600, threads: 1, command: '/sbin/init', name: 'init', kernel: false },
+        { pid: 2, ppid: 0, user: 'root', state: 'S', cpu: 0.0, mem: 0.0, rssKb: 0, rss: '0 Kio', elapsed: '3 j 4 h', elapsedSec: 273600, threads: 1, command: '[kthreadd]', name: 'kthreadd', kernel: true } ]
+    property var services: [
+        { unit: 'ssh.service', load: 'loaded', active: 'active', sub: 'running', description: 'OpenBSD Secure Shell server', failed: false },
+        { unit: 'broken.service', load: 'loaded', active: 'failed', sub: 'failed', description: 'A broken thing', failed: true },
+        { unit: 'cron.service', load: 'loaded', active: 'inactive', sub: 'dead', description: 'Regular background program processing daemon', failed: false } ]
+    property int reloads: 0
+    function reload() { reloads = reloads + 1 }
+    function setWindowActive(a) {}
+})";
 static const char kFakeRemote[] = R"(import QtQml
 QtObject { property bool connected: true; property string serverLabel: "fixture@server" })";
 #endif
@@ -272,6 +296,67 @@ private slots:
             shell->setProperty("controlOpen", true);
             QTest::qWait(400);
             QVERIFY(window->grabWindow().save(QString("layout-captures/%1-control-selected.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+            {   // Système: processes (filter, sort, details), services and the overview, all read-only.
+                QQmlComponent sysComponent(&engine), sysRemoteComponent(&engine);
+                sysComponent.setData(kFakeSystem, QUrl());
+                sysRemoteComponent.setData(kFakeRemote, QUrl());
+                auto *fakeSys = sysComponent.create(); QVERIFY2(fakeSys, qPrintable(sysComponent.errorString()));
+                auto *sysRemote = sysRemoteComponent.create(); QVERIFY2(sysRemote, qPrintable(sysRemoteComponent.errorString()));
+                fakeSys->setParent(window); sysRemote->setParent(window);
+                shell->setProperty("systemController", QVariant::fromValue(fakeSys));
+                shell->setProperty("systemOpen", true);
+                shell->setProperty("foregroundApp", "system");
+                QTest::qWait(80);
+                auto *sysWin = shell->findChild<QQuickItem *>("systemWindow"); QVERIFY(sysWin); QVERIFY(sysWin->isVisible());
+                sysWin->setProperty("remote", QVariant::fromValue(sysRemote));
+                QVERIFY(sysWin->x() >= 0 && sysWin->y() >= 47 && sysWin->x() + sysWin->width() <= shell->width());
+                QTest::qWait(100);
+                auto *procList = findByName(sysWin, "systemProcessList"); QVERIFY(procList); QVERIFY(procList->isVisible());
+                QCOMPARE(procList->property("count").toInt(), 2);                    // the kernel thread is hidden by default
+                auto click = [&](QQuickItem *item) {
+                    QVERIFY(item);
+                    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
+                    QTest::qWait(60);
+                };
+                click(findByName(sysWin, "systemKernel"));
+                QCOMPARE(procList->property("count").toInt(), 3);
+                click(findByName(sysWin, "systemKernel"));
+                QCOMPARE(procList->property("count").toInt(), 2);
+                // Default order is CPU descending: nginx first; PID ascending puts init first.
+                QCOMPARE(sysWin->property("shownProcesses").toList().first().toMap().value("name").toString(), QString("nginx"));
+                click(findByName(sysWin, "systemSort_pid"));                        // switches to PID, ascending
+                QCOMPARE(sysWin->property("shownProcesses").toList().first().toMap().value("name").toString(), QString("init"));
+                // Filtering by text and a row selection opens the details (read-only).
+                auto *filter = findByName(sysWin, "systemFilter"); QVERIFY(filter);
+                filter->forceActiveFocus();
+                for (const char c : QByteArray("ngin")) QTest::keyClick(window, c);
+                QTRY_COMPARE(procList->property("count").toInt(), 1);
+                QVERIFY(QMetaObject::invokeMethod(procList, "forceLayout"));
+                QQuickItem *row = nullptr;
+                QVERIFY(QMetaObject::invokeMethod(procList, "itemAtIndex", Q_RETURN_ARG(QQuickItem *, row), Q_ARG(int, 0)));
+                click(row);
+                auto *detail = findByName(sysWin, "systemDetail"); QVERIFY(detail);
+                QTRY_VERIFY(detail->isVisible());
+                QVERIFY(window->grabWindow().save(QString("layout-captures/%1-system.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+                // Services: failed ones first, filter chips.
+                click(findByName(sysWin, "systemSection_services"));
+                QCOMPARE(sysWin->property("shownServices").toList().size(), 3);
+                QCOMPARE(sysWin->property("shownServices").toList().first().toMap().value("unit").toString(), QString("broken.service"));
+                click(findByName(sysWin, "systemServiceFilter_failed"));
+                QCOMPARE(sysWin->property("shownServices").toList().size(), 1);
+                click(findByName(sysWin, "systemServiceFilter_active"));
+                QCOMPARE(sysWin->property("shownServices").toList().size(), 1);
+                click(findByName(sysWin, "systemSection_overview"));
+                QTest::qWait(60);
+                // The auto-refresh switch asks the controller for new data while the window is open.
+                const int before = fakeSys->property("reloads").toInt();
+                click(findByName(sysWin, "systemSection_processes"));
+                click(findByName(sysWin, "systemAuto"));
+                QTRY_VERIFY_WITH_TIMEOUT(fakeSys->property("reloads").toInt() > before, 8000);
+                click(findByName(sysWin, "systemAuto"));
+                shell->setProperty("systemOpen", false);
+                shell->setProperty("systemController", QVariant::fromValue<QObject *>(nullptr));
+            }
             {   // Réseau: read-only sections and diagnostics that run on the server.
                 QQmlComponent netComponent(&engine), netRemoteComponent(&engine);
                 netComponent.setData(kFakeNetwork, QUrl());

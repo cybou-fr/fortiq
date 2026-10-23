@@ -8,6 +8,7 @@
 #include "core/TaskManager.h"
 #include "browser/BrowserController.h"
 #include "network/NetworkController.h"
+#include "system/SystemController.h"
 #include <QSettings>
 #include <QUuid>
 #endif
@@ -143,6 +144,8 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("browser", &browser);
     fortiq::NetworkController network(&controller);
     engine.rootContext()->setContextProperty("network", &network);
+    fortiq::SystemController systemInfo(&controller);
+    engine.rootContext()->setContextProperty("systemInfo", &systemInfo);
     fortiq::TerminalController terminal(&controller);
     engine.rootContext()->setContextProperty("terminal", &terminal);
 #else
@@ -153,6 +156,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("disks", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("browser", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("network", QVariant::fromValue<QObject *>(nullptr));
+    engine.rootContext()->setContextProperty("systemInfo", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("documents", QVariant::fromValue<QObject *>(nullptr));
 #endif
     engine.loadFromModule("Fortiq.App", "Main");
