@@ -97,7 +97,18 @@ void MailController::resetAll(const QString &state, const QString &status) {
     m_hasMore = false; m_offset = 0;
     m_accounts.clear(); m_accountsVariant.clear(); m_tempCopies.clear(); m_attachStatus.clear();
     m_previewFiles.clear(); m_previewAccount.clear(); m_setupState = MailSetupState(); m_setupStateVariant.clear();
-    m_actionBusy = false; m_sendState = QStringLiteral("idle"); m_sendStatus.clear(); m_actionStatus.clear(); m_actionOutput.clear();
+    // An interrupted send may or may not have been delivered: say so instead of going back to a clean state.
+    // The warning stays until the user dismisses it (resetSend), across reconnections and server changes.
+    const bool sendInterrupted = m_sendState == QStringLiteral("sending");
+    const bool keepUnknown = m_sendState == QStringLiteral("unknown");
+    m_actionBusy = false; m_actionStatus.clear(); m_actionOutput.clear();
+    if (sendInterrupted) {
+        m_sendState = QStringLiteral("unknown");
+        m_sendStatus = QStringLiteral("Connexion fermée pendant l'envoi : on ne sait pas si le message est parti. Vérifiez le dossier Sent avant de le renvoyer.");
+    } else if (!keepUnknown) {
+        m_sendState = QStringLiteral("idle");
+        m_sendStatus.clear();
+    }
     m_state = state;
     m_status = status;
     emit changed(); emit threadsChanged(); emit threadChanged(); emit accountsChanged(); emit sendChanged(); emit actionChanged(); emit setupChanged(); emit attachChanged();

@@ -43,7 +43,7 @@ QByteArray buildAttachmentSaveScript(const QString &messageId, int part, const Q
     if (!configPath.isEmpty()) s += "export NOTMUCH_CONFIG=" + shQuote(configPath) + "\n";
     s += "command -v notmuch >/dev/null 2>&1 || { echo 'FQ-ERR missing-notmuch' >&2; exit 4; }\n";
     if (mode == QLatin1String("server")) {
-        s += "umask 022\n"
+        s += "umask 077\n"
              "dir=\"$HOME/Downloads\"\n"
              "mkdir -p \"$dir\" || { echo 'FQ-ERR mkdir' >&2; exit 5; }\n";
     } else {
@@ -64,7 +64,7 @@ QByteArray buildAttachmentSaveScript(const QString &messageId, int part, const Q
          "if [ $rc -ne 0 ]; then rm -f \"$tmp\"; echo 'FQ-ERR notmuch' >&2; exit 6; fi\n"
          "if [ ! -s \"$tmp\" ]; then rm -f \"$tmp\"; echo 'FQ-ERR empty' >&2; exit 7; fi\n"
          "mv \"$tmp\" \"$final\" || { rm -f \"$tmp\"; echo 'FQ-ERR move' >&2; exit 8; }\n";
-    s += mode == QLatin1String("server") ? "chmod 644 \"$final\"\n" : "chmod 600 \"$final\"\n";
+    s += "chmod 600 \"$final\"\n";   // attachments of private mail stay private on the server too
     s += "printf '#path %s\\n' \"$final\"\n"
          "printf '#size %s\\n' \"$(wc -c < \"$final\")\"\n";
     return s;

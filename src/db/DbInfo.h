@@ -44,6 +44,7 @@ struct SqlScan {
     bool unterminated = false;       // open string, identifier, comment or dollar quote
     bool metaCommand = false;        // psql '\' outside quotes, or an sqlite3 '.' command at a line start
     QString firstKeyword;            // lower-case, "" when empty
+    QStringList words;               // identifiers and keywords outside strings and comments, lower-case (function names among them)
 };
 SqlScan scanSql(const QString &sql, DbEngine engine);
 

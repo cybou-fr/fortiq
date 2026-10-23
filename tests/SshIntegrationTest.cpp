@@ -1429,6 +1429,7 @@ private slots:
         QVERIFY(msmtprc.contains("account other\nhost smtp.other.example\nfrom other@example.org"));              // foreign content preserved
         QVERIFY(msmtprc.contains("# >>> FORTIQ account live") && msmtprc.contains("password \"Zq\"7 #x\\y$z;w\""));
         QCOMPARE(text("ls ~/.msmtprc.fortiq-bak-* | wc -l\n"), QStringLiteral("1"));                                  // backup of the previous file
+        QCOMPARE(text("stat -c %a ~/.msmtprc.fortiq-bak-*\n"), QStringLiteral("600"));                               // a backup of a 0644 file is not left readable (audit)
         QCOMPARE(text("grep -c 'password' ~/.msmtprc.fortiq-bak-* | tr -d '\\n'\n"), QStringLiteral("0"));
         QCOMPARE(text("ls ~/.mbsyncrc.fortiq-bak-* 2>/dev/null | wc -l\n"), QStringLiteral("0"));                    // no previous .mbsyncrc: no backup
         // The same wizard run twice keeps one block (idempotent) and the other account.
@@ -1592,7 +1593,7 @@ private slots:
         QVERIFY2(mail.attachStatus().startsWith("Enregistr"), qPrintable(mail.attachStatus()));
         QVERIFY(mail.attachStatus().contains(home + "/Downloads/"));
         QCOMPARE(text("head -c 8 ~/Downloads/*.pdf\n"), QStringLiteral("%PDF-1.4"));                                          // base64 decoded
-        QCOMPARE(text("stat -c %a ~/Downloads/*.pdf\n"), QStringLiteral("644"));
+        QCOMPARE(text("stat -c %a ~/Downloads/*.pdf\n"), QStringLiteral("600"));
         mail.saveAttachmentToServer(messageId, part, name); waitIdle();
         QCOMPARE(text("ls ~/Downloads | wc -l\n"), QStringLiteral("2"));
         QVERIFY(text("ls ~/Downloads\n").contains(QString::fromUtf8("Rapport \xC3\xA9t\xC3\xA9 (1).pdf")));
@@ -1641,6 +1642,237 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
         shell("cd ~ && rm -rf Downloads .cache/fortiq-mail\n");
         settings.remove(pin); settings.remove("mail/notmuchConfig");
+    }
+
+    // ---- Audit 23.10.2026 (docs/AUDIT_2026-10-23.md) ----
+    // Adversarial corpus against the real clients: whatever the scanner lets through must not change anything, even though the test role OWNS the tables.
+    // Needs FORTIQ_IT_DB=1 and the PostgreSQL cluster of the test Debian.
+    void databaseAdversarialCorpus() {
+        if (qEnvironmentVariable("FORTIQ_IT_DB").isEmpty()) QSKIP("FORTIQ_IT_DB not set");
+        fortiq::RemoteController controller;
+        QSettings settings;
+        settings.remove("servers/profiles"); settings.remove("db/profiles");
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        const QString serverId = controller.saveServer({ { "name", "Adversarial" }, { "host", base.host }, { "port", base.port }, { "user", base.user }, { "keyPath", key } });
+        controller.connectTo(serverId, key.isEmpty() ? base.password : QString());
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        auto shell = [&](const QByteArray &script) {
+            fortiq::SshSession session;
+            const SshResult opened = session.open(controller.connectionRequest());
+            if (opened.status != SshResult::Status::Ok) return opened;
+            return session.runScript(script, 262144, {});
+        };
+        auto text = [&](const QByteArray &script) { return QString::fromUtf8(shell(script).data).trimmed(); };
+        QCOMPARE(text("rm -f /tmp/fq_adv*; sqlite3 /tmp/fq_adv.db \"create table t(a); insert into t values (1),(2);\"; echo ready\n"), QStringLiteral("ready"));
+        const QByteArray pgSnapshot = "PGPASSWORD=fqdb-test-pw psql -h 127.0.0.1 -U fqdb -d fqtest -tAc \"select (select md5(string_agg(p::text, '|' order by id)) from people p) || '/' || "
+                                      "(select count(*) from pg_tables where schemaname='public') || '/' || (select last_value from people_id_seq) || '/' || (select count(*) from pg_roles)\"\n";
+        const QByteArray sqliteSnapshot = "sha256sum /tmp/fq_adv.db | cut -d' ' -f1; ls /tmp | grep -c '^fq_adv'\n";
+        const QString pgBefore = text(pgSnapshot), sqliteBefore = text(sqliteSnapshot);
+        QVERIFY2(pgBefore.contains('/') && pgBefore.size() > 10, qPrintable(pgBefore));
+
+        fortiq::DbController db(&controller);
+        struct Attack { const char *sql; const char *expect; };   // refuse: never sent | fail: sent and rejected | ok: harmless | any: only the end state matters
+        auto runCorpus = [&](const QList<Attack> &corpus) {
+            for (const Attack &a : corpus) {
+                const int tasksBefore = controller.tasks()->count();
+                db.runQuery(QString::fromUtf8(a.sql));
+                if (db.busy()) QTRY_VERIFY_WITH_TIMEOUT(!db.busy(), 30000);
+                const QString expect = QString::fromLatin1(a.expect);
+                const bool sent = controller.tasks()->count() > tasksBefore;
+                if (expect == "refuse") { QVERIFY2(!sent && !db.error().isEmpty(), a.sql); }
+                else if (expect == "fail") { QVERIFY2(sent && !db.error().isEmpty(), qPrintable(QString::fromUtf8(a.sql) + " -> " + db.error())); }
+                else if (expect == "ok") { QVERIFY2(sent && db.error().isEmpty(), qPrintable(QString::fromUtf8(a.sql) + " -> " + db.error())); }
+            }
+        };
+
+        QVERIFY(db.saveProfile({ { "name", "PG" }, { "engine", "postgres" }, { "host", "127.0.0.1" }, { "port", 5432 }, { "user", "fqdb" }, { "database", "fqtest" } },
+                               QStringLiteral("fqdb-test-pw"), false).isEmpty());
+        runCorpus({
+            { "insert into people(name) values ('x')", "refuse" }, { "update people set name='x'", "refuse" }, { "delete from people", "refuse" }, { "drop table people", "refuse" },
+            { "truncate people", "refuse" }, { "create table adv(a int)", "refuse" }, { "alter table people add column z int", "refuse" }, { "begin; delete from people; commit", "refuse" },
+            { "select 1; delete from people", "refuse" }, { "\\! touch /tmp/fq_adv_pg", "refuse" }, { "select 1 \\gexec", "refuse" }, { "copy people to program 'touch /tmp/fq_adv_pg'", "refuse" },
+            { "do $$ begin delete from people; end $$", "refuse" }, { "call nosuch()", "refuse" }, { "set default_transaction_read_only = off", "refuse" }, { "reset all", "refuse" },
+            { "vacuum people", "refuse" }, { "grant all on people to public", "refuse" }, { "lock table people", "refuse" }, { "select pg_read_file('/etc/hostname')", "refuse" },
+            { "select lo_import('/etc/hostname')", "refuse" }, { "select pg_terminate_backend(pg_backend_pid())", "refuse" }, { "select set_config('default_transaction_read_only','off',false)", "refuse" },
+            { "values (1); drop table people", "refuse" }, { "/**/delete from people", "refuse" }, { "(delete from people)", "refuse" }, { "  \n--c\n insert into people(name) values('x')", "refuse" },
+            { "listen x", "refuse" }, { "notify x", "refuse" }, { "savepoint a", "refuse" }, { "prepare p as delete from people", "refuse" }, { "execute p", "refuse" },
+            { "declare c cursor for select 1", "refuse" }, { "create role adv_role", "refuse" }, { "select 1 \\g /tmp/fq_adv_pg", "refuse" }, { "select 'unterminated", "refuse" },
+            { "with x as (delete from people returning *) select * from x", "fail" }, { "with x as (update people set name='z' returning *) select * from x", "fail" },
+            { "with x as (insert into people(name) values ('h') returning *) select * from x", "fail" }, { "select * into adv_new from people", "fail" },
+            { "explain analyze insert into people(name) values ('x')", "fail" }, { "explain analyze delete from people", "fail" }, { "select nextval('people_id_seq')", "fail" },
+            { "select setval('people_id_seq', 999)", "fail" }, { "select * from people for update", "fail" }, { "select txid_current()", "any" },
+            { "select count(*) from people", "ok" }, { "show server_version", "ok" }, { "table people", "ok" }, { "values (1),(2)", "ok" }, { "explain select * from people", "ok" },
+            { "select pg_sleep(0)", "ok" }, { "select 'insert into people' as s", "ok" }, { "select 1 -- ; delete from people", "ok" }, { "select $$ ; delete from people $$", "ok" },
+            { "select E'\\'; delete from people; --' as s", "ok" }, { "select '\\'; delete from people; --'", "any" }, { "select \"a\" from (select 1 as \"a\") q", "ok" } });
+        QCOMPARE(text(pgSnapshot), pgBefore);                                              // not a row, table, role or sequence value changed
+        QCOMPARE(text("ls /tmp | grep -c '^fq_adv_pg'\n"), QStringLiteral("0"));         // no command ran on the server
+
+        QVERIFY(db.saveProfile({ { "name", "SQLite" }, { "engine", "sqlite" }, { "path", "/tmp/fq_adv.db" } }, QString(), false).isEmpty());
+        runCorpus({
+            { "insert into t values (9)", "refuse" }, { "delete from t", "refuse" }, { "drop table t", "refuse" }, { "create table n(a)", "refuse" }, { "vacuum", "refuse" }, { "reindex", "refuse" },
+            { "replace into t values (1)", "refuse" }, { "attach database '/tmp/fq_adv_x.db' as x", "refuse" }, { ".shell touch /tmp/fq_adv_sq", "refuse" },
+            { "select 1\n.shell touch /tmp/fq_adv_sq", "refuse" }, { ".read /etc/passwd", "refuse" }, { "select writefile('/tmp/fq_adv_sq', 'x')", "refuse" },
+            { "select edit('x', 'touch /tmp/fq_adv_sq')", "refuse" }, { "select readfile('/etc/hostname')", "refuse" }, { "select load_extension('/lib/x86_64-linux-gnu/libm.so.6')", "refuse" },
+            { "with c as (select 1) select readfile('/etc/passwd') from c", "refuse" }, { "select name, data from fsdir('/etc')", "refuse" }, { "begin", "refuse" },
+            { "with x as (select 1) delete from t", "fail" }, { "with x as (select 1) insert into t select * from x", "fail" }, { "pragma user_version = 7", "any" },
+            { "pragma journal_mode = wal", "fail" }, { "pragma writable_schema = 1", "any" }, { "pragma temp_store_directory = '/tmp'", "any" },
+            { "select * from t", "ok" }, { "pragma table_info(t)", "ok" }, { "explain select 1", "ok" }, { "select 'a;b' as s", "ok" }, { "select '.shell touch /tmp/fq_adv_sq' as s", "ok" },
+            { "select 1 -- .shell touch /tmp/fq_adv_sq", "ok" } });
+        QCOMPARE(text(sqliteSnapshot), sqliteBefore);                                       // same bytes, no new file next to it
+        QCOMPARE(text("ls /tmp | grep -c '^fq_adv_sq\\|^fq_adv_x'\n"), QStringLiteral("0"));
+
+        // The shell without safe mode is refused, not trusted: simulate a sqlite3 that rejects -safe.
+        QCOMPARE(text("mkdir -p /tmp/fq_adv_bin && printf '#!/bin/sh\\nfor a in \"$@\"; do [ \"$a\" = -safe ] && exit 1; done; exec /usr/bin/sqlite3 \"$@\"\\n' > /tmp/fq_adv_bin/sqlite3 && chmod +x /tmp/fq_adv_bin/sqlite3 && echo done\n"), QStringLiteral("done"));
+        {
+            const QByteArray script = fortiq::buildSqliteScript(fortiq::profileFromVariant({ { "engine", "sqlite" }, { "path", "/tmp/fq_adv.db" } }), "select 1", { 5, 10 }, "FQDELIMX");
+            const SshResult r = shell("PATH=/tmp/fq_adv_bin:$PATH\nexport PATH\n" + script);
+            QVERIFY2(r.status == SshResult::Status::Ok && r.code == "exit:11" && r.message.contains("old-sqlite") && r.data.isEmpty(), qPrintable(r.code + r.message));
+        }
+        shell("rm -rf /tmp/fq_adv_bin /tmp/fq_adv.db\n");
+        controller.removeServer(serverId);
+        settings.remove(pin); settings.remove("servers/profiles"); settings.remove("db/profiles");
+    }
+
+    // Reliability invariants under session changes and failures (disposable test environment only).
+    // Needs FORTIQ_IT_DB, FORTIQ_IT_MAIL and FORTIQ_IT_MAILSEND (PostgreSQL, notmuch, SMTP sink of tool/setup_mail_live_fixture.sh).
+    void reliabilityInvariants() {
+        if (qEnvironmentVariable("FORTIQ_IT_DB").isEmpty() || qEnvironmentVariable("FORTIQ_IT_MAIL").isEmpty() || qEnvironmentVariable("FORTIQ_IT_MAILSEND").isEmpty())
+            QSKIP("FORTIQ_IT_DB, FORTIQ_IT_MAIL and FORTIQ_IT_MAILSEND are all needed");
+        fortiq::RemoteController controller;
+        QSettings settings;
+        settings.remove("servers/profiles"); settings.remove("db/profiles"); settings.remove("mail/notmuchConfig"); settings.remove("mail/displayName");
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        const QString serverA = controller.saveServer({ { "name", "A" }, { "host", base.host }, { "port", base.port }, { "user", base.user }, { "keyPath", key } });
+        const QString serverB = controller.saveServer({ { "name", "B" }, { "host", base.host }, { "port", base.port }, { "user", base.user }, { "keyPath", key } });
+        QVERIFY(!serverA.isEmpty() && !serverB.isEmpty() && serverA != serverB);
+        auto connectTo = [&](const QString &id) {
+            controller.connectTo(id, key.isEmpty() ? base.password : QString());
+            QTRY_VERIFY_WITH_TIMEOUT(controller.connected() && controller.activeServerId() == id, 15000);
+        };
+        auto shell = [&](const QByteArray &script) {
+            fortiq::SshSession session;
+            const SshResult opened = session.open(controller.connectionRequest());
+            if (opened.status != SshResult::Status::Ok) return opened;
+            return session.runScript(script, 262144, {});
+        };
+        auto text = [&](const QByteArray &script) { return QString::fromUtf8(shell(script).data).trimmed(); };
+        auto lastTaskState = [&] { return controller.tasks()->tasks().constLast().toMap().value("state").toString(); };
+        connectTo(serverA);
+        QFile fixtureScript(QString::fromUtf8(QT_TESTCASE_SOURCEDIR) + "/tool/make_mail_fixture.sh");
+        QVERIFY(fixtureScript.open(QIODevice::ReadOnly));
+        QVERIFY(shell("bash -s -- /tmp/fq_mail_out <<'FQ_FIXTURE_END'\n" + fixtureScript.readAll().replace("\r\n", "\n") + "\nFQ_FIXTURE_END\n").code == "exit:0");
+        const QString home = text("printf '%s' \"$HOME\"\n");
+        const QString mailConfig = home + "/mailfix/nm.conf";
+        // A msmtp account for the SMTP sink (the wizard has its own test); CRAM-MD5 because msmtp refuses plain methods without TLS.
+        QVERIFY(shell("rm -rf ~/sinkout/*.eml ~/sinkout/*.env ~/sinkout/delay; umask 077; printf 'account live\\nhost 127.0.0.1\\nport 2525\\nprotocol smtp\\nauth cram-md5\\nuser fqmail\\npassword \"Zq\"7 #x\\\\y$z;w\"\\nfrom me@example.net\\ntls off\\n' > ~/.msmtprc\n").code == "exit:0");
+        const QString dbPassword = QStringLiteral("fqdb-test-pw");
+
+        // ===== 1. A late reply never lands in a newer session (database) =====
+        fortiq::DbController db(&controller);
+        QVERIFY(db.saveProfile({ { "name", "PG" }, { "engine", "postgres" }, { "host", "127.0.0.1" }, { "port", 5432 }, { "user", "fqdb" }, { "database", "fqtest" } }, dbPassword, false).isEmpty());
+        const QString profileId = db.selectedId();
+        db.runQuery("select pg_sleep(3), 'LATE' as marker");
+        QTRY_VERIFY_WITH_TIMEOUT(db.busy(), 5000);
+        controller.disconnectServer();                                  // the session ends while the query runs
+        QVERIFY(!db.busy());
+        QVERIFY2(lastTaskState() == "unknown" || lastTaskState() == "cancelled", qPrintable(lastTaskState()));   // never "succeeded": nobody saw the result
+        connectTo(serverB);                                             // another server profile, a newer generation
+        QTest::qWait(4500);                                             // the stale reply arrives now
+        QVERIFY(db.rows().isEmpty() && db.columns().isEmpty() && db.error().isEmpty());
+        QVERIFY(db.profiles().isEmpty());                               // the profile belongs to server A only
+        QVERIFY(db.selectedId().isEmpty());
+        QVERIFY2(lastTaskState() == "unknown" || lastTaskState() == "cancelled", qPrintable(lastTaskState()));
+        // ... and server A's state comes back intact after reconnecting.
+        controller.disconnectServer();
+        connectTo(serverA);
+        QCOMPARE(db.profiles().size(), 1);
+        db.select(profileId);
+        QTRY_VERIFY_WITH_TIMEOUT(!db.busy(), 20000);                    // the schema read of the selection
+        db.runQuery("select 'AFTER' as marker");
+        QTRY_VERIFY_WITH_TIMEOUT(!db.busy() && !db.rows().isEmpty(), 20000);
+        QCOMPARE(db.rows().first().toList().first().toString(), QStringLiteral("AFTER"));
+
+        // ===== 2. The same for System, Network and Mail reads =====
+        {
+            fortiq::SystemController sys(&controller);
+            fortiq::NetworkController net(&controller);
+            fortiq::MailController mail(&controller);
+            sys.setWindowActive(true); net.setWindowActive(true); mail.setConfigPath(mailConfig); mail.setWindowActive(true);
+            QTRY_VERIFY_WITH_TIMEOUT(sys.busy() || sys.state() == "ready", 5000);
+            controller.disconnectServer();
+            connectTo(serverB);
+            QTest::qWait(3500);
+            // The windows are active, so they reload for server B; only that read may fill them.
+            QTRY_VERIFY_WITH_TIMEOUT(sys.state() == "ready" && net.state() == "ready" && mail.state() == "ready", 30000);   // the windows are active: they reload for B
+            controller.disconnectServer();
+            QCOMPARE(sys.state(), QStringLiteral("disconnected")); QCOMPARE(net.state(), QStringLiteral("disconnected")); QCOMPARE(mail.state(), QStringLiteral("disconnected"));
+            QVERIFY(sys.processes().isEmpty() && sys.services().isEmpty() && net.interfaces().isEmpty() && mail.threads().isEmpty() && mail.folders().isEmpty() && mail.messages().isEmpty());
+            QTest::qWait(1500);
+            QVERIFY(sys.processes().isEmpty() && net.interfaces().isEmpty() && mail.threads().isEmpty());           // nothing arrives late into a closed session
+            connectTo(serverA);
+            QTRY_VERIFY_WITH_TIMEOUT(mail.state() == "ready" && !mail.threads().isEmpty() && !mail.accounts().isEmpty(), 30000);
+            sys.setWindowActive(false); net.setWindowActive(false);
+
+            // ===== 3. An interrupted send is "unknown", never "sent" and never "failed", and nothing is retried =====
+            QVERIFY(shell("echo 4 > ~/sinkout/delay\n").code == "exit:0");   // the sink stores the message but acknowledges 4 s late
+            QVERIFY2(mail.send({ { "account", "live" }, { "to", "you@example.org" }, { "subject", "Reliability" }, { "body", "x" } }).isEmpty(), "send");
+            QTRY_VERIFY_WITH_TIMEOUT(mail.sendState() == "sending", 5000);
+            QTest::qWait(1200);                                              // the connection to msmtp is up and the message is in flight
+            controller.disconnectServer();
+            QCOMPARE(mail.sendState(), QStringLiteral("unknown"));
+            QVERIFY2(mail.sendStatus().contains("ne sait pas"), qPrintable(mail.sendStatus()));
+            QCOMPARE(controller.tasks()->tasks().constLast().toMap().value("kind").toString(), QStringLiteral("mailSend"));
+            QCOMPARE(lastTaskState(), QStringLiteral("unknown"));
+            connectTo(serverA);
+            QTest::qWait(6500);
+            QCOMPARE(mail.sendState(), QStringLiteral("unknown"));         // a later reply or a reconnection does not rewrite history
+            QCOMPARE(lastTaskState(), QStringLiteral("unknown"));
+            const QString delivered = text("ls ~/sinkout | grep -c eml\n");
+            qInfo() << "interrupted send: the sink received" << delivered << "message(s); the client reported unknown";
+            QVERIFY2(delivered == "0" || delivered == "1", qPrintable(delivered));                                    // never more than once
+            QTest::qWait(3000);
+            QCOMPARE(text("ls ~/sinkout | grep -c eml\n"), delivered);                                               // no automatic resend
+            mail.resetSend();
+            QCOMPARE(mail.sendState(), QStringLiteral("idle"));
+            shell("rm -f ~/sinkout/delay\n");
+
+            // ===== 4. A failed mutation changes nothing locally and says so =====
+            QTRY_VERIFY_WITH_TIMEOUT(mail.state() == "ready" && !mail.threads().isEmpty(), 30000);
+            const QVariantMap thread = mail.threads().first().toMap();
+            const QString threadId = thread.value("id").toString();
+            const QStringList tagsBefore = thread.value("tags").toStringList();
+            auto folderCount = [&](const QString &k) { for (const QVariant &f : mail.folders()) if (f.toMap().value("key").toString() == k) return f.toMap().value("count").toInt(); return -2; };
+            const int flaggedBefore = folderCount("flagged");
+            QVERIFY(shell("chmod -R a-w ~/mailfix/.notmuch\n").code == "exit:0");   // the index becomes read-only: tagging must fail
+            mail.setTag(threadId, "flagged", !tagsBefore.contains("flagged"));
+            QTRY_VERIFY_WITH_TIMEOUT(!mail.busy(), 20000);
+            QVERIFY2(mail.status().startsWith(QString::fromUtf8("\xC3\x89tiquette non modifi\xC3\xA9""e")), qPrintable(mail.status()));
+            QCOMPARE(mail.threads().first().toMap().value("tags").toStringList(), tagsBefore);
+            QCOMPARE(folderCount("flagged"), flaggedBefore);
+            QVERIFY(shell("chmod -R u+w ~/mailfix/.notmuch\n").code == "exit:0");
+            mail.setTag(threadId, "flagged", !tagsBefore.contains("flagged"));
+            QTRY_VERIFY_WITH_TIMEOUT(mail.threads().first().toMap().value("tags").toStringList().contains("flagged") != tagsBefore.contains("flagged"), 20000);   // works again
+            mail.setTag(threadId, "flagged", tagsBefore.contains("flagged"));
+            QTRY_VERIFY_WITH_TIMEOUT(!mail.busy(), 20000);
+        }
+
+        // ===== 5. Secrets never reach the client settings in clear =====
+        for (const QString &k : settings.allKeys()) {
+            const QString value = settings.value(k).toString() + QString::fromUtf8(settings.value(k).toByteArray());
+            QVERIFY2(!value.contains(dbPassword) && !value.contains(base.password) && !value.contains("Zq\"7"), qPrintable(k));
+        }
+        QVERIFY(fortiq::SecretStore::load("db-" + profileId).ok);   // it is in the protected store...
+        shell("rm -f ~/.msmtprc\n");
+        controller.removeServer(serverA);                           // ...and leaves with the server
+        QVERIFY(!fortiq::SecretStore::load("db-" + profileId).ok);
+        controller.disconnectServer();
+        settings.remove(pin); settings.remove("servers/profiles"); settings.remove("db/profiles"); settings.remove("mail/notmuchConfig"); settings.remove("mail/displayName");
     }
 
     // The Bases de données app against the test server: SQLite file and PostgreSQL 17 (role fqdb / base fqtest).

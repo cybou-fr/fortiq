@@ -1,6 +1,7 @@
 #include "mail/MailInfo.h"
 
 #include <QFile>
+#include <QRandomGenerator>
 #include <QtTest>
 
 using namespace fortiq;
@@ -131,6 +132,38 @@ private slots:
         const QList<MailMessage> b = parseMailThread(fixture("show_m6.json"));
         QCOMPARE(b[0].subject, QString());
         QCOMPARE(messagesToVariant(b).first().toMap().value("subject").toString(), QString("(sans objet)"));
+    }
+
+    // Audit 23.10.2026: notmuch output is data from a server the user may not control. Truncated, mutated or hostile JSON must not crash the parsers.
+    void parsersSurviveMutatedJson() {
+        QRandomGenerator rng(20261023);
+        for (const char *name : { "search_all.json", "show_m1.json", "show_m3.json", "show_m4.json" }) {
+            const QByteArray good = fixture(name);
+            QVERIFY(!good.isEmpty());
+            for (int round = 0; round < 600; ++round) {
+                QByteArray data = good;
+                switch (round % 3) {
+                case 0: data.truncate(rng.bounded(data.size() + 1)); break;
+                case 1: for (int k = 0; k < 4; ++k) data[rng.bounded(data.size())] = static_cast<char>(rng.bounded(256)); break;
+                default: data.insert(rng.bounded(data.size() + 1), QByteArray("[{\"id\":\"x\",\"body\":[{\"content-type\":\"text/html\",\"content\":\"<script>alert(1)</script>\"}]},[]]")); break;
+                }
+                const QList<MailThread> t = parseMailSearch(data);
+                const QList<MailMessage> m = parseMailThread(data);
+                for (const MailMessage &msg : m) {
+                    QVERIFY2(!msg.html.contains("<script", Qt::CaseInsensitive), qPrintable(msg.html));
+                    QVERIFY(msg.depth >= 0);
+                }
+                Q_UNUSED(t)
+            }
+        }
+        // Hostile shapes: wrong types, absurd nesting, huge numbers.
+        for (const char *json : { "[[[1,2,3]]]", "[[[{\"id\":5}]]]", "[[[{\"id\":\"a\",\"body\":\"text\"}, 7]]]", "[{\"thread\":null,\"tags\":3}]", "{\"a\":1}", "null", "[[[{\"id\":\"a\",\"timestamp\":1e308,\"body\":[null,1,[]]},[]]]]" }) {
+            parseMailSearch(json); parseMailThread(json);
+        }
+        QByteArray deep;
+        for (int i = 0; i < 5000; ++i) deep += "[";
+        for (int i = 0; i < 5000; ++i) deep += "]";
+        parseMailThread(deep); parseMailSearch(deep);   // beyond the JSON parser's depth limit: refused, not a stack overflow
     }
 
     void brokenThreadJson() {

@@ -326,3 +326,9 @@ Not done: attachments (download and send), reply-all/forward/drafts, PGP, OAuth 
 to a private temporary copy on the server and fetches it with the ordinary Files download task (progress, cancel, conflict prompt), removing the copy when that task ends. File names are sanitized and quoted, only
 `~/.cache/fortiq-mail/att.*` can be removed. Verified: unit tests for names, scripts and the cleanup guard, the live `mailAttachmentsStayOnTheServer` test (decoded content, collisions, hostile name, bad part, real download
 task with a conflict, temporary copy gone; live suite 34 passed, 3 skipped), a layout test, CTest 18/18. Not done: attaching files to outgoing mail, opening attachments in place; Android not run on a device.
+
+23 October Architecture & Reliability Gate ([AUDIT_2026-10-23](AUDIT_2026-10-23.md)): acceptance matrix per app (implemented / unit / integration / layout / device), invariant matrix, risk register and ordered backlog. Real defects found and fixed:
+the sqlite3 shell's `writefile()`/`readfile()`/`edit()`/`load_extension()` bypassed the read-only database mode (`-safe` now mandatory, fails closed, plus a function denylist; PostgreSQL side-effect functions denied), mail-wizard backups
+and saved attachments were readable by other local users (now 0600), an interrupted send was forgotten after reconnecting (now "unknown" until dismissed; proven that the message really can be delivered), parser rows longer than the header,
+recipients starting with "-". New evidence: 88-statement adversarial database corpus against real clients, session-switch and late-reply tests across five apps, interrupted-send, failed-mutation and secrets-in-settings checks, structured HTML-attack
+and mutated-JSON/CSV property tests, the 28 publication tests actually run, and `tool/run_live_tests.py` to reproduce everything on a disposable Debian. Not done: device/clean-Windows qualification, CI, sanitizers, a real fuzzer, two distinct hosts.

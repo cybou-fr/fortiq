@@ -70,13 +70,15 @@ SqlScan scanSql(const QString &sql, DbEngine engine) {
     State st = Normal;
     bool content = false, lineStart = true, eString = false, keywordDone = false;
     int blockDepth = 0;
-    QString dollarTag, kw;
+    QString dollarTag, kw, word;
     const qsizetype n = sql.size();
     for (qsizetype i = 0; i < n; ++i) {
         const QChar c = sql.at(i);
         const QChar next = i + 1 < n ? sql.at(i + 1) : QChar();
         switch (st) {
         case Normal:
+            if (c.isLetterOrNumber() || c == QLatin1Char('_')) word += c.toLower();
+            else if (!word.isEmpty()) { r.words << word; word.clear(); }
             if (c.isSpace()) { if (c == QLatin1Char('\n')) lineStart = true; if (!kw.isEmpty()) keywordDone = true; break; }
             if (lineStart && !pg && c == QLatin1Char('.')) r.metaCommand = true;   // sqlite3 shell dot-command (.shell, .read, .import ...)
             lineStart = false;
@@ -128,6 +130,7 @@ SqlScan scanSql(const QString &sql, DbEngine engine) {
             break;
         }
     }
+    if (!word.isEmpty()) r.words << word;
     if (content) ++r.statements;
     r.unterminated = st != Normal && st != Line;
     r.firstKeyword = kw;
@@ -144,6 +147,17 @@ QString readOnlyRefusal(const QString &sql, DbEngine engine) {
         return engine == DbEngine::Postgres ? QStringLiteral("Les commandes psql (\\…) sont refusées : seul du SQL est accepté.")
                                             : QStringLiteral("Les commandes du shell sqlite3 (lignes commençant par un point) sont refusées : seul du SQL est accepté.");
     if (s.statements != 1) return QStringLiteral("Un seul ordre SQL à la fois (%1 détectés).").arg(s.statements);
+    // Defence in depth, not the guard: functions that touch files, other sessions or the server configuration. The real guards are
+    // `sqlite3 -safe -readonly`, the read-only PostgreSQL session and, above all, a database role without those rights.
+    static const QSet<QString> sqliteDenied { "readfile", "writefile", "edit", "load_extension", "fsdir", "fts3_tokenizer" };
+    static const QSet<QString> pgDenied {
+        "pg_terminate_backend", "pg_cancel_backend", "pg_reload_conf", "pg_rotate_logfile", "pg_switch_wal", "pg_promote", "pg_read_file", "pg_read_binary_file",
+        "pg_ls_dir", "pg_stat_file", "pg_ls_logdir", "pg_ls_waldir", "lo_import", "lo_export", "lo_create", "lo_unlink", "lo_put", "dblink", "dblink_exec",
+        "dblink_connect", "dblink_connect_u", "set_config", "pg_create_restore_point", "pg_wal_replay_pause", "pg_wal_replay_resume", "pg_logical_emit_message",
+        "pg_drop_replication_slot", "pg_create_physical_replication_slot", "pg_create_logical_replication_slot", "pg_replication_origin_create" };
+    for (const QString &w : s.words)
+        if ((engine == DbEngine::Sqlite ? sqliteDenied : pgDenied).contains(w))
+            return QStringLiteral("La fonction « %1 » est refusée en mode lecture seule (accès aux fichiers du serveur, aux autres sessions ou à la configuration).").arg(w);
     static const QSet<QString> pgAllowed { "select", "with", "values", "table", "show", "explain" };
     static const QSet<QString> sqliteAllowed { "select", "with", "values", "explain", "pragma" };
     const bool ok = engine == DbEngine::Postgres ? pgAllowed.contains(s.firstKeyword) : sqliteAllowed.contains(s.firstKeyword);
@@ -173,9 +187,10 @@ QByteArray buildSqliteScript(const DbProfile &p, const QString &sql, const DbLim
     const QByteArray d = delimiter.toUtf8();
     QByteArray s = "export LC_ALL=C.UTF-8\nf=" + shQuote(p.path) + "\n";
     s += "command -v sqlite3 >/dev/null 2>&1 || { echo 'FQ-ERR missing-sqlite3' >&2; exit 4; }\n"
+         "sqlite3 -safe :memory: 'select 1' >/dev/null 2>&1 || { echo 'FQ-ERR old-sqlite' >&2; exit 11; }\n"
          "[ -f \"$f\" ] || { echo 'FQ-ERR no-file' >&2; exit 5; }\n"
          "[ -r \"$f\" ] || { echo 'FQ-ERR unreadable' >&2; exit 6; }\n";
-    s += "timeout -k 2 " + QByteArray::number(limits.timeoutSec) + " sqlite3 -readonly -bail -batch -cmd '.timeout 2000' -cmd '.headers on' -cmd '.mode quote' \"$f\" <<'" + d + "'\n";
+    s += "timeout -k 2 " + QByteArray::number(limits.timeoutSec) + " sqlite3 -safe -readonly -bail -batch -cmd '.timeout 2000' -cmd '.headers on' -cmd '.mode quote' \"$f\" <<'" + d + "'\n";
     s += sql.toUtf8();
     if (!sql.endsWith(QLatin1Char('\n'))) s += '\n';
     s += d + "\n";
@@ -219,8 +234,9 @@ QByteArray buildSchemaScript(const DbProfile &p, const QString &password, const 
     if (p.engine == DbEngine::Sqlite) {
         QByteArray s = "export LC_ALL=C.UTF-8\nf=" + shQuote(p.path) + "\n";
         s += "command -v sqlite3 >/dev/null 2>&1 || { echo 'FQ-ERR missing-sqlite3' >&2; exit 4; }\n"
+             "sqlite3 -safe :memory: 'select 1' >/dev/null 2>&1 || { echo 'FQ-ERR old-sqlite' >&2; exit 11; }\n"
              "[ -r \"$f\" ] || { echo 'FQ-ERR unreadable' >&2; exit 6; }\n";
-        s += "timeout -k 2 " + QByteArray::number(limits.timeoutSec) + " sqlite3 -readonly -bail -batch -cmd '.timeout 2000' -cmd '.headers on' -cmd '.mode quote' \"$f\" <<'" + d + "'\n"
+        s += "timeout -k 2 " + QByteArray::number(limits.timeoutSec) + " sqlite3 -safe -readonly -bail -batch -cmd '.timeout 2000' -cmd '.headers on' -cmd '.mode quote' \"$f\" <<'" + d + "'\n"
              "select m.name as tbl, m.type as kind, p.name as col, p.type as typ, p.\"notnull\" as nn from sqlite_master m left join pragma_table_info(m.name) p "
              "where m.type in ('table','view') and m.name not like 'sqlite_%' order by m.name, p.cid;\n" + d + "\n";
         return s;
@@ -290,6 +306,7 @@ DbResult parsePostgresCsv(const QByteArray &data, const QString &nullMarker, int
         if (r.rows.size() >= maxRows) { r.truncated = true; break; }
         QVariantList cells = all.at(i);
         while (cells.size() < r.columns.size()) cells << QVariant();
+        while (cells.size() > r.columns.size()) cells.removeLast();   // a table never has more cells than headers
         r.rows << cells;
     }
     if (incomplete) r.truncated = true;
@@ -343,6 +360,7 @@ DbResult parseSqliteQuote(const QByteArray &data, int maxRows, bool incomplete) 
         if (r.rows.size() >= maxRows) { r.truncated = true; break; }
         QVariantList cells = all.at(k);
         while (cells.size() < r.columns.size()) cells << QVariant();
+        while (cells.size() > r.columns.size()) cells.removeLast();   // a table never has more cells than headers
         r.rows << cells;
     }
     if (incomplete || cut) r.truncated = true;
@@ -353,6 +371,7 @@ DbResult parseSqliteQuote(const QByteArray &data, int maxRows, bool incomplete) 
 
 QString describeDbFailure(DbEngine engine, int exitCode, const QString &stderrText, int timeoutSec) {
     const QString err = stderrText.trimmed();
+    if (err.contains(QLatin1String("FQ-ERR old-sqlite"))) return QStringLiteral("Ce sqlite3 est trop ancien pour le mode sûr (-safe, version 3.31 au moins) : par prudence, aucune requête n'est exécutée.");
     if (err.contains(QLatin1String("FQ-ERR missing-sqlite3"))) return QStringLiteral("sqlite3 n'est pas installé sur ce serveur (sudo apt install sqlite3).");
     if (err.contains(QLatin1String("FQ-ERR missing-psql"))) return QStringLiteral("psql n'est pas installé sur ce serveur (sudo apt install postgresql-client).");
     if (err.contains(QLatin1String("FQ-ERR no-file"))) return QStringLiteral("Le fichier SQLite n'existe pas sur le serveur.");

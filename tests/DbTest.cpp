@@ -1,5 +1,7 @@
 #include "db/DbInfo.h"
 
+#include <QRandomGenerator>
+#include <QSet>
 #include <QtTest>
 
 using namespace fortiq;
@@ -111,6 +113,72 @@ private slots:
         QVERIFY(!readOnlyRefusal(QString("select 1") + QChar::Null, pg).isEmpty());
     }
 
+    // Audit 23.10.2026: the sqlite3 shell provides writefile()/readfile()/edit()/load_extension() as SQL functions. They passed the keyword check and
+    // "-readonly" does not stop them (live proof: writefile created a file). They are refused here and `-safe` removes them in the shell.
+    void shellFunctionsAreRefused() {
+        const auto sq = DbEngine::Sqlite, pg = DbEngine::Postgres;
+        for (const char *sql : { "select writefile('/tmp/x', 'y')", "SELECT WriteFile('/tmp/x','y')", "select readfile('/etc/passwd')", "select edit('x', 'true')",
+                                 "select load_extension('/lib/x.so')", "select name, data from fsdir('/etc')", "select 1 where writefile ('/tmp/x','y')",
+                                 "with c as (select readfile('/etc/hostname')) select * from c", "select/**/writefile/**/('/tmp/x','y')" }) {
+            QVERIFY2(!readOnlyRefusal(QString::fromUtf8(sql), sq).isEmpty(), sql);
+            QVERIFY2(readOnlyRefusal(QString::fromUtf8(sql), sq).contains("refus"), sql);
+        }
+        // Names inside strings, comments and quoted identifiers are data, not calls.
+        QVERIFY(readOnlyRefusal("select 'writefile' as a, \"readfile\" from t", sq).isEmpty());
+        QVERIFY(readOnlyRefusal("select 1 -- readfile(\n", sq).isEmpty());
+        QVERIFY(readOnlyRefusal("select 1 /* edit */", sq).isEmpty());
+        QVERIFY(readOnlyRefusal("select my_readfile_count from t", sq).isEmpty());   // only whole identifiers
+        for (const char *sql : { "select pg_terminate_backend(123)", "select PG_CANCEL_BACKEND(1)", "select pg_read_file('/etc/passwd')", "select lo_import('/etc/passwd')",
+                                 "select pg_reload_conf()", "select set_config('default_transaction_read_only','off',false)", "select * from dblink('x','select 1') as t(a int)",
+                                 "select pg_ls_dir('.')", "select pg_switch_wal()" })
+            QVERIFY2(!readOnlyRefusal(QString::fromUtf8(sql), pg).isEmpty(), sql);
+        QVERIFY(readOnlyRefusal("select pg_sleep(1), now(), version()", pg).isEmpty());
+        QVERIFY(readOnlyRefusal("select count(*) from pg_stat_activity", pg).isEmpty());
+        // The same names are ordinary words for the other engine's rules.
+        QVERIFY(readOnlyRefusal("select writefile from t", pg).isEmpty());
+        QCOMPARE(scanSql("select a, b2 from t where c = 'x y' -- z", sq).words, QStringList({ "select", "a", "b2", "from", "t", "where", "c" }));
+    }
+
+    // Audit 23.10.2026: random input must never crash the parsers, and a statement the scanner lets through must satisfy the read-only contract.
+    void parsersSurviveRandomOutput() {
+        QRandomGenerator rng(20261023);
+        const QByteArray alphabet = "ab1 ,,\n\n\"\"''XNULL<<N>>x';\r\\\xC3\xA9";
+        for (int round = 0; round < 4000; ++round) {
+            QByteArray data;
+            const int len = rng.bounded(0, 260);
+            for (int i = 0; i < len; ++i) data += alphabet.at(rng.bounded(alphabet.size()));
+            const int maxRows = rng.bounded(1, 6);
+            for (const DbResult &r : { parsePostgresCsv(data, "<<N>>", maxRows, round % 2 == 0), parseSqliteQuote(data, maxRows, round % 2 == 1) }) {
+                QVERIFY(r.rows.size() <= maxRows);
+                for (const QVariantList &row : r.rows) QCOMPARE(row.size(), r.columns.size());
+                QVERIFY(r.numeric.size() == r.columns.size() || r.columns.isEmpty());
+            }
+        }
+    }
+
+    void scannerAcceptsOnlyOneAllowedStatement() {
+        QRandomGenerator rng(7);
+        const QStringList tokens { "select", "with", "values", "table", "show", "explain", "pragma", "insert", "delete", "drop", "update", "create", "set", "begin", "copy", "do", "call",
+                                   "1", "x", "*", "from", "t", "(", ")", ";", ";", "'a'", "'it''s'", "\"q\"", "$$", "$t$", "/*", "*/", "--", "\n", " ", "\\", ".", "[", "]", "`", "E'", "'", "writefile", "pg_read_file" };
+        for (const DbEngine engine : { DbEngine::Postgres, DbEngine::Sqlite }) {
+            int accepted = 0;
+            for (int round = 0; round < 20000; ++round) {
+                QString sql;
+                const int n = rng.bounded(1, 14);
+                for (int i = 0; i < n; ++i) sql += tokens.at(rng.bounded(tokens.size())) + (rng.bounded(4) ? QStringLiteral(" ") : QString());
+                if (!readOnlyRefusal(sql, engine).isEmpty()) continue;
+                ++accepted;
+                const SqlScan s = scanSql(sql, engine);
+                QCOMPARE(s.statements, 1);
+                QVERIFY2(!s.metaCommand && !s.unterminated, qPrintable(sql));
+                static const QSet<QString> pgOk { "select", "with", "values", "table", "show", "explain" }, sqOk { "select", "with", "values", "explain", "pragma" };
+                QVERIFY2((engine == DbEngine::Postgres ? pgOk : sqOk).contains(s.firstKeyword), qPrintable(sql));
+                QVERIFY2(engine == DbEngine::Sqlite ? !s.words.contains("writefile") : !s.words.contains("pg_read_file"), qPrintable(sql));
+            }
+            QVERIFY2(accepted > 50, "the generator must produce acceptable statements too");
+        }
+    }
+
     void limits() {
         const DbLimits l = clampLimits({ 0, 99999 });
         QCOMPARE(l.timeoutSec, 1); QCOMPARE(l.maxRows, 5000);
@@ -122,7 +190,8 @@ private slots:
         DbProfile p; p.engine = DbEngine::Sqlite; p.path = "/home/u/it's.db";
         const QString d = randomToken();
         const QByteArray s = buildSqliteScript(p, "select 'a'", { 10, 100 }, d);
-        QVERIFY(s.contains("sqlite3 -readonly -bail -batch"));
+        QVERIFY(s.contains("sqlite3 -safe -readonly -bail -batch"));
+        QVERIFY(s.contains("sqlite3 -safe :memory: 'select 1' >/dev/null 2>&1 || { echo 'FQ-ERR old-sqlite' >&2; exit 11; }"));   // fails closed on a shell without safe mode
         QVERIFY(s.contains("f='/home/u/it'\\''s.db'"));
         QVERIFY(s.contains("timeout -k 2 10 "));
         QVERIFY(s.contains("<<'" + d.toUtf8() + "'\nselect 'a'\n" + d.toUtf8() + "\n"));

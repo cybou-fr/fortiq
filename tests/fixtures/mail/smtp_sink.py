@@ -63,6 +63,10 @@ class Handler(socketserver.StreamRequestHandler):
                 n = counter[0] = counter[0] + 1
                 open(os.path.join(OUT, "%d.eml" % n), "wb").write(b"".join(body))
                 open(os.path.join(OUT, "%d.env" % n), "w").write("from %s\n" % sender + "".join("rcpt %s\n" % r for r in rcpts))
+                # Reliability tests: the message is stored, but the acknowledgement is held back (file <outdir>/delay holds the seconds).
+                delay = os.path.join(OUT, "delay")
+                if os.path.exists(delay):
+                    time.sleep(float(open(delay).read().strip() or 0))
                 self.send("250 queued")
             elif up == "RSET":
                 sender, rcpts = None, []

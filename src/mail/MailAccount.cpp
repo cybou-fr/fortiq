@@ -245,7 +245,7 @@ QByteArray buildSetupWriteScript(const QString &name, const QList<MailSetupFile>
             if (!f.mkdirPath.isEmpty())
                 s += "mkdir -p " + shQuote(f.mkdirPath) + " || { rm -f \"$new\"; echo 'FQ-ERR mkdir' >&2; exit 8; }\n";
             s += "if [ -e \"$f\" ]; then\n"
-                 "  cp -p \"$f\" \"$f.fortiq-bak-" + stamp.toUtf8() + "\" || { rm -f \"$new\"; echo 'FQ-ERR backup' >&2; exit 6; }\n"
+                 "  cp -p \"$f\" \"$f.fortiq-bak-" + stamp.toUtf8() + "\" && chmod 600 \"$f.fortiq-bak-" + stamp.toUtf8() + "\" || { rm -f \"$new\"; echo 'FQ-ERR backup' >&2; exit 6; }\n"
                  "  awk -v b=" + shQuote(f.beginMarker) + " -v e=" + shQuote(f.endMarker) + " '$0==b{skip=1;next} $0==e{skip=0;next} !skip{print}' \"$f\" > \"$new\" || { rm -f \"$new\"; echo 'FQ-ERR strip' >&2; exit 9; }\n"
                  "  if [ -s \"$new\" ]; then echo >> \"$new\"; fi\n"
                  "fi\n";

@@ -4,6 +4,8 @@
 #include "browser/UrlTools.h"
 
 #include <QRandomGenerator>
+#include <QRegularExpression>
+#include <QSet>
 
 namespace fortiq {
 class BrowserTest : public QObject {
@@ -273,6 +275,62 @@ private slots:
         for (int i = 0; i < 2000; ++i) deep += "<div>";
         deep += "end";
         QVERIFY(balanced(clean(deep)));
+    }
+    // Audit 23.10.2026: the output grammar, not a blacklist. Whatever is fed in, every tag that comes out is in a small allow-list, carries
+    // only href (http/https) / colspan / rowspan / start, and nothing executable or loadable survives.
+    void structuredAttacksProduceOnlyTheAllowedGrammar() {
+        static const QStringList fragments {
+            "<script>alert(1)</script>", "<SCRIPT SRC=//x.example/a.js></SCRIPT>", "<img src=x onerror=alert(1)>", "<img src=\"http://track.example/p.gif\">",
+            "<a href=\"javascript:alert(1)\">x</a>", "<a href=\"  JaVaScRiPt:alert(1)\">x</a>", "<a href=\"data:text/html;base64,PHNjcmlwdD4=\">d</a>",
+            "<a href=\"vbscript:x\">v</a>", "<a href=\"//evil.example/x\">protocol-relative</a>", "<a href=\"https://ok.example/p?q=1&amp;r=2\" onclick=\"x()\" style=\"color:red\">ok</a>",
+            "<a href=\"file:///etc/passwd\">f</a>", "<a href=\"ftp://x\">ftp</a>", "<iframe src=\"//x\"></iframe>", "<object data=x></object>", "<embed src=x>",
+            "<svg onload=alert(1)><circle/></svg>", "<math><mi xlink:href=\"javascript:x\">x</mi></math>", "<form action=\"//x\"><input name=a value=b><button>go</button></form>",
+            "<link rel=stylesheet href=//x.css>", "<meta http-equiv=\"refresh\" content=\"0;url=javascript:x\">", "<base href=\"//evil.example/\">",
+            "<style>body{background:url(//x)}</style>", "<div style=\"background:url(javascript:x)\">s</div>", "<body onload=alert(1)>", "<p onmouseover=\"x()\">hover</p>",
+            "<video src=x controls></video>", "<audio src=x></audio>", "<textarea><script>x</script></textarea>", "<noscript><img src=x onerror=y></noscript>",
+            "<table><tr><td colspan=2 rowspan=3 onclick=x>c</td></tr></table>", "<ol start=\"3\" type=\"I\"><li>i</li></ol>", "<!-- <script>x</script> -->", "<![CDATA[<script>x</script>]]>",
+            "<a href=\"https://ok.example/\"><a href=\"https://ok2.example/\">nested</a></a>", "&lt;script&gt;alert(1)&lt;/script&gt;", "&#x3C;script&#x3E;", "<scr<script>ipt>x</scr</script>ipt>",
+            "<a href='https://ok.example/\" onclick=\"x'>quote</a>", "<a href=`javascript:x`>b</a>", "\x00<script>", "<template><script>x</script></template>", "<h1>Title</h1><p>text <b>bold</b></p>" };
+        QRandomGenerator rng(20261023);
+        static const QSet<QString> allowedTags { "a", "p", "br", "b", "i", "em", "strong", "u", "s", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "table", "thead", "tbody",
+                                                "tfoot", "tr", "td", "th", "caption", "blockquote", "pre", "code", "hr", "div", "span", "sub", "sup", "dl", "dt", "dd", "small", "big", "center", "tt", "cite", "q", "del", "ins", "mark", "abbr", "font" };
+        static const QRegularExpression tagRe(QStringLiteral("<(/?)([A-Za-z][A-Za-z0-9]*)([^<>]*)>"));
+        static const QRegularExpression attrRe(QStringLiteral("([A-Za-z-]+)=\"([^\"]*)\""));
+        for (int round = 0; round < 4000; ++round) {
+            QString in;
+            const int parts = rng.bounded(1, 7);
+            for (int i = 0; i < parts; ++i) in += fragments.at(rng.bounded(fragments.size())) + (rng.bounded(3) == 0 ? QStringLiteral("text ") : QString());
+            const auto page = sanitizeHtml(in, "https://base.example/dir/", round % 3 == 0);
+            const QString out = page.html;
+            auto it = tagRe.globalMatch(out);
+            while (it.hasNext()) {
+                const auto m = it.next();
+                const QString tag = m.captured(2).toLower();
+                QVERIFY2(allowedTags.contains(tag), qPrintable(tag + " in " + out + " from " + in));
+                const QString attrs = m.captured(3);
+                auto ai = attrRe.globalMatch(attrs);
+                QString leftover = attrs;
+                while (ai.hasNext()) {
+                    const auto a = ai.next();
+                    const QString name = a.captured(1).toLower(), value = a.captured(2);
+                    leftover.remove(a.captured(0));
+                    if (name == "href") {
+                        QVERIFY2(tag == "a", qPrintable(out));
+                        QVERIFY2(value.startsWith("http://") || value.startsWith("https://"), qPrintable(value + " in " + out + " from " + in));
+                        QVERIFY2(!value.contains('"') && !value.contains('<') && !value.contains('>'), qPrintable(value));
+                    } else {
+                        QVERIFY2(name == "colspan" || name == "rowspan" || name == "start", qPrintable(name + " in " + out + " from " + in));
+                        bool numeric = false;
+                        value.toInt(&numeric);
+                        QVERIFY2(numeric, qPrintable(value));
+                    }
+                }
+                QVERIFY2(leftover.trimmed().isEmpty() || leftover.trimmed() == "/", qPrintable("leftover [" + leftover + "] in " + out));
+            }
+            QVERIFY2(!out.contains("<!--") && !out.contains("<![CDATA["), qPrintable(out));
+            QVERIFY2(!out.contains("alert(1)") || !out.contains("<script"), qPrintable(out));
+            QVERIFY2(!out.contains(QChar(0)), qPrintable(out));
+        }
     }
     void survivesRandomGarbage() {
         QRandomGenerator rng(12345);

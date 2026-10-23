@@ -44,7 +44,7 @@ private slots:
         QCOMPARE(a[2].addr, QString("e@f.org"));
         QVERIFY(parseMailAddresses(QString(), &a, &err)); QVERIFY(a.isEmpty());
         QVERIFY(parseMailAddresses("o'brien@example.org", &a, &err));
-        for (const char *bad : { "nobody", "a@b", "a@b..org", "x@y.org\nBcc: z@w.org", "Name <a@b.org", "\"open <a@b.org>", "a b@c.org", "zoë@example.org", "a@b.org>" }) {
+        for (const char *bad : { "nobody", "a@b", "a@b..org", "x@y.org\nBcc: z@w.org", "Name <a@b.org", "\"open <a@b.org>", "a b@c.org", "zoë@example.org", "a@b.org>", "-oQ/tmp@evil.example", "-X@b.org" }) {
             QVERIFY2(!parseMailAddresses(QString::fromUtf8(bad), &a, &err), bad);
             QVERIFY(!err.isEmpty());
         }
@@ -246,6 +246,7 @@ private slots:
         const QByteArray script = buildMailWriteForTest(files);
         QVERIFY(script.startsWith("umask 077\n"));
         QVERIFY(script.contains("cp -p \"$f\" \"$f.fortiq-bak-20261023120000\""));
+        QVERIFY(script.contains("chmod 600 \"$f.fortiq-bak-20261023120000\""));       // the backup may hold the old passwords: never group/world readable
         QVERIFY(script.contains("mktemp \"$f.fortiq-new.XXXXXX\""));
         QVERIFY(script.contains("awk -v b='# >>> FORTIQ account perso' -v e='# <<< FORTIQ account perso'"));
         QVERIFY(script.contains("chmod 600 \"$f\""));
@@ -304,7 +305,7 @@ private slots:
         QVERIFY(s.contains("notmuch show --format=raw --part=3 -- 'id:m3@example.org' > \"$tmp\""));
         QVERIFY(s.contains("dir=\"$HOME/Downloads\"") && s.contains("name='Rapport.pdf'"));
         QVERIFY(s.contains("final=\"$dir/$stem ($i)$ext\""));                 // never overwrites
-        QVERIFY(s.contains("chmod 644") && !s.contains("rm -rf"));
+        QVERIFY(s.contains("umask 077") && s.contains("chmod 600") && !s.contains("chmod 644") && !s.contains("rm -rf"));   // private mail stays private on the server
         const QByteArray t = buildAttachmentSaveScript("m3@example.org", 3, "x'y.pdf", "temp", "/home/u/nm.conf");
         QVERIFY(t.contains("name='x'\\''y.pdf'") && t.contains("NOTMUCH_CONFIG='/home/u/nm.conf'"));
         QVERIFY(t.contains("mktemp -d \"$base/att.XXXXXX\"") && t.contains("chmod 600") && t.contains("-mmin +1440"));

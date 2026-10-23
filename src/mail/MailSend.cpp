@@ -24,7 +24,8 @@ bool hasControl(const QString &s) {
 
 bool validAddrSpec(const QString &addr) {
     static const QRegularExpression re(QStringLiteral("^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$"));
-    return addr.size() <= 254 && re.match(addr).hasMatch() && !addr.contains(QLatin1String(".."));
+    // A leading "-" could be taken for an option by a mail tool (the lesson in DEVELOPMENT_MATRIX): refused although `--` is also used.
+    return addr.size() <= 254 && re.match(addr).hasMatch() && !addr.contains(QLatin1String("..")) && !addr.startsWith(QLatin1Char('-'));
 }
 
 QString stripQuotes(QString name) {
