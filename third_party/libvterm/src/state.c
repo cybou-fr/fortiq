@@ -1259,6 +1259,9 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
 
   case 0x62: { // REP - ECMA-48 8.3.103
     const int row_width = THISROWWIDTH(state);
+    /* FORTIQ: no previous glyph (combine_width == 0) made the loop below spin forever */
+    if(state->combine_width <= 0)
+      break;
     count = CSI_ARG_COUNT(args[0]);
     col = state->pos.col + count;
     UBOUND(col, row_width);

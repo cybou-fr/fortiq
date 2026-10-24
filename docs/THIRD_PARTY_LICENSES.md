@@ -58,7 +58,7 @@ FORTIQ их не использует: `windeployqt` и `androiddeployqt` под
 | libssh2 | BSD-3-Clause | `libssh2.dll`, в APK статически | `licenses/libssh2.txt` |
 | OpenSSL 3 | Apache-2.0 | `libcrypto-3-x64.dll` | `licenses/openssl.txt` |
 | zlib | Zlib | `z.dll` | `licenses/zlib.txt` |
-| libvterm 0.3.3 | MIT | статически, `third_party/libvterm` | `licenses/libvterm.txt` |
+| libvterm 0.3.3 (с тремя локальными заплатками, см. `third_party/libvterm/README.fortiq.md`) | MIT | статически, `third_party/libvterm` | `licenses/libvterm.txt` |
 | MSVC runtime | Microsoft redistributable | `vcruntime140*.dll`, `msvcp140*.dll` | условия Visual Studio |
 | Mesa llvmpipe | MIT и др. | `opengl32sw.dll` (из Qt для Windows) | перечислен в уведомлениях; полные тексты Mesa/LLVM в пакет **не** добавлены — открытый пункт |
 | `d3dcompiler_47.dll` | Microsoft (DirectX) | из Qt для Windows | перечислен |

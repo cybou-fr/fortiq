@@ -226,8 +226,17 @@ void TerminalView::clearSelection() {
     m_selectionStart = m_selectionEnd = m_selectionAnchor = -1;
     if (selected) { update(); emit selectionChanged(); }
 }
-void TerminalView::paste(const QString &text) {
-    if (!m_inputEnabled || text.toUtf8().size() > 16000 || text.contains(QChar::Null)) return;
+void TerminalView::paste(const QString &pasted) {
+    if (!m_inputEnabled || pasted.toUtf8().size() > 16000 || pasted.contains(QChar::Null)) return;
+    // Pasted text is data. An ESC in it could end bracketed paste early ("ESC[201~") and make the rest run as typed
+    // commands, and other control characters act as keystrokes: only tab and line breaks survive.
+    QString text;
+    text.reserve(pasted.size());
+    for (const QChar c : pasted) {
+        const ushort u = c.unicode();
+        if ((u < 0x20 && u != 0x09 && u != 0x0a && u != 0x0d) || u == 0x7f || (u >= 0x80 && u <= 0x9f)) continue;
+        text += c;
+    }
     vterm_keyboard_start_paste(m_vt); textInput(text); vterm_keyboard_end_paste(m_vt);
 }
 void TerminalView::insertHistory(const QString &text) {
