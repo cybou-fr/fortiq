@@ -50,6 +50,7 @@ ApplicationWindow {
         systemController: typeof systemInfo !== "undefined" ? systemInfo : null
         dbController: typeof databases !== "undefined" ? databases : null
         mailController: typeof mail !== "undefined" ? mail : null
+        licenseController: typeof license !== "undefined" ? license : null
         documentsController: typeof documents !== "undefined" ? documents : null
         fixture: shellFixture
         fixturePreview: shellFixturePreview
