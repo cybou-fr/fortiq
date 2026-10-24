@@ -3,7 +3,7 @@
 namespace fortiq {
 SshResult SshSession::download(const QString &remotePath, const QString &localPath, const TransferProgress &progress)
 {
-    if (!isOpen()) return transferFail(QStringLiteral("SSH session is not open."));
+    if (!isOpen()) return transferFail(QStringLiteral("La session SSH n'est pas ouverte."));
     const auto clean = cleanAbsolutePath(remotePath);
     if (!clean || localPath.isEmpty()) return transferFail(QStringLiteral("Invalid transfer paths."));
     const QByteArray pathUtf8 = clean->toUtf8();
@@ -18,8 +18,8 @@ SshResult SshSession::download(const QString &remotePath, const QString &localPa
                                          LIBSSH2_SFTP_STAT, &attr);
     if (statResult != 0) {
         if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
-            d->close();
-            return transferFail(QStringLiteral("SSH connection lost before download started."), QStringLiteral("disconnected"));
+            d->closeLost();
+            return transferFail(QStringLiteral("Connexion SSH perdue avant le début du téléchargement."), QStringLiteral("disconnected"));
         }
         return transferFail(QStringLiteral("Cannot read remote file (permission or path error; SFTP %1).")
                             .arg(libssh2_sftp_last_error(d->sftp)));
@@ -57,7 +57,7 @@ SshResult SshSession::download(const QString &remotePath, const QString &localPa
         if (n < 0) {
             libssh2_sftp_close(file);
             cancelLocal();
-            if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) d->close();
+            if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) d->closeLost();
             return transferFail(QStringLiteral("Download interrupted; the local file was not created."));
         }
         if (out.write(buffer.data(), n) != n) {
@@ -100,7 +100,7 @@ SshResult SshSession::download(const QString &remotePath, const QString &localPa
 SshResult SshSession::upload(const QString &localPath, const QString &remoteDir, const QString &name,
                              ConflictPolicy policy, const TransferProgress &progress)
 {
-    if (!isOpen()) return transferFail(QStringLiteral("SSH session is not open."));
+    if (!isOpen()) return transferFail(QStringLiteral("La session SSH n'est pas ouverte."));
     const auto dir = cleanAbsolutePath(remoteDir);
     const auto target = dir ? safeChildPath(*dir, name) : std::nullopt;
     if (!target) return transferFail(QStringLiteral("Invalid remote destination."));
@@ -182,9 +182,9 @@ SshResult SshSession::upload(const QString &localPath, const QString &remoteDir,
                 const bool lost = libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL;
                 libssh2_sftp_close(file);
                 if (lost) {
-                    d->close();
+                    d->closeLost();
                     // Nothing was published; only the owned temporary may remain.
-                    return transferFail(QStringLiteral("Connection lost during upload; nothing was published (a hidden temporary %1 may remain).")
+                    return transferFail(QStringLiteral("Connexion perdue pendant l'envoi ; rien n'a été publié (un fichier temporaire caché %1 peut subsister).")
                                             .arg(tempPath.section('/', -1)));
                 }
                 removeTemp();
@@ -254,8 +254,8 @@ SshResult SshSession::upload(const QString &localPath, const QString &remoteDir,
     if (published != 0) {
         if (!isOpen() || (published != LIBSSH2_ERROR_METHOD_NOT_SUPPORTED
             && libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL)) {
-            d->close();
-            return transferFail(QStringLiteral("Connection lost while publishing; check the folder before retrying."), QStringLiteral("unknown"));
+            d->closeLost();
+            return transferFail(QStringLiteral("Connexion perdue pendant la publication ; vérifiez le dossier avant de réessayer."), QStringLiteral("unknown"));
         }
         removeTemp();
         if (replacement)

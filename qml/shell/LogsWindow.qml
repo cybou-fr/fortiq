@@ -658,4 +658,5 @@ Item {
             win.height = Math.max(380, win.height + m.y - press.y)
         }
     }
+    LinkBanner { remote: win.remote; touch: win.adaptive; onRetry: if (win.logs) win.logs.reload() }
 }

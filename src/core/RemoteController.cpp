@@ -1,4 +1,5 @@
 #include "RemoteControllerInternal.h"
+#include "../ssh/LinkMonitor.h"
 
 namespace fortiq {
 RemoteController::RemoteController(QObject *parent)
@@ -12,6 +13,8 @@ RemoteController::RemoteController(QObject *parent)
     m_pool.setExpiryTimeout(-1);
     m_transferPool.setMaxThreadCount(1);
     m_transferPool.setExpiryTimeout(-1);
+    connect(&LinkMonitor::instance(), &LinkMonitor::changed, this, [this](const QString &key) { if (key == linkKey()) emit linkChanged(); });
+    connect(this, &RemoteController::changed, this, &RemoteController::linkChanged);   // server switched or disconnected
     m_ownedTasks = std::make_unique<TaskManager>();
     setTaskManager(m_ownedTasks.get());
 }
@@ -174,7 +177,21 @@ void RemoteController::refresh() {
     if (m_connected && !m_currentDirectory.isEmpty()) request(Kind::List, m_currentDirectory, false);
 }
 
+QString RemoteController::linkKey() const {
+    return m_connected && !m_host.isEmpty() ? LinkMonitor::key(m_host, m_port, m_user) : QString();
+}
+bool RemoteController::linkLost() const { const QString key = linkKey(); return !key.isEmpty() && LinkMonitor::instance().lost(key); }
+QString RemoteController::linkLostAt() const {
+    const QString key = linkKey();
+    return key.isEmpty() ? QString() : LinkMonitor::instance().state(key).lostAt.toString(QStringLiteral("HH:mm"));
+}
+QString RemoteController::linkText() const {
+    if (!linkLost()) return {};
+    return QStringLiteral("Connexion perdue à %1 — les données affichées datent d'avant la coupure. Une nouvelle connexion est tentée à chaque actualisation.").arg(linkLostAt());
+}
+
 void RemoteController::disconnectServer() {
+    LinkMonitor::forget(linkKey());   // an intentional disconnect is not a lost link
     m_rememberPending = false;
     clearSearch();
     auto searchSlot = m_searchSession;

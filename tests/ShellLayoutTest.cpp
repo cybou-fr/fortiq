@@ -241,7 +241,7 @@ QtObject {
     function downloadAttachment(id, part, name, url) { calls = calls.concat(['attach-pc:' + id + ':' + part + ':' + name]) }
 })";
 static const char kFakeRemote[] = R"(import QtQml
-QtObject { property bool connected: true; property string serverLabel: "fixture@server" })";
+QtObject { property bool connected: true; property string serverLabel: "fixture@server"; property bool linkLost: false; property string linkText: "Connexion perdue à 12:00 — les données affichées datent d’avant la coupure." })";
 #endif
 
 class ShellLayoutTest : public QObject {
@@ -458,6 +458,21 @@ private slots:
                 click(findByName(sysWin, "systemAuto"));
                 QTRY_VERIFY_WITH_TIMEOUT(fakeSys->property("reloads").toInt() > before, 8000);
                 click(findByName(sysWin, "systemAuto"));
+                {   // Link lost: a banner with the French sentence and "Réessayer"; it goes away when the link is back.
+                    auto *banner = findByName(sysWin, "linkBanner"); QVERIFY(banner);
+                    QVERIFY(!banner->isVisible());
+                    sysRemote->setProperty("linkLost", true);
+                    QTRY_V(banner->isVisible());
+                    auto *bannerText = findByName(banner, "linkBannerText"); QVERIFY(bannerText);
+                    QVERIFY(bannerText->property("text").toString().contains("Connexion perdue"));
+                    QVERIFY(banner->x() >= 0 && banner->x() + banner->width() <= sysWin->width() && banner->y() >= 0 && banner->y() + banner->height() <= sysWin->height());
+                    const int reloadsBefore = fakeSys->property("reloads").toInt();
+                    click(findByName(banner, "linkBannerRetry"));
+                    QTRY_V(fakeSys->property("reloads").toInt() > reloadsBefore);
+                    QVERIFY(window->grabWindow().save(QString("layout-captures/%1-link-lost.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+                    sysRemote->setProperty("linkLost", false);
+                    QTRY_V(!banner->isVisible());
+                }
                 shell->setProperty("systemOpen", false);
                 shell->setProperty("systemController", QVariant::fromValue<QObject *>(nullptr));
             }
@@ -1171,6 +1186,22 @@ private slots:
             QVERIFY(dialog->isVisible());
             QVERIFY(editor->property("dirty").toBool());
             QVERIFY(window->grabWindow().save(QString("layout-captures/%1-unsaved.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+        }
+        {   // The server pill turns red and says so when the link is lost.
+            auto *pill = findByName(shell, "sessionPill"); QVERIFY(pill);
+            auto *bar = pill->parentItem(); QVERIFY(bar);
+            bar->setProperty("connected", true); bar->setProperty("serverLabel", "fixture@server"); bar->setProperty("linkLost", false);
+            settle(window);
+            auto *dot = findByName(pill, "sessionDot"); QVERIFY(dot);
+            auto *label = findByName(pill, "sessionPillText"); QVERIFY(label);
+            QCOMPARE(dot->property("color").value<QColor>(), QColor("#4ADE80"));
+            QVERIFY(!label->property("text").toString().contains("perdue"));
+            bar->setProperty("linkLost", true);
+            settle(window);
+            QCOMPARE(dot->property("color").value<QColor>(), QColor("#F87171"));
+            QVERIFY(label->property("text").toString().contains("connexion perdue"));
+            QVERIFY(pill->x() >= 0 && pill->x() + pill->width() <= shell->width());
+            QVERIFY(window->grabWindow().save(QString("layout-captures/%1-pill-lost.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
         }
         for (const auto &entry : warnings) for (const auto &error : qvariant_cast<QList<QQmlError>>(entry.first()))
             QVERIFY2(!error.description().contains("Error") && !error.description().contains("Binding loop")

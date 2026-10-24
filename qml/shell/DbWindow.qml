@@ -440,4 +440,5 @@ Item {
             }
         }
     }
+    LinkBanner { remote: win.remote; touch: win.adaptive; onRetry: if (win.db && !win.db.busy) win.db.loadSchema() }
 }

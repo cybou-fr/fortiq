@@ -307,4 +307,5 @@ Item {
         visible: win.network !== null && win.network.notes.length > 0 && win.section !== "diag"
         text: win.network ? win.network.notes.join("  ·  ") : ""; color: Theme.inkMuted; font.pixelSize: 10
     }
+    LinkBanner { remote: win.remote; touch: win.adaptive; onRetry: if (win.network && !win.network.busy) win.network.reload() }
 }

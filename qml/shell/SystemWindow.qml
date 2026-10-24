@@ -74,7 +74,7 @@ Item {
     function pct(v) { return v.toFixed(1) + " %" }
 
     Timer {
-        interval: 5000; repeat: true
+        interval: win.remote && win.remote.linkLost === true ? 15000 : 5000; repeat: true   // each tick is one reconnection attempt while the link is lost
         running: win.autoRefresh && win.visible && win.connected && win.sys !== null && win.section !== "services"
         onTriggered: if (!win.sys.busy) win.sys.reload()
     }
@@ -380,4 +380,5 @@ Item {
         visible: win.sys !== null && win.sys.notes.length > 0
         text: win.sys ? win.sys.notes.join("  ·  ") : ""; color: Theme.inkMuted; font.pixelSize: 10
     }
+    LinkBanner { remote: win.remote; touch: win.adaptive; onRetry: if (win.sys && !win.sys.busy) win.sys.reload() }
 }

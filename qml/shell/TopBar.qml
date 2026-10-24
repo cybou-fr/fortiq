@@ -8,6 +8,9 @@ Rectangle {
     property string serverLabel: "Linux"
     property string clockText: ""
     property bool connected: false
+    // The transport died after it had worked: the dot turns red and the label says so (data on screen is the last known state).
+    property bool linkLost: false
+    readonly property color dotColor: !connected ? "#94A3B8" : (linkLost ? "#F87171" : "#4ADE80")
     property bool compact: false
     // Production: the connection indicator sits at the right in place of the
     // user avatar and opens the session menu. The reference scene keeps the
@@ -45,7 +48,7 @@ Rectangle {
         Rectangle {
             x: 10; anchors.verticalCenter: parent.verticalCenter
             width: 8; height: 8; radius: 4
-            color: bar.connected ? "#4ADE80" : "#94A3B8"
+            color: bar.dotColor
         }
         MouseArea { id: serverMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: bar.serverClicked() }
     }
@@ -120,15 +123,17 @@ Rectangle {
         color: pillMouse.containsMouse ? "#26FFFFFF" : "#14FFFFFF"
         border.width: 1; border.color: "#33FFFFFF"
         Rectangle {
+            objectName: "sessionDot"
             x: 12; anchors.verticalCenter: parent.verticalCenter
             width: 8; height: 8; radius: 4
-            color: bar.connected ? "#4ADE80" : "#94A3B8"
+            color: bar.dotColor
         }
         Text {
             id: pillText
             x: 28; anchors.verticalCenter: parent.verticalCenter
+            objectName: "sessionPillText"
             width: parent.width - 54; elide: Text.ElideRight
-            text: bar.serverLabel
+            text: bar.serverLabel + (bar.connected && bar.linkLost ? " · connexion perdue" : "")
             color: Theme.ink; font.pixelSize: 14; font.weight: Font.DemiBold; font.family: Theme.fontFamily
         }
         SymbolGlyph { anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; glyph: "⌄"; color: Theme.inkMuted; size: 12 }

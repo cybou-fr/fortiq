@@ -48,7 +48,7 @@ SshResult SshSession::terminalExchange(const QByteArray &input, int columns, int
     const bool ended = libssh2_channel_eof(d->terminal);
     const int exitCode = ended ? libssh2_channel_get_exit_status(d->terminal) : 0;
     libssh2_session_set_blocking(d->handle, 1);
-    if (failed) { d->close(); return fail(QStringLiteral("SSH terminal connection lost. Input was not replayed.")); }
+    if (failed) { d->closeLost(); return fail(QStringLiteral("Connexion du terminal SSH perdue. La saisie n'a pas été rejouée.")); }
     if (ended) { result.code = QStringLiteral("exit:%1").arg(exitCode); d->close(); }
     return result;
 }

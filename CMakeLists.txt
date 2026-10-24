@@ -94,6 +94,7 @@ set(FORTIQ_SHELL_QML
     qml/shell/SystemWindow.qml
     qml/shell/DbWindow.qml
     qml/shell/SessionGuard.qml
+    qml/shell/LinkBanner.qml
     qml/shell/MailWindow.qml
     qml/shell/ControlCenter.qml
     qml/shell/WorkspaceSwitcher.qml
@@ -196,6 +197,8 @@ set(FORTIQ_REMOTE_SOURCES
 )
 
 set(FORTIQ_SSH_SOURCES
+    src/ssh/LinkMonitor.cpp
+    src/ssh/LinkMonitor.h
     src/ssh/SshSession.cpp
     src/ssh/SshTerminal.cpp
     src/ssh/SshTransfers.cpp
@@ -390,6 +393,10 @@ if(BUILD_TESTING)
         target_link_options(fortiq_fuzz PRIVATE -fsanitize=fuzzer,address,undefined)
         target_link_libraries(fortiq_fuzz PRIVATE Qt6::Core Qt6::Network)
     endif()
+    qt_add_executable(fortiq_link_tests tests/LinkMonitorTest.cpp src/ssh/LinkMonitor.cpp src/ssh/LinkMonitor.h)
+    target_include_directories(fortiq_link_tests PRIVATE src)
+    target_link_libraries(fortiq_link_tests PRIVATE Qt6::Core Qt6::Concurrent Qt6::Test)
+    add_test(NAME fortiq_link COMMAND fortiq_link_tests -o "${CMAKE_CURRENT_BINARY_DIR}/link-results.txt,txt" -o "-,txt")
     qt_add_executable(fortiq_document_tests tests/LocalDocumentTest.cpp src/core/LocalDocument.cpp src/core/LocalDocument.h)
     target_include_directories(fortiq_document_tests PRIVATE src)
     target_link_libraries(fortiq_document_tests PRIVATE Qt6::Core Qt6::Test)
@@ -411,7 +418,7 @@ if(BUILD_TESTING)
         file(TO_CMAKE_PATH "$ENV{WINDIR}/Fonts" FORTIQ_TEST_FONT_DIR)
         set_property(TEST fortiq_layout APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=${FORTIQ_TEST_FONT_DIR}")
         # Developer tests need the matching Qt Test runtime, absent from the app package.
-        set_tests_properties(fortiq_markdown fortiq_disks fortiq_terminal_history fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_credentials fortiq_tasks fortiq_browser fortiq_network fortiq_system fortiq_db fortiq_mail fortiq_mailsend fortiq_publication fortiq_documents fortiq_layout PROPERTIES
+        set_tests_properties(fortiq_markdown fortiq_link fortiq_disks fortiq_terminal_history fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_credentials fortiq_tasks fortiq_browser fortiq_network fortiq_system fortiq_db fortiq_mail fortiq_mailsend fortiq_publication fortiq_documents fortiq_layout PROPERTIES
             ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:$<TARGET_FILE_DIR:${FORTIQ_SSH_TARGET}>")
     endif()
 endif()

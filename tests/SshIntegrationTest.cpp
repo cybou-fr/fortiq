@@ -1877,6 +1877,54 @@ private slots:
         settings.remove(pin); settings.remove("servers/profiles"); settings.remove("db/profiles"); settings.remove("mail/notmuchConfig"); settings.remove("mail/displayName");
     }
 
+    // Connection state at a drop: every app notices a dead transport, the active server is marked lost with a French
+    // sentence, and the next refresh opens a new connection by itself and clears the mark.
+    void aDroppedConnectionIsNoticedAndRecovered() {
+        fortiq::RemoteController controller;
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        QVERIFY(!controller.linkLost());
+        QVERIFY(controller.linkText().isEmpty());
+
+        fortiq::SystemController system(&controller);
+        system.reload();
+        QTRY_VERIFY_WITH_TIMEOUT(system.state() == "ready", 30000);
+        QVERIFY(!controller.linkLost());
+
+        // The server ends every login session of this user except the one that gives the order.
+        fortiq::SshSession shellSession;
+        QVERIFY(shellSession.open(controller.connectionRequest()).status == SshResult::Status::Ok);
+        const SshResult killed = shellSession.runScript(
+            "me=$PPID\nfor p in $(pgrep -u \"$(id -u)\" -f 'sshd-session: '); do [ \"$p\" != \"$me\" ] && kill -9 \"$p\"; done\nsleep 1\necho done\n", 65536, {});
+        QVERIFY2(killed.status == SshResult::Status::Ok && killed.data.contains("done"), qPrintable(killed.message));
+
+        QSignalSpy linkSpy(&controller, &fortiq::RemoteController::linkChanged);
+        system.reload();
+        QTRY_VERIFY_WITH_TIMEOUT(controller.linkLost(), 30000);
+        QVERIFY(linkSpy.count() >= 1);
+        QVERIFY2(controller.linkText().contains("Connexion perdue"), qPrintable(controller.linkText()));
+        QVERIFY(QRegularExpression("^\\d\\d:\\d\\d$").match(controller.linkLostAt()).hasMatch());
+        QTRY_COMPARE_WITH_TIMEOUT(system.state(), QStringLiteral("error"), 30000);   // the failed refresh is reported, not hidden
+        QVERIFY2(system.status().contains("perdue"), qPrintable(system.status()));        // in French
+        QVERIFY(controller.connected());                                    // the server stays selected: this is a link problem, not a logout
+
+        // The next refresh reconnects on its own (host pin checked again) and the mark disappears.
+        system.reload();
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.linkLost(), 30000);
+        QTRY_VERIFY_WITH_TIMEOUT(system.state() == "ready", 30000);
+        QVERIFY(controller.linkText().isEmpty());
+
+        // Leaving on purpose is not a loss.
+        controller.disconnectServer();
+        QTest::qWait(100);
+        QVERIFY(!controller.linkLost());
+    }
+
     // Audit backlog 1: Logs, MDok, Disks and Terminal report their work to the TaskManager, with the right guarding and settling rules.
     void everyAppReportsItsWorkToTheTaskManager() {
         fortiq::RemoteController controller;

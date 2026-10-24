@@ -43,23 +43,26 @@ SshResult SshSession::open(const ConnectionRequest &req)
     if (!req.directory.isEmpty() && !req.directory.startsWith('/'))
         return fail(QStringLiteral("Invalid remote directory."));
 
+    d->key = LinkMonitor::key(req.host, req.port, req.user);
     std::call_once(sshInitFlag, [] { sshInitResult = libssh2_init(0); });
-    if (sshInitResult != 0) return fail(QStringLiteral("SSH library initialization failed."));
+    if (sshInitResult != 0) return fail(QStringLiteral("Échec d'initialisation de la bibliothèque SSH."));
 
     d->socket.connectToHost(req.host, static_cast<quint16>(req.port));
     if (!d->socket.waitForConnected(10000)) {
         d->close();
-        return fail(QStringLiteral("TCP connection failed or timed out."));
+        LinkMonitor::reportLost(d->key, QStringLiteral("Serveur injoignable."));   // ignored for a server never reached
+        return fail(QStringLiteral("Connexion TCP impossible ou délai dépassé."));
     }
 
     d->handle = libssh2_session_init();
-    if (!d->handle) { d->close(); return fail(QStringLiteral("SSH session allocation failed.")); }
+    if (!d->handle) { d->close(); return fail(QStringLiteral("Échec de création de la session SSH.")); }
     libssh2_session_set_blocking(d->handle, 1);
     libssh2_session_set_timeout(d->handle, 15000);
     if (libssh2_session_handshake(d->handle,
             static_cast<libssh2_socket_t>(d->socket.socketDescriptor())) != 0) {
-        const SshResult r = fail(sshError(d->handle, QStringLiteral("SSH handshake failed")));
+        const SshResult r = fail(sshError(d->handle, QStringLiteral("Échec de la négociation SSH")));
         d->close();
+        LinkMonitor::reportLost(d->key, QStringLiteral("Serveur injoignable."));
         return r;
     }
 
@@ -126,7 +129,7 @@ SshResult SshSession::open(const ConnectionRequest &req)
     libssh2_keepalive_config(d->handle, 1, 30);
     d->sftp = libssh2_sftp_init(d->handle);
     if (!d->sftp) {
-        const SshResult r = fail(sshError(d->handle, QStringLiteral("SFTP unavailable")));
+        const SshResult r = fail(sshError(d->handle, QStringLiteral("SFTP indisponible")));
         d->close();
         return r;
     }
@@ -138,12 +141,12 @@ SshResult SshSession::open(const ConnectionRequest &req)
     SshResult result = list(req.directory.isEmpty() ? d->home : req.directory);
     if (result.status == SshResult::Status::Ok)
         result.message = QStringLiteral("Connected to Linux over verified SSH/SFTP.");
-    return result;
+    return result;   // list() reported the link as working
 }
 
 SshResult SshSession::list(const QString &remoteDir)
 {
-    if (!isOpen()) return fail(QStringLiteral("SSH session is not open."));
+    if (!isOpen()) return fail(QStringLiteral("La session SSH n'est pas ouverte."));
     if (!remoteDir.startsWith('/'))
         return fail(QStringLiteral("Remote path is not absolute."));
     const QByteArray dirUtf8 = remoteDir.toUtf8();
@@ -151,8 +154,8 @@ SshResult SshSession::list(const QString &remoteDir)
     if (!dir) {
         // A dead transport surfaces as a session-level error, not an SFTP status.
         if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
-            d->close();
-            return fail(QStringLiteral("SSH connection lost."));
+            d->closeLost();
+            return fail(QStringLiteral("Connexion SSH perdue."));
         }
         return fail(QStringLiteral("Cannot open remote folder (permission or path error)."));
     }
@@ -165,7 +168,9 @@ SshResult SshSession::list(const QString &remoteDir)
         const int n = libssh2_sftp_readdir_ex(dir, name, sizeof(name), longentry, sizeof(longentry), &attr);
         if (n == 0) break;
         if (n < 0) {
+            const bool dead = libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL;
             libssh2_sftp_closedir(dir);
+            if (dead) { d->closeLost(); return fail(QStringLiteral("Connexion SSH perdue.")); }
             return fail(QStringLiteral("Remote directory read failed."));
         }
         const QByteArray rawName(name, n);
@@ -208,20 +213,21 @@ SshResult SshSession::list(const QString &remoteDir)
     result.home = d->home;
     result.entries = entries;
     result.message = QStringLiteral("%1 items").arg(entries.size());
+    LinkMonitor::reportOk(d->key);
     return result;
 }
 
 SshResult SshSession::readFile(const QString &path, qint64 maxBytes)
 {
-    if (!isOpen()) return fail(QStringLiteral("SSH session is not open."));
+    if (!isOpen()) return fail(QStringLiteral("La session SSH n'est pas ouverte."));
     if (!path.startsWith('/') || maxBytes <= 0) return fail(QStringLiteral("Invalid remote file."));
     const QByteArray pathUtf8 = path.toUtf8();
     LIBSSH2_SFTP_ATTRIBUTES attr{};
     if (libssh2_sftp_stat_ex(d->sftp, pathUtf8.constData(), static_cast<unsigned int>(pathUtf8.size()),
             LIBSSH2_SFTP_STAT, &attr) != 0) {
         if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
-            d->close();
-            return fail(QStringLiteral("SSH connection lost."));
+            d->closeLost();
+            return fail(QStringLiteral("Connexion SSH perdue."));
         }
         return fail(QStringLiteral("Cannot read file (permission or path error)."));
     }

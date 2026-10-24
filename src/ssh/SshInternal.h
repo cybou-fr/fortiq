@@ -2,6 +2,7 @@
 // Internal to the SSH session implementation (SshSession*.cpp, SshTerminal.cpp, ...).
 // Not part of the public API: SshClient.h is.
 #include "SshClient.h"
+#include "LinkMonitor.h"
 #include "../core/RemotePath.h"
 #include "../core/LocalDocument.h"
 
@@ -88,6 +89,7 @@ struct SshSession::Impl {
     QString fingerprint;
     QString home;
     LIBSSH2_CHANNEL *terminal = nullptr;
+    QString key;          // LinkMonitor key of the server this session talks to
     QList<QByteArray> terminalWrites;
     qsizetype terminalOffset = 0;
     qsizetype terminalQueued = 0;
@@ -104,6 +106,11 @@ struct SshSession::Impl {
         }
         socket.abort();
         home.clear();
+    }
+    // The transport is dead: close, remember it, and tell the rest of the client (LinkMonitor).
+    void closeLost() {
+        close();
+        LinkMonitor::reportLost(key, QStringLiteral("Connexion SSH perdue."));
     }
 };
 

@@ -10,7 +10,7 @@ bool validName(const QString &name) {
 
 SshResult SshSession::makeDirectory(const QString &dir, const QString &name)
 {
-    if (!isOpen()) return transferFail(QStringLiteral("SSH session is not open."));
+    if (!isOpen()) return transferFail(QStringLiteral("La session SSH n'est pas ouverte."));
     const auto parent = cleanAbsolutePath(dir);
     if (!parent || !validName(name.trimmed())) return transferFail(QStringLiteral("Invalid folder name."));
     const QString target = *safeChildPath(*parent, name.trimmed());
@@ -20,8 +20,8 @@ SshResult SshSession::makeDirectory(const QString &dir, const QString &name)
         return transferFail(QStringLiteral("« %1 » already exists.").arg(name.trimmed()), QStringLiteral("conflict"));
     if (libssh2_sftp_mkdir_ex(d->sftp, p.constData(), static_cast<unsigned int>(p.size()), 0755) != 0) {
         if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
-            d->close();
-            return transferFail(QStringLiteral("Connection lost; check whether the folder was created."), QStringLiteral("unknown"));
+            d->closeLost();
+            return transferFail(QStringLiteral("Connexion perdue ; vérifiez si le dossier a été créé."), QStringLiteral("unknown"));
         }
         return transferFail(QStringLiteral("Cannot create the folder (permission error?)."));
     }
@@ -34,7 +34,7 @@ SshResult SshSession::makeDirectory(const QString &dir, const QString &name)
 
 SshResult SshSession::renameEntry(const QString &path, const QString &newName)
 {
-    if (!isOpen()) return transferFail(QStringLiteral("SSH session is not open."));
+    if (!isOpen()) return transferFail(QStringLiteral("La session SSH n'est pas ouverte."));
     const auto source = cleanAbsolutePath(path);
     if (!source || *source == "/" || !validName(newName.trimmed())) return transferFail(QStringLiteral("Invalid name."));
     const auto target = safeChildPath(parentPath(*source), newName.trimmed());
@@ -48,8 +48,8 @@ SshResult SshSession::renameEntry(const QString &path, const QString &newName)
     if (libssh2_sftp_rename_ex(d->sftp, from.constData(), static_cast<unsigned int>(from.size()),
                                to.constData(), static_cast<unsigned int>(to.size()), 0) != 0) {
         if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
-            d->close();
-            return transferFail(QStringLiteral("Connection lost; check the folder before retrying."), QStringLiteral("unknown"));
+            d->closeLost();
+            return transferFail(QStringLiteral("Connexion perdue ; vérifiez le dossier avant de réessayer."), QStringLiteral("unknown"));
         }
         return transferFail(QStringLiteral("Cannot rename (permission error or name taken meanwhile)."));
     }

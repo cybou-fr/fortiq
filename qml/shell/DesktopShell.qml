@@ -412,6 +412,7 @@ Item {
             : (shell.controller && shell.controller.connected ? shell.controller.serverLabel : "Aucun serveur")
         clockText: shell.barClock
         connected: shell.controller !== null && shell.controller.connected
+        linkLost: shell.controller !== null && shell.controller.connected && shell.controller.linkLost === true
         onServerClicked: {
             if (shell.fixture) return
             if (shell.controller && shell.controller.connected) shell.sessionMenuOpen = !shell.sessionMenuOpen

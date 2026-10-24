@@ -33,6 +33,11 @@ class RemoteController : public QObject {
     Q_PROPERTY(bool canGoBack READ canGoBack NOTIFY changed)
     Q_PROPERTY(bool canGoForward READ canGoForward NOTIFY changed)
     Q_PROPERTY(int lastLatencyMs READ lastLatencyMs NOTIFY changed)
+    // Link to the active server as seen by every app (LinkMonitor): lost = the transport died after it had worked.
+    // Data on screen is then the last known state; the next refresh opens a new connection by itself.
+    Q_PROPERTY(bool linkLost READ linkLost NOTIFY linkChanged)
+    Q_PROPERTY(QString linkLostAt READ linkLostAt NOTIFY linkChanged)       // "HH:mm", empty while the link works
+    Q_PROPERTY(QString linkText READ linkText NOTIFY linkChanged)           // French sentence for banners, empty while the link works
     // File viewer (RAM only; nothing is written to the device).
     Q_PROPERTY(bool previewOpen READ previewOpen NOTIFY previewChanged)
     Q_PROPERTY(bool previewBusy READ previewBusy NOTIFY previewChanged)
@@ -80,6 +85,10 @@ public:
     bool canGoBack() const { return !m_back.isEmpty(); }
     bool canGoForward() const { return !m_forward.isEmpty(); }
     int lastLatencyMs() const { return m_latencyMs; }
+    bool linkLost() const;
+    QString linkLostAt() const;
+    QString linkText() const;
+    QString linkKey() const;   // LinkMonitor key of the active server, empty when none
     // For sibling services (Logs) that open their own connection to the same
     // pinned server: credentials stay in RAM, the token changes per server.
     ConnectionRequest connectionRequest() const;
@@ -169,6 +178,7 @@ public:
 
 signals:
     void changed();
+    void linkChanged();
     void previewChanged();
     void operationBusyChanged();
     void savingChanged();

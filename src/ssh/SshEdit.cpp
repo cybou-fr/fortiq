@@ -8,7 +8,7 @@ QByteArray sha256(const QByteArray &bytes) { return QCryptographicHash::hash(byt
 
 SshResult SshSession::saveFile(const QString &path, const QByteArray &data, const QByteArray &expectedSha256, bool force)
 {
-    if (!isOpen()) return transferFail(QStringLiteral("SSH session is not open."));
+    if (!isOpen()) return transferFail(QStringLiteral("La session SSH n'est pas ouverte."));
     const auto requested = cleanAbsolutePath(path);
     if (!requested || data.size() > kEditLimit) return transferFail(QStringLiteral("Invalid file or content too large."));
 
@@ -72,8 +72,8 @@ SshResult SshSession::saveFile(const QString &path, const QByteArray &data, cons
             const bool lost = libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL;
             libssh2_sftp_close(file);
             if (lost) {
-                d->close();
-                return transferFail(QStringLiteral("Connection lost while saving; the original file was not changed."));
+                d->closeLost();
+                return transferFail(QStringLiteral("Connexion perdue pendant l'enregistrement ; le fichier d'origine n'a pas été modifié."));
             }
             removeTemp();
             return transferFail(QStringLiteral("Write failed (quota or disk full?); the original file was not changed."));
@@ -131,8 +131,8 @@ SshResult SshSession::saveFile(const QString &path, const QByteArray &data, cons
     if (published != 0) {
         if (published != LIBSSH2_ERROR_METHOD_NOT_SUPPORTED
             && libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
-            d->close();
-            return transferFail(QStringLiteral("Connection lost while publishing; reopen the file to see which version is on the server."),
+            d->closeLost();
+            return transferFail(QStringLiteral("Connexion perdue pendant la publication ; rouvrez le fichier pour voir quelle version est sur le serveur."),
                                 QStringLiteral("unknown"));
         }
         removeTemp();
@@ -153,7 +153,7 @@ SshResult SshSession::saveFile(const QString &path, const QByteArray &data, cons
 
 SshResult SshSession::saveCopy(const QString &dirPath, const QString &name, const QByteArray &data)
 {
-    if (!isOpen()) return transferFail(QStringLiteral("SSH session is not open."));
+    if (!isOpen()) return transferFail(QStringLiteral("La session SSH n'est pas ouverte."));
     const auto dir = cleanAbsolutePath(dirPath);
     if (!dir || !safeChildPath(*dir, name) || data.size() > kEditLimit) return transferFail(QStringLiteral("Invalid destination."));
     auto exists = [this](const QString &p) {

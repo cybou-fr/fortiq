@@ -484,4 +484,5 @@ Item {
             win.height = Math.max(340, win.height + m.y - press.y)
         }
     }
+    LinkBanner { remote: win.controller; touch: win.adaptive; inset: 44; onRetry: if (win.controller && !win.controller.busy) win.controller.refresh() }
 }

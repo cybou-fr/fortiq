@@ -3,7 +3,7 @@
 namespace fortiq {
 SshResult SshSession::moveToTrash(const QString &path)
 {
-    if (!isOpen()) return transferFail(QStringLiteral("SSH session is not open."));
+    if (!isOpen()) return transferFail(QStringLiteral("La session SSH n'est pas ouverte."));
     const auto source = cleanAbsolutePath(path);
     const QString trash = d->home + QStringLiteral("/.local/share/Trash");
     if (!source || *source == "/" || d->home.isEmpty() || *source == d->home
@@ -56,8 +56,8 @@ SshResult SshSession::moveToTrash(const QString &path)
     if (libssh2_sftp_rename_ex(d->sftp, from.constData(), static_cast<unsigned int>(from.size()),
                                to.constData(), static_cast<unsigned int>(to.size()), 0) != 0) {
         if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
-            d->close();
-            return transferFail(QStringLiteral("Connection lost; check the folder and the Trash before retrying."), QStringLiteral("unknown"));
+            d->closeLost();
+            return transferFail(QStringLiteral("Connexion perdue ; vérifiez le dossier et la corbeille avant de réessayer."), QStringLiteral("unknown"));
         }
         dropInfo();
         // No copy-and-delete fallback: that would not be reversible or atomic.
@@ -113,7 +113,7 @@ bool removeTree(LIBSSH2_SFTP *sftp, const QString &path, int depth, qint64 &remo
 
 SshResult SshSession::restoreFromTrash(const QString &trashedPath, ConflictPolicy policy)
 {
-    if (!isOpen()) return transferFail(QStringLiteral("SSH session is not open."));
+    if (!isOpen()) return transferFail(QStringLiteral("La session SSH n'est pas ouverte."));
     const QString files = d->home + QStringLiteral("/.local/share/Trash/files");
     const auto source = cleanAbsolutePath(trashedPath);
     if (!source || parentPath(*source) != files) return transferFail(QStringLiteral("Only items at the top of the Trash can be restored."));
@@ -150,8 +150,8 @@ SshResult SshSession::restoreFromTrash(const QString &trashedPath, ConflictPolic
     if (libssh2_sftp_rename_ex(d->sftp, from.constData(), static_cast<unsigned int>(from.size()),
                                to.constData(), static_cast<unsigned int>(to.size()), 0) != 0) {
         if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
-            d->close();
-            return transferFail(QStringLiteral("Connection lost; check the Trash and %1 before retrying.").arg(folder), QStringLiteral("unknown"));
+            d->closeLost();
+            return transferFail(QStringLiteral("Connexion perdue ; vérifiez la corbeille et %1 avant de réessayer.").arg(folder), QStringLiteral("unknown"));
         }
         return transferFail(QStringLiteral("Cannot restore (permission error, or another filesystem)."));
     }
@@ -166,7 +166,7 @@ SshResult SshSession::restoreFromTrash(const QString &trashedPath, ConflictPolic
 
 SshResult SshSession::deleteFromTrash(const QString &trashedPath)
 {
-    if (!isOpen()) return transferFail(QStringLiteral("SSH session is not open."));
+    if (!isOpen()) return transferFail(QStringLiteral("La session SSH n'est pas ouverte."));
     const QString files = d->home + QStringLiteral("/.local/share/Trash/files");
     const auto source = cleanAbsolutePath(trashedPath);
     // Only whole items of the Trash: permanent deletion never reaches elsewhere.
@@ -175,8 +175,8 @@ SshResult SshSession::deleteFromTrash(const QString &trashedPath)
     qint64 removed = 0;
     if (!removeTree(d->sftp, *source, 0, removed)) {
         if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL && libssh2_session_last_errno(d->handle) != 0) {
-            d->close();
-            return transferFail(QStringLiteral("Connection lost during deletion; part of the item may already be gone."), QStringLiteral("unknown"));
+            d->closeLost();
+            return transferFail(QStringLiteral("Connexion perdue pendant la suppression ; une partie de l'élément a peut-être déjà disparu."), QStringLiteral("unknown"));
         }
         return transferFail(QStringLiteral("Could not delete everything (%1 entries removed; permission error?).").arg(removed));
     }
@@ -191,14 +191,14 @@ SshResult SshSession::deleteFromTrash(const QString &trashedPath)
 
 SshResult SshSession::emptyTrash()
 {
-    if (!isOpen() || d->home.isEmpty()) return transferFail(QStringLiteral("SSH session is not open."));
+    if (!isOpen() || d->home.isEmpty()) return transferFail(QStringLiteral("La session SSH n'est pas ouverte."));
     const QString trash = d->home + QStringLiteral("/.local/share/Trash");
     qint64 removed = 0;
     int failed = 0;
     for (const QString &sub : { QStringLiteral("files"), QStringLiteral("info") }) {
         const SshResult listing = list(trash + '/' + sub);
         if (listing.status != SshResult::Status::Ok) {
-            if (!isOpen()) return transferFail(QStringLiteral("Connection lost while emptying the Trash."), QStringLiteral("unknown"));
+            if (!isOpen()) return transferFail(QStringLiteral("Connexion perdue pendant le vidage de la corbeille."), QStringLiteral("unknown"));
             continue; // no such folder: nothing to empty
         }
         for (const QVariant &v : listing.entries) {
@@ -206,7 +206,7 @@ SshResult SshSession::emptyTrash()
             if (parentPath(path) != trash + '/' + sub || !removeTree(d->sftp, path, 0, removed)) ++failed;
         }
     }
-    if (!isOpen()) return transferFail(QStringLiteral("Connection lost while emptying the Trash."), QStringLiteral("unknown"));
+    if (!isOpen()) return transferFail(QStringLiteral("Connexion perdue pendant le vidage de la corbeille."), QStringLiteral("unknown"));
     if (failed > 0) return transferFail(QStringLiteral("%1 item(s) could not be deleted (permission error?).").arg(failed));
     SshResult r;
     r.status = SshResult::Status::Ok;

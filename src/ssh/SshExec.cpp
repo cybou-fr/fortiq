@@ -22,7 +22,7 @@ QString globLiteral(const QString &text) {
 SshResult SshSession::search(const QString &dirPath, const QString &query, const QString &mode, int limit,
                              const std::function<bool(int)> &keepGoing)
 {
-    if (!isOpen()) return transferFail(QStringLiteral("SSH session is not open."));
+    if (!isOpen()) return transferFail(QStringLiteral("La session SSH n'est pas ouverte."));
     const auto dir = cleanAbsolutePath(dirPath);
     const QString q = query.trimmed();
     if (!dir || q.isEmpty() || q.contains(QChar::Null) || q.contains('\n') || q.contains('\r') || q.size() > 256)
@@ -53,14 +53,14 @@ SshResult SshSession::search(const QString &dirPath, const QString &query, const
 
     LIBSSH2_CHANNEL *channel = libssh2_channel_open_session(d->handle);
     if (!channel) {
-        d->close();
-        return transferFail(QStringLiteral("SSH connection lost."));
+        d->closeLost();
+        return transferFail(QStringLiteral("Connexion SSH perdue."));
     }
     libssh2_channel_handle_extended_data2(channel, LIBSSH2_CHANNEL_EXTENDED_DATA_IGNORE);
     // The login shell only sees "sh -s"; the script and its data arrive on stdin.
     if (libssh2_channel_exec(channel, "sh -s") != 0) {
         libssh2_channel_free(channel);
-        return transferFail(QStringLiteral("The server refused command execution."));
+        return transferFail(QStringLiteral("Le serveur a refusé d'exécuter la commande."));
     }
     qsizetype sent = 0;
     while (sent < script.size()) {
@@ -146,8 +146,8 @@ SshResult SshSession::search(const QString &dirPath, const QString &query, const
     libssh2_channel_free(channel);
     libssh2_session_set_timeout(d->handle, 15000);
     if (lost) {
-        d->close();
-        return transferFail(QStringLiteral("SSH connection lost during the search."));
+        d->closeLost();
+        return transferFail(QStringLiteral("Connexion SSH perdue pendant la recherche."));
     }
     if (stopped && !limitReached) {
         SshResult r = transferFail(QStringLiteral("Search cancelled."), QStringLiteral("cancelled"));
@@ -168,15 +168,15 @@ QByteArray SshSession::shellQuote(const QString &value) { return shQuote(value);
 
 SshResult SshSession::runScript(const QByteArray &script, qint64 maxStdout, const std::function<bool()> &keepGoing)
 {
-    if (!isOpen()) return transferFail(QStringLiteral("SSH session is not open."));
+    if (!isOpen()) return transferFail(QStringLiteral("La session SSH n'est pas ouverte."));
     LIBSSH2_CHANNEL *channel = libssh2_channel_open_session(d->handle);
     if (!channel) {
-        d->close();
-        return transferFail(QStringLiteral("SSH connection lost."));
+        d->closeLost();
+        return transferFail(QStringLiteral("Connexion SSH perdue."));
     }
     if (libssh2_channel_exec(channel, "sh -s") != 0) {
         libssh2_channel_free(channel);
-        return transferFail(QStringLiteral("The server refused command execution."));
+        return transferFail(QStringLiteral("Le serveur a refusé d'exécuter la commande."));
     }
     qsizetype sent = 0;
     while (sent < script.size()) {
@@ -214,8 +214,8 @@ SshResult SshSession::runScript(const QByteArray &script, qint64 maxStdout, cons
     libssh2_channel_free(channel);
     libssh2_session_set_timeout(d->handle, 15000);
     if (lost) {
-        d->close();
-        return transferFail(QStringLiteral("SSH connection lost."));
+        d->closeLost();
+        return transferFail(QStringLiteral("Connexion SSH perdue."));
     }
     SshResult r;
     r.status = stopped ? SshResult::Status::Error : SshResult::Status::Ok;
@@ -223,6 +223,7 @@ SshResult SshSession::runScript(const QByteArray &script, qint64 maxStdout, cons
     r.truncated = truncated;
     r.message = QString::fromUtf8(err);
     r.code = stopped ? QStringLiteral("cancelled") : QStringLiteral("exit:%1").arg(exitCode);
+    if (!stopped) LinkMonitor::reportOk(d->key);
     return r;
 }
 }  // namespace fortiq

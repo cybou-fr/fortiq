@@ -630,4 +630,5 @@ Item {
             if (win.mailer && !win.mailer.actionBusy && win.previewPending) { win.previewPending = false; win.finishPreview() }
         }
     }
+    LinkBanner { remote: win.remote; touch: win.adaptive; onRetry: if (win.mailer && !win.mailer.busy) win.mailer.refresh() }
 }
