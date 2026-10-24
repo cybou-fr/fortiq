@@ -35,10 +35,10 @@ SshResult SshSession::search(const QString &dirPath, const QString &query, const
             "command -v find >/dev/null 2>&1 || { printf '#missing:find\\n'; exit 3; }\n"
             "if find / -maxdepth 0 -printf '' >/dev/null 2>&1; then\n"
             "  printf '#tool:find\\n'\n"
-            "  exec find \"$d\" -xdev -path '*/.local/share/Trash' -prune -o -iname \"$p\" -printf '%y\\t%s\\t%T@\\t%p\\0' 2>/dev/null\n"
+            "  exec find -H \"$d\" -xdev -path '*/.local/share/Trash' -prune -o -iname \"$p\" -printf '%y\\t%s\\t%T@\\t%p\\0' 2>/dev/null\n"
             "fi\n"
             "printf '#tool:find-basic\\n'\n"
-            "exec find \"$d\" -xdev -path '*/.local/share/Trash' -prune -o -iname \"$p\" -print0 2>/dev/null\n";
+            "exec find -H \"$d\" -xdev -path '*/.local/share/Trash' -prune -o -iname \"$p\" -print0 2>/dev/null\n";
     } else {
         script += "q=" + shQuote(q) + "\n"
             "if command -v rg >/dev/null 2>&1; then\n"

@@ -3045,6 +3045,139 @@ private slots:
         QVERIFY(session.emptyTrash().status == SshResult::Status::Ok);
     }
 
+    // S-5 (docs/STABILIZATION_PLAN.md): symbolic links and cycles. Nothing recursive follows a link out of its
+    // tree, nothing hangs on a cycle or a special file, no write goes through a dangling link to create its target,
+    // and deleting a link never touches what it points to.
+    void symlinksAndCyclesAreContained() {
+        const QString remoteDir = qEnvironmentVariable("FORTIQ_IT_UPLOAD_DIR");
+        if (remoteDir.isEmpty()) QSKIP("FORTIQ_IT_UPLOAD_DIR not set");
+        ConnectionRequest request = base;
+        request.expectedHostFingerprint = fingerprint;
+        if (request.password.isEmpty()) request.keyPath = qEnvironmentVariable("FORTIQ_IT_KEY");
+        fortiq::SshSession session;
+        const SshResult opened = session.open(request);
+        QVERIFY2(opened.status == SshResult::Status::Ok, qPrintable(opened.message));
+        const QString tag = QString::number(QDateTime::currentMSecsSinceEpoch());
+        const QString outside = remoteDir + "/links-outside-" + tag;
+        const QString arena = remoteDir + "/links-" + tag;
+        const QString danglingTarget = "/tmp/fortiq-s5-target-" + tag;
+        const auto q = [](const QString &v) { return QString::fromUtf8(fortiq::SshSession::shellQuote(v)); };
+        const auto sh = [&](const QString &script) {
+            const SshResult res = session.runScript(script.toUtf8(), 65536);
+            return res.code == QStringLiteral("exit:0");
+        };
+        QVERIFY(sh(QStringLiteral("set -e\nmkdir -p %1 %2/real/sub %2/cyc\nprintf precious > %1/precious.txt\nprintf real > %2/real/file.txt\n"
+                                  "printf deep-needle > %2/real/sub/deep.txt\nprintf needle-out > %1/outside-needle.txt\n"
+                                  "ln -s ../real %2/real/loop\nln -s . %2/cyc/self\nln -s ../cyc %2/cyc/up\n"
+                                  "ln -s real %2/linkdir\nln -s %1 %2/escape\nln -s /etc %2/etc-link\nln -s /etc/hostname %2/file-link\n"
+                                  "ln -s %3 %2/dang\nln -s selfloop %2/selfloop\nln -s /dev/zero %2/devzero\nmkfifo %2/fifo\n")
+                       .arg(q(outside), q(arena), q(danglingTarget))));
+
+        // Listing reports links as links and finishes; a cycle of links is walked only as far as the server allows.
+        SshResult r = session.list(arena);
+        QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(r.message));
+        QVariantMap byName;
+        for (const QVariant &v : r.entries) byName.insert(v.toMap().value("name").toString(), v);
+        for (const char *link : { "linkdir", "escape", "etc-link", "file-link", "dang", "selfloop", "devzero" })
+            QVERIFY2(byName.value(link).toMap().value("link").toBool(), link);
+        QVERIFY(!byName.value("fifo").toMap().value("link").toBool());
+        QElapsedTimer clock;
+        clock.start();
+        QString deep = arena;
+        for (int i = 0; i < 80; ++i) deep += "/cyc/self";
+        r = session.list(deep);
+        QVERIFY2(clock.elapsed() < 15000, "listing a link cycle took too long");
+        QVERIFY(session.isOpen());
+        QVERIFY(session.list(arena).status == SshResult::Status::Ok);
+
+        // Search never leaves its tree and ends on cycles: the real file once, nothing via loop/linkdir/escape.
+        const auto all = [](int) { return true; };
+        const auto paths = [](const SshResult &res) {
+            QStringList out;
+            for (const QVariant &v : res.entries) out << v.toMap().value("path").toString();
+            out.sort();
+            return out;
+        };
+        clock.restart();
+        r = session.search(arena, QStringLiteral("file"), "name", 500, all);
+        QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(r.message));
+        QVERIFY2(clock.elapsed() < 15000, "name search on cycles took too long");
+        QStringList hits = paths(r);
+        QVERIFY2(hits.contains(arena + "/real/file.txt"), qPrintable(hits.join('|')));
+        for (const QString &hit : hits)
+            QVERIFY2(!hit.contains("/real/loop/") && !hit.contains("/linkdir/") && !hit.contains("/escape/") && !hit.contains("/etc-link/"), qPrintable(hit));
+        r = session.search(arena, QStringLiteral("needle"), "content", 500, all);
+        QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(r.message));
+        QCOMPARE(paths(r), QStringList{ arena + "/real/sub/deep.txt" }); // not outside-needle.txt behind "escape"
+        // A search rooted at a link to a folder looks inside it (the user navigated there).
+        r = session.search(arena + "/linkdir", QStringLiteral("deep"), "name", 50, all);
+        QVERIFY2(r.status == SshResult::Status::Ok && paths(r).size() == 1, qPrintable("name search at a symlinked folder: " + r.message + paths(r).join('|')));
+        r = session.search(arena + "/linkdir", QStringLiteral("needle"), "content", 50, all);
+        QVERIFY2(r.status == SshResult::Status::Ok && r.entries.size() == 1, qPrintable("content search at a symlinked folder: " + r.message));
+
+        // Reading: only regular files, quickly; a link to a file reads its target; dangling/looping/special refuse.
+        clock.restart();
+        QVERIFY(session.readFile(arena + "/file-link", 4096).status == SshResult::Status::Ok);
+        for (const char *bad : { "dang", "selfloop", "devzero", "fifo", "linkdir", "etc-link" })
+            QVERIFY2(session.readFile(arena + "/" + bad, 4096).status == SshResult::Status::Error, bad);
+        QVERIFY2(clock.elapsed() < 15000, "reading special files hung");
+        QTemporaryDir local;
+        for (const char *bad : { "dang", "selfloop", "devzero", "fifo", "linkdir" }) {
+            const QString out = local.filePath(QString("dl-") + bad);
+            QVERIFY2(session.download(arena + "/" + bad, out, [](qint64, qint64) { return true; }).status == SshResult::Status::Error, bad);
+            QVERIFY2(!QFileInfo::exists(out), bad);
+        }
+        QVERIFY2(clock.elapsed() < 30000, "downloading special files hung");
+        QVERIFY(session.isOpen());
+
+        // Writing never goes through a dangling link and never creates its target.
+        const QString src = local.filePath("up.txt");
+        { QFile f(src); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("uploaded"); }
+        const auto ok = fortiq::TransferProgress([](qint64, qint64) { return true; });
+        QCOMPARE(session.upload(src, arena, "dang", fortiq::ConflictPolicy::Fail, ok).code, QStringLiteral("conflict"));
+        const SshResult kept = session.upload(src, arena, "dang", fortiq::ConflictPolicy::KeepBoth, ok);
+        QVERIFY2(kept.status == SshResult::Status::Ok, qPrintable(kept.message));
+        QCOMPARE(kept.directory, arena + "/dang (2)");
+        QVERIFY(session.upload(src, arena, "dang", fortiq::ConflictPolicy::Replace, ok).status == SshResult::Status::Error);
+        QVERIFY(session.upload(src, arena, "linkdir", fortiq::ConflictPolicy::Replace, ok).status == SshResult::Status::Error);
+        QCOMPARE(session.saveCopy(arena, "dang", "copy").directory, arena + "/dang (3)");
+        QCOMPARE(session.makeDirectory(arena, "dang").code, QStringLiteral("conflict"));
+        const QByteArray emptyHash = QCryptographicHash::hash("", QCryptographicHash::Sha256);
+        QVERIFY(session.saveFile(arena + "/dang", "x", emptyHash, true).status == SshResult::Status::Error);
+        QVERIFY(session.saveFile(arena + "/selfloop", "x", emptyHash, true).status == SshResult::Status::Error);
+        QVERIFY2(sh(QStringLiteral("test ! -e %1 && test -L %2/dang").arg(q(danglingTarget), q(arena))), "a write created the dangling link's target");
+        QVERIFY(sh(QStringLiteral("test \"$(cat %1/precious.txt)\" = precious").arg(q(outside))));
+
+        // Renaming and trashing a link moves the link, never its target; deleting it from the Trash removes only the link.
+        QVERIFY(session.renameEntry(arena + "/escape", "escape2").status == SshResult::Status::Ok);
+        SshResult trashed = session.moveToTrash(arena + "/escape2");
+        QVERIFY2(trashed.status == SshResult::Status::Ok, qPrintable(trashed.message));
+        QVERIFY(sh(QStringLiteral("test -L %1 && test -f %2/precious.txt").arg(q(trashed.directory), q(outside))));
+        QVERIFY(session.deleteFromTrash(trashed.directory).status == SshResult::Status::Ok);
+        QVERIFY(sh(QStringLiteral("test ! -e %1 && test -f %2/precious.txt && test -f %2/outside-needle.txt").arg(q(trashed.directory), q(outside))));
+        trashed = session.moveToTrash(arena + "/etc-link");
+        QVERIFY(trashed.status == SshResult::Status::Ok);
+        QVERIFY(session.deleteFromTrash(trashed.directory).status == SshResult::Status::Ok);
+        QVERIFY(sh(QStringLiteral("test -f /etc/hostname && test -d /etc")));
+        // A folder holding cycles and a link out is trashed and deleted for good: finite, the outside intact.
+        QVERIFY(sh(QStringLiteral("ln -s %1 %2/cyc/out").arg(q(outside), q(arena))));
+        trashed = session.moveToTrash(arena + "/cyc");
+        QVERIFY2(trashed.status == SshResult::Status::Ok, qPrintable(trashed.message));
+        clock.restart();
+        r = session.deleteFromTrash(trashed.directory);
+        QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(r.message));
+        QVERIFY2(clock.elapsed() < 15000, "deleting a tree with link cycles took too long");
+        QVERIFY(sh(QStringLiteral("test ! -e %1 && test -f %2/precious.txt && test -f %2/outside-needle.txt").arg(q(trashed.directory), q(outside))));
+
+        // Restore of a link puts the link back; clean up.
+        trashed = session.moveToTrash(arena + "/file-link");
+        QVERIFY(trashed.status == SshResult::Status::Ok);
+        r = session.restoreFromTrash(trashed.directory, fortiq::ConflictPolicy::Fail);
+        QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(r.message));
+        QVERIFY(sh(QStringLiteral("test -L %1/file-link").arg(q(arena))));
+        QVERIFY(sh(QStringLiteral("rm -rf -- %1 %2").arg(q(arena), q(outside))));
+    }
+
     void pinnedHostListsHomeWithUnicodeNames() {
         ConnectionRequest request = base;
         request.expectedHostFingerprint = fingerprint;
