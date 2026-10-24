@@ -28,6 +28,7 @@ Item {
     // Fixture only: "text" or "image" shows the viewer with sample content.
     property string fixturePreview: ""
     signal requestDocuments(string path)
+    signal requestTerminal(string path)
     signal closeRequested()
     signal requestServers()
     signal requestDisconnect()

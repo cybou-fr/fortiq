@@ -26,7 +26,7 @@ Rectangle {
         objectName: "linkBannerText"
         x: 30; anchors.verticalCenter: parent.verticalCenter
         width: parent.width - 30 - retryButton.width - 24
-        text: banner.remote ? banner.remote.linkText : ""
+        text: (banner.remote && banner.remote.linkText) || ""
         wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight
         color: "#FDE68A"; font.pixelSize: banner.touch ? 13 : 11; font.family: Theme.fontFamily
     }

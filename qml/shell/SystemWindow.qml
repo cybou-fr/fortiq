@@ -26,6 +26,11 @@ Item {
     readonly property int failedCount: overview.failedServices === undefined ? 0 : overview.failedServices
     signal closeRequested()
     signal requestServers()
+    signal requestLogs(string unit)
+    signal requestCopy(string what, string text)
+    property string selectedUnit: ""
+    readonly property var selectedService: { for (const s of shownServices) if (s.unit === selectedUnit) return s; return null }
+    function showService(unit) { section = "services"; filterText = unit; selectedUnit = unit; navigationOpen = false; if (sys && !sys.busy) sys.reload() }
 
     function sync() { if (sys) sys.setWindowActive(visible) }
     onVisibleChanged: sync()
@@ -244,7 +249,7 @@ Item {
             id: detail
             objectName: "systemDetail"
             visible: win.selectedProcess !== null
-            anchors.bottom: parent.bottom; width: parent.width; height: visible ? detailText.implicitHeight + 22 : 0
+            anchors.bottom: parent.bottom; width: parent.width; height: visible ? detailText.implicitHeight + 22 + (win.adaptive ? 48 : 30) : 0
             radius: 10; color: "#40182740"; border.width: 1; border.color: "#25DCEBFF"
             Text {
                 id: detailText
@@ -253,6 +258,12 @@ Item {
                         + "  ·  utilisateur " + win.selectedProcess.user + "  ·  état " + win.selectedProcess.state + " (" + win.stateText(win.selectedProcess.state) + ")\n"
                         + "démarré il y a " + win.selectedProcess.elapsed + "  ·  " + win.selectedProcess.threads + " thread(s)  ·  mémoire résidente " + win.selectedProcess.rss
                         + "  ·  lecture seule : aucun signal n'est envoyé" : ""
+            }
+            CopyChip {
+                objectName: "systemCopyProcess"
+                anchors.right: parent.right; anchors.rightMargin: 12; anchors.bottom: parent.bottom; anchors.bottomMargin: 8
+                touch: win.adaptive
+                onClicked: if (win.selectedProcess) win.requestCopy("détails du processus " + win.selectedProcess.pid, detailText.text)
             }
         }
     }
@@ -301,13 +312,14 @@ Item {
         }
         ListView {
             objectName: "systemServiceList"
-            y: svcSummary.y + svcSummary.height + 6; width: parent.width; height: Math.max(0, parent.height - y)
+            y: svcSummary.y + svcSummary.height + 6; width: parent.width; height: Math.max(0, parent.height - y - (serviceDetail.visible ? serviceDetail.height + 6 : 0))
             clip: true; spacing: 2; model: win.shownServices
             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
             delegate: Rectangle {
                 required property var modelData
                 width: ListView.view.width - 10; height: win.adaptive ? 56 : 44; radius: 8
-                color: modelData.failed ? "#26EF4444" : (svcMouse.containsMouse ? "#14FFFFFF" : "transparent")
+                border.width: win.selectedUnit === modelData.unit ? 1 : 0; border.color: "#802F8CFF"
+                color: modelData.failed ? "#26EF4444" : (win.selectedUnit === modelData.unit || svcMouse.containsMouse ? "#14FFFFFF" : "transparent")
                 Rectangle { x: 8; y: 10; width: 8; height: 8; radius: 4; color: modelData.failed ? "#EF4444" : modelData.active === "active" ? "#4ADE80" : modelData.active === "activating" ? "#FCD34D" : "#64748B" }
                 Text { x: 24; y: 4; width: parent.width - 200; elide: Text.ElideRight; textFormat: Text.PlainText; text: modelData.unit; color: Theme.ink; font.pixelSize: 13; font.weight: Font.DemiBold }
                 Text { x: 24; y: 23; width: parent.width - 200; elide: Text.ElideRight; textFormat: Text.PlainText; text: modelData.description; color: Theme.inkMuted; font.pixelSize: 10 }
@@ -319,8 +331,27 @@ Item {
                     anchors.right: parent.right; anchors.rightMargin: 10; y: 24; width: 180; horizontalAlignment: Text.AlignRight; textFormat: Text.PlainText
                     visible: modelData.load !== "loaded"; text: modelData.load; color: "#FCD34D"; font.pixelSize: 10
                 }
-                MouseArea { id: svcMouse; anchors.fill: parent; hoverEnabled: true }
+                MouseArea { id: svcMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.selectedUnit = (win.selectedUnit === modelData.unit ? "" : modelData.unit) }
             }
+        }
+    }
+
+    // The chosen service: its state, a jump to its journal, and the text to copy.
+    Rectangle {
+        id: serviceDetail
+        objectName: "systemServiceDetail"
+        visible: win.connected && win.sys !== null && win.section === "services" && win.selectedService !== null
+        x: win.contentLeft + 12; width: parent.width - x - 12; anchors.bottom: parent.bottom; anchors.bottomMargin: 10
+        height: serviceText.implicitHeight + (win.adaptive ? 66 : 48); radius: 10; color: "#40182740"; border.width: 1; border.color: "#25DCEBFF"; z: 5
+        Text {
+            id: serviceText
+            x: 12; y: 10; width: parent.width - 24; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText; color: Theme.ink; font.pixelSize: 11; font.family: Theme.monoFamily
+            text: win.selectedService ? win.selectedService.unit + "\n" + win.selectedService.description + "\nétat " + win.selectedService.active + " (" + win.selectedService.sub + ")  ·  chargement " + win.selectedService.load + "  ·  lecture seule : rien n'est redémarré" : ""
+        }
+        Row {
+            anchors.right: parent.right; anchors.rightMargin: 12; anchors.bottom: parent.bottom; anchors.bottomMargin: 8; spacing: 8
+            CopyChip { objectName: "systemServiceLogs"; label: "Journaux"; touch: win.adaptive; onClicked: if (win.selectedService) win.requestLogs(win.selectedService.unit) }
+            CopyChip { objectName: "systemCopyService"; touch: win.adaptive; onClicked: if (win.selectedService) win.requestCopy("état du service " + win.selectedService.unit, serviceText.text) }
         }
     }
 

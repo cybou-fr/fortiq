@@ -100,6 +100,38 @@ Item {
 
     Timer { running: !shell.fixture; repeat: true; interval: 15000; onTriggered: shell.now = new Date() }
 
+    // ---- Moves between apps (audit backlog 8, R12) --------------------------------------------------------------
+    // An action carries the server it was made for. It runs only while that server is the connected one: a stale or
+    // late action never lands on another server, and the active server is never substituted for the one named.
+    property string lastRoute: ""
+    function notify(message) { routeToast.show(message) }
+    function shQuote(value) { return "'" + String(value).replace(/'/g, "'\\''") + "'" }
+    function route(a) {
+        if (!controller || !controller.connected || !a.serverId || a.serverId !== controller.activeServerId) {
+            notify("Action ignorée : elle ne concerne pas le serveur actuellement connecté.")
+            return false
+        }
+        switch (a.type) {
+        case "openDocument": documentsOpen = true; raiseApp("docs"); launcherOpen = false; documentsWindow.request("open", a.path); break
+        case "revealInFiles": controller.navigate(a.path); filesOpen = true; raiseApp("files"); launcherOpen = false; break
+        case "showLogs": logsOpen = true; raiseApp("logs"); launcherOpen = false; logsWindow.showUnit(a.unit); break
+        case "showService": systemOpen = true; raiseApp("system"); launcherOpen = false; systemWindow.showService(a.unit); break
+        case "terminalHere": terminalOpen = true; raiseApp("terminal"); launcherOpen = false; terminalWindow.proposeCommand("cd -- " + shQuote(a.path)); break
+        default: notify("Action inconnue : " + a.type); return false
+        }
+        lastRoute = a.type + "@" + a.serverId
+        return true
+    }
+    // The action of a window: stamped with the connected server at the moment of the click.
+    function act(type, fields) {
+        return route(Object.assign({ type: type, serverId: controller ? controller.activeServerId : "" }, fields))
+    }
+    function copyText(what, text) {
+        shellClip.text = text; shellClip.selectAll(); shellClip.copy(); shellClip.deselect(); shellClip.text = ""
+        notify("Copié : " + what)
+    }
+    TextEdit { id: shellClip; visible: false }
+
     function launch(app) {
         if (app === "files") { filesOpen = true; raiseApp("files") }
         else if (app === "launcher") launcherOpen = !launcherOpen
@@ -158,7 +190,8 @@ Item {
         onCloseRequested: { shell.filesOpen = false; if (shell.adaptive && shell.logsOpen) shell.foregroundApp = "logs" }
         onRequestServers: shell.serversOpen = true
         onRequestDisconnect: shell.confirmSessionEnd("Se déconnecter", function() { shell.controller.disconnectServer() })
-        onRequestDocuments:path=>{shell.documentsOpen=true;shell.raiseApp("docs");documentsWindow.request("open",path)}
+        onRequestDocuments:path=>shell.act("openDocument", { path: path })
+        onRequestTerminal: path => shell.act("terminalHere", { path: path })
     }
 
     BrowserWindow {
@@ -186,6 +219,8 @@ Item {
         fixtureService: shell.fixture && shell.fixturePreview === "service"
         onCloseRequested: { shell.logsOpen = false; if (shell.adaptive) { shell.filesOpen = true; shell.foregroundApp = "files" } }
         onRequestServers: shell.serversOpen = true
+        onRequestService: unit => shell.act("showService", { unit: unit })
+        onRequestCopy: (what, text) => shell.copyText(what, text)
     }
 
     TerminalWindow {
@@ -237,6 +272,7 @@ Item {
         backdrop: wallpaper; db: shell.dbController; remote: shell.controller
         onCloseRequested: { shell.dbOpen = false; if (shell.adaptive) { shell.foregroundApp = "files"; shell.filesOpen = true } }
         onRequestServers: shell.serversOpen = true
+        onRequestCopy: (what, text) => shell.copyText(what, text)
     }
 
     SystemWindow {
@@ -249,6 +285,8 @@ Item {
         backdrop: wallpaper; sys: shell.systemController; remote: shell.controller
         onCloseRequested: { shell.systemOpen = false; if (shell.adaptive) { shell.foregroundApp = "files"; shell.filesOpen = true } }
         onRequestServers: shell.serversOpen = true
+        onRequestLogs: unit => shell.act("showLogs", { unit: unit })
+        onRequestCopy: (what, text) => shell.copyText(what, text)
     }
 
     NetworkWindow {
@@ -261,6 +299,7 @@ Item {
         backdrop: wallpaper; network: shell.networkController; remote: shell.controller
         onCloseRequested: { shell.networkOpen = false; if (shell.adaptive) { shell.foregroundApp = "files"; shell.filesOpen = true } }
         onRequestServers: shell.serversOpen = true
+        onRequestCopy: (what, text) => shell.copyText(what, text)
     }
 
     DisksWindow {
@@ -273,7 +312,7 @@ Item {
         backdrop:wallpaper;disks:shell.disksController;remote:shell.controller
         onCloseRequested:{shell.disksOpen=false;if(shell.adaptive){shell.foregroundApp="files";shell.filesOpen=true}}
         onRequestServers:shell.serversOpen=true
-        onOpenPath:path=>{if(shell.controller && shell.controller.connected){shell.controller.navigate(path);shell.filesOpen=true;shell.raiseApp("files")}}
+        onOpenPath:path=>shell.act("revealInFiles", { path: path })
     }
 
     DocumentsWindow {
@@ -483,6 +522,8 @@ Item {
         PropertyChanges { target: logsWindow; x: 8; y: shell.appTop; width: shell.width - 16; height: shell.appHeight }
         PropertyChanges { target: terminalWindow; x: 8; y: shell.appTop; width: shell.width - 16; height: shell.appHeight }
     }
+    Toast { id: routeToast; adaptive: shell.adaptive }
+
     SessionGuard { id: sessionGuard; anchors.fill: parent; manager: shell.taskManager }
     focus: true
     function handleBack() {

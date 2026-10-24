@@ -27,6 +27,11 @@ Item {
     readonly property bool unitSelected: lc && (lc.source === "unit" || lc.source === "userunit")
     signal closeRequested()
     signal requestServers()
+    signal requestService(string unit)
+    signal requestCopy(string what, string text)
+    // Opened from another app: the journal of one unit over the last day.
+    property string requestedUnit: ""
+    function showUnit(unit) { requestedUnit = unit; choose("unit", unit); if (!fixture && logs) logs.setRange("24h") }
 
     property string view: fixtureService ? "service" : "timeline" // "timeline" | "patterns" | "service"
     property string textFilter: ""
@@ -492,7 +497,7 @@ Item {
                 required property int index
                 readonly property bool open: win.expanded === index
                 width: timeline.width
-                height: open ? Math.max(30, full.implicitHeight + meta.implicitHeight + 18) : 26
+                height: open ? Math.max(30, full.implicitHeight + meta.implicitHeight + 18 + 30) : 26
                 Rectangle {
                     anchors.fill: parent; radius: 6
                     color: ev.open ? "#262F8CFF" : (evMouse.containsMouse ? "#12FFFFFF" : (ev.index % 2 ? "#08FFFFFF" : "transparent"))
@@ -533,6 +538,14 @@ Item {
                         enabled: !win.fixture && ev.modelData.time > 0
                         onClicked: win.logs.inspect(ev.modelData, 300)
                     }
+                }
+                Row {
+                    visible: ev.open
+                    x: 242; y: meta.y + meta.implicitHeight + 6; spacing: 8
+                    CopyChip { objectName: "logsCopyEvent"; touch: win.adaptive
+                        onClicked: win.requestCopy("événement du journal", (ev.modelData.timeText || "") + "  " + ev.modelData.unit + "  " + ev.modelData.message) }
+                    CopyChip { objectName: "logsShowService"; label: "Service"; touch: win.adaptive; visible: !win.fixture && ev.modelData.unit.length > 0 && /\.(service|socket|timer|mount)$/.test(ev.modelData.unit)
+                        onClicked: win.requestService(ev.modelData.unit) }
                 }
                 Text {
                     id: meta

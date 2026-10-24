@@ -16,6 +16,8 @@ Item {
     readonly property real contentLeft: drawer ? 0 : 210
     signal closeRequested()
     signal requestServers()
+    // A command proposed by another app ("Terminal ici"): shown in full, typed after the user confirms and never run: no line break is sent, Enter is the user's.
+    function proposeCommand(command) { pasteText = command; pasteDialog.open(); return true }
     function syncSession() { if(terminal)terminal.setWindowActive(visible) }
     function openSearch() { searchOpen=true;navigationOpen=false;searchInput.forceActiveFocus();searchInput.selectAll() }
     function closeSearch() { searchDelay.stop();searchOpen=false;surface.clearSearch();surface.forceActiveFocus() }
@@ -194,9 +196,9 @@ Item {
     Dialog {
         id:pasteDialog
         anchors.centerIn:parent;width:Math.min(440,win.width-24);modal:true
-        title:"Envoyer le presse-papiers au shell ?";contentHeight:84
+        title:"Envoyer ce texte au shell ?";contentHeight:Math.min(220,Math.max(84,win.pasteText.length/2+90))
         standardButtons:Dialog.Ok|Dialog.Cancel
-        contentItem:Text { text:win.pasteText.length>16000?"Texte trop volumineux (limite 16 Ko).":"Le texte sera envoyé au serveur. Les retours à la ligne peuvent exécuter des commandes.";wrapMode:Text.WordWrap }
+        contentItem:Text { objectName:"pastePreview";text:win.pasteText.length>16000?"Texte trop volumineux (limite 16 Ko).":"Le texte suivant sera envoyé au serveur. Les retours à la ligne peuvent exécuter des commandes.\n\n"+win.pasteText.slice(0,300)+(win.pasteText.length>300?"…":"");wrapMode:Text.WrapAnywhere;font.family:Theme.monoFamily;font.pixelSize:12 }
         onAccepted:{surface.paste(win.pasteText);win.pasteText="";surface.forceActiveFocus()}
         onRejected:win.pasteText=""
     }

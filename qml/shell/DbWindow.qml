@@ -25,6 +25,12 @@ Item {
     readonly property int colWidth: 150
     signal closeRequested()
     signal requestServers()
+    signal requestCopy(string what, string text)
+    function resultAsText() {
+        if (!db || db.columns.length === 0) return ""
+        const cell = v => v === null || v === undefined ? "NULL" : String(v)
+        return [db.columns.map(cell).join("\t")].concat(db.rows.map(r => r.map(cell).join("\t"))).join("\n")
+    }
 
     function sync() { if (db) db.setWindowActive(visible) }
     onVisibleChanged: sync()
@@ -294,10 +300,16 @@ Item {
             Text {
                 id: infoLine
                 objectName: "dbInfo"
-                y: editorBox.height + 6; width: parent.width; elide: Text.ElideRight; textFormat: Text.PlainText; font.pixelSize: 11
+                y: editorBox.height + 6; width: parent.width - 90; elide: Text.ElideRight; textFormat: Text.PlainText; font.pixelSize: 11
                 color: win.db && win.db.error !== "" ? "#FCA5A5" : Theme.inkMuted
                 text: !win.db ? "" : (win.db.error !== "" ? "" : (win.db.busy ? win.db.status : (win.db.resultInfo !== "" ? win.db.resultInfo : win.db.status)))
                 visible: win.db && win.db.error === ""
+            }
+            CopyChip {
+                objectName: "dbCopyResult"
+                visible: win.db !== null && win.db.error === "" && win.db.columns.length > 0
+                anchors.right: parent.right; y: editorBox.height + 3; touch: win.adaptive
+                onClicked: win.requestCopy("résultat de la requête", win.resultAsText())
             }
             Text {
                 id: errorLine

@@ -17,6 +17,7 @@ Item {
     readonly property real contentLeft: drawer ? 0 : 196
     signal closeRequested()
     signal requestServers()
+    signal requestCopy(string what, string text)
 
     function sync() { if (network) network.setWindowActive(visible) }
     onVisibleChanged: sync()
@@ -269,9 +270,15 @@ Item {
             }
         }
         Text {
-            id: probeStatus; y: probeButtons.y + probeButtons.height + 8; width: parent.width; textFormat: Text.PlainText; font.pixelSize: 11
+            id: probeStatus; y: probeButtons.y + probeButtons.height + 8; width: parent.width - 90; textFormat: Text.PlainText; font.pixelSize: 11
             text: win.network ? (win.network.probeKind.length > 0 ? win.network.probeKind + " " + win.network.probeTarget + " — " : "") + win.network.probeStatus : ""
             color: win.network && win.network.probeStatus.indexOf("Saisissez") === 0 ? "#FCA5A5" : Theme.inkMuted
+        }
+        CopyChip {
+            objectName: "networkCopyProbe"
+            visible: win.network !== null && win.network.probeOutput.length > 0
+            anchors.right: parent.right; y: probeStatus.y - 3; touch: win.adaptive
+            onClicked: win.requestCopy("résultat du diagnostic", (win.network.probeKind.length > 0 ? win.network.probeKind + " " + win.network.probeTarget + "\n" : "") + win.network.probeOutput)
         }
         Flickable {
             y: probeStatus.y + probeStatus.implicitHeight + 6; width: parent.width; height: Math.max(0, parent.height - y)

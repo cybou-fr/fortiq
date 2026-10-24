@@ -10,7 +10,7 @@ Item {
     Rectangle { width: parent.width; height: 1; color: "#14FFFFFF" }
     Text {
         x: 14; anchors.verticalCenter: parent.verticalCenter
-        width: parent.width - 120; elide: Text.ElideRight
+        width: parent.width - 250; elide: Text.ElideRight
         color: files.notice.length > 0 ? (files.noticeError ? "#FCA5A5" : "#86EFAC") : Theme.inkMuted
         font.pixelSize: 11; font.family: Theme.fontFamily
         text: {
@@ -22,6 +22,13 @@ Item {
             return base + "   ·   " + s.name + (s.directory ? "" : " — " + files.formatSize(s.size))
                 + (s.owner ? " — " + s.owner : "") + (s.mode ? " — " + s.mode : "")
         }
+    }
+    CopyChip {
+        objectName: "filesTerminalHere"
+        visible: !files.fixture && files.connected && files.controller !== null && files.controller.currentDirectory.length > 0
+        anchors.right: parent.right; anchors.rightMargin: 130; anchors.verticalCenter: parent.verticalCenter
+        label: "Terminal ici"
+        onClicked: files.requestTerminal(files.controller.currentDirectory)
     }
     Text {
         anchors.right: parent.right; anchors.rightMargin: 22

@@ -151,6 +151,21 @@ QtObject {
     function reload() { reloads = reloads + 1 }
     function setWindowActive(a) {}
 })";
+static const char kFakeRouter[] = R"(import QtQml
+QtObject {
+    property bool connected: true
+    property string activeServerId: "srvA"
+    property string serverLabel: "u@a"
+    property var navigated: []
+    property string trashDirectory: ""
+    property var servers: []
+    property bool busy: false
+    property bool secretStoreAvailable: false
+    property string pendingFingerprint: ""
+    property string statusText: ""
+    signal changed()
+    function navigate(path) { navigated = navigated.concat([path]) }
+})";
 static const char kFakeDb[] = R"(import QtQml
 QtObject {
     property bool canEdit: true
@@ -595,6 +610,13 @@ private slots:
                 QCOMPARE(rows->property("count").toInt(), 2);
                 QCOMPARE(dbWin->property("schemaRows").toList().size(), 1);          // collapsed: only the table
                 QVERIFY(findByName(dbWin, "dbInfo")); QVERIFY(!findByName(dbWin, "dbError")->isVisible());
+                {   // Copier: the result as tab-separated text, NULL spelled out.
+                    auto *copy = findByName(dbWin, "dbCopyResult"); QVERIFY(copy); QTRY_V(copy->isVisible());
+                    QVERIFY(copy->x() + copy->width() <= dbWin->width());
+                    QGuiApplication::clipboard()->clear();
+                    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, copy->mapToScene(QPointF(copy->width() / 2, copy->height() / 2)).toPoint());
+                    QTRY_V(QGuiApplication::clipboard()->text().startsWith("id\tname\tscore\n"));
+                }
                 // The connected role: a banner says what it may do; details and a copyable read-only role recipe open on a click.
                 auto *role = findByName(dbWin, "dbRoleBanner"); QVERIFY(role); QTRY_V(role->isVisible());
                 QCOMPARE(role->height(), 30.0);
@@ -678,6 +700,13 @@ private slots:
                 QTRY_C(fakeNet->property("calls").toStringList(), QStringList{ "probe:ping:example.org" });
                 auto *output = findByName(netWin, "networkProbeOutput"); QVERIFY(output);
                 QTRY_V(output->property("text").toString().contains("4 packets transmitted"));
+                {   // Copier: the diagnostic and its target reach the clipboard.
+                    auto *copy = findByName(netWin, "networkCopyProbe"); QVERIFY(copy); QTRY_V(copy->isVisible());
+                    QVERIFY(copy->x() + copy->width() <= netWin->width());
+                    QGuiApplication::clipboard()->clear();
+                    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, copy->mapToScene(QPointF(copy->width() / 2, copy->height() / 2)).toPoint());
+                    QTRY_V(QGuiApplication::clipboard()->text().contains("ping example.org") && QGuiApplication::clipboard()->text().contains("4 packets transmitted"));
+                }
                 shell->setProperty("networkOpen", false);
                 shell->setProperty("networkController", QVariant::fromValue<QObject *>(nullptr));
             }
@@ -1186,6 +1215,104 @@ private slots:
             QVERIFY(dialog->isVisible());
             QVERIFY(editor->property("dirty").toBool());
             QVERIFY(window->grabWindow().save(QString("layout-captures/%1-unsaved.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+        }
+        {   // Moves between apps (audit backlog 8): one router, bound to the server that was connected when the action was made.
+            QQmlComponent routerComponent(&engine), sysComponent2(&engine);
+            routerComponent.setData(kFakeRouter, QUrl()); sysComponent2.setData(kFakeSystem, QUrl());
+            auto *router = routerComponent.create(); QVERIFY2(router, qPrintable(routerComponent.errorString()));
+            auto *fakeSys2 = sysComponent2.create(); QVERIFY2(fakeSys2, qPrintable(sysComponent2.errorString()));
+            router->setParent(window); fakeSys2->setParent(window);
+            shell->setProperty("serversOpen", false);
+            shell->setProperty("controller", QVariant::fromValue(router));
+            shell->setProperty("systemController", QVariant::fromValue(fakeSys2));
+            shell->setProperty("systemOpen", true);
+            shell->setProperty("foregroundApp", "system");
+            settle(window);
+            auto *sysWin = shell->findChild<QQuickItem *>("systemWindow"); QVERIFY(sysWin); QVERIFY(sysWin->isVisible());
+            auto *logsWin = shell->findChild<QQuickItem *>("logsWindow"); QVERIFY(logsWin);
+            auto click = [&](QQuickItem *item) {
+                QVERIFY(item); QVERIFY(item->isVisible());
+                QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
+                settle(window);
+            };
+            auto toastText = [&] { auto *toast = findByName(shell, "routeToast"); return toast && toast->isVisible() ? toast->findChild<QQuickItem *>()->property("text").toString() : QString(); };
+            auto route = [&](const QVariantMap &action) { QVariant r; [&] { QVERIFY(QMetaObject::invokeMethod(shell, "route", Q_RETURN_ARG(QVariant, r), Q_ARG(QVariant, action))); }(); settle(window); return r.toBool(); };
+            auto act = [&](const QString &type, const QVariantMap &fields) { QVariant r; [&] { QVERIFY(QMetaObject::invokeMethod(shell, "act", Q_RETURN_ARG(QVariant, r), Q_ARG(QVariant, type), Q_ARG(QVariant, fields))); }(); settle(window); return r.toBool(); };
+
+            // Système -> Journaux: a service row, then its journal.
+            QVERIFY(QMetaObject::invokeMethod(shell, "raiseApp", Q_ARG(QVariant, QVariant("system"))));
+            sysWin->setProperty("section", "services");
+            sysWin->setProperty("filterText", "");
+            settle(window);
+            click(findByName(sysWin, "systemServiceFilter_all"));
+            auto *serviceList = findByName(sysWin, "systemServiceList"); QVERIFY(serviceList);
+            QQuickItem *row = nullptr;
+            QTRY_V([&] {
+                QMetaObject::invokeMethod(serviceList, "forceLayout");
+                row = nullptr;
+                for (int i = 0; i < 3 && !row; ++i) {
+                    QQuickItem *candidate = nullptr;
+                    QMetaObject::invokeMethod(serviceList, "itemAtIndex", Q_RETURN_ARG(QQuickItem *, candidate), Q_ARG(int, i));
+                    if (candidate && candidate->property("modelData").toMap().value("unit").toString() == "broken.service") row = candidate;
+                }
+                return row != nullptr;
+            }());
+            click(row);
+            QCOMPARE(sysWin->property("selectedUnit").toString(), QString("broken.service"));
+            auto *serviceDetail = findByName(sysWin, "systemServiceDetail"); QVERIFY(serviceDetail); QTRY_V(serviceDetail->isVisible());
+            QVERIFY(serviceDetail->y() >= 0 && serviceDetail->y() + serviceDetail->height() <= sysWin->height());
+            QVERIFY(window->grabWindow().save(QString("layout-captures/%1-service-detail.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+            click(findByName(serviceDetail, "systemServiceLogs"));
+            QCOMPARE(shell->property("lastRoute").toString(), QString("showLogs@srvA"));
+            QVERIFY(shell->property("logsOpen").toBool());
+            QCOMPARE(logsWin->property("requestedUnit").toString(), QString("broken.service"));
+            QCOMPARE(logsWin->property("view").toString(), QString("service"));
+
+            // A stale action (made for srvA while srvB is connected) is refused and says so; the active server is not substituted.
+            router->setProperty("activeServerId", "srvB");
+            QVERIFY(!route({ { "type", "showLogs" }, { "serverId", "srvA" }, { "unit", "ssh.service" } }));
+            QCOMPARE(logsWin->property("requestedUnit").toString(), QString("broken.service"));
+            QCOMPARE(shell->property("lastRoute").toString(), QString("showLogs@srvA"));
+            QVERIFY2(toastText().contains("ignorée"), qPrintable(toastText()));
+            QVERIFY(!route({ { "type", "terminalHere" }, { "serverId", "" }, { "path", "/x" } }));      // no server named at all
+            router->setProperty("connected", false);
+            QVERIFY(!act("showService", { { "unit", "cron.service" } }));                              // nothing is connected
+            QCOMPARE(sysWin->property("selectedUnit").toString(), QString("broken.service"));
+            router->setProperty("connected", true); router->setProperty("activeServerId", "srvA");
+
+            // Journaux -> Système: the service of an event, with its state.
+            const int reloadsBefore = fakeSys2->property("reloads").toInt();
+            QVERIFY(act("showService", { { "unit", "cron.service" } }));
+            QCOMPARE(sysWin->property("section").toString(), QString("services"));
+            QCOMPARE(sysWin->property("selectedUnit").toString(), QString("cron.service"));
+            QCOMPARE(sysWin->property("filterText").toString(), QString("cron.service"));
+            QVERIFY(fakeSys2->property("reloads").toInt() > reloadsBefore);
+
+            // Copier: the state of the service and the details of a process reach the clipboard, and a notice says so.
+            QGuiApplication::clipboard()->clear();
+            click(findByName(serviceDetail, "systemCopyService"));
+            QVERIFY2(QGuiApplication::clipboard()->text().contains("cron.service") && QGuiApplication::clipboard()->text().contains("inactive"), qPrintable(QGuiApplication::clipboard()->text()));
+            QVERIFY2(toastText().startsWith("Copié"), qPrintable(toastText()));
+            sysWin->setProperty("section", "processes"); sysWin->setProperty("filterText", ""); sysWin->setProperty("selectedPid", 700);
+            settle(window);
+            auto *processDetail = findByName(sysWin, "systemDetail"); QVERIFY(processDetail); QTRY_V(processDetail->isVisible());
+            click(findByName(processDetail, "systemCopyProcess"));
+            QVERIFY2(QGuiApplication::clipboard()->text().contains("nginx") && QGuiApplication::clipboard()->text().contains("PID 700"), qPrintable(QGuiApplication::clipboard()->text()));
+
+            // Fichiers -> Terminal: the command is proposed, quoted, and waits for the user's confirmation.
+            auto *terminalWin = shell->findChild<QQuickItem *>("terminalWindow"); QVERIFY(terminalWin);
+            QVERIFY(act("terminalHere", { { "path", "/home/o'neil" } }));
+            QVERIFY(shell->property("terminalOpen").toBool());
+            QCOMPARE(terminalWin->property("pasteText").toString(), QString("cd -- '/home/o'\\''neil'"));   // typed, never run: Enter is the user's
+            // Disques -> Fichiers.
+            QVERIFY(act("revealInFiles", { { "path", "/mnt/data" } }));
+            QCOMPARE(router->property("navigated").toStringList(), QStringList{ "/mnt/data" });
+            QVERIFY(shell->property("filesOpen").toBool());
+
+            shell->setProperty("systemOpen", false); shell->setProperty("logsOpen", false); shell->setProperty("terminalOpen", false); shell->setProperty("filesOpen", false);
+            shell->setProperty("systemController", QVariant::fromValue<QObject *>(nullptr));
+            shell->setProperty("controller", QVariant::fromValue<QObject *>(nullptr));
+            settle(window);
         }
         {   // The server pill turns red and says so when the link is lost.
             auto *pill = findByName(shell, "sessionPill"); QVERIFY(pill);
