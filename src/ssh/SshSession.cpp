@@ -10,6 +10,40 @@ QString sshError(LIBSSH2_SESSION *session, const QString &prefix) {
     // Never echo unknown server text or credential data into the UI.
     return prefix + QStringLiteral(" (SSH code %1)").arg(libssh2_session_last_errno(session));
 }
+// S-1: the algorithms the client will negotiate. libssh2's own list (in ITS order, so the host-key type that is
+// negotiated, and with it every saved pin, stays what it was) minus what is obsolete or weak: SHA-1 key exchange,
+// SHA-1 (ssh-rsa) and DSA host keys, CBC / 3DES / RC4 / Blowfish / CAST ciphers, MD5 / SHA-1 MACs, "none".
+bool obsoleteAlgorithm(int method, const QByteArray &name)
+{
+    const auto has = [&](std::initializer_list<const char *> parts) {
+        for (const char *part : parts) if (name.contains(part)) return true;
+        return false;
+    };
+    if (name.contains("none")) return true;
+    switch (method) {
+    case LIBSSH2_METHOD_KEX: return has({ "sha1", "group1-" });
+    case LIBSSH2_METHOD_HOSTKEY: return name == "ssh-rsa" || has({ "dss", "sha1" }) || name.startsWith("ssh-rsa-cert");
+    case LIBSSH2_METHOD_CRYPT_CS: case LIBSSH2_METHOD_CRYPT_SC: return has({ "cbc", "3des", "arcfour", "blowfish", "cast", "rijndael" });
+    case LIBSSH2_METHOD_MAC_CS: case LIBSSH2_METHOD_MAC_SC: return has({ "md5", "sha1", "ripemd" });
+    default: return false;
+    }
+}
+// Applies the policy to a fresh session; false if a list would be empty or libssh2 refuses it.
+bool applyAlgorithmPolicy(LIBSSH2_SESSION *session)
+{
+    for (const int method : { LIBSSH2_METHOD_KEX, LIBSSH2_METHOD_HOSTKEY, LIBSSH2_METHOD_CRYPT_CS, LIBSSH2_METHOD_CRYPT_SC,
+                              LIBSSH2_METHOD_MAC_CS, LIBSSH2_METHOD_MAC_SC }) {
+        const char **supported = nullptr;
+        const int count = libssh2_session_supported_algs(session, method, &supported);
+        if (count <= 0 || !supported) return false;
+        QByteArrayList allowed;
+        for (int i = 0; i < count; ++i)
+            if (!obsoleteAlgorithm(method, QByteArray(supported[i]))) allowed << QByteArray(supported[i]);
+        libssh2_free(session, static_cast<void *>(supported));
+        if (allowed.isEmpty() || libssh2_session_method_pref(session, method, allowed.join(',').constData()) != 0) return false;
+    }
+    return true;
+}
 QString modeString(unsigned long mode) {
     QString s(10, QLatin1Char('-'));
     if (LIBSSH2_SFTP_S_ISDIR(mode)) s[0] = 'd';
@@ -58,9 +92,13 @@ SshResult SshSession::open(const ConnectionRequest &req)
     if (!d->handle) { d->close(); return fail(QStringLiteral("Échec de création de la session SSH.")); }
     libssh2_session_set_blocking(d->handle, 1);
     libssh2_session_set_timeout(d->handle, 15000);
+    if (!applyAlgorithmPolicy(d->handle)) { d->close(); return fail(QStringLiteral("Cannot apply the SSH algorithm policy.")); }
     if (libssh2_session_handshake(d->handle,
             static_cast<libssh2_socket_t>(d->socket.socketDescriptor())) != 0) {
-        const SshResult r = fail(sshError(d->handle, QStringLiteral("Échec de la négociation SSH")));
+        const int code = libssh2_session_last_errno(d->handle);
+        const SshResult r = fail(code == LIBSSH2_ERROR_METHOD_NONE || code == LIBSSH2_ERROR_KEX_FAILURE
+            ? QStringLiteral("Le serveur ne propose que des algorithmes SSH obsolètes (échange de clés SHA-1, chiffrement CBC, MAC SHA-1 ou clé d'hôte ssh-rsa) : connexion refusée. Mettez à jour la configuration du serveur. (SSH code %1)").arg(code)
+            : sshError(d->handle, QStringLiteral("Échec de la négociation SSH")));
         d->close();
         LinkMonitor::reportLost(d->key, QStringLiteral("Serveur injoignable."));
         return r;

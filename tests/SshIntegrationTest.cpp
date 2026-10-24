@@ -1868,7 +1868,7 @@ private slots:
         // ===== 5. Secrets never reach the client settings in clear =====
         for (const QString &k : settings.allKeys()) {
             const QString value = settings.value(k).toString() + QString::fromUtf8(settings.value(k).toByteArray());
-            QVERIFY2(!value.contains(dbPassword) && !value.contains(base.password) && !value.contains("Zq\"7"), qPrintable(k));
+            QVERIFY2(!value.contains(dbPassword) && (base.password.isEmpty() || !value.contains(base.password)) && !value.contains("Zq\"7"), qPrintable(k));
         }
         QVERIFY(fortiq::SecretStore::load("db-" + profileId).ok);   // it is in the protected store...
         shell("rm -f ~/.msmtprc\n");
@@ -3095,6 +3095,36 @@ private slots:
         qInfo("rebinding: %d opened from the public address, %d asked about an internal one; control curl: %s", fetched, asked, qPrintable(naive.simplified()));
         QVERIFY2(fetched > 0 && asked > 0, "both outcomes are expected while the name flips");
         settings.remove(pin);
+    }
+
+    // S-1 (docs/STABILIZATION_PLAN.md): the client offers no obsolete algorithm. tool/setup_weak_ssh_fixture.sh starts
+    // sshd instances that offer ONLY a SHA-1 key exchange (2231), only a CBC cipher (2232), only HMAC-SHA1 (2233) or only
+    // an ssh-rsa (SHA-1) host key (2234); 2235 offers only modern algorithms. The handshake with a weak one must fail before
+    // any host key is shown for trust; the modern one and the normal server must still work with the SAME host-key
+    // fingerprint as before (saved pins must not break).
+    void obsoleteAlgorithmsAreRefused() {
+        if (qEnvironmentVariable("FORTIQ_IT_WEAK").isEmpty()) QSKIP("FORTIQ_IT_WEAK (tool/setup_weak_ssh_fixture.sh) is needed");
+        const auto handshake = [&](int port) {
+            ConnectionRequest request = base;
+            request.port = port;
+            request.password = QStringLiteral("unused");
+            request.keyPath.clear();
+            request.expectedHostFingerprint.clear();
+            return SshClient::list(request);   // never authenticates: it stops at the trust question
+        };
+        for (const int port : { 2231, 2232, 2233, 2234 }) {
+            const SshResult r = handshake(port);
+            QVERIFY2(r.status == SshResult::Status::Error, qPrintable(QStringLiteral("port %1 was accepted: %2").arg(port).arg(r.message)));
+            QVERIFY2(r.fingerprint.isEmpty(), "no host key may be offered for trust over an obsolete algorithm");
+            QVERIFY2(r.message.contains(QStringLiteral("obsol")), qPrintable(r.message));
+        }
+        const SshResult modern = handshake(2235);
+        QVERIFY2(modern.status == SshResult::Status::TrustRequired, qPrintable(modern.message));
+        QVERIFY(!modern.fingerprint.isEmpty());
+        // the usual server: still negotiates, and the fingerprint is the one already pinned (same host key type as before)
+        const SshResult normal = handshake(base.port);
+        QVERIFY2(normal.status == SshResult::Status::TrustRequired, qPrintable(normal.message));
+        QCOMPARE(normal.fingerprint, fingerprint);
     }
 
     // S-2 (docs/STABILIZATION_PLAN.md): a server command that never ends. runScript has a deadline; when it passes (or
