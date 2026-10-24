@@ -97,18 +97,20 @@ Item {
         if (!taskManager || state === "cancelled") return
         const t = taskManager.task(id)
         if (!t || !t.title) return
+        if (t.transient && state === "succeeded") return      // quiet reads leave no trace
         const where = t.source ? " · " + t.source : ""
         if (state === "succeeded") pushNotification("ok", "Terminé : " + t.title, (t.message || "") + where)
         else if (state === "failed") pushNotification("error", "Échec : " + t.title, (t.message || "") + where)
         else pushNotification("warn", "Résultat incertain : " + t.title, (t.message || "") + where)
     }
-    function trackLink() {
-        if (!controller) return
-        const lost = controller.connected && controller.linkLost === true
+    function trackLink(source) {
+        const c = source === undefined ? controller : source
+        if (!c) return
+        const lost = c.connected && c.linkLost === true
         if (lost === lastLinkLost) return
         lastLinkLost = lost
-        if (lost) pushNotification("error", "Connexion perdue", controller.serverLabel + " — les données affichées datent d’avant la coupure.")
-        else if (controller.connected) pushNotification("ok", "Connexion rétablie", controller.serverLabel)
+        if (lost) pushNotification("error", "Connexion perdue", c.serverLabel + " — les données affichées datent d’avant la coupure.")
+        else if (c.connected) pushNotification("ok", "Connexion rétablie", c.serverLabel)
     }
     Connections {
         target: shell.controller

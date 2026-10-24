@@ -708,6 +708,36 @@ LauncherPanel { width: 438; height: 443 })", QUrl());
                 QVERIFY(!shell->property("notificationsOpen").toBool());
                 QMetaObject::invokeMethod(shell, "clearNotifications");
             }
+            {   // Notifications from the real sources: a TaskManager and a controller whose link drops and comes back.
+                QQmlComponent linkComponent(&engine);
+                linkComponent.setData(R"(import QtQml
+QtObject { property bool connected: true; property bool linkLost: false; property string serverLabel: "u@host" })", QUrl());
+                auto *linkCtl = linkComponent.create(); QVERIFY2(linkCtl, qPrintable(linkComponent.errorString()));
+                linkCtl->setParent(window);
+                auto track = [&]() { QMetaObject::invokeMethod(shell, "trackLink", Q_ARG(QVariant, QVariant::fromValue(linkCtl))); };
+                fortiq::TaskManager manager;
+                shell->setProperty("taskManager", QVariant::fromValue<QObject *>(&manager));
+                auto titles = [&]() { QStringList t; for (const QVariant &v : shell->property("notifications").toList()) t << v.toMap().value("title").toString(); return t; };
+                QMetaObject::invokeMethod(shell, "clearNotifications");
+                linkCtl->setProperty("linkLost", true); track();
+                QCOMPARE(titles(), QStringList({"Connexion perdue"}));
+                track();                                                                         // the same state twice: one notice
+                QCOMPARE(titles().size(), 1);
+                linkCtl->setProperty("linkLost", false); track();
+                QCOMPARE(titles().first(), QString("Connexion rétablie"));
+                fortiq::TaskManager::Spec spec; spec.kind = "upload"; spec.title = "rapport.pdf"; spec.source = "u@host";
+                const int ok = manager.begin(spec); manager.succeed(ok, "Envoyé");
+                const int bad = manager.begin(spec); manager.fail(bad, "Permission refusée");
+                const int stopped = manager.begin(spec); manager.markCancelled(stopped, "Annulé");
+                fortiq::TaskManager::Spec quiet = spec; quiet.title = "lecture"; quiet.transient = true;
+                const int silent = manager.begin(quiet); manager.succeed(silent, "ok");
+                const QStringList got = titles();
+                QVERIFY2(got.contains("Terminé : rapport.pdf") && got.contains("Échec : rapport.pdf"), qPrintable(got.join('|')));
+                QCOMPARE(got.size(), 4);                                                         // link x2 + done + failed; cancelled and transient stay quiet
+                QCOMPARE(shell->property("unreadCount").toInt(), 4);
+                QMetaObject::invokeMethod(shell, "clearNotifications");
+                shell->setProperty("taskManager", QVariant::fromValue<QObject *>(nullptr));
+            }
             {   // Bases de données: profile list, schema, read-only editor and the profile form.
                 QQmlComponent dbComponent(&engine), dbRemoteComponent(&engine);
                 dbComponent.setData(kFakeDb, QUrl());
