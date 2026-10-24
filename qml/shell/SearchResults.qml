@@ -113,7 +113,7 @@ Rectangle {
                 elide: Text.ElideRight
                 textFormat: Text.StyledText
                 text: "<font color='#7F93B5'>" + row.modelData.line + ":</font> " + panel.highlight(row.modelData.text || "")
-                color: "#CFDAEC"; font.pixelSize: 11; font.family: "Consolas"
+                color: "#CFDAEC"; font.pixelSize: 11; font.family: Theme.monoFamily
             }
             Text {
                 id: locate

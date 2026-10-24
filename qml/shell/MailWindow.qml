@@ -580,7 +580,7 @@ Item {
                                 width: parent.width; height: Math.min(260, fileText.implicitHeight + 16); radius: 8; color: "#30182740"; border.width: 1; border.color: "#25DCEBFF"
                                 Flickable {
                                     anchors.fill: parent; anchors.margins: 8; clip: true; contentWidth: fileText.implicitWidth; contentHeight: fileText.implicitHeight; boundsBehavior: Flickable.StopAtBounds
-                                    Text { id: fileText; objectName: "mailWizText_" + modelData.key; textFormat: Text.PlainText; text: revealBox.checked ? modelData.content : modelData.shown; color: Theme.ink; font.pixelSize: 11; font.family: "Consolas" }
+                                    Text { id: fileText; objectName: "mailWizText_" + modelData.key; textFormat: Text.PlainText; text: revealBox.checked ? modelData.content : modelData.shown; color: Theme.ink; font.pixelSize: 11; font.family: Theme.monoFamily }
                                 }
                             }
                         }
@@ -615,7 +615,7 @@ Item {
                     width: parent.width; height: Math.min(200, outText.implicitHeight + 16); radius: 8; color: "#30182740"; border.width: 1; border.color: "#25DCEBFF"
                     Flickable {
                         anchors.fill: parent; anchors.margins: 8; clip: true; contentWidth: outText.implicitWidth; contentHeight: outText.implicitHeight; boundsBehavior: Flickable.StopAtBounds
-                        Text { id: outText; objectName: "mailWizOutput"; textFormat: Text.PlainText; text: win.mailer ? win.mailer.actionOutput : ""; color: Theme.inkMuted; font.pixelSize: 10; font.family: "Consolas" }
+                        Text { id: outText; objectName: "mailWizOutput"; textFormat: Text.PlainText; text: win.mailer ? win.mailer.actionOutput : ""; color: Theme.inkMuted; font.pixelSize: 10; font.family: Theme.monoFamily }
                     }
                 }
             }

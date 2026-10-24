@@ -49,7 +49,14 @@ Item {
             GradientStop { position: 0; color: icon.colors[0] }
             GradientStop { position: 1; color: icon.colors[1] }
         }
+        SymbolGlyph {   // a few symbols are missing from Android's fonts and are drawn instead
+            id: drawnGlyph
+            anchors.centerIn: parent
+            visible: drawn
+            glyph: icon.colors[2]; color: "white"; size: icon.size * 0.52
+        }
         Text {
+            visible: !drawnGlyph.drawn
             anchors.centerIn: parent
             text: icon.colors[2]
             color: "white"

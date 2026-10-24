@@ -8,7 +8,7 @@ Item {
     property color color: Theme.ink
     property real size: 16
     property string fontFamily: ""
-    readonly property bool drawn: Qt.platform.os === "android" && ["⌕", "⧉", "▤", "≣", "◷", "⛁", "ᛒ", "◠", "☰", "↻", "⤒", "⤓", "⤢", "↶", "⌃", "⌄"].indexOf(glyph) >= 0
+    readonly property bool drawn: Qt.platform.os === "android" && ["⌕", "⧉", "▤", "≣", "◷", "⛁", "ᛒ", "◠", "☰", "↻", "⤒", "⤓", "⤢", "↶", "⌃", "⌄", "✎", "▯"].indexOf(glyph) >= 0
     implicitWidth: drawn ? size : label.implicitWidth
     implicitHeight: drawn ? size : label.implicitHeight
     Text {
@@ -58,6 +58,8 @@ Item {
             case "⤢": c.moveTo(3, 8); c.lineTo(3, 3); c.lineTo(8, 3); c.moveTo(3, 3); c.lineTo(8, 8); c.moveTo(12, 17); c.lineTo(17, 17); c.lineTo(17, 12); c.moveTo(17, 17); c.lineTo(12, 12); break
             case "↶": c.moveTo(7, 3); c.lineTo(3, 7); c.lineTo(7, 11); c.moveTo(3, 7); c.lineTo(12, 7); c.bezierCurveTo(19, 7, 19, 17, 11, 17); break
             case "⌃": c.moveTo(4, 13); c.lineTo(10, 7); c.lineTo(16, 13); break
+            case "✎": c.moveTo(3, 17); c.lineTo(4, 12); c.lineTo(14, 2); c.lineTo(18, 6); c.lineTo(8, 16); c.lineTo(3, 17); c.moveTo(12, 4); c.lineTo(16, 8); break
+            case "▯": c.rect(6, 3, 8, 14); c.moveTo(8.5, 1.5); c.lineTo(11.5, 1.5); break
             case "⌄": c.moveTo(4, 7); c.lineTo(10, 13); c.lineTo(16, 7); break
             }
             c.stroke()

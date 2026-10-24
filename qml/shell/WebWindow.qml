@@ -173,7 +173,7 @@ Item {
                 readOnly: true; selectByMouse: true
                 textFormat: TextEdit.RichText
                 wrapMode: TextEdit.Wrap
-                text: win.browser && win.kind === "html" ? "<style>a { color: #9CC6FF; } h1, h2, h3 { color: #FFFFFF; } code, pre { font-family: Consolas; }</style>" + win.browser.contentHtml : ""
+                text: win.browser && win.kind === "html" ? "<style>a { color: #9CC6FF; } h1, h2, h3 { color: #FFFFFF; } code, pre { font-family: monospace; }</style>" + win.browser.contentHtml : ""
                 color: Theme.ink; selectionColor: Theme.accent
                 font.pixelSize: win.adaptive ? 15 : 13; font.family: Theme.fontFamily
                 onLinkActivated: link => win.browser.openLink(link)
@@ -196,7 +196,7 @@ Item {
                 wrapMode: TextEdit.WrapAnywhere
                 text: win.browser && (win.kind === "text" || win.kind === "json") ? win.browser.contentText : ""
                 color: Theme.ink; selectionColor: Theme.accent
-                font.pixelSize: win.adaptive ? 13 : 12; font.family: "Consolas"
+                font.pixelSize: win.adaptive ? 13 : 12; font.family: Theme.monoFamily
                 onTextChanged: textFlick.contentY = 0
             }
         }
@@ -284,7 +284,7 @@ Item {
                         model: win.browser && win.browser.pendingConfirm.details ? win.browser.pendingConfirm.details : []
                         Text {
                             required property var modelData
-                            width: confirmColumn.width; textFormat: Text.PlainText; font.pixelSize: 11; font.family: "Consolas"
+                            width: confirmColumn.width; textFormat: Text.PlainText; font.pixelSize: 11; font.family: Theme.monoFamily
                             color: modelData.cls === "public" ? Theme.inkMuted : "#FCD34D"
                             text: "• " + modelData.ip + "   " + modelData.label
                         }
@@ -368,7 +368,7 @@ Item {
                         required property var modelData
                         width: infoColumn.width; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText
                         text: modelData.name + ": " + modelData.value
-                        color: Theme.inkMuted; font.pixelSize: 10; font.family: "Consolas"
+                        color: Theme.inkMuted; font.pixelSize: 10; font.family: Theme.monoFamily
                     }
                 }
             }

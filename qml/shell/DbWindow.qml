@@ -108,7 +108,7 @@ Item {
                 Rectangle {
                     anchors.right: parent.right; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter
                     width: 30; height: 30; radius: 6; color: editMouse.containsMouse ? "#33FFFFFF" : "transparent"
-                    Text { anchors.centerIn: parent; text: "✎"; color: Theme.ink; font.pixelSize: 13 }
+                    SymbolGlyph { anchors.centerIn: parent; glyph: "✎"; color: Theme.ink; size: 13 }
                     MouseArea { id: editMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.openForm(modelData) }
                 }
             }
@@ -210,7 +210,7 @@ Item {
                 objectName: "dbRoleRecipe"
                 visible: roleBanner.expanded && roleBanner.check.recommendation !== undefined && roleBanner.check.recommendation !== ""
                 width: parent.width; readOnly: true; selectByMouse: true; wrapMode: TextEdit.NoWrap; textFormat: TextEdit.PlainText
-                color: Theme.ink; font.pixelSize: 10; font.family: "Consolas"
+                color: Theme.ink; font.pixelSize: 10; font.family: Theme.monoFamily
                 text: roleBanner.check.recommendation ? roleBanner.check.recommendation : ""
             }
             Button {
@@ -282,7 +282,7 @@ Item {
                     TextArea {
                         id: editor
                         objectName: "dbEditor"
-                        color: Theme.ink; font.pixelSize: 12; font.family: "Consolas"; wrapMode: TextEdit.WrapAnywhere; selectByMouse: true
+                        color: Theme.ink; font.pixelSize: 12; font.family: Theme.monoFamily; wrapMode: TextEdit.WrapAnywhere; selectByMouse: true
                         placeholderText: "SELECT … (Ctrl+Entrée pour exécuter)"; placeholderTextColor: "#7F93B5"
                         background: null
                         Keys.onPressed: (event) => {
@@ -351,7 +351,7 @@ Item {
                                         anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight; textFormat: Text.PlainText
                                         horizontalAlignment: win.db.numeric[index] ? Text.AlignRight : Text.AlignLeft
                                         text: modelData === null ? "NULL" : String(modelData).replace(/\n/g, "⏎")
-                                        font.pixelSize: 11; font.italic: modelData === null; font.family: win.db.numeric[index] ? "Consolas" : ""
+                                        font.pixelSize: 11; font.italic: modelData === null; font.family: win.db.numeric[index] ? Theme.monoFamily : ""
                                         color: modelData === null ? "#7F93B5" : Theme.ink
                                     }
                                 }

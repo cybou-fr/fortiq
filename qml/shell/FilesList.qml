@@ -85,7 +85,7 @@ ListView {
             }
             Text { visible: list.colDate > 0; width: list.colDate; anchors.verticalCenter: parent.verticalCenter; text: files.formatDate(row.modelData.mtime); color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily }
             Text { width: list.colSize; anchors.verticalCenter: parent.verticalCenter; text: row.modelData.directory ? "—" : files.formatSize(row.modelData.size); color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily }
-            Text { visible: list.colMode > 0; width: list.colMode; anchors.verticalCenter: parent.verticalCenter; text: row.modelData.mode || ""; color: "#8FA2C2"; font.pixelSize: 11; font.family: "Consolas" }
+            Text { visible: list.colMode > 0; width: list.colMode; anchors.verticalCenter: parent.verticalCenter; text: row.modelData.mode || ""; color: "#8FA2C2"; font.pixelSize: 11; font.family: Theme.monoFamily }
         }
         MouseArea {
             id: rowMouse

@@ -131,7 +131,7 @@ Rectangle {
             text: bar.serverLabel
             color: Theme.ink; font.pixelSize: 14; font.weight: Font.DemiBold; font.family: Theme.fontFamily
         }
-        Text { anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; text: "▾"; color: Theme.inkMuted; font.pixelSize: 11 }
+        SymbolGlyph { anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; glyph: "⌄"; color: Theme.inkMuted; size: 12 }
         MouseArea { id: pillMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: bar.serverClicked() }
     }
     Rectangle {

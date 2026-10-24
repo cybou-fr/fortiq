@@ -30,5 +30,8 @@ QtObject {
     readonly property color folder: "#3D8BF2"
     readonly property color folderTab: "#2E73DA"
 
-    readonly property string fontFamily: Qt.platform.os === "windows" ? "Segoe UI" : "sans-serif"
+    // Android: the generic "sans-serif" resolves to Carrois Gothic SC (a small-caps face), so the platform UI font is named explicitly.
+    readonly property string fontFamily: Qt.platform.os === "windows" ? "Segoe UI" : (Qt.platform.os === "android" ? "Roboto" : "sans-serif")
+    // Consolas exists only on Windows; elsewhere Qt would substitute an arbitrary font (found on Android: small caps in host fingerprints).
+    readonly property string monoFamily: Qt.platform.os === "windows" ? "Consolas" : (Qt.platform.os === "android" ? "Droid Sans Mono" : "monospace")
 }

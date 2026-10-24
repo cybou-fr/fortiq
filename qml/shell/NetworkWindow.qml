@@ -147,7 +147,7 @@ Item {
                         required property var modelData
                         width: parent.width; elide: Text.ElideMiddle; textFormat: Text.PlainText
                         text: modelData.text + "   " + modelData.scope
-                        color: modelData.family === "inet6" ? "#9CC6FF" : Theme.ink; font.pixelSize: 11; font.family: "Consolas"
+                        color: modelData.family === "inet6" ? "#9CC6FF" : Theme.ink; font.pixelSize: 11; font.family: Theme.monoFamily
                     }
                 }
             }
@@ -164,7 +164,7 @@ Item {
                 visible: win.section === "ports"
                 x: 12; y: 8; width: parent.width - 150; elide: Text.ElideRight; textFormat: Text.PlainText
                 text: win.section === "ports" ? modelData.protocol.toUpperCase() + "  " + modelData.address + " : " + modelData.port : ""
-                color: Theme.ink; font.pixelSize: 13; font.family: "Consolas"
+                color: Theme.ink; font.pixelSize: 13; font.family: Theme.monoFamily
             }
             Text {
                 visible: win.section === "ports"
@@ -189,7 +189,7 @@ Item {
                 visible: win.section === "routes"
                 x: 12; y: 6; width: parent.width - 24; elide: Text.ElideRight; textFormat: Text.PlainText
                 text: win.section === "routes" ? (modelData.isDefault ? "Route par défaut  " : "") + modelData.destination : ""
-                color: win.section === "routes" && modelData.isDefault ? "#9CC6FF" : Theme.ink; font.pixelSize: 13; font.family: "Consolas"
+                color: win.section === "routes" && modelData.isDefault ? "#9CC6FF" : Theme.ink; font.pixelSize: 13; font.family: Theme.monoFamily
             }
             Text {
                 visible: win.section === "routes"
@@ -212,12 +212,12 @@ Item {
             Text { text: "DNS"; color: Theme.ink; font.pixelSize: 18 }
             Text { visible: win.network !== null && win.network.dnsNote.length > 0; width: parent.width; wrapMode: Text.WordWrap; text: win.network ? win.network.dnsNote : ""; color: Theme.inkMuted; font.pixelSize: 11 }
             Text { text: "SERVEURS"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2 }
-            Repeater { model: win.network ? win.network.dnsServers : []; Text { required property string modelData; text: modelData; color: Theme.ink; font.pixelSize: 13; font.family: "Consolas" } }
+            Repeater { model: win.network ? win.network.dnsServers : []; Text { required property string modelData; text: modelData; color: Theme.ink; font.pixelSize: 13; font.family: Theme.monoFamily } }
             Text { visible: win.network !== null && win.network.dnsServers.length === 0; text: "Aucun serveur DNS dans /etc/resolv.conf"; color: "#FCA5A5"; font.pixelSize: 12 }
             Text { visible: win.network !== null && win.network.dnsSearch.length > 0; topPadding: 6; text: "DOMAINES DE RECHERCHE"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2 }
             Text { visible: win.network !== null && win.network.dnsSearch.length > 0; width: parent.width; wrapMode: Text.WrapAnywhere; text: win.network ? win.network.dnsSearch.join("  ") : ""; color: Theme.ink; font.pixelSize: 12 }
             Text { visible: win.network !== null && win.network.resolvedText.length > 0; topPadding: 6; text: "SYSTEMD-RESOLVED"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2 }
-            Text { visible: win.network !== null && win.network.resolvedText.length > 0; width: parent.width; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText; text: win.network ? win.network.resolvedText : ""; color: Theme.inkMuted; font.pixelSize: 11; font.family: "Consolas" }
+            Text { visible: win.network !== null && win.network.resolvedText.length > 0; width: parent.width; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText; text: win.network ? win.network.resolvedText : ""; color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.monoFamily }
         }
     }
 
@@ -281,7 +281,7 @@ Item {
                 id: probeText
                 objectName: "networkProbeOutput"
                 width: parent.width - 8; readOnly: true; selectByMouse: true; wrapMode: TextEdit.WrapAnywhere; textFormat: TextEdit.PlainText
-                text: win.network ? win.network.probeOutput : ""; color: Theme.ink; font.pixelSize: 12; font.family: "Consolas"
+                text: win.network ? win.network.probeOutput : ""; color: Theme.ink; font.pixelSize: 12; font.family: Theme.monoFamily
             }
         }
     }

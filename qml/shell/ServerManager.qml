@@ -292,7 +292,7 @@ Item {
                         TextEdit {
                             width: parent.width; readOnly: true; selectByMouse: true; wrapMode: TextEdit.WrapAnywhere
                             text: mgr.controller ? mgr.controller.pendingFingerprint : ""
-                            color: "white"; font.family: "Consolas"; font.pixelSize: 13
+                            color: "white"; font.family: Theme.monoFamily; font.pixelSize: 13
                         }
                         Text {
                             width: parent.width; wrapMode: Text.WordWrap
@@ -323,7 +323,9 @@ Item {
                     Rectangle {
                         height: mgr.adaptive ? 40 : 28; radius: 14; width: el.implicitWidth + 24
                         color: em.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
-                        Text { id: el; anchors.centerIn: parent; text: "✎  Modifier"; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
+                        Row { id: el; anchors.centerIn: parent; spacing: 6
+                            SymbolGlyph { anchors.verticalCenter: parent.verticalCenter; glyph: "✎"; color: "white"; size: 12 }
+                            Text { anchors.verticalCenter: parent.verticalCenter; text: "Modifier"; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily } }
                         MouseArea { id: em; anchors.fill: parent; hoverEnabled: true; onClicked: mgr.startEdit(mgr.selected) }
                     }
                     Rectangle {

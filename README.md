@@ -119,6 +119,7 @@ cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
 
+Квалификация платформ (эмулятор Android сделан; чистая Windows и физический Android — за владельцем): [PLATFORM_QUALIFICATION](docs/PLATFORM_QUALIFICATION.md).
 Фаззинг и санитайзеры: [FUZZING](docs/FUZZING.md) (`tool/fuzz_linux.sh`, `-DFORTIQ_SANITIZE=ON`).
 
 Все проверки, которые обязан пройти коммит в `main` (документы, компиляция скриптов, сборка, офлайн-тесты, по желанию layout-тест под нагрузкой), одной командой:

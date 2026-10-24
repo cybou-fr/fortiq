@@ -498,7 +498,7 @@ Item {
                     color: ev.open ? "#262F8CFF" : (evMouse.containsMouse ? "#12FFFFFF" : (ev.index % 2 ? "#08FFFFFF" : "transparent"))
                 }
                 Rectangle { x: 4; y: 5; width: 3; height: 16; radius: 1.5; color: win.priorityColor(ev.modelData.priority) }
-                Text { x: 14; y: 5; width: 98; text: ev.modelData.timeText || "—"; color: "#9FB2D0"; font.pixelSize: 11; font.family: "Consolas" }
+                Text { x: 14; y: 5; width: 98; text: ev.modelData.timeText || "—"; color: "#9FB2D0"; font.pixelSize: 11; font.family: Theme.monoFamily }
                 Text {
                     x: 116; y: 5; width: 120; elide: Text.ElideRight
                     text: ev.modelData.unit; textFormat: Text.PlainText
@@ -509,7 +509,7 @@ Item {
                     x: 242; y: 5; width: parent.width - x - 8; elide: Text.ElideRight
                     text: ev.modelData.message; textFormat: Text.PlainText
                     color: ev.modelData.priority >= 0 && ev.modelData.priority <= 3 ? "#FECACA" : Theme.ink
-                    font.pixelSize: 11; font.family: "Consolas"
+                    font.pixelSize: 11; font.family: Theme.monoFamily
                 }
                 TextEdit {
                     id: full
@@ -518,7 +518,7 @@ Item {
                     readOnly: true; selectByMouse: true
                     wrapMode: TextEdit.WrapAnywhere; textFormat: TextEdit.PlainText
                     text: ev.open ? ev.modelData.message : ""
-                    color: Theme.ink; selectionColor: Theme.accent; font.pixelSize: 11; font.family: "Consolas"
+                    color: Theme.ink; selectionColor: Theme.accent; font.pixelSize: 11; font.family: Theme.monoFamily
                 }
                 Text {
                     visible: ev.open
@@ -576,7 +576,7 @@ Item {
                 Text {
                     x: 66; y: 6; width: parent.width - x - 12; elide: Text.ElideRight
                     text: pat.modelData.template; textFormat: Text.PlainText
-                    color: Theme.ink; font.pixelSize: 11; font.family: "Consolas"
+                    color: Theme.ink; font.pixelSize: 11; font.family: Theme.monoFamily
                 }
                 Text {
                     x: 66; y: 25; width: parent.width - x - 12; elide: Text.ElideRight

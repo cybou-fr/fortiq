@@ -79,7 +79,7 @@ Rectangle {
         zoom = Math.max(0.05, Math.min(16, base * f))
     }
 
-    FontMetrics { id: metrics; font.family: "Consolas"; font.pixelSize: 12 }
+    FontMetrics { id: metrics; font.family: Theme.monoFamily; font.pixelSize: 12 }
 
     // Header
     Item {
@@ -128,7 +128,9 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 height: 26; radius: 7; width: editLabel.implicitWidth + 20
                 color: editMouse.containsMouse ? Theme.selection : "#802D6FE0"
-                Text { id: editLabel; anchors.centerIn: parent; text: "✎  Modifier"; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
+                Row { id: editLabel; anchors.centerIn: parent; spacing: 6
+                            SymbolGlyph { anchors.verticalCenter: parent.verticalCenter; glyph: "✎"; color: "white"; size: 12 }
+                            Text { anchors.verticalCenter: parent.verticalCenter; text: "Modifier"; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily } }
                 MouseArea { id: editMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: viewer.startEditing() }
             }
             Rectangle {
@@ -201,7 +203,7 @@ Rectangle {
                         return s
                     }
                     color: "#5F7395"
-                    font.family: "Consolas"; font.pixelSize: 12
+                    font.family: Theme.monoFamily; font.pixelSize: 12
                     horizontalAlignment: Text.AlignRight
                     lineHeight: metrics.lineSpacing; lineHeightMode: Text.FixedHeight
                 }
@@ -224,7 +226,7 @@ Rectangle {
                     else if (r.x + x > textFlick.contentX + textFlick.width - 24) textFlick.contentX = r.x + x - textFlick.width + 48
                 }
                 color: "#E4ECF8"; selectionColor: Theme.accent
-                font.family: "Consolas"; font.pixelSize: 12
+                font.family: Theme.monoFamily; font.pixelSize: 12
                 textFormat: TextEdit.PlainText
                 wrapMode: TextEdit.NoWrap
             }

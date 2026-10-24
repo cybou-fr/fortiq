@@ -233,9 +233,9 @@ Item {
                     x: 24; y: 23; width: parent.width - 250; elide: Text.ElideMiddle; textFormat: Text.PlainText
                     text: modelData.user + "  ·  pid " + modelData.pid + "  ·  " + modelData.command; color: Theme.inkMuted; font.pixelSize: 10
                 }
-                Text { anchors.right: parent.right; anchors.rightMargin: 150; y: 6; width: 80; horizontalAlignment: Text.AlignRight; text: win.pct(modelData.cpu); color: modelData.cpu >= 50 ? "#FCD34D" : Theme.ink; font.pixelSize: 12; font.family: "Consolas" }
-                Text { anchors.right: parent.right; anchors.rightMargin: 70; y: 6; width: 76; horizontalAlignment: Text.AlignRight; text: win.pct(modelData.mem); color: Theme.ink; font.pixelSize: 12; font.family: "Consolas" }
-                Text { anchors.right: parent.right; anchors.rightMargin: 10; y: 6; width: 70; horizontalAlignment: Text.AlignRight; text: modelData.rss; color: Theme.inkMuted; font.pixelSize: 11; font.family: "Consolas" }
+                Text { anchors.right: parent.right; anchors.rightMargin: 150; y: 6; width: 80; horizontalAlignment: Text.AlignRight; text: win.pct(modelData.cpu); color: modelData.cpu >= 50 ? "#FCD34D" : Theme.ink; font.pixelSize: 12; font.family: Theme.monoFamily }
+                Text { anchors.right: parent.right; anchors.rightMargin: 70; y: 6; width: 76; horizontalAlignment: Text.AlignRight; text: win.pct(modelData.mem); color: Theme.ink; font.pixelSize: 12; font.family: Theme.monoFamily }
+                Text { anchors.right: parent.right; anchors.rightMargin: 10; y: 6; width: 70; horizontalAlignment: Text.AlignRight; text: modelData.rss; color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.monoFamily }
                 Text { anchors.right: parent.right; anchors.rightMargin: 10; y: 24; width: 200; horizontalAlignment: Text.AlignRight; text: modelData.threads + " thread(s) · " + modelData.elapsed; color: Theme.inkMuted; font.pixelSize: 10 }
                 MouseArea { id: rowMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.selectedPid = win.selectedPid === modelData.pid ? -1 : modelData.pid }
             }
@@ -248,7 +248,7 @@ Item {
             radius: 10; color: "#40182740"; border.width: 1; border.color: "#25DCEBFF"
             Text {
                 id: detailText
-                x: 12; y: 10; width: parent.width - 24; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText; color: Theme.ink; font.pixelSize: 11; font.family: "Consolas"
+                x: 12; y: 10; width: parent.width - 24; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText; color: Theme.ink; font.pixelSize: 11; font.family: Theme.monoFamily
                 text: win.selectedProcess ? win.selectedProcess.command + "\n\nPID " + win.selectedProcess.pid + "  ·  parent " + win.selectedProcess.ppid
                         + "  ·  utilisateur " + win.selectedProcess.user + "  ·  état " + win.selectedProcess.state + " (" + win.stateText(win.selectedProcess.state) + ")\n"
                         + "démarré il y a " + win.selectedProcess.elapsed + "  ·  " + win.selectedProcess.threads + " thread(s)  ·  mémoire résidente " + win.selectedProcess.rss
@@ -339,7 +339,7 @@ Item {
                 width: parent.width; height: 74; radius: 10; color: "#30182740"; border.width: 1; border.color: "#25DCEBFF"
                 Text { x: 12; y: 8; text: "CHARGE (moyenne sur 1 / 5 / 15 min)"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2 }
                 Text {
-                    x: 12; y: 26; font.pixelSize: 15; font.family: "Consolas"; color: win.overview.loadRatio > 1 ? "#FCD34D" : Theme.ink
+                    x: 12; y: 26; font.pixelSize: 15; font.family: Theme.monoFamily; color: win.overview.loadRatio > 1 ? "#FCD34D" : Theme.ink
                     text: Number(win.overview.load1).toFixed(2) + "   " + Number(win.overview.load5).toFixed(2) + "   " + Number(win.overview.load15).toFixed(2) + "      sur " + win.overview.cores + " cœur(s)"
                 }
                 Text { x: 12; y: 52; font.pixelSize: 11; color: Theme.inkMuted

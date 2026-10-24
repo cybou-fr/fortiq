@@ -97,7 +97,7 @@ Item {
                         visible: (panel.info.fragment || "").length > 0
                         width: parent.width; elide: Text.ElideMiddle; textFormat: Text.PlainText
                         text: "Fichier d'unité : " + panel.info.fragment
-                        color: "#7F93B5"; font.pixelSize: 10; font.family: "Consolas"
+                        color: "#7F93B5"; font.pixelSize: 10; font.family: Theme.monoFamily
                     }
                     Row {
                         spacing: 10
@@ -190,7 +190,7 @@ Item {
                         width: col.width; height: 26; radius: 6
                         color: index % 2 ? "#08FFFFFF" : "transparent"
                         Rectangle { x: 6; anchors.verticalCenter: parent.verticalCenter; width: 8; height: 8; radius: 4; color: panel.kindColor(modelData.kind) }
-                        Text { x: 22; anchors.verticalCenter: parent.verticalCenter; width: 104; text: modelData.timeText; color: "#9FB2D0"; font.pixelSize: 11; font.family: "Consolas" }
+                        Text { x: 22; anchors.verticalCenter: parent.verticalCenter; width: 104; text: modelData.timeText; color: "#9FB2D0"; font.pixelSize: 11; font.family: Theme.monoFamily }
                         Text {
                             x: 130; anchors.verticalCenter: parent.verticalCenter; width: parent.width - x - 8; elide: Text.ElideRight
                             textFormat: Text.PlainText

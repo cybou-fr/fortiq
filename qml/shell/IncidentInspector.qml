@@ -169,7 +169,7 @@ Rectangle {
                                         required property var modelData
                                         height: 16; radius: 8; width: rt.implicitWidth + 10
                                         color: "#262F8CFF"
-                                        Text { id: rt; anchors.centerIn: parent; text: "#" + (modelData + 1); color: "#BFDBFE"; font.pixelSize: 9; font.family: "Consolas" }
+                                        Text { id: rt; anchors.centerIn: parent; text: "#" + (modelData + 1); color: "#BFDBFE"; font.pixelSize: 9; font.family: Theme.monoFamily }
                                     }
                                 }
                                 Text {
@@ -225,7 +225,7 @@ Rectangle {
                 x: 12; y: 4
                 text: "#" + (row.index + 1) + "  " + row.modelData.timeText + "  " + row.modelData.unit + (row.isAnchor ? "   ▶ choisi" : "")
                 textFormat: Text.PlainText
-                color: row.isAnchor ? "#FDE68A" : "#9FB2D0"; font.pixelSize: 10; font.family: "Consolas"
+                color: row.isAnchor ? "#FDE68A" : "#9FB2D0"; font.pixelSize: 10; font.family: Theme.monoFamily
             }
             Text {
                 id: msg
@@ -234,7 +234,7 @@ Rectangle {
                 textFormat: Text.PlainText
                 text: row.modelData.message
                 color: row.modelData.priority >= 0 && row.modelData.priority <= 3 ? "#FECACA" : Theme.ink
-                font.pixelSize: 11; font.family: "Consolas"
+                font.pixelSize: 11; font.family: Theme.monoFamily
             }
         }
     }
