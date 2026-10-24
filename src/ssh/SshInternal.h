@@ -67,6 +67,23 @@ inline int closeStagingFile(LIBSSH2_SFTP_HANDLE *file) {
     return libssh2_sftp_close(file);
 }
 
+// Every SFTP mutation whose result decides what the user is told goes through here, so that tests can
+// inject a refusal, a lost request or a lost acknowledgement (docs/STABILIZATION_PLAN.md, S-4).
+template <class Real>
+inline int sftpMutation(LIBSSH2_SESSION *session, const char *op, Real &&real) {
+#ifdef FORTIQ_PUBLICATION_TESTS
+    if (publication_test::fault) {
+        const int mode = publication_test::fault(op);
+        if (mode == 1) { libssh2_session_set_last_error(session, LIBSSH2_ERROR_SFTP_PROTOCOL, "injected refusal"); return -1; }
+        if (mode == 2) { libssh2_session_set_last_error(session, LIBSSH2_ERROR_SOCKET_RECV, "injected lost request"); return -1; }
+        if (mode == 3) { real(); libssh2_session_set_last_error(session, LIBSSH2_ERROR_SOCKET_RECV, "injected lost acknowledgement"); return -1; }
+    }
+#else
+    Q_UNUSED(session); Q_UNUSED(op);
+#endif
+    return real();
+}
+
 inline SshResult transferFail(const QString &reason, const QString &code = {}) {
     SshResult r; r.message = reason; r.code = code; return r;
 }

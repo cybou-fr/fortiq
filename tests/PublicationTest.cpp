@@ -41,7 +41,7 @@ private slots:
     void cleanup() {
         publication_test::replace = {}; publication_test::staged = {};
         publication_test::attributes = {}; publication_test::flush = {}; publication_test::close = {};
-        publication_test::downloadStat = {};
+        publication_test::downloadStat = {}; publication_test::fault = {};
     }
     void cleanupTestCase() {
         if (!dir.isEmpty()) QCOMPARE(command("rm -rf -- " + SshSession::shellQuote(dir)).code, QString("exit:0"));
@@ -259,6 +259,116 @@ private slots:
         QCOMPARE(r.code, QString("cancelled"));
         QCOMPARE(read("cancel.txt"), QByteArray("original\n"));
         QCOMPARE(command("find " + SshSession::shellQuote(dir) + " -maxdepth 1 -name '*.fortiq-*' -print").data, before);
+    }
+
+    // S-4: every SFTP mutation, under the three failures a client cannot tell apart from success or from each other:
+    // 1 the server refuses, 2 the request is lost, 3 the work is done but the acknowledgement is lost. A refusal
+    // is a plain error; a lost link is "unknown" (never "nothing happened" and never retried); the server state
+    // matches what the table in docs/STABILIZATION_PLAN.md promises.
+    void ackLoss_data() {
+        QTest::addColumn<QString>("op");
+        QTest::addColumn<int>("mode");
+        for (const char *op : { "mkdir", "rename", "copy", "trash", "restore", "delete", "empty" })
+            for (int mode = 1; mode <= 3; ++mode)
+                QTest::newRow(qPrintable(QString("%1-%2").arg(op).arg(mode))) << QString(op) << mode;
+    }
+    bool exists(const QString &path) { return command("test -e " + SshSession::shellQuote(path) + "\n").code == "exit:0"; }
+    void ackLoss() {
+        QFETCH(QString, op); QFETCH(int, mode);
+        const QString tag = QUuid::createUuid().toString(QUuid::Id128).left(12);
+        const QString trashFiles = observer.homeDirectory() + "/.local/share/Trash/files";
+        const auto trashedHere = [&](const QString &stem) {
+            return command("ls " + SshSession::shellQuote(trashFiles) + " | grep -c -F -- " + SshSession::shellQuote(stem) + "\n").data.trimmed().toInt();
+        };
+        SshSession writer;
+        QVERIFY(writer.open(request).status == SshResult::Status::Ok);
+        int calls = 0;
+        const auto arm = [&](const QString &which) {
+            publication_test::fault = [&, which](const char *name) { if (which != name) return 0; return ++calls == 1 ? mode : 0; };
+        };
+        SshResult r;
+        const bool lost = mode != 1;
+        const QString expectedCode = lost ? QStringLiteral("unknown") : QString();
+
+        if (op == "mkdir") {
+            const QString name = "mk-" + tag;
+            arm("mkdir");
+            r = writer.makeDirectory(dir, name);
+            QCOMPARE(r.status, SshResult::Status::Error);
+            QCOMPARE(r.code, expectedCode);
+            QCOMPARE(exists(dir + "/" + name), mode == 3);
+        } else if (op == "rename") {
+            const QString from = "rn-" + tag, to = "rn2-" + tag;
+            QVERIFY(put(from, "x"));
+            arm("rename");
+            r = writer.renameEntry(dir + "/" + from, to);
+            QCOMPARE(r.status, SshResult::Status::Error);
+            QCOMPARE(r.code, expectedCode);
+            QCOMPARE(exists(dir + "/" + to), mode == 3);
+            QCOMPARE(exists(dir + "/" + from), mode != 3);
+        } else if (op == "copy") {
+            const QString name = "cp-" + tag;
+            arm("copy");
+            r = writer.saveCopy(dir, name, "copied\n");
+            QCOMPARE(r.status, SshResult::Status::Error);
+            // Refusal means the name was taken meanwhile ("conflict"); a lost link is "unknown", never "nothing was written".
+            QCOMPARE(r.code, lost ? QStringLiteral("unknown") : QStringLiteral("conflict"));
+            QCOMPARE(exists(dir + "/" + name), mode == 3);
+            if (mode == 3) QCOMPARE(read(name), QByteArray("copied\n"));
+            if (!lost) QCOMPARE(command("ls -A " + SshSession::shellQuote(dir) + " | grep -c -F -- " + SshSession::shellQuote(".cp-" + tag)).data.trimmed(), QByteArray("0"));
+        } else if (op == "trash") {
+            const QString name = "tr-" + tag;
+            QVERIFY(put(name, "x"));
+            arm("trash");
+            r = writer.moveToTrash(dir + "/" + name);
+            QCOMPARE(r.status, SshResult::Status::Error);
+            QCOMPARE(r.code, expectedCode);
+            QCOMPARE(exists(dir + "/" + name), mode != 3);
+            QCOMPARE(trashedHere(name), mode == 3 ? 1 : 0);
+            if (mode == 1) // a refusal leaves no reserved .trashinfo behind
+                QCOMPARE(command("ls " + SshSession::shellQuote(observer.homeDirectory() + "/.local/share/Trash/info") + " | grep -c -F -- " + SshSession::shellQuote(name)).data.trimmed(), QByteArray("0"));
+        } else if (op == "restore") {
+            const QString name = "rs-" + tag;
+            QVERIFY(put(name, "x"));
+            const SshResult trashed = writer.moveToTrash(dir + "/" + name);
+            QVERIFY2(trashed.status == SshResult::Status::Ok, qPrintable(trashed.message));
+            arm("restore");
+            r = writer.restoreFromTrash(trashed.directory, ConflictPolicy::Fail);
+            QCOMPARE(r.status, SshResult::Status::Error);
+            QCOMPARE(r.code, expectedCode);
+            QCOMPARE(exists(dir + "/" + name), mode == 3);
+            QCOMPARE(exists(trashed.directory), mode != 3);
+        } else if (op == "delete") {
+            const QString name = "dl-" + tag;
+            QCOMPARE(command("mkdir -- " + SshSession::shellQuote(dir + "/" + name) + " && printf a > " + SshSession::shellQuote(dir + "/" + name + "/a")
+                             + " && printf b > " + SshSession::shellQuote(dir + "/" + name + "/b") + "\n").code, QString("exit:0"));
+            const SshResult trashed = writer.moveToTrash(dir + "/" + name);
+            QVERIFY2(trashed.status == SshResult::Status::Ok, qPrintable(trashed.message));
+            arm("unlink");
+            r = writer.deleteFromTrash(trashed.directory);
+            QCOMPARE(r.status, SshResult::Status::Error);
+            QCOMPARE(r.code, expectedCode);
+            QCOMPARE(calls, 1); // no retry after the failure
+            QVERIFY(exists(trashed.directory)); // the folder itself is only removed after its files
+            const int left = command("ls " + SshSession::shellQuote(trashed.directory) + " | wc -l\n").data.trimmed().toInt();
+            QCOMPARE(left, mode == 3 ? 1 : 2); // lost ack: the first file really went
+        } else { // empty
+            const QString name = "em-" + tag;
+            QVERIFY(put(name, "x"));
+            QVERIFY(writer.moveToTrash(dir + "/" + name).status == SshResult::Status::Ok);
+            arm("unlink");
+            r = writer.emptyTrash();
+            QCOMPARE(r.status, SshResult::Status::Error);
+            QCOMPARE(r.code, expectedCode); // was: "N item(s) could not be deleted" with no sign that the link was gone
+            // A refusal skips only that item and goes on (calls counts every unlink); a lost link stops at once.
+            if (!lost) calls = 1;
+        }
+        QCOMPARE(calls, 1); // the mutation was attempted once and never retried
+        QCOMPARE(writer.isOpen(), !lost); // a lost link closes the session; a refusal keeps it
+        if (!lost) {
+            publication_test::fault = {};
+            QVERIFY(writer.list(dir).status == SshResult::Status::Ok);
+        }
     }
 };
 QTEST_GUILESS_MAIN(PublicationTest)

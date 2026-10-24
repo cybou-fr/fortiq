@@ -182,8 +182,13 @@ SshResult SshSession::saveCopy(const QString &dirPath, const QString &name, cons
         off += w;
     }
     libssh2_sftp_close(file);
-    if (libssh2_sftp_rename_ex(d->sftp, temp.constData(), static_cast<unsigned int>(temp.size()),
-                               t.constData(), static_cast<unsigned int>(t.size()), 0) != 0) {
+    if (sftpMutation(d->handle, "copy", [&] { return libssh2_sftp_rename_ex(d->sftp, temp.constData(), static_cast<unsigned int>(temp.size()),
+                               t.constData(), static_cast<unsigned int>(t.size()), 0); }) != 0) {
+        // A lost link says nothing about the rename: the copy may well exist. Only a protocol refusal is a "taken name".
+        if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
+            d->closeLost();
+            return transferFail(QStringLiteral("Connexion perdue ; vérifiez le dossier avant de réessayer."), QStringLiteral("unknown"));
+        }
         dropTemp();
         return transferFail(QStringLiteral("The copy name was taken meanwhile; nothing was written."), QStringLiteral("conflict"));
     }

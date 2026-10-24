@@ -53,8 +53,8 @@ SshResult SshSession::moveToTrash(const QString &path)
     if (!written) { dropInfo(); return transferFail(QStringLiteral("Cannot write the Trash record.")); }
 
     const QByteArray from = source->toUtf8(), to = (trash + "/files/" + name).toUtf8();
-    if (libssh2_sftp_rename_ex(d->sftp, from.constData(), static_cast<unsigned int>(from.size()),
-                               to.constData(), static_cast<unsigned int>(to.size()), 0) != 0) {
+    if (sftpMutation(d->handle, "trash", [&] { return libssh2_sftp_rename_ex(d->sftp, from.constData(), static_cast<unsigned int>(from.size()),
+                               to.constData(), static_cast<unsigned int>(to.size()), 0); }) != 0) {
         if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
             d->closeLost();
             return transferFail(QStringLiteral("Connexion perdue ; vérifiez le dossier et la corbeille avant de réessayer."), QStringLiteral("unknown"));
@@ -73,7 +73,7 @@ SshResult SshSession::moveToTrash(const QString &path)
 namespace {
 // Removes a tree without following symlinks. Returns false on the first
 // failure; `removed` counts deleted entries.
-bool removeTree(LIBSSH2_SFTP *sftp, const QString &path, int depth, qint64 &removed)
+bool removeTree(LIBSSH2_SESSION *session, LIBSSH2_SFTP *sftp, const QString &path, int depth, qint64 &removed)
 {
     if (depth > 128) return false;
     const QByteArray p = path.toUtf8();
@@ -81,7 +81,7 @@ bool removeTree(LIBSSH2_SFTP *sftp, const QString &path, int depth, qint64 &remo
     if (libssh2_sftp_stat_ex(sftp, p.constData(), static_cast<unsigned int>(p.size()), LIBSSH2_SFTP_LSTAT, &a) != 0)
         return false;
     if (!LIBSSH2_SFTP_S_ISDIR(a.permissions)) {
-        if (libssh2_sftp_unlink_ex(sftp, p.constData(), static_cast<unsigned int>(p.size())) != 0) return false;
+        if (sftpMutation(session, "unlink", [&] { return libssh2_sftp_unlink_ex(sftp, p.constData(), static_cast<unsigned int>(p.size())); }) != 0) return false;
         ++removed;
         return true;
     }
@@ -103,9 +103,9 @@ bool removeTree(LIBSSH2_SFTP *sftp, const QString &path, int depth, qint64 &remo
     libssh2_sftp_closedir(dir);
     for (const QString &child : children) {
         const auto childPath = safeChildPath(path, child);
-        if (!childPath || !removeTree(sftp, *childPath, depth + 1, removed)) return false;
+        if (!childPath || !removeTree(session, sftp, *childPath, depth + 1, removed)) return false;
     }
-    if (libssh2_sftp_rmdir_ex(sftp, p.constData(), static_cast<unsigned int>(p.size())) != 0) return false;
+    if (sftpMutation(session, "rmdir", [&] { return libssh2_sftp_rmdir_ex(sftp, p.constData(), static_cast<unsigned int>(p.size())); }) != 0) return false;
     ++removed;
     return true;
 }
@@ -147,8 +147,8 @@ SshResult SshSession::restoreFromTrash(const QString &trashedPath, ConflictPolic
         if (exists(target)) return transferFail(QStringLiteral("No free name to restore to."), QStringLiteral("conflict"));
     }
     const QByteArray from = source->toUtf8(), to = target.toUtf8();
-    if (libssh2_sftp_rename_ex(d->sftp, from.constData(), static_cast<unsigned int>(from.size()),
-                               to.constData(), static_cast<unsigned int>(to.size()), 0) != 0) {
+    if (sftpMutation(d->handle, "restore", [&] { return libssh2_sftp_rename_ex(d->sftp, from.constData(), static_cast<unsigned int>(from.size()),
+                               to.constData(), static_cast<unsigned int>(to.size()), 0); }) != 0) {
         if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
             d->closeLost();
             return transferFail(QStringLiteral("Connexion perdue ; vérifiez la corbeille et %1 avant de réessayer.").arg(folder), QStringLiteral("unknown"));
@@ -173,7 +173,7 @@ SshResult SshSession::deleteFromTrash(const QString &trashedPath)
     if (d->home.isEmpty() || !source || parentPath(*source) != files)
         return transferFail(QStringLiteral("Permanent deletion is only available for items in the Trash."));
     qint64 removed = 0;
-    if (!removeTree(d->sftp, *source, 0, removed)) {
+    if (!removeTree(d->handle, d->sftp, *source, 0, removed)) {
         if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL && libssh2_session_last_errno(d->handle) != 0) {
             d->closeLost();
             return transferFail(QStringLiteral("Connexion perdue pendant la suppression ; une partie de l'élément a peut-être déjà disparu."), QStringLiteral("unknown"));
@@ -203,7 +203,14 @@ SshResult SshSession::emptyTrash()
         }
         for (const QVariant &v : listing.entries) {
             const QString path = v.toMap().value("path").toString();
-            if (parentPath(path) != trash + '/' + sub || !removeTree(d->sftp, path, 0, removed)) ++failed;
+            if (parentPath(path) != trash + '/' + sub || !removeTree(d->handle, d->sftp, path, 0, removed)) {
+                const int err = libssh2_session_last_errno(d->handle);
+                if (err != 0 && err != LIBSSH2_ERROR_SFTP_PROTOCOL) {
+                    d->closeLost();
+                    return transferFail(QStringLiteral("Connexion perdue pendant le vidage de la corbeille ; une partie a peut-être disparu."), QStringLiteral("unknown"));
+                }
+                ++failed;
+            }
         }
     }
     if (!isOpen()) return transferFail(QStringLiteral("Connexion perdue pendant le vidage de la corbeille."), QStringLiteral("unknown"));

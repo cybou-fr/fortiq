@@ -18,7 +18,7 @@ SshResult SshSession::makeDirectory(const QString &dir, const QString &name)
     LIBSSH2_SFTP_ATTRIBUTES a{};
     if (libssh2_sftp_stat_ex(d->sftp, p.constData(), static_cast<unsigned int>(p.size()), LIBSSH2_SFTP_LSTAT, &a) == 0)
         return transferFail(QStringLiteral("« %1 » already exists.").arg(name.trimmed()), QStringLiteral("conflict"));
-    if (libssh2_sftp_mkdir_ex(d->sftp, p.constData(), static_cast<unsigned int>(p.size()), 0755) != 0) {
+    if (sftpMutation(d->handle, "mkdir", [&] { return libssh2_sftp_mkdir_ex(d->sftp, p.constData(), static_cast<unsigned int>(p.size()), 0755); }) != 0) {
         if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
             d->closeLost();
             return transferFail(QStringLiteral("Connexion perdue ; vérifiez si le dossier a été créé."), QStringLiteral("unknown"));
@@ -45,8 +45,8 @@ SshResult SshSession::renameEntry(const QString &path, const QString &newName)
     if (libssh2_sftp_stat_ex(d->sftp, to.constData(), static_cast<unsigned int>(to.size()), LIBSSH2_SFTP_LSTAT, &a) == 0)
         return transferFail(QStringLiteral("« %1 » already exists.").arg(newName.trimmed()), QStringLiteral("conflict"));
     // SFTP v3 rename never replaces an existing name.
-    if (libssh2_sftp_rename_ex(d->sftp, from.constData(), static_cast<unsigned int>(from.size()),
-                               to.constData(), static_cast<unsigned int>(to.size()), 0) != 0) {
+    if (sftpMutation(d->handle, "rename", [&] { return libssh2_sftp_rename_ex(d->sftp, from.constData(), static_cast<unsigned int>(from.size()),
+                               to.constData(), static_cast<unsigned int>(to.size()), 0); }) != 0) {
         if (libssh2_session_last_errno(d->handle) != LIBSSH2_ERROR_SFTP_PROTOCOL) {
             d->closeLost();
             return transferFail(QStringLiteral("Connexion perdue ; vérifiez le dossier avant de réessayer."), QStringLiteral("unknown"));
