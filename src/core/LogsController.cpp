@@ -41,7 +41,9 @@ void LogsController::disconnected() {
     m_token = -1;
     if (m_inspectorOpen) { m_inspectorBusy = false; emit inspectorChanged(); }
     m_state = QStringLiteral("disconnected");
-    m_stateText = QStringLiteral("Source déconnectée — affichage figé, suivi en direct arrêté.");
+    m_stateText = m_events.isEmpty() || m_dataLabel.isEmpty()
+        ? QStringLiteral("Source déconnectée — affichage figé, suivi en direct arrêté.")
+        : QStringLiteral("Source déconnectée — affichage figé des journaux de %1, suivi en direct arrêté.").arg(m_dataLabel);
     auto slot = m_session;
     (void)QtConcurrent::run(&m_pool, [slot] { slot->reset(); });
     m_session = std::make_shared<std::unique_ptr<SshSession>>();
@@ -355,6 +357,7 @@ void LogsController::apply(const SshResult &r, bool append, int seq) {
         e.insert("tkey", e.value("unit").toString() + '' + templateOf(e.value("message").toString()));
         v = e;
     }
+    m_dataLabel = m_remote->serverLabel();   // whose events these are (the display is kept after a disconnect or a server change)
     if (append) {
         m_events.append(fresh);
         if (m_events.size() > kMaxEvents) m_events = m_events.mid(m_events.size() - kMaxEvents);

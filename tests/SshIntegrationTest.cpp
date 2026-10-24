@@ -22,6 +22,7 @@
 
 #include <QCryptographicHash>
 #include <QDateTime>
+#include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QFile>
 #include <QJsonDocument>
@@ -1923,6 +1924,165 @@ private slots:
         controller.disconnectServer();
         QTest::qWait(100);
         QVERIFY(!controller.linkLost());
+    }
+
+    // Audit backlog 7 (R10): two DIFFERENT hosts (own host keys, port, user, files, journal, host name). Whatever an app shows
+    // belongs to the server that is selected, a late reply of A never lands in B, and a host key pinned for A never lets B in.
+    // Needs the second fixture: tool/setup_second_host_fixture.sh, then FORTIQ_IT_PORT_B, FORTIQ_IT_USER_B,
+    // FORTIQ_IT_FINGERPRINT_B (and FORTIQ_IT_KEY, accepted by both hosts).
+    void twoHostsNeverMix() {
+        if (qEnvironmentVariableIsEmpty("FORTIQ_IT_PORT_B") || qEnvironmentVariableIsEmpty("FORTIQ_IT_USER_B")
+            || qEnvironmentVariableIsEmpty("FORTIQ_IT_FINGERPRINT_B") || qEnvironmentVariableIsEmpty("FORTIQ_IT_KEY"))
+            QSKIP("second fixture not configured (FORTIQ_IT_PORT_B/USER_B/FINGERPRINT_B and FORTIQ_IT_KEY)");
+        const QString keyPath = qEnvironmentVariable("FORTIQ_IT_KEY");
+        const QString fingerprintB = qEnvironmentVariable("FORTIQ_IT_FINGERPRINT_B");
+        QVERIFY(fingerprintB != fingerprint);                               // two different hosts, two different identities
+        const QString hostB = qEnvironmentVariable("FORTIQ_IT_HOST_B", base.host);
+        const int portB = qEnvironmentVariableIntValue("FORTIQ_IT_PORT_B");
+        const QString userB = qEnvironmentVariable("FORTIQ_IT_USER_B");
+        QVERIFY(portB != base.port || hostB != base.host);
+
+        auto pinKey = [](const QString &host, int port) {
+            return QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+                (host.toLower() + ':' + QString::number(port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        };
+        QSettings settings;
+        settings.remove("servers/profiles");
+        settings.setValue(pinKey(base.host, base.port), fingerprint);
+        settings.setValue(pinKey(hostB, portB), fingerprintB);
+
+        ConnectionRequest requestA = base;
+        requestA.expectedHostFingerprint = fingerprint;
+        if (requestA.password.isEmpty()) requestA.keyPath = keyPath;
+        ConnectionRequest requestB;
+        requestB.host = hostB; requestB.port = portB; requestB.user = userB; requestB.keyPath = keyPath; requestB.expectedHostFingerprint = fingerprintB;
+        auto run = [](const ConnectionRequest &request, const QByteArray &script) {
+            fortiq::SshSession session;
+            const SshResult opened = session.open(request);
+            if (opened.status != SshResult::Status::Ok) return opened;
+            return session.runScript(script, 262144, {});
+        };
+        auto text = [&](const ConnectionRequest &request, const QByteArray &script) { return QString::fromUtf8(run(request, script).data).trimmed(); };
+
+        // Each host gets its own data: a marker file, a document, a file only it has, and an error line in its journal.
+        const QString tag = QStringLiteral("fqabtest") + QString::number(QRandomGenerator::global()->generate() % 100000);
+        auto prepare = [&](const ConnectionRequest &request, const QString &who) {
+            const QByteArray w = who.toUtf8();
+            const SshResult prepared = run(request, "rm -rf ~/ab-test; mkdir -p ~/ab-test && printf '# " + w + "\\n' > ~/ab-test/who.md && printf '" + w + "' > ~/ab-test/who.txt"
+                        " && printf x > ~/ab-test/only-" + w.toLower() + ".txt && logger -p user.err -t " + tag.toUtf8() + " 'ABLINE-" + w + "'\n");
+            QVERIFY2(prepared.code == "exit:0", qPrintable(prepared.message + " " + prepared.code));
+        };
+        prepare(requestA, "A");
+        prepare(requestB, "B");
+        const QString nameA = text(requestA, "hostname\n"), nameB = text(requestB, "hostname\n");
+        QVERIFY2(!nameA.isEmpty() && !nameB.isEmpty() && nameA != nameB, qPrintable(nameA + " / " + nameB));
+        const QString homeA = text(requestA, "printf '%s' \"$HOME\"\n"), homeB = text(requestB, "printf '%s' \"$HOME\"\n");
+        QVERIFY(!homeA.isEmpty() && homeA != homeB);
+
+        fortiq::RemoteController controller;
+        const QString idA = controller.saveServer({ { "name", "A" }, { "host", base.host }, { "port", base.port }, { "user", base.user }, { "keyPath", requestA.keyPath } });
+        const QString idB = controller.saveServer({ { "name", "B" }, { "host", hostB }, { "port", portB }, { "user", userB }, { "keyPath", keyPath } });
+        QVERIFY(!idA.isEmpty() && !idB.isEmpty() && idA != idB);
+        auto connectTo = [&](const QString &id) {
+            controller.connectTo(id, id == idA && requestA.keyPath.isEmpty() ? base.password : QString());
+            QTRY_VERIFY_WITH_TIMEOUT(controller.connected() && controller.activeServerId() == id && !controller.busy(), 20000);
+        };
+        auto names = [&] { QStringList n; for (const QVariant &e : controller.entries()) n << e.toMap().value("name").toString(); return n; };
+
+        fortiq::SystemController system(&controller);
+        fortiq::DocumentsController docs(&controller);
+        fortiq::LogsController logs(&controller);
+        fortiq::TerminalController terminal(&controller);
+        QSignalSpy output(&terminal, &fortiq::TerminalController::output);
+        auto received = [&](int from) { QByteArray data; for (int i = from; i < output.size(); ++i) data += output.at(i).first().toByteArray(); return data; };
+        auto journalHas = [&](const QByteArray &line) { for (const QVariant &v : logs.events()) if (v.toMap().value("message").toString().contains(QString::fromUtf8(line))) return true; return false; };
+        auto loadJournal = [&] {
+            logs.loadSources();
+            logs.setRange(QStringLiteral("15min"));
+            logs.setMaxPriority(3);
+            QTRY_VERIFY_WITH_TIMEOUT(!logs.busy(), 30000);
+        };
+
+        // ===== Server A =====
+        connectTo(idA);
+        QVERIFY(controller.serverLabel().contains(base.user));
+        controller.navigate(homeA + "/ab-test");
+        QTRY_VERIFY_WITH_TIMEOUT(names().contains("only-a.txt"), 15000);
+        QVERIFY(!names().contains("only-b.txt"));
+        system.reload();
+        QTRY_VERIFY_WITH_TIMEOUT(system.state() == "ready", 30000);
+        QCOMPARE(system.overview().value("hostname").toString(), nameA);
+        docs.open(homeA + "/ab-test/who.md");
+        QTRY_VERIFY_WITH_TIMEOUT(!docs.busy() && docs.hasDocument(), 20000);
+        QVERIFY(docs.text().contains("# A")); QVERIFY(docs.canSave());
+        const QString docLabelA = docs.sourceLabel();
+        loadJournal();
+        QTRY_VERIFY_WITH_TIMEOUT(journalHas("ABLINE-A"), 20000);
+        QVERIFY(!journalHas("ABLINE-B"));
+        terminal.setWindowActive(true);
+        QTRY_VERIFY_WITH_TIMEOUT(terminal.running(), 20000);
+        int mark = int(output.size());
+        terminal.send("stty -echo; cat ~/ab-test/who.txt; printf ' %s\\n' \"$(hostname)\"\r");
+        QTRY_VERIFY_WITH_TIMEOUT(received(mark).contains(("A " + nameA).toUtf8()), 10000);
+
+        // A reply of A that is still on its way when B is chosen must never show in B.
+        system.reload();
+        connectTo(idB);                                                    // a newer generation, another host
+        QTest::qWait(3000);                                                // A's late reply arrives now
+        QVERIFY(system.overview().value("hostname").toString() != nameA);
+        QVERIFY(system.state() != "ready" || system.overview().value("hostname").toString() == nameB);
+
+        // ===== Server B =====
+        QVERIFY(controller.serverLabel().contains(userB));
+        QVERIFY(!controller.serverLabel().contains(base.user) || base.user == userB);
+        QVERIFY(!names().contains("only-a.txt"));                          // B's home, not A's listing
+        controller.navigate(homeB + "/ab-test");
+        QTRY_VERIFY_WITH_TIMEOUT(names().contains("only-b.txt"), 15000);
+        QVERIFY(!names().contains("only-a.txt"));
+        system.reload();
+        QTRY_VERIFY_WITH_TIMEOUT(system.state() == "ready", 30000);
+        QCOMPARE(system.overview().value("hostname").toString(), nameB);
+        // The document of A stays what it is (nothing is lost) but is not B's: it cannot be saved over there.
+        QVERIFY(!docs.canSave());
+        QCOMPARE(docs.sourceLabel(), docLabelA);
+        docs.discardDraft();
+        docs.open(homeB + "/ab-test/who.md");
+        QTRY_VERIFY_WITH_TIMEOUT(!docs.busy() && docs.hasDocument() && docs.text().contains("# B"), 20000);
+        QVERIFY(!docs.text().contains("# A")); QVERIFY(docs.sourceLabel() != docLabelA);
+        // Logs: A's journal line is gone, B's is read from B.
+        // (a frozen display of A may remain after the switch, but it says whose it is and that the source is gone)
+        QCOMPARE(logs.state(), QStringLiteral("disconnected"));
+        QVERIFY2(logs.stateText().contains(base.user + "@" + base.host), qPrintable(logs.stateText()));
+        QCOMPARE(logs.dataLabel(), base.user + "@" + base.host);
+        loadJournal();
+        QTRY_VERIFY_WITH_TIMEOUT(journalHas("ABLINE-B"), 20000);
+        QCOMPARE(logs.dataLabel(), userB + "@" + hostB);
+        QVERIFY(!journalHas("ABLINE-A"));
+        // Terminal: a new shell on B, nothing of A's screen or history.
+        QTRY_VERIFY_WITH_TIMEOUT(terminal.running(), 20000);
+        mark = int(output.size());
+        terminal.send("cat ~/ab-test/who.txt; printf ' %s\\n' \"$(hostname)\"\r");
+        QTRY_VERIFY_WITH_TIMEOUT(received(mark).contains(("B " + nameB).toUtf8()), 10000);
+        QVERIFY(!received(mark).contains(nameA.toUtf8() + "\r\n"));
+
+        // ===== B's address with A's pinned key: refused, nothing connects =====
+        controller.disconnectServer();
+        settings.setValue(pinKey(hostB, portB), fingerprint);              // the wrong identity is pinned for B
+        controller.connectTo(idB, QString());
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 20000);
+        QVERIFY(!controller.connected());
+        QVERIFY2(controller.statusText().contains("HOST KEY CHANGED", Qt::CaseInsensitive), qPrintable(controller.statusText()));
+        settings.setValue(pinKey(hostB, portB), fingerprintB);
+
+        // ===== Back to A: its own state, again =====
+        connectTo(idA);
+        controller.navigate(homeA + "/ab-test");
+        QTRY_VERIFY_WITH_TIMEOUT(names().contains("only-a.txt") && !names().contains("only-b.txt"), 15000);
+
+        controller.disconnectServer();
+        run(requestA, "rm -rf ~/ab-test\n");
+        run(requestB, "rm -rf ~/ab-test\n");
+        settings.remove("servers/profiles"); settings.remove(pinKey(hostB, portB));
     }
 
     // Audit backlog 1: Logs, MDok, Disks and Terminal report their work to the TaskManager, with the right guarding and settling rules.

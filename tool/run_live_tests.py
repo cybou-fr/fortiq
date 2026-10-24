@@ -3,6 +3,7 @@
 
 It never touches a real server: the fixture is a throw-away Debian (for example the WSL distro `fortiq-test`
 with sshd, PostgreSQL 17, notmuch, isync, msmtp, dovecot and tool/setup_mail_live_fixture.sh already run).
+Second host (needed by twoHostsNeverMix, otherwise it is SKIPPED and listed as such): a copy of the fixture made independent by tool/setup_second_host_fixture.sh, passed as --port-b/--user-b/--fingerprint-b.
 Fixtures to prepare once as root on the disposable Debian: tool/setup_mail_live_fixture.sh, tool/setup_browser_policy_fixture.sh, tool/setup_db_roles_fixture.sh.
 The live tests delete files in the test user's home (~/Mail, ~/.msmtprc, ~/Downloads, ...): see docs/AUDIT_2026-10-23.md.
 
@@ -41,6 +42,10 @@ def main():
     ap.add_argument("--key", default="", help="private key of the test user (publication tests use it)")
     ap.add_argument("--wsl-distro", default="", help="WSL distro name for the Logs reader test")
     ap.add_argument("--upload-dir", default="", help="writable directory on the fixture for the transfer tests")
+    ap.add_argument("--host-b", default="", help="second fixture (tool/setup_second_host_fixture.sh): host, defaults to --host")
+    ap.add_argument("--port-b", default="", help="second fixture: SSH port; with --user-b and --fingerprint-b it enables twoHostsNeverMix")
+    ap.add_argument("--user-b", default="")
+    ap.add_argument("--fingerprint-b", default="")
     ap.add_argument("--web-base", default="", help="URL of tests/fixtures/web_fixture.py as seen from the fixture")
     ap.add_argument("--qt-bin", default="C:/Qt/6.12.0/msvc2022_64/bin")
     ap.add_argument("--vcpkg-bin", default="C:/Users/cybou/vcpkg/installed/x64-windows/bin")
@@ -61,6 +66,9 @@ def main():
     if opts.key:
         env["FORTIQ_IT_KEY"] = opts.key
         env["FORTIQ_PUBLICATION_KEY"] = opts.key
+    if opts.port_b and opts.user_b and opts.fingerprint_b:
+        env.update({"FORTIQ_IT_HOST_B": opts.host_b or opts.host, "FORTIQ_IT_PORT_B": opts.port_b,
+                    "FORTIQ_IT_USER_B": opts.user_b, "FORTIQ_IT_FINGERPRINT_B": opts.fingerprint_b})
     if opts.upload_dir:
         env["FORTIQ_IT_UPLOAD_DIR"] = opts.upload_dir
     if opts.web_base:

@@ -640,7 +640,7 @@ Item {
         }
         Text {
             anchors.right: parent.right; anchors.rightMargin: 22; anchors.verticalCenter: parent.verticalCenter
-            text: !win.lc ? "" : win.lc.state === "disconnected" ? "source déconnectée"
+            text: !win.lc ? "" : win.lc.state === "disconnected" ? "source déconnectée" + (win.lc.dataLabel ? " · données de " + win.lc.dataLabel : "")
                 : (win.lc.busy ? "lecture…" : (win.lc.following ? "en direct · " : "") + "màj " + win.lc.lastUpdate) + "  ·  lecture seule"
             color: win.lc && win.lc.state === "disconnected" ? "#FCA5A5" : "#7F93B5"
             font.pixelSize: 10; font.family: Theme.fontFamily

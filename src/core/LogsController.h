@@ -29,6 +29,7 @@ class LogsController : public QObject {
     Q_PROPERTY(bool following READ following NOTIFY changed)
     Q_PROPERTY(QString state READ state NOTIFY changed) // "", "limited", "missing", "denied", "error", "disconnected"
     Q_PROPERTY(QString stateText READ stateText NOTIFY changed)
+    Q_PROPERTY(QString dataLabel READ dataLabel NOTIFY changed)      // server the events on screen were read from
     Q_PROPERTY(QString coverage READ coverage NOTIFY changed)
     Q_PROPERTY(QString lastUpdate READ lastUpdate NOTIFY changed)
     Q_PROPERTY(QVariantList events READ events NOTIFY changed)
@@ -63,6 +64,7 @@ public:
     bool following() const { return m_following; }
     QString state() const { return m_state; }
     QString stateText() const { return m_stateText; }
+    QString dataLabel() const { return m_dataLabel; }
     QString coverage() const { return m_coverage; }
     QString lastUpdate() const { return m_lastUpdate; }
     QVariantList events() const { return m_events; }
@@ -161,6 +163,7 @@ private:
     bool m_following = false;
     QString m_state;
     QString m_stateText;
+    QString m_dataLabel;
     QString m_coverage;
     QString m_lastUpdate;
     QString m_cursor;     // journal: last __CURSOR seen
