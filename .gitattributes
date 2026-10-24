@@ -1,0 +1,2 @@
+# Shell scripts run on Linux (fixtures, tests): a CRLF checkout on Windows breaks them (": command not found").
+*.sh text eol=lf
