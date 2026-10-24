@@ -19,6 +19,10 @@ Rectangle {
     // Where the clickable clock/control-center area must stop (left edge of the pill).
     readonly property real indicatorLeft: pillRight ? sessionPill.x : 1480
     signal serverClicked()
+    property alias searchText: searchInput.text
+    signal searchAccepted()
+    signal searchCleared()
+    property bool searchEnabled: false     // the reference scene keeps the static look
     color: Theme.topBar
     height: 47
 
@@ -76,10 +80,22 @@ Rectangle {
             glyph: "⌕"
             color: Theme.ink; size: 18
         }
-        Text {
-            x: 42; anchors.verticalCenter: parent.verticalCenter
-            text: "Rechercher des applications, fichiers, paramètres..."
-            color: "#DCE6F5"; font.pixelSize: 12; font.family: Theme.fontFamily
+        TextInput {
+            id: searchInput
+            objectName: "topSearch"
+            x: 42; width: parent.width - 60; anchors.verticalCenter: parent.verticalCenter
+            enabled: bar.searchEnabled
+            clip: true; selectByMouse: true
+            color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily
+            inputMethodHints: Qt.ImhNoPredictiveText
+            onAccepted: bar.searchAccepted()
+            Keys.onEscapePressed: { text = ""; bar.searchCleared() }
+            Text {
+                visible: parent.text.length === 0
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Rechercher des applications, fichiers, paramètres..."
+                color: "#DCE6F5"; font.pixelSize: 12; font.family: Theme.fontFamily
+            }
         }
     }
 

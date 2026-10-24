@@ -615,6 +615,46 @@ private slots:
                 shell->setProperty("mailOpen", false);
                 shell->setProperty("mailController", QVariant::fromValue<QObject *>(nullptr));
             }
+            {   // Paramètres: wallpaper and panel position apply at once, sections switch, search finds apps and settings.
+                shell->setProperty("settingsOpen", true);
+                QMetaObject::invokeMethod(shell, "raiseApp", Q_ARG(QVariant, QString("settings")));
+                settle(window);
+                auto *settingsWin = shell->findChild<QQuickItem *>("settingsWindow"); QVERIFY(settingsWin); QVERIFY(settingsWin->isVisible());
+                QVERIFY(settingsWin->x() >= 0 && settingsWin->y() >= 47 && settingsWin->x() + settingsWin->width() <= shell->width());
+                QVERIFY(settingsWin->y() + settingsWin->height() <= shell->height());
+                auto click = [&](QQuickItem *item) {
+                    QVERIFY(item);
+                    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
+                    settle(window);
+                };
+                click(findByName(settingsWin, "settingsWallpaper_city"));
+                QCOMPARE(shell->property("wallpaperName").toString(), QString("city"));
+                click(findByName(settingsWin, "settingsWallpaper_none"));
+                QCOMPARE(shell->property("wallpaperName").toString(), QString());
+                click(findByName(settingsWin, "settingsEdge_left"));
+                QCOMPARE(shell->property("panelEdge").toString(), QString("left"));
+                click(findByName(settingsWin, "settingsEdge_bottom"));
+                QCOMPARE(shell->property("panelEdge").toString(), QString("bottom"));
+                click(findByName(settingsWin, "settingsSection_servers"));
+                auto *openServers = findByName(settingsWin, "settingsOpenServers"); QVERIFY(openServers); QVERIFY(openServers->isVisible());
+                click(openServers);
+                QVERIFY(shell->property("serversOpen").toBool());
+                shell->setProperty("serversOpen", false);
+                click(findByName(settingsWin, "settingsSection_about"));
+                QVERIFY(!findByName(settingsWin, "settingsOpenServers")->isVisible());
+                QVERIFY(window->grabWindow().save(QString("layout-captures/%1-settings.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+                auto search = [&](const QString &q) {
+                    QVariant out; QMetaObject::invokeMethod(shell, "searchResults", Q_RETURN_ARG(QVariant, out), Q_ARG(QVariant, q));
+                    QStringList titles; for (const QVariant &v : out.toList()) titles << v.toMap().value("t").toString(); return titles;
+                };
+                QVERIFY(search("").isEmpty()); QVERIFY(search("   ").isEmpty());
+                QVERIFY(search("systeme").contains(QString::fromUtf8("Système")));        // accents do not matter
+                QVERIFY(search("FOND").contains(QString::fromUtf8("Fond d’écran")));      // nor case
+                QVERIFY(search("zzzz").isEmpty());
+                shell->setProperty("settingsOpen", false);
+                shell->setProperty("foregroundApp", "files");
+                settle(window);
+            }
             {   // Bases de données: profile list, schema, read-only editor and the profile form.
                 QQmlComponent dbComponent(&engine), dbRemoteComponent(&engine);
                 dbComponent.setData(kFakeDb, QUrl());

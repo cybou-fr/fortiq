@@ -22,7 +22,7 @@ Item {
         { app: "terminal", kind: "terminal", label: "Terminal", ready: true },
         { app: "editor", kind: "editor", label: "Éditeur", ready: false },
         { app: "browser", kind: "browser", label: "Navigateur", ready: !fixture },
-        { app: "settings", kind: "settings", label: "Paramètres", ready: false }
+        { app: "settings", kind: "settings", label: "Paramètres", ready: !fixture }
     ].concat(fixture?[]:[{app:"disks",kind:"disks",label:"Disques",ready:true},{app:"network",kind:"network",label:"Réseau",ready:true},{app:"system",kind:"system",label:"Système",ready:true},{app:"db",kind:"db",label:"Bases",ready:true},{app:"mail",kind:"mail",label:"Courrier",ready:true},{app:"docs",kind:"docs",label:"MDok",ready:true}])
     readonly property int cell: vertical ? 74 : 60
 

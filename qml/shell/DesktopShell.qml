@@ -29,6 +29,7 @@ Item {
     property bool dbOpen: false
     property var mailController: null
     property bool mailOpen: false
+    property bool settingsOpen: false
     property bool disksOpen: false
     property var documentsController:null
     property bool documentsOpen:false
@@ -54,6 +55,7 @@ Item {
         id: displaySettings
         category: "display"
         property string panelEdge: "bottom"
+        property string wallpaper: "unset"      // "unset" | "none" | a bundled wallpaper name
     }
     property string panelEdge: fixture ? (fixturePreview === "panelleft" ? "left" : "bottom")
                                        : (displaySettings.panelEdge === "left" ? "left" : "bottom")
@@ -81,6 +83,39 @@ Item {
         function onChanged() { if (shell.controller.connected && shell.serversOpen && !shell.fixture) shell.serversOpen = false }
     }
     property var windowOrder: ["files", "browser", "logs", "terminal", "disks", "docs", "web", "network", "system", "db", "mail"]
+    // Wallpaper choice is a display preference of this device (the reference scene neither reads nor writes it).
+    function setWallpaper(name) {
+        wallpaperName = name
+        if (!fixture) displaySettings.wallpaper = name.length > 0 ? name : "none"
+    }
+    function restoreWallpaper() {
+        if (fixture || wallpaperSource.toString().length > 0) return
+        const saved = displaySettings.wallpaper
+        if (saved === "none") wallpaperName = ""
+        else if (wallpapers.indexOf(saved) >= 0) wallpaperName = saved
+    }
+
+    // Global search of the top bar: applications and settings, accent-insensitive.
+    readonly property var searchEntries: [
+        { t: "Fichiers", k: "files", d: "Application" }, { t: "Journaux", k: "logs", d: "Application" }, { t: "Terminal", k: "terminal", d: "Application" },
+        { t: "Navigateur", k: "browser", d: "Application" }, { t: "Réseau", k: "network", d: "Application" }, { t: "Système", k: "system", d: "Application" },
+        { t: "Bases de données", k: "db", d: "Application" }, { t: "Courrier", k: "mail", d: "Application" }, { t: "Disques", k: "disks", d: "Application" },
+        { t: "MDok (documents)", k: "docs", d: "Application" }, { t: "Corbeille", k: "trash", d: "Fichiers" },
+        { t: "Paramètres", k: "settings", d: "Application" }, { t: "Fond d’écran", k: "settings", d: "Paramètre", section: "appearance" },
+        { t: "Position de la barre des applications", k: "settings", d: "Paramètre", section: "appearance" },
+        { t: "Serveurs", k: "servers", d: "Paramètre" }, { t: "À propos de FORTIQ", k: "settings", d: "Paramètre", section: "about" }
+    ]
+    function normalizeText(s) { return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() }
+    function searchResults(query) {
+        const q = normalizeText(query.trim())
+        if (q.length === 0) return []
+        return searchEntries.filter(e => normalizeText(e.t).indexOf(q) >= 0)
+    }
+    function openSearchResult(entry) {
+        if (entry.section) settingsWindow.section = entry.section
+        launch(entry.k)
+    }
+
     function raiseApp(app) {
         windowOrder = windowOrder.filter(key => key !== app).concat([app])
         foregroundApp = app
@@ -146,6 +181,7 @@ Item {
         else if (app === "system") { systemOpen = true; raiseApp("system"); launcherOpen = false }
         else if (app === "db") { dbOpen = true; raiseApp("db"); launcherOpen = false }
         else if (app === "mail") { mailOpen = true; raiseApp("mail"); launcherOpen = false }
+        else if (app === "settings" && !fixture) { settingsOpen = true; raiseApp("settings"); launcherOpen = false }
         else if (app === "trash") {
             filesOpen = true; raiseApp("files")
             if (controller && controller.connected && controller.trashDirectory.length > 0) controller.navigate(controller.trashDirectory)
@@ -302,6 +338,22 @@ Item {
         onRequestCopy: (what, text) => shell.copyText(what, text)
     }
 
+    SettingsWindow {
+        id: settingsWindow
+        visible: shell.settingsOpen && (!shell.adaptive || shell.foregroundApp === "settings")
+        adaptive: shell.adaptive
+        x: shell.adaptive ? 8 : 420; y: shell.adaptive ? shell.appTop : 110
+        width: shell.adaptive ? shell.width - 16 : 720; height: shell.adaptive ? shell.appHeight : 520
+        z: shell.windowOrder.indexOf("settings") + 1
+        backdrop: wallpaper
+        wallpapers: shell.wallpapers; wallpaperName: shell.wallpaperName; panelEdge: shell.panelEdge
+        appVersion: Qt.application.version
+        onCloseRequested: { shell.settingsOpen = false; if (shell.adaptive) { shell.foregroundApp = "files"; shell.filesOpen = true } }
+        onChooseWallpaper: name => shell.setWallpaper(name)
+        onChooseEdge: edge => { shell.panelEdge = edge; if (!shell.fixture) displaySettings.panelEdge = edge }
+        onRequestServers: shell.serversOpen = true
+    }
+
     DisksWindow {
         id:disksWindow
         visible:shell.disksOpen && (!shell.adaptive || shell.foregroundApp==="disks")
@@ -346,7 +398,7 @@ Item {
         z: 9
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         onPressed: mouse => {
-            const windows = [{key: "files", item: filesWindow}, {key: "browser", item: browserWindow}, {key: "logs", item: logsWindow}, {key: "terminal", item: terminalWindow}, {key:"disks",item:disksWindow}, {key:"docs",item:documentsWindow}, {key:"web",item:webWindow}, {key:"network",item:networkWindow}, {key:"system",item:systemWindow}, {key:"db",item:dbWindow}, {key:"mail",item:mailWindow}]
+            const windows = [{key: "files", item: filesWindow}, {key: "browser", item: browserWindow}, {key: "logs", item: logsWindow}, {key: "terminal", item: terminalWindow}, {key:"disks",item:disksWindow}, {key:"docs",item:documentsWindow}, {key:"web",item:webWindow}, {key:"network",item:networkWindow}, {key:"system",item:systemWindow}, {key:"db",item:dbWindow}, {key:"mail",item:mailWindow}, {key:"settings",item:settingsWindow}]
             windows.sort((a, b) => b.item.z - a.item.z)
             for (const entry of windows) {
                 const p = entry.item.mapFromItem(shell, mouse.x, mouse.y)
@@ -423,7 +475,7 @@ Item {
         y: edge === "left" ? 59 : parent.height - height - 8
         width: edge === "left" ? 84 : (shell.fixture?560:Math.min(parent.width-16,appPanel.apps.length*60+84))
         height: edge === "left" ? parent.height - 59 - 8 : 70
-        running: ({ files: shell.filesOpen, logs: shell.logsOpen, terminal: shell.terminalOpen, disks:shell.disksOpen, docs:shell.documentsOpen, browser: shell.fixture ? shell.browserOpen : shell.webOpen, network: shell.networkOpen, system: shell.systemOpen, db: shell.dbOpen, mail: shell.mailOpen, launcher: shell.launcherOpen })
+        running: ({ files: shell.filesOpen, logs: shell.logsOpen, terminal: shell.terminalOpen, disks:shell.disksOpen, docs:shell.documentsOpen, browser: shell.fixture ? shell.browserOpen : shell.webOpen, network: shell.networkOpen, system: shell.systemOpen, db: shell.dbOpen, mail: shell.mailOpen, settings: shell.settingsOpen, launcher: shell.launcherOpen })
         onLaunch: (app) => shell.launch(app)
         onMoveTo: (edge) => {
             shell.panelEdge = edge
@@ -452,6 +504,9 @@ Item {
         clockText: shell.barClock
         connected: shell.controller !== null && shell.controller.connected
         linkLost: shell.controller !== null && shell.controller.connected && shell.controller.linkLost === true
+        searchEnabled: !shell.fixture
+        onSearchAccepted: { const r = shell.searchResults(searchText); if (r.length > 0) { shell.openSearchResult(r[0]); searchText = "" } }
+        onSearchCleared: searchText = ""
         onServerClicked: {
             if (shell.fixture) return
             if (shell.controller && shell.controller.connected) shell.sessionMenuOpen = !shell.sessionMenuOpen
@@ -460,6 +515,34 @@ Item {
         MouseArea {
             x: shell.adaptive ? parent.width - 44 : 1100; width: shell.adaptive ? 44 : Math.max(0, topBar.indicatorLeft - 1100); height: parent.height
             onClicked: shell.controlOpen = !shell.controlOpen
+        }
+    }
+
+    // Results of the top-bar search, listed under it.
+    Glass {
+        id: searchPopup
+        objectName: "searchResults"
+        z: 11
+        readonly property var results: shell.searchResults(topBar.searchText)
+        visible: !shell.fixture && !shell.adaptive && results.length > 0
+        x: 511; y: 44; width: 515; height: Math.min(results.length, 6) * 34 + 12
+        backdrop: wallpaper; radius: 14; tint: "#E6101A2E"
+        Column {
+            x: 6; y: 6; width: parent.width - 12
+            Repeater {
+                model: searchPopup.results.slice(0, 6)
+                Rectangle {
+                    required property var modelData
+                    required property int index
+                    objectName: "searchResult_" + index
+                    width: parent.width; height: 34; radius: 9
+                    color: index === 0 ? "#33FFFFFF" : (rm.containsMouse ? "#26FFFFFF" : "transparent")
+                    Text { x: 12; anchors.verticalCenter: parent.verticalCenter; text: parent.modelData.t; color: Theme.ink; font.pixelSize: 13; font.family: Theme.fontFamily }
+                    Text { anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; text: parent.modelData.d; color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily }
+                    MouseArea { id: rm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: { shell.openSearchResult(parent.modelData); topBar.searchText = "" } }
+                }
+            }
         }
     }
 
@@ -549,6 +632,7 @@ Item {
             if (systemWindow.handleBack()) return true
             foregroundApp = "files"; filesOpen = true; return true
         }
+        if (foregroundApp === "settings") { settingsOpen = false; foregroundApp = "files"; filesOpen = true; return true }
         if (foregroundApp === "network") {
             if (networkWindow.handleBack()) return true
             foregroundApp = "files"; filesOpen = true; return true
@@ -571,6 +655,7 @@ Item {
         if ((shell.adaptive || Qt.platform.os === "android") && (event.key === Qt.Key_Back || event.key === Qt.Key_Escape)) event.accepted = shell.handleBack()
     }
     Component.onCompleted: {
+        restoreWallpaper()
         if (fixture) filesOpen = true
         else serversOpen = true
     }
