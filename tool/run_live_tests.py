@@ -46,6 +46,8 @@ def main():
     ap.add_argument("--port-b", default="", help="second fixture: SSH port; with --user-b and --fingerprint-b it enables twoHostsNeverMix")
     ap.add_argument("--user-b", default="")
     ap.add_argument("--fingerprint-b", default="")
+    ap.add_argument("--log-tag", default="", help="tool/setup_logs_fixture.sh: tag of the three user.err lines")
+    ap.add_argument("--crash-unit", default="", help="tool/setup_logs_fixture.sh: failing user service")
     ap.add_argument("--web-base", default="", help="URL of tests/fixtures/web_fixture.py as seen from the fixture")
     ap.add_argument("--qt-bin", default="C:/Qt/6.12.0/msvc2022_64/bin")
     ap.add_argument("--vcpkg-bin", default="C:/Users/cybou/vcpkg/installed/x64-windows/bin")
@@ -71,6 +73,10 @@ def main():
                     "FORTIQ_IT_USER_B": opts.user_b, "FORTIQ_IT_FINGERPRINT_B": opts.fingerprint_b})
     if opts.upload_dir:
         env["FORTIQ_IT_UPLOAD_DIR"] = opts.upload_dir
+    if opts.log_tag:
+        env["FORTIQ_IT_LOG_TAG"] = opts.log_tag
+    if opts.crash_unit:
+        env["FORTIQ_IT_CRASH_UNIT"] = opts.crash_unit
     if opts.web_base:
         env["FORTIQ_IT_WEB_BASE"] = opts.web_base
     if opts.wsl_distro:
