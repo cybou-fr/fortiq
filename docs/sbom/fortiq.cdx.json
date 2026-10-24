@@ -1,0 +1,472 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "metadata": {
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "tool/make_sbom.py"
+        }
+      ]
+    },
+    "component": {
+      "type": "application",
+      "name": "FORTIQ",
+      "version": "0.1.0",
+      "bom-ref": "fortiq"
+    },
+    "properties": [
+      {
+        "name": "fortiq:note",
+        "value": "inventory only; CVE review is recorded in docs/STABILIZATION_PLAN.md (S-11)"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "Direct3D compiler (d3dcompiler_47.dll)@unknown:windows-x64",
+      "name": "Direct3D compiler (d3dcompiler_47.dll)",
+      "properties": [
+        {
+          "name": "fortiq:note",
+          "value": "Microsoft redistributable"
+        },
+        {
+          "name": "fortiq:platform",
+          "value": "windows-x64"
+        },
+        {
+          "name": "fortiq:version-known",
+          "value": "false"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "Mesa llvmpipe (opengl32sw.dll)@unknown:windows-x64",
+      "name": "Mesa llvmpipe (opengl32sw.dll)",
+      "properties": [
+        {
+          "name": "fortiq:note",
+          "value": "software OpenGL shipped by windeployqt"
+        },
+        {
+          "name": "fortiq:platform",
+          "value": "windows-x64"
+        },
+        {
+          "name": "fortiq:version-known",
+          "value": "false"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "Microsoft Visual C++ runtime@unknown:windows-x64",
+      "name": "Microsoft Visual C++ runtime",
+      "properties": [
+        {
+          "name": "fortiq:note",
+          "value": "vcruntime140*/msvcp140*"
+        },
+        {
+          "name": "fortiq:platform",
+          "value": "windows-x64"
+        },
+        {
+          "name": "fortiq:version-known",
+          "value": "false"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "Qt@6.12.0:windows-x64,android-arm64",
+      "name": "Qt",
+      "version": "6.12.0",
+      "description": "Qt Base, Declarative, Quick Controls 2 (LGPL modules only; see tool/check_third_party.py)",
+      "licenses": [
+        {
+          "license": {
+            "id": "LGPL-3.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:generic/qt@6.12.0",
+      "cpe": "cpe:2.3:a:qt:qt:6.12.0:*:*:*:*:*:*:*",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.qt.io/"
+        }
+      ],
+      "properties": [
+        {
+          "name": "fortiq:linking",
+          "value": "dynamic (LGPLv3)"
+        },
+        {
+          "name": "fortiq:platform",
+          "value": "windows-x64,android-arm64"
+        },
+        {
+          "name": "fortiq:version-known",
+          "value": "true"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "Qt Installer Framework@4.11:windows-x64",
+      "name": "Qt Installer Framework",
+      "version": "4.11",
+      "licenses": [
+        {
+          "license": {
+            "name": "GPL-3.0-only WITH exception (to be confirmed, see THIRD_PARTY_LICENSES.md)"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "fortiq:platform",
+          "value": "windows-x64"
+        },
+        {
+          "name": "fortiq:role",
+          "value": "installer builder (installerbase.exe is copied into the installer)"
+        },
+        {
+          "name": "fortiq:source",
+          "value": "Qt online installer, Tools/QtInstallerFramework"
+        },
+        {
+          "name": "fortiq:version-known",
+          "value": "true"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "Qt for Android Gradle dependencies@unknown:android-arm64",
+      "name": "Qt for Android Gradle dependencies",
+      "properties": [
+        {
+          "name": "fortiq:note",
+          "value": "not inventoried (androiddeployqt)"
+        },
+        {
+          "name": "fortiq:platform",
+          "value": "android-arm64"
+        },
+        {
+          "name": "fortiq:version-known",
+          "value": "false"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "libssh2@1.11.1:android-arm64",
+      "name": "libssh2",
+      "version": "1.11.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "purl": "pkg:vcpkg/libssh2@1.11.1",
+      "cpe": "cpe:2.3:a:libssh2:libssh2:1.11.1:*:*:*:*:*:*:*",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://libssh2.org/"
+        }
+      ],
+      "properties": [
+        {
+          "name": "fortiq:platform",
+          "value": "android-arm64"
+        },
+        {
+          "name": "fortiq:source",
+          "value": "vcpkg arm64-android (port revision 3)"
+        },
+        {
+          "name": "fortiq:version-known",
+          "value": "true"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "libssh2@1.11.1:windows-x64",
+      "name": "libssh2",
+      "version": "1.11.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "purl": "pkg:vcpkg/libssh2@1.11.1",
+      "cpe": "cpe:2.3:a:libssh2:libssh2:1.11.1:*:*:*:*:*:*:*",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://libssh2.org/"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "c8a53a38d13a53ee4b7ebc2bd31e6157de227c13953f8aa048d1c12700d7931d"
+        }
+      ],
+      "properties": [
+        {
+          "name": "fortiq:platform",
+          "value": "windows-x64"
+        },
+        {
+          "name": "fortiq:source",
+          "value": "vcpkg x64-windows (port revision 3)"
+        },
+        {
+          "name": "fortiq:version-known",
+          "value": "true"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "libvterm@0.3.3:windows-x64,android-arm64",
+      "name": "libvterm",
+      "version": "0.3.3",
+      "description": "Terminal emulation; carries local security patches (third_party/libvterm/README.fortiq.md)",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:github/neovim/libvterm@934bc2fbf21800ac3458a499df8820ca5fb45fd3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/neovim/libvterm"
+        }
+      ],
+      "properties": [
+        {
+          "name": "fortiq:linking",
+          "value": "static"
+        },
+        {
+          "name": "fortiq:local-patches",
+          "value": "3"
+        },
+        {
+          "name": "fortiq:platform",
+          "value": "windows-x64,android-arm64"
+        },
+        {
+          "name": "fortiq:source",
+          "value": "vendored in third_party/libvterm"
+        },
+        {
+          "name": "fortiq:upstream-commit",
+          "value": "934bc2fbf21800ac3458a499df8820ca5fb45fd3"
+        },
+        {
+          "name": "fortiq:version-known",
+          "value": "true"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "openssl@3.6.3:android-arm64",
+      "name": "openssl",
+      "version": "3.6.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:vcpkg/openssl@3.6.3",
+      "cpe": "cpe:2.3:a:openssl:openssl:3.6.3:*:*:*:*:*:*:*",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.openssl.org/"
+        }
+      ],
+      "properties": [
+        {
+          "name": "fortiq:platform",
+          "value": "android-arm64"
+        },
+        {
+          "name": "fortiq:source",
+          "value": "vcpkg arm64-android"
+        },
+        {
+          "name": "fortiq:version-known",
+          "value": "true"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "openssl@3.6.3:windows-x64",
+      "name": "openssl",
+      "version": "3.6.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:vcpkg/openssl@3.6.3",
+      "cpe": "cpe:2.3:a:openssl:openssl:3.6.3:*:*:*:*:*:*:*",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.openssl.org/"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "675544f67a2ee272101a8d1c8b2eaac3e918d38d131ddcace7016d84a5e3cbe3"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b3e6fd0aa86a332de584eadba76730beea81827ce9b9da277dd4c846f5f70b82"
+        }
+      ],
+      "properties": [
+        {
+          "name": "fortiq:platform",
+          "value": "windows-x64"
+        },
+        {
+          "name": "fortiq:source",
+          "value": "vcpkg x64-windows"
+        },
+        {
+          "name": "fortiq:version-known",
+          "value": "true"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "zlib@1.3.2:android-arm64",
+      "name": "zlib",
+      "version": "1.3.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "Zlib"
+          }
+        }
+      ],
+      "purl": "pkg:vcpkg/zlib@1.3.2",
+      "cpe": "cpe:2.3:a:zlib:zlib:1.3.2:*:*:*:*:*:*:*",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://zlib.net/"
+        }
+      ],
+      "properties": [
+        {
+          "name": "fortiq:platform",
+          "value": "android-arm64"
+        },
+        {
+          "name": "fortiq:source",
+          "value": "vcpkg arm64-android (port revision 1)"
+        },
+        {
+          "name": "fortiq:version-known",
+          "value": "true"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "zlib@1.3.2:windows-x64",
+      "name": "zlib",
+      "version": "1.3.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "Zlib"
+          }
+        }
+      ],
+      "purl": "pkg:vcpkg/zlib@1.3.2",
+      "cpe": "cpe:2.3:a:zlib:zlib:1.3.2:*:*:*:*:*:*:*",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://zlib.net/"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "3367add507fcd30d96b9f4f53a674e6906df52b0df13d03b0c7b886417a7686e"
+        }
+      ],
+      "properties": [
+        {
+          "name": "fortiq:platform",
+          "value": "windows-x64"
+        },
+        {
+          "name": "fortiq:source",
+          "value": "vcpkg x64-windows (port revision 1)"
+        },
+        {
+          "name": "fortiq:version-known",
+          "value": "true"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "fortiq",
+      "dependsOn": [
+        "Direct3D compiler (d3dcompiler_47.dll)@unknown:windows-x64",
+        "Mesa llvmpipe (opengl32sw.dll)@unknown:windows-x64",
+        "Microsoft Visual C++ runtime@unknown:windows-x64",
+        "Qt Installer Framework@4.11:windows-x64",
+        "Qt for Android Gradle dependencies@unknown:android-arm64",
+        "Qt@6.12.0:windows-x64,android-arm64",
+        "libssh2@1.11.1:android-arm64",
+        "libssh2@1.11.1:windows-x64",
+        "libvterm@0.3.3:windows-x64,android-arm64",
+        "openssl@3.6.3:android-arm64",
+        "openssl@3.6.3:windows-x64",
+        "zlib@1.3.2:android-arm64",
+        "zlib@1.3.2:windows-x64"
+      ]
+    }
+  ],
+  "serialNumber": "urn:uuid:08b4ff4c-9de9-683c-b713-d1f698818681"
+}
