@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 
 // Places, window controls and server footer of the Files window.
 Rectangle {

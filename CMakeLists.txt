@@ -266,6 +266,9 @@ set_target_properties(fortiq PROPERTIES
     QT_ANDROID_APP_NAME "FORTIQ"
 )
 
+# Licensing (audit backlog 10): the Qt Virtual Keyboard module is GPL-3.0-only or commercial (no LGPL), and FORTIQ does not use it; the
+# platform input context plugin that pulls it in must never ship. Lottie vector images are not used either.
+qt_import_plugins(fortiq EXCLUDE_BY_TYPE platforminputcontexts EXCLUDE_BY_TYPE vectorimageformats)
 if(ANDROID)
     if(Qt6_VERSION VERSION_LESS "6.9.0")
         message(FATAL_ERROR "FORTIQ Android launcher/adaptive icon requires Qt 6.9 or newer")

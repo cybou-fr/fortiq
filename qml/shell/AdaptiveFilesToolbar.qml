@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 
 // Touch-sized controls use the existing Files actions and dialogs.
 Column {

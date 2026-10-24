@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 
 // One scrollable app panel on narrow screens; icon art is not scaled down.
 Rectangle {

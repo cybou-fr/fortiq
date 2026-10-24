@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 
 // Server search results over the Files content: name or content matches
 // below the folder where the search started. Double-click opens a file in

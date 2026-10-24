@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 
 // Navigation, path bar, filter field and view tools of the Files window (also its drag handle).
 Item {

@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 
 // Incident inspector over the Logs content: deterministic synopsis on the
 // left (observed / hypotheses / unknown / next checks, each linked to event

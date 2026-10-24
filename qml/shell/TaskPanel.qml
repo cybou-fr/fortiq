@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 
 // Shared task list (transfers, file operations, saves, searches) of every app,
 // fed by the application's TaskManager. Progress, a stop request for tasks that

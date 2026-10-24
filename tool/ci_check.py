@@ -39,6 +39,8 @@ def main():
     opts = ap.parse_args()
 
     run("documentation consistency", [sys.executable, "tool/check_docs_consistency.py"])
+    if opts.qt_prefix:
+        run("licence check of the packages proves itself (tool/check_third_party.py)", [sys.executable, "tool/check_third_party.py", "--self-test", "--qt", opts.qt_prefix])
     scripts = sorted(glob.glob(str(ROOT / "tool" / "*.py")) + glob.glob(str(ROOT / "tests" / "fixtures" / "**" / "*.py"), recursive=True))
     run("tool and fixture scripts compile", [sys.executable, "-m", "py_compile", *scripts])
 

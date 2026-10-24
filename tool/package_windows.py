@@ -17,7 +17,10 @@ every shipped binary is either shipped or a Windows system library.
 
 The installer installs per user into %LOCALAPPDATA%\\Programs\\FORTIQ (no
 administrator rights), adds a Start menu entry and a maintenance tool for
-uninstalling. It is not code-signed: Windows SmartScreen will warn.
+uninstalling. With --sign-thumbprint <sha1> the application and the installer are
+signed with a certificate from the current user's store (see docs/WINDOWS_SIGNING.md);
+without it they are not, and Windows SmartScreen will warn. The maintenance tool that the
+installer copies next to the application is not signed by this script.
 """
 from __future__ import annotations
 
@@ -87,11 +90,55 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def find_signtool() -> Path:
+    found = sorted(glob.glob("C:/Program Files (x86)/Windows Kits/10/bin/*/x64/signtool.exe"))
+    if not found:
+        sys.exit("signtool.exe not found (install the Windows SDK)")
+    return Path(found[-1])
+
+
+def authenticode(path: Path) -> tuple[str, str, str]:
+    """(status, signer thumbprint, message) of the Authenticode signature of a file, from PowerShell."""
+    quoted = str(path).replace("'", "''")
+    script = (f"$s = Get-AuthenticodeSignature -LiteralPath '{quoted}'; "
+              "$t = if ($s.SignerCertificate) { $s.SignerCertificate.Thumbprint } else { '' }; "
+              "Write-Output ($s.Status.ToString() + '|' + $t + '|' + $s.StatusMessage)")
+    out = subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, text=True, errors="replace").stdout.strip()
+    status, _, rest = out.partition("|")
+    thumb, _, message = rest.partition("|")
+    return status, thumb, message
+
+
+def sign_files(files: list[Path], thumbprint: str, timestamp_url: str) -> None:
+    """Signs with a certificate that is in the current user's store (no password or key ever passes through this script)."""
+    tool = find_signtool()
+    for f in files:
+        cmd = [str(tool), "sign", "/fd", "SHA256", "/sha1", thumbprint, "/s", "My"]
+        if timestamp_url:
+            cmd += ["/tr", timestamp_url, "/td", "SHA256"]
+        run(cmd + [str(f)])
+
+
+def verify_signatures(files: list[Path], thumbprint: str, allow_untrusted: bool) -> list[str]:
+    problems = []
+    for f in files:
+        status, thumb, message = authenticode(f)
+        trusted = status == "Valid"
+        # A throw-away self-signed certificate (the self-test) is "UnknownError / not trusted" but must still carry OUR signature and an intact hash.
+        accepted_untrusted = allow_untrusted and status in ("UnknownError", "NotTrusted")      # a HashMismatch is never accepted
+        if thumb.upper() != thumbprint.upper() or not (trusted or accepted_untrusted):
+            problems.append(f"{f.name}: signature status {status} ({message.strip()}), signer {thumb or 'none'}")
+    return problems
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--build", default=str(ROOT / "build-msvc"), help="CMake Release build directory with fortiq.exe")
     parser.add_argument("--out", default=str(ROOT / "build-dist"))
     parser.add_argument("--no-installer", action="store_true")
+    parser.add_argument("--sign-thumbprint", default="", help="SHA-1 thumbprint of a code-signing certificate in the current user's store: signs fortiq.exe and the installer")
+    parser.add_argument("--timestamp-url", default="", help="RFC 3161 timestamp server for the signatures (build-time use only; without one a signature ends with the certificate)")
+    parser.add_argument("--allow-untrusted-signature", action="store_true", help="accept a signature whose root is not trusted (a throw-away test certificate only)")
     args = parser.parse_args()
 
     build, out = Path(args.build), Path(args.out)
@@ -106,7 +153,16 @@ def main() -> int:
 
     shutil.copy2(exe, stage / "fortiq.exe")
     run([str(QT / "bin/windeployqt.exe"), "--release", "--qmldir", str(ROOT / "qml"), "--no-compiler-runtime",
-         "--skip-plugin-types", "qmltooling", "--no-system-dxc-compiler", str(stage / "fortiq.exe")])
+         "--skip-plugin-types", "qmltooling,platforminputcontexts,vectorimageformats", "--no-virtualkeyboard", "--no-system-dxc-compiler", str(stage / "fortiq.exe")])
+
+    for d in sorted((p for p in stage.rglob("*") if p.is_dir()), key=lambda p: len(p.parts), reverse=True):
+        if not any(d.iterdir()):
+            d.rmdir()          # module folders that windeployqt created but left empty
+
+    to_verify: list[Path] = []
+    if args.sign_thumbprint:
+        sign_files([stage / "fortiq.exe"], args.sign_thumbprint, args.timestamp_url)    # before the archive and the installer are made
+        to_verify.append(stage / "fortiq.exe")
 
     tool = dumpbin()
     # Third-party DLLs: follow imports from fortiq.exe into vcpkg's bin.
@@ -144,14 +200,24 @@ def main() -> int:
         if src.exists():
             shutil.copy2(src, lic / f"Qt-{name}")
     redist = Path(crt[-1]).parents[2] / "redist.txt"
+    contact = os.environ.get("FORTIQ_NOTICE_CONTACT", "l'éditeur (CYBOU), par le site du produit")
+    qt_version = QT.parent.name
     (lic / "THIRD_PARTY_NOTICES.txt").write_text(
-        "FORTIQ includes the following third-party libraries:\n"
+        "FORTIQ includes the following third-party software:\n\n"
+        f"- Qt {qt_version}, used under the GNU Lesser General Public License version 3 (LGPLv3); see Qt-COPYING.txt, Qt-LICENSE and Qt-Copyright.txt.\n"
+        "  The Qt libraries (Qt6*.dll, the plugins and the qml folder) are separate, unmodified files in this folder that are loaded dynamically:\n"
+        "  you may replace them with your own build of the same Qt version. The corresponding Qt source code is available from\n"
+        f"  https://download.qt.io/official_releases/qt/{qt_version.rsplit('.', 1)[0]}/{qt_version}/ and, on request, from {contact}.\n"
+        "  FORTIQ uses no Qt module that is only available under the GPL or a commercial licence (checked by tool/check_third_party.py).\n"
         "- libvterm 0.3.3 (MIT), statically linked, unmodified sources: see libvterm.txt.\n"
-        f"- Qt {QT.parent.name} (LGPLv3 / GPLv3; see Qt-*.txt). The Qt libraries are separate DLLs in this folder and can be replaced.\n"
         "- libssh2 (BSD-3-Clause), OpenSSL 3 (Apache-2.0), zlib (zlib license): see the matching files.\n"
+        "- Mesa llvmpipe software renderer (opengl32sw.dll, MIT and others) and Microsoft d3dcompiler_47.dll, both shipped with Qt for Windows.\n"
         "- Microsoft Visual C++ runtime DLLs, redistributed app-locally under the Visual Studio redistribution terms.\n"
-        "Commercial Qt licensing for the product remains an open decision (docs/ARCHITECTURE.md).\n",
+        "- The installer is built with the Qt Installer Framework (GPLv3 with the Qt exception for the installer's content).\n",
         encoding="utf-8")
+    check = subprocess.run([sys.executable, str(ROOT / "tool/check_third_party.py"), "--stage", str(stage), "--qt", str(QT)])
+    if check.returncode != 0:
+        sys.exit("licence check failed: the package contains a component that may not be distributed (see above)")
 
     # Dependency check of everything shipped.
     shipped = {p.name.lower() for p in stage.rglob("*") if p.is_file()}
@@ -235,8 +301,18 @@ Component.prototype.createOperations = function() {
         setup = out / f"FORTIQ-{version}-win64-setup.exe"
         run([str(IFW / "binarycreator.exe"), "--offline-only", "-c", str(ifw / "config/config.xml"),
              "-p", str(ifw / "packages"), str(setup)])
+        if args.sign_thumbprint:
+            sign_files([setup], args.sign_thumbprint, args.timestamp_url)
+            to_verify.append(setup)
         report["installer"] = {"file": setup.name, "bytes": setup.stat().st_size, "sha256": sha256(setup)}
 
+    if args.sign_thumbprint:
+        sig_problems = verify_signatures(to_verify, args.sign_thumbprint, args.allow_untrusted_signature)
+        report["signatures"] = {"thumbprint": args.sign_thumbprint, "timestamp": bool(args.timestamp_url), "problems": sig_problems}
+        if sig_problems:
+            problems.extend(sig_problems)
+    else:
+        report["signatures"] = "not signed (no --sign-thumbprint): Windows SmartScreen will warn"
     (out / "package-report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     print(json.dumps({k: v for k, v in report.items() if k != "fortiq_exe_sha256"}, indent=2, ensure_ascii=False))
     return 1 if problems else 0

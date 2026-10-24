@@ -120,6 +120,7 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 Квалификация платформ (эмулятор Android сделан; чистая Windows и физический Android — за владельцем): [PLATFORM_QUALIFICATION](docs/PLATFORM_QUALIFICATION.md).
+Выпуск, подпись и обновления: [RELEASE](docs/RELEASE.md); лицензии Qt и сторонних компонентов (**пакеты, собранные до 24.10.2026, содержат GPL-модуль Qt и не должны распространяться**): [THIRD_PARTY_LICENSES](docs/THIRD_PARTY_LICENSES.md).
 Фаззинг и санитайзеры: [FUZZING](docs/FUZZING.md) (`tool/fuzz_linux.sh`, `-DFORTIQ_SANITIZE=ON`).
 
 Все проверки, которые обязан пройти коммит в `main` (документы, компиляция скриптов, сборка, офлайн-тесты, по желанию layout-тест под нагрузкой), одной командой:

@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 
 // Système (lecture seule): processus, services systemd et vue d'ensemble du serveur.
 // Rien n'est démarré, arrêté ni tué (docs/SYSTEM.md).

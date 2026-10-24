@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 import QtQuick.Effects
 
 // Logs app, glass sibling of Files: sources sidebar (system / user journal,

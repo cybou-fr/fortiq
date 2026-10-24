@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Window
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 import Fortiq.Shell
 
 // ApplicationWindow applies Android safe-area padding on Qt 6.9+.

@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 
 // Read-only service view: systemctl status fields, 7-day starts / failures /
 // restarts and the lifecycle history reported by systemd. FORTIQ never

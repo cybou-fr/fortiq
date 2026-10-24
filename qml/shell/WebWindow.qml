@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 
 // Navigateur: a GUI over curl running on the selected Linux server (docs/BROWSER.md).
 // Pages are fetched by the server, then shown here as safe text: no JavaScript,

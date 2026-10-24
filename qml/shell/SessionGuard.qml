@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 
 // Confirmation before the session ends (logout, disconnect, another server, quitting) while tasks still run.
 // The list is what the TaskManager says guards the session: transfers, saves, sends, an open terminal.

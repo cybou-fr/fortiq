@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 import QtQuick.Dialogs
 
 // Login screen (owner decision 23.10.2026): connecting to a server works like

@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 
 // Réseau (lecture seule): interfaces, ports en écoute, routes et DNS du serveur,
 // plus trois diagnostics lancés sur le serveur. Rien n'est modifié (docs/NETWORK.md).

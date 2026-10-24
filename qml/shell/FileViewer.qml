@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 
 // Read-only viewer over the Files content area. Text (first 1 MiB) with
 // line numbers, images with fit / 100 % / wheel zoom, hex dump for binaries.

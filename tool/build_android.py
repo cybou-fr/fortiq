@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 
 def main():
@@ -43,7 +44,15 @@ def main():
     subprocess.run(configure, env=env, check=True)
     subprocess.run([args.cmake, "--build", str(build), "--target", "fortiq", "-j", str(args.jobs)], env=env, check=True)
     if args.package:
+        # androiddeployqt only ADDS libraries to android-build/libs: after a dependency or plugin is dropped (audit backlog 10: Qt Virtual
+        # Keyboard and Qt Quick Timeline are GPL-only) the stale copies would still end up in the APK.
+        shutil.rmtree(build / "android-build" / "libs", ignore_errors=True)
         subprocess.run([args.cmake, "--build", str(build), "--target", "fortiq_make_apk", "-j", str(args.jobs)], env=env, check=True)
+        apk = build / "android-build/build/outputs/apk" / ("release" if args.build_type == "Release" else "debug") / (
+            "android-build-release-unsigned.apk" if args.build_type == "Release" else "android-build-debug.apk")
+        if apk.exists():
+            checker = Path(__file__).with_name("check_third_party.py")
+            subprocess.run([sys.executable, str(checker), "--apk", str(apk), "--qt", args.qt_host] + (["--allow-debug-tooling"] if args.build_type != "Release" else []), check=True)
 
 
 if __name__ == "__main__":

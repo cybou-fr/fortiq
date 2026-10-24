@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 
 // Bases de données (lecture seule): SQLite et PostgreSQL via sqlite3 / psql sur le serveur.
 // Les mots de passe restent dans le stockage protégé du client (docs/DATABASES.md).

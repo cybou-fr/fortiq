@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 
 // The single application panel (owner decision 22.10.2026: one panel instead
 // of rail + dock), docked on the left or at the bottom. Apps that do not
