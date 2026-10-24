@@ -78,6 +78,48 @@ Item {
         if (controller) controller.disconnectServer()
         serversOpen = true
     }
+    // Notifications (RAM only, newest first): what happened while the user was elsewhere. Nothing is stored on disk or sent anywhere.
+    property var notifications: []
+    property bool notificationsOpen: false
+    readonly property int unreadCount: notifications.filter(n => n.unread).length
+    property bool lastLinkLost: false
+    function pushNotification(kind, title, text) {
+        const entry = { id: Date.now() + Math.random(), time: Date.now(), kind: kind, title: title, text: text, unread: !notificationsOpen }
+        notifications = [entry].concat(notifications).slice(0, 50)
+    }
+    function toggleNotifications() {
+        notificationsOpen = !notificationsOpen
+        if (notificationsOpen) { sessionMenuOpen = false; controlOpen = false; launcherOpen = false; notifications = notifications.map(n => Object.assign({}, n, { unread: false })) }
+    }
+    function clearNotifications() { notifications = [] }
+    function notificationTime(ms) { return Qt.formatTime(new Date(ms), "HH:mm") }
+    function taskFinished(id, state) {
+        if (!taskManager || state === "cancelled") return
+        const t = taskManager.task(id)
+        if (!t || !t.title) return
+        const where = t.source ? " · " + t.source : ""
+        if (state === "succeeded") pushNotification("ok", "Terminé : " + t.title, (t.message || "") + where)
+        else if (state === "failed") pushNotification("error", "Échec : " + t.title, (t.message || "") + where)
+        else pushNotification("warn", "Résultat incertain : " + t.title, (t.message || "") + where)
+    }
+    function trackLink() {
+        if (!controller) return
+        const lost = controller.connected && controller.linkLost === true
+        if (lost === lastLinkLost) return
+        lastLinkLost = lost
+        if (lost) pushNotification("error", "Connexion perdue", controller.serverLabel + " — les données affichées datent d’avant la coupure.")
+        else if (controller.connected) pushNotification("ok", "Connexion rétablie", controller.serverLabel)
+    }
+    Connections {
+        target: shell.controller
+        ignoreUnknownSignals: true
+        function onLinkChanged() { shell.trackLink() }
+    }
+    Connections {
+        target: shell.taskManager
+        ignoreUnknownSignals: true
+        function onFinished(id, state) { shell.taskFinished(id, state) }
+    }
     Connections {
         target: shell.controller
         function onChanged() { if (shell.controller.connected && shell.serversOpen && !shell.fixture) shell.serversOpen = false }
@@ -410,6 +452,7 @@ Item {
             if (!shell.fixture && !shell.serversOpen) {
                 if (shell.controlOpen && !shell.pressInside(controlPanel, mouse.x, mouse.y)) shell.controlOpen = false
                 if (shell.sessionMenuOpen && !shell.pressInside(sessionMenu, mouse.x, mouse.y)) shell.sessionMenuOpen = false
+                if (shell.notificationsOpen && !shell.pressInside(notificationPanel, mouse.x, mouse.y)) shell.notificationsOpen = false
                 if (shell.launcherOpen && !shell.pressInside(launcherItem, mouse.x, mouse.y)
                     && !shell.pressInside(appPanel, mouse.x, mouse.y) && !shell.pressInside(compactPanel, mouse.x, mouse.y))
                     shell.launcherOpen = false
@@ -505,6 +548,8 @@ Item {
         connected: shell.controller !== null && shell.controller.connected
         linkLost: shell.controller !== null && shell.controller.connected && shell.controller.linkLost === true
         searchEnabled: !shell.fixture
+        unreadCount: shell.unreadCount
+        onBellClicked: shell.toggleNotifications()
         onSearchAccepted: { const r = shell.searchResults(searchText); if (r.length > 0) { shell.openSearchResult(r[0]); searchText = "" } }
         onSearchCleared: searchText = ""
         onServerClicked: {
@@ -515,6 +560,48 @@ Item {
         MouseArea {
             x: shell.adaptive ? parent.width - 44 : 1100; width: shell.adaptive ? 44 : Math.max(0, topBar.indicatorLeft - 1100); height: parent.height
             onClicked: shell.controlOpen = !shell.controlOpen
+        }
+    }
+
+    // Notification panel under the bell.
+    Glass {
+        id: notificationPanel
+        objectName: "notificationPanel"
+        z: 11
+        visible: shell.notificationsOpen && !shell.fixture
+        width: Math.min(380, shell.width - 16); height: Math.min(shell.height - 120, 64 + Math.max(1, Math.min(shell.notifications.length, 6)) * 66)
+        x: Math.max(8, Math.min(shell.width - width - 8, 1030)); y: 52
+        backdrop: wallpaper; radius: 14; tint: "#E6101A2E"
+        Text { x: 16; y: 14; text: "Notifications"; color: Theme.ink; font.pixelSize: 13; font.weight: Font.DemiBold; font.family: Theme.fontFamily }
+        Rectangle {
+            objectName: "notificationsClear"
+            visible: shell.notifications.length > 0
+            anchors.right: parent.right; anchors.rightMargin: 12; y: 8; width: 96; height: 26; radius: 13
+            color: nc.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
+            Text { anchors.centerIn: parent; text: "Tout effacer"; color: Theme.ink; font.pixelSize: 11; font.family: Theme.fontFamily }
+            MouseArea { id: nc; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: shell.clearNotifications() }
+        }
+        Text {
+            visible: shell.notifications.length === 0
+            objectName: "notificationsEmpty"
+            x: 16; y: 52; width: parent.width - 32; text: "Aucune notification."
+            color: Theme.inkMuted; font.pixelSize: 12; font.family: Theme.fontFamily
+        }
+        ListView {
+            objectName: "notificationList"
+            x: 8; y: 44; width: parent.width - 16; height: parent.height - 52
+            clip: true; spacing: 4
+            model: shell.notifications
+            delegate: Rectangle {
+                required property var modelData
+                width: ListView.view.width; height: 62; radius: 9; color: "#14FFFFFF"
+                Rectangle { x: 10; y: 12; width: 8; height: 8; radius: 4
+                    color: parent.modelData.kind === "error" ? "#F87171" : (parent.modelData.kind === "warn" ? "#FBBF24" : "#4ADE80") }
+                Text { x: 28; y: 7; width: parent.width - 80; elide: Text.ElideRight; text: parent.modelData.title; color: Theme.ink; font.pixelSize: 12; font.weight: Font.DemiBold; font.family: Theme.fontFamily }
+                Text { anchors.right: parent.right; anchors.rightMargin: 10; y: 8; text: shell.notificationTime(parent.modelData.time); color: Theme.inkMuted; font.pixelSize: 10; font.family: Theme.fontFamily }
+                Text { x: 28; y: 26; width: parent.width - 40; height: 32; wrapMode: Text.WordWrap; elide: Text.ElideRight; maximumLineCount: 2
+                    text: parent.modelData.text; color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily }
+            }
         }
     }
 

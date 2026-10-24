@@ -655,6 +655,59 @@ private slots:
                 shell->setProperty("foregroundApp", "files");
                 settle(window);
             }
+            {   // Launcher search and notifications (the shell runs as the reference fixture here, so these are exercised on their own).
+                QQmlComponent launcherComponent(&engine);
+                launcherComponent.setData(R"(import QtQuick
+import Fortiq.Shell
+LauncherPanel { width: 438; height: 443 })", QUrl());
+                auto *launcherObj = launcherComponent.create(); QVERIFY2(launcherObj, qPrintable(launcherComponent.errorString()));
+                auto *launcherItem = qobject_cast<QQuickItem *>(launcherObj); QVERIFY(launcherItem);
+                launcherItem->setParentItem(window->contentItem()); launcherItem->setZ(1000);
+                QSignalSpy launched(launcherItem, SIGNAL(launch(QString)));
+                settle(window);
+                auto *searchBox = findByName(launcherItem, "launcherSearch"); QVERIFY(searchBox);
+                auto shownCount = [&]() { return launcherItem->property("shown").toList().size(); };
+                const int all = shownCount(); QVERIFY(all >= 10);
+                searchBox->forceActiveFocus();
+                for (const char c : QByteArray("RESEAU")) QTest::keyClick(window, c);            // case and accents do not matter
+                settle(window);
+                QCOMPARE(shownCount(), 1);
+                QCOMPARE(launcherItem->property("shown").toList().first().toMap().value("k").toString(), QString("network"));
+                QTest::keyClick(window, Qt::Key_Return);
+                QCOMPARE(launched.count(), 1); QCOMPARE(launched.first().first().toString(), QString("network"));
+                QCOMPARE(searchBox->property("text").toString(), QString());                      // cleared after launching
+                QCOMPARE(shownCount(), all);
+                for (const char c : QByteArray("zzzz")) QTest::keyClick(window, c);
+                settle(window);
+                QCOMPARE(shownCount(), 0); QVERIFY(findByName(launcherItem, "launcherNoMatch")->isVisible());
+                QTest::keyClick(window, Qt::Key_Return); QCOMPARE(launched.count(), 1);          // nothing to open
+                QTest::keyClick(window, Qt::Key_Escape); settle(window);
+                QCOMPARE(shownCount(), all);
+                delete launcherObj;
+
+                auto call = [&](const char *name, const QVariantList &args) {
+                    QVariant ret;
+                    QMetaObject::invokeMethod(shell, name, Q_RETURN_ARG(QVariant, ret), Q_ARG(QVariant, args.value(0)), Q_ARG(QVariant, args.value(1)), Q_ARG(QVariant, args.value(2)));
+                    return ret;
+                };
+                QCOMPARE(shell->property("unreadCount").toInt(), 0);
+                call("pushNotification", { "error", "Connexion perdue", "demo" });
+                call("pushNotification", { "ok", "Terminé : a.txt", "" });
+                QCOMPARE(shell->property("unreadCount").toInt(), 2);
+                QCOMPARE(shell->property("notifications").toList().first().toMap().value("title").toString(), QString("Terminé : a.txt"));   // newest first
+                for (int i = 0; i < 60; ++i) call("pushNotification", { "ok", QString("n%1").arg(i), "" });
+                QCOMPARE(shell->property("notifications").toList().size(), 50);                // bounded
+                QMetaObject::invokeMethod(shell, "toggleNotifications");
+                QVERIFY(shell->property("notificationsOpen").toBool());
+                QCOMPARE(shell->property("unreadCount").toInt(), 0);                           // opening reads them
+                call("pushNotification", { "warn", "pendant l’ouverture", "" });
+                QCOMPARE(shell->property("unreadCount").toInt(), 0);
+                QMetaObject::invokeMethod(shell, "clearNotifications");
+                QCOMPARE(shell->property("notifications").toList().size(), 0);
+                QMetaObject::invokeMethod(shell, "toggleNotifications");
+                QVERIFY(!shell->property("notificationsOpen").toBool());
+                QMetaObject::invokeMethod(shell, "clearNotifications");
+            }
             {   // Bases de données: profile list, schema, read-only editor and the profile form.
                 QQmlComponent dbComponent(&engine), dbRemoteComponent(&engine);
                 dbComponent.setData(kFakeDb, QUrl());

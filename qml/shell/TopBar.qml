@@ -22,6 +22,8 @@ Rectangle {
     property alias searchText: searchInput.text
     signal searchAccepted()
     signal searchCleared()
+    property int unreadCount: 0
+    signal bellClicked()
     property bool searchEnabled: false     // the reference scene keeps the static look
     color: Theme.topBar
     height: 47
@@ -113,6 +115,19 @@ Rectangle {
                 glyph: modelData
                 color: modelData === "|" ? "#6F86A8" : Theme.ink
                 size: 15
+                Rectangle {     // unread notifications
+                    visible: parent.modelData === "🔔" && bar.unreadCount > 0
+                    objectName: "bellBadge"
+                    x: parent.width - 6; y: -4; width: 10; height: 10; radius: 5; color: "#F87171"
+                    border.width: 1; border.color: Theme.topBar
+                }
+                MouseArea {
+                    objectName: parent.modelData === "🔔" ? "bellButton" : ""
+                    enabled: parent.modelData === "🔔" && bar.searchEnabled
+                    anchors.fill: parent; anchors.margins: -7
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: bar.bellClicked()
+                }
             }
         }
     }
