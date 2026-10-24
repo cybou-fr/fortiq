@@ -111,6 +111,7 @@ struct SshSession::Impl {
     qsizetype terminalOffset = 0;
     qsizetype terminalQueued = 0;
     int terminalColumns = 0, terminalRows = 0;
+    int commandTimeoutMs = 600000; // runScript() deadline
 
     void close() {
         if (terminal) { libssh2_channel_free(terminal); terminal = nullptr; }

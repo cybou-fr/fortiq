@@ -1,4 +1,5 @@
 #include "SshInternal.h"
+#include <QElapsedTimer>
 
 namespace fortiq {
 namespace {
@@ -166,7 +167,32 @@ SshResult SshSession::search(const QString &dirPath, const QString &query, const
 
 QByteArray SshSession::shellQuote(const QString &value) { return shQuote(value); }
 
-SshResult SshSession::runScript(const QByteArray &script, qint64 maxStdout, const std::function<bool()> &keepGoing)
+void SshSession::setCommandTimeout(int ms) { d->commandTimeoutMs = ms > 0 ? ms : 600000; }
+
+namespace {
+// Stops what a finished-with channel left running on the server. The command was started as
+// "sh -s fortiq-run-<token>", so its process (and, through sshd's setsid, its whole group) can be found by that token.
+void stopRemoteRun(LIBSSH2_SESSION *session, const QByteArray &token)
+{
+    const QByteArray script =
+        "p=$(pgrep -f '[s]h -s " + token + "' | head -n 1); [ -n \"$p\" ] || exit 0\n"
+        "g=$(ps -o pgid= -p \"$p\" | tr -d ' '); me=$(ps -o pgid= -p $$ | tr -d ' ')\n"
+        "if [ -n \"$g\" ] && [ \"$g\" != \"$me\" ] && [ \"$g\" != 1 ]; then kill -s TERM -- \"-$g\" 2>/dev/null; sleep 1; kill -s KILL -- \"-$g\" 2>/dev/null\n"
+        "else pkill -TERM -P \"$p\" 2>/dev/null; kill -TERM \"$p\" 2>/dev/null; fi\nexit 0\n";
+    libssh2_session_set_timeout(session, 8000);
+    LIBSSH2_CHANNEL *ch = libssh2_channel_open_session(session);
+    if (!ch) return;
+    const QByteArray command = "sh -c " + shQuote(QString::fromLatin1(script));
+    if (libssh2_channel_exec(ch, command.constData()) == 0) {
+        char sink[256];
+        while (libssh2_channel_read(ch, sink, sizeof(sink)) > 0) {}
+        libssh2_channel_wait_closed(ch);
+    }
+    libssh2_channel_free(ch);
+}
+}  // namespace
+
+SshResult SshSession::runScript(const QByteArray &script, qint64 maxStdout, const std::function<bool()> &keepGoing, int timeoutMs)
 {
     if (!isOpen()) return transferFail(QStringLiteral("La session SSH n'est pas ouverte."));
     LIBSSH2_CHANNEL *channel = libssh2_channel_open_session(d->handle);
@@ -174,10 +200,14 @@ SshResult SshSession::runScript(const QByteArray &script, qint64 maxStdout, cons
         d->closeLost();
         return transferFail(QStringLiteral("Connexion SSH perdue."));
     }
-    if (libssh2_channel_exec(channel, "sh -s") != 0) {
+    const QByteArray token = "fortiq-run-" + randomTag().toLatin1();
+    if (libssh2_channel_exec(channel, ("sh -s " + token).constData()) != 0) {
         libssh2_channel_free(channel);
         return transferFail(QStringLiteral("Le serveur a refusé d'exécuter la commande."));
     }
+    QElapsedTimer clock;
+    clock.start();
+    const qint64 deadline = timeoutMs > 0 ? timeoutMs : d->commandTimeoutMs;
     qsizetype sent = 0;
     while (sent < script.size()) {
         const auto w = libssh2_channel_write(channel, script.constData() + sent, static_cast<size_t>(script.size() - sent));
@@ -188,10 +218,11 @@ SshResult SshSession::runScript(const QByteArray &script, qint64 maxStdout, cons
 
     libssh2_session_set_timeout(d->handle, 200);
     QByteArray out, err;
-    bool truncated = false, stopped = false, lost = false;
+    bool truncated = false, stopped = false, lost = false, timedOut = false;
     char buffer[65536];
     while (true) {
         bool any = false;
+        if (clock.elapsed() > deadline) { timedOut = true; break; }
         auto n = libssh2_channel_read(channel, buffer, sizeof(buffer));
         if (n > 0) {
             any = true;
@@ -205,7 +236,8 @@ SshResult SshSession::runScript(const QByteArray &script, qint64 maxStdout, cons
         if (keepGoing && !keepGoing()) { stopped = true; break; }
     }
     int exitCode = -1;
-    if (!truncated && !stopped && !lost) {
+    if (!lost && (timedOut || stopped || truncated)) stopRemoteRun(d->handle, token);
+    if (!truncated && !stopped && !lost && !timedOut) {
         libssh2_session_set_timeout(d->handle, 5000);
         libssh2_channel_wait_closed(channel);
         exitCode = libssh2_channel_get_exit_status(channel);
@@ -218,12 +250,13 @@ SshResult SshSession::runScript(const QByteArray &script, qint64 maxStdout, cons
         return transferFail(QStringLiteral("Connexion SSH perdue."));
     }
     SshResult r;
-    r.status = stopped ? SshResult::Status::Error : SshResult::Status::Ok;
+    r.status = (stopped || timedOut) ? SshResult::Status::Error : SshResult::Status::Ok;
     r.data = std::move(out);
     r.truncated = truncated;
-    r.message = QString::fromUtf8(err);
-    r.code = stopped ? QStringLiteral("cancelled") : QStringLiteral("exit:%1").arg(exitCode);
-    if (!stopped) LinkMonitor::reportOk(d->key);
+    r.message = timedOut ? QStringLiteral("La commande a dépassé le délai (%1 s) et a été arrêtée sur le serveur.").arg(deadline / 1000)
+                         : QString::fromUtf8(err);
+    r.code = timedOut ? QStringLiteral("timeout") : stopped ? QStringLiteral("cancelled") : QStringLiteral("exit:%1").arg(exitCode);
+    if (!stopped && !timedOut) LinkMonitor::reportOk(d->key);
     return r;
 }
 }  // namespace fortiq

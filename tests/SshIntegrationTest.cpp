@@ -3097,6 +3097,64 @@ private slots:
         settings.remove(pin);
     }
 
+    // S-2 (docs/STABILIZATION_PLAN.md): a server command that never ends. runScript has a deadline; when it passes (or
+    // the caller cancels) the command is stopped ON THE SERVER too, the result says "timeout", the session stays usable.
+    void hungServerCommandIsStopped() {
+        ConnectionRequest request = base;
+        request.expectedHostFingerprint = fingerprint;
+        if (request.password.isEmpty()) request.keyPath = qEnvironmentVariable("FORTIQ_IT_KEY");
+        fortiq::SshSession session, observer;
+        QVERIFY(session.open(request).status == SshResult::Status::Ok);
+        QVERIFY(observer.open(request).status == SshResult::Status::Ok);
+        const QString tag = QString::number(QDateTime::currentMSecsSinceEpoch());
+        // sleep durations unique to this run: the count of such processes on the server is the evidence
+        const int mark = 3000 + static_cast<int>(tag.right(4).toInt());
+        const auto running = [&](int seconds) {
+            return observer.runScript(QStringLiteral("pgrep -f '[s]leep %1$' | wc -l\n").arg(seconds).toUtf8(), 256).data.trimmed().toInt();
+        };
+
+        // 1. deadline: a foreground command and a child process that both never finish
+        session.setCommandTimeout(2000);
+        QElapsedTimer clock;
+        clock.start();
+        SshResult r = session.runScript(QStringLiteral("echo started\nsleep %1\n").arg(mark).toUtf8(), 4096);
+        QVERIFY2(clock.elapsed() < 12000, "the command ran past its deadline");
+        QCOMPARE(r.status, SshResult::Status::Error);
+        QCOMPARE(r.code, QStringLiteral("timeout"));
+        QVERIFY2(r.data.contains("started"), "output produced before the deadline is kept");
+        QVERIFY(session.isOpen());
+        QTRY_COMPARE_WITH_TIMEOUT(running(mark), 0, 5000);   // not left running on the server
+        QCOMPARE(session.runScript("echo alive\n", 256).code, QStringLiteral("exit:0"));   // the session still works
+
+        // 2. a per-call deadline beats the session default, and a quiet command that ends in time is not touched
+        session.setCommandTimeout(600000);
+        r = session.runScript(QStringLiteral("sleep %1\n").arg(mark + 1).toUtf8(), 256, {}, 1500);
+        QCOMPARE(r.code, QStringLiteral("timeout"));
+        QTRY_COMPARE_WITH_TIMEOUT(running(mark + 1), 0, 5000);
+        r = session.runScript("sleep 1\necho done\n", 256, {}, 8000);
+        QCOMPARE(r.code, QStringLiteral("exit:0"));
+        QVERIFY(r.data.contains("done"));
+
+        // 3. cancellation stops the server side as well (it used to leave the command running)
+        std::atomic<bool> cancel{false};
+        QElapsedTimer sinceStart;
+        sinceStart.start();
+        r = session.runScript(QStringLiteral("sleep %1\n").arg(mark + 2).toUtf8(), 256, [&] { return sinceStart.elapsed() < 1500; });
+        QCOMPARE(r.code, QStringLiteral("cancelled"));
+        QTRY_COMPARE_WITH_TIMEOUT(running(mark + 2), 0, 5000);
+
+        // 4. a command that fills stdout past the limit is cut and stopped, not left writing into a closed pipe
+        r = session.runScript(QStringLiteral("sleep %1 &\nyes\n").arg(mark + 3).toUtf8(), 4096);
+        QVERIFY(r.truncated);
+        QTRY_COMPARE_WITH_TIMEOUT(running(mark + 3), 0, 5000);
+
+        // 5. children of the command go with it
+        session.setCommandTimeout(1500);
+        r = session.runScript(QStringLiteral("( sleep %1 ) &\nsh -c 'sleep %2'\n").arg(mark + 4).arg(mark + 5).toUtf8(), 256);
+        QCOMPARE(r.code, QStringLiteral("timeout"));
+        QTRY_COMPARE_WITH_TIMEOUT(running(mark + 4) + running(mark + 5), 0, 5000);
+    }
+
     // S-5 (docs/STABILIZATION_PLAN.md): symbolic links and cycles. Nothing recursive follows a link out of its
     // tree, nothing hangs on a cycle or a special file, no write goes through a dangling link to create its target,
     // and deleting a link never touches what it points to.

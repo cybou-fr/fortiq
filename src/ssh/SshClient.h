@@ -116,7 +116,12 @@ public:
     // parses it). stdout -> data (at most maxStdout bytes, then the channel is
     // closed: `truncated`), stderr -> message (first 8 KiB), exit status ->
     // code "exit:N". Callers must quote data with shellQuote().
-    SshResult runScript(const QByteArray &script, qint64 maxStdout, const std::function<bool()> &keepGoing = {});
+    // The command has a deadline (timeoutMs, 0 = the session default, see setCommandTimeout): when it passes, the
+    // command is stopped on the server too (best effort, by process group) and the result is Error with code
+    // "timeout"; a cancelled or truncated run is stopped the same way, so nothing keeps running unseen.
+    SshResult runScript(const QByteArray &script, qint64 maxStdout, const std::function<bool()> &keepGoing = {}, int timeoutMs = 0);
+    // Default deadline of runScript() on this session (10 minutes). Tests shorten it.
+    void setCommandTimeout(int ms);
     // Interactive PTY on this worker-owned connection; no automatic replay.
     SshResult startTerminal(int columns, int rows);
     SshResult terminalExchange(const QByteArray &input, int columns, int rows);
