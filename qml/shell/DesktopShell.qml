@@ -29,9 +29,6 @@ Item {
     property bool dbOpen: false
     property var mailController: null
     property bool mailOpen: false
-    property var licenseController: null    // product licence (LicenseController); null in builds without it
-    property bool licenseOpen: false
-    readonly property bool licenseLocked: !fixture && licenseController !== null && licenseController.required && !licenseController.entitled
     property bool disksOpen: false
     property var documentsController:null
     property bool documentsOpen:false
@@ -473,7 +470,7 @@ Item {
         z: 11
         visible: shell.sessionMenuOpen && !shell.fixture
         x: shell.width - width - 12; y: 52
-        width: Math.min(280, shell.width - 16); height: licenseController ? 140 : 96
+        width: Math.min(280, shell.width - 16); height: 96
         backdrop: wallpaper
         radius: 14
         tint: "#E6101A2E"
@@ -489,14 +486,6 @@ Item {
             color: lm.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
             Text { anchors.centerIn: parent; text: "Se déconnecter"; color: "white"; font.pixelSize: 13; font.family: Theme.fontFamily }
             MouseArea { id: lm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: shell.logout() }
-        }
-        Rectangle {
-            objectName: "licenseButton"
-            visible: shell.licenseController !== null
-            x: 12; y: 90; width: parent.width - 24; height: 36; radius: 9
-            color: lcm.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
-            Text { anchors.centerIn: parent; text: "Licence"; color: "white"; font.pixelSize: 13; font.family: Theme.fontFamily }
-            MouseArea { id: lcm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { shell.sessionMenuOpen = false; shell.licenseOpen = true } }
         }
     }
 
@@ -533,22 +522,12 @@ Item {
         PropertyChanges { target: logsWindow; x: 8; y: shell.appTop; width: shell.width - 16; height: shell.appHeight }
         PropertyChanges { target: terminalWindow; x: 8; y: shell.appTop; width: shell.width - 16; height: shell.appHeight }
     }
-    LicenseScreen {
-        id: licenseScreen
-        anchors.fill: parent
-        z: 150
-        visible: !shell.fixture && shell.licenseController !== null && (shell.licenseOpen || shell.licenseLocked)
-        license: shell.licenseController
-        adaptive: shell.adaptive
-        onCloseRequested: shell.licenseOpen = false
-    }
     Toast { id: routeToast; adaptive: shell.adaptive }
 
     SessionGuard { id: sessionGuard; anchors.fill: parent; manager: shell.taskManager }
     focus: true
     function handleBack() {
         if (sessionGuard.visible) { sessionGuard.stay(); return true }
-        if (licenseScreen.visible) { if (!licenseLocked) licenseOpen = false; return true }
         if (Qt.inputMethod.visible) { Qt.inputMethod.hide(); return true }
         if (serversOpen) { serverManager.back(); return true }
         if (launcherOpen || controlOpen) { launcherOpen = false; controlOpen = false; return true }

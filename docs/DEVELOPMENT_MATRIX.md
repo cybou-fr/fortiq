@@ -47,7 +47,6 @@ Android arm64 debug APK прошёл базовые SSH/SFTP, поворот/IME
 | 06 | QML Desktop Shell, окна, dock, launcher | **срез R0.2 в исходниках:** все регионы эталона, фикстура, захват и diff; **не принят** (обои, иконки, шрифт, §4 адаптации) |
 | 07 | Secure credentials | **Windows (23.10.2026):** по желанию пароль/фраза ключа хранится в Windows Credential Manager (`SecretStore`), «Se souvenir»/«Oublier» на экране входа; **Android (23.10.2026):** AES-256-GCM-ключ в Android Keystore (`SecretVault`, JNI), в настройках только шифртекст; проверено самотестом на эмуляторе FortiqTablet, полный вход с запоминанием и физическое устройство не проверены. **ssh-agent не реализован**; на прочих платформах запись отклоняется явной ошибкой, без файла. Без галочки пароль остаётся в RAM |
 | 08 | WorkspaceState только на Linux | не реализовано |
-| 09 | Лицензирование Lemon Squeezy | не реализовано в Qt |
 | 10 | Подготовка сервера с подтверждением и откатом | не реализовано |
 | 11 | Windows EXE + deployment | не проверено |
 | 12 | Android arm64 APK + touch | debug APK: SSH, Files/Editor, IME/Back/поворот и SAF проверены в эмуляторе; физическое устройство и полный touch review ожидаются |
@@ -63,7 +62,7 @@ Android arm64 debug APK прошёл базовые SSH/SFTP, поворот/IME
 | **R1 / Sprint 2** | **Smart Files**, безопасные передачи, tasks/unknown, минимум Terminal | файлы на Debian, реальные обрывы/конфликты/Unicode, обе ОС |
 | **R1.5 / Sprint 3** | **Logs**, journald, фильтры, повторы, объяснимые сводки, поддержка Services/System | источники и доказательства событий, реальный Debian, реальные UI-сценарии |
 | **R2+** | Editor, Docs/PDF, Mail, Server Setup | серверные CLI и проверенные пользовательские сценарии |
-| **R3+** | Browser over verified SSH proxy, media, licensing/release | без direct-network fallback, обе платформы |
+| **R3+** | Browser over verified SSH proxy, media, release | без direct-network fallback, обе платформы |
 | **Позже** | опциональный §ai§, расширенные интеграции | только после реальных испытаний |
 
 **Уже в R0.2** создаётся desktop-shell, не откладывается на R1.5/R3. **Android — цель с первого спринта**, а не последняя платформа. Документ [FORTIQ_DESKTOP_BLUEPRINT](FORTIQ_DESKTOP_BLUEPRINT.md) описывает техническую последовательность.

@@ -17,7 +17,6 @@ CMakeUserPresets.json
 test/integration/.keys/
 
 # Локальная конфигурация магазина (ID публичные, но данные покупателей не коммитим)
-/config/lemon_squeezy.local.json
 
 # Qt/C++ migration additions
 # C++ Qt / CMake build products

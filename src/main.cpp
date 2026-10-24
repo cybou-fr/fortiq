@@ -11,7 +11,6 @@
 #include "system/SystemController.h"
 #include "db/DbController.h"
 #include "mail/MailController.h"
-#include "license/LicenseController.h"
 #include <QSettings>
 #include <QUuid>
 #endif
@@ -155,14 +154,6 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("databases", &databases);
     fortiq::TerminalController terminal(&controller);
     engine.rootContext()->setContextProperty("terminal", &terminal);
-    // Product licence: the key and the last answer live in the protected store when the platform has one, else for this run only.
-    std::unique_ptr<fortiq::license::LicenseStore> licenseStore;
-    if (fortiq::SecretStore::available()) licenseStore = std::make_unique<fortiq::license::SecretLicenseStore>();
-    else licenseStore = std::make_unique<fortiq::license::MemoryLicenseStore>();
-    fortiq::license::LicenseController license(fortiq::license::LicenseController::configFromBuild(), fortiq::license::Policy(), std::move(licenseStore),
-                                               fortiq::license::LicenseController::requiredByBuild() && !parser.isSet(fixtureOption));
-    engine.rootContext()->setContextProperty("license", &license);
-    if (!parser.isSet(fixtureOption)) license.start();
 #else
     engine.rootContext()->setContextProperty("databases", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("mail", QVariant::fromValue<QObject *>(nullptr));
@@ -175,7 +166,6 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("network", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("systemInfo", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("documents", QVariant::fromValue<QObject *>(nullptr));
-    engine.rootContext()->setContextProperty("license", QVariant::fromValue<QObject *>(nullptr));
 #endif
     engine.loadFromModule("Fortiq.App", "Main");
     if (engine.rootObjects().isEmpty()) return 1;

@@ -14,7 +14,7 @@
 | How to implement it? | [Architecture](ARCHITECTURE.md), [Desktop Blueprint](FORTIQ_DESKTOP_BLUEPRINT.md) | discontinued Flutter architecture |
 | What is actually in code today? | **[README](../README.md), [Qt migration](QT_MIGRATION.md), [Development Matrix](DEVELOPMENT_MATRIX.md)** plus executed test evidence | aspirational specification, unrun tests, screenshots |
 | What is planned next, and in what order? | [Roadmap](ROADMAP.md) (a plan; subordinate to Product Scope and the Matrix) | claims of implemented status |
-| How do licenses and optional AI work? | [Licensing](LICENSING.md), [Licensing Setup](LICENSING_SETUP.md), [AI CLI](AI_CLI.md) | historical Flutter implementation |
+| How does optional AI work? | [AI CLI](AI_CLI.md) | historical Flutter implementation |
 
 **Conflict resolution:** stricter SSH/security guarantees win over UI convenience. For the visual appearance **in the user-provided master screenshot**, [UI SPEC](UI_SPEC_V1.md) wins over generic design suggestions, sample tokens and old wording. For actual implementation status, verifiable **current source + test evidence** wins over all roadmap claims.
 
@@ -26,7 +26,7 @@
 4. **Remote:** SSH-only for work data, SFTP, CLI, PTY and future browser forwarding. No FORTIQ backend daemon, persistent local working-data copies or direct client mail protocols.
 5. **Flagships:** **Smart Files first**, **Logs second**; Logs performs deterministic source-backed grouping and synthesis **without AI**. Terminal/Services/System are supporting.
 6. **Deferred:** browser until its SSH-only routing is provable on Windows and Android; mail/docs/editor progressively after flagship basis; optional CPU Linux `ai` later.
-7. **Status:** engineering Qt R0.1 has persistent SSH/password/key, file operations and first Logs slices; Windows builds locally, while clean-machine/Android/visual qualification and licensing remain incomplete. Executed test evidence is in Qt migration.
+7. **Status:** engineering Qt R0.1 has persistent SSH/password/key, file operations and first Logs slices; Windows builds locally, while clean-machine/Android/visual qualification remain incomplete. Executed test evidence is in Qt migration.
 8. **Git workflow:** direct commits to `main`; no branches by default. The Flutter reference exists only at tag `flutter-final`.
 9. **Design verification:** master PNG SHA-256 recorded in UI SPEC. **The exact image is not yet committed**. The verified import process is [tool/install_master_reference.py](../tool/install_master_reference.py); once imported it is copied into both `docs/design/reference/` and `www/assets/`, allowing the marketing preview to display the byte-exact design reference. Golden Qt pixel-comparison still requires the running app and separate screenshot evidence.
 

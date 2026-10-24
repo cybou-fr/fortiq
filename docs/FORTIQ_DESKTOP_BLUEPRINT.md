@@ -6,7 +6,7 @@
 
 **FORTIQ is a *local desktop shell for a remote Linux system*.** It renders its own desktop-like experience *inside the Windows or Android application*; it does **not** replace the host OS desktop or stream GNOME/KDE/X11/Wayland pixels.
 
-- **Local / client:** wallpaper, top bar, launcher, app surfaces/windows, dock, quick settings, notifications, keyboard/touch input, rendering, temporary in-memory unsaved edits, minimum protected SSH bootstrap, trusted host keys, and separate commercial licensing.
+- **Local / client:** wallpaper, top bar, launcher, app surfaces/windows, dock, quick settings, notifications, keyboard/touch input, rendering, temporary in-memory unsaved edits, minimum protected SSH bootstrap, trusted host keys.
 - **Remote / Debian or Ubuntu:** files, working state, CLI execution, jobs, documents, mail tools, workspace persistence, servers' configuration, and other domain computations.
 - **The ONLY work transport:** SSH, channels, SFTP, PTY and SSH tunneling via the user's selected Linux server. Do not use direct IMAP/SMTP/FTP/REST for remote apps. License purchasing/validation may use the expressly allowed direct HTTPS exception.
 - **No proprietary Linux daemon/agent** and no need for a graphical session on Linux. Reuse existing inspected CLI tools; capability absence must be surfaced clearly.
@@ -173,7 +173,7 @@ Create directories/files only at the milestone where a real feature uses them. N
 
 **Windowed workflow:** maintain exact sketch UI while opening Files and Logs side by side, with overlapping/focus/minimize/restore on desktop and task switching on Android. Source ServerId remains immutable. Editor remains deferred; do not replace Logs with unrelated utilities.
 
-**UX polish:** keyboard navigation, touch gestures, reduced motion, accessibility contrast, saved wallpaper/theme preference only (local UI setting), connection onboarding including fingerprint help. Put licensing/payments, server setup mutation, mail and browser behind later explicit gates.
+**UX polish:** keyboard navigation, touch gestures, reduced motion, accessibility contrast, saved wallpaper/theme preference only (local UI setting), connection onboarding including fingerprint help. Put server setup mutation, mail and browser behind later explicit gates.
 
 **Exit:** first-run Windows and Android can connect to Debian/Ubuntu, use Smart Files, run basic terminal/system checks, inspect one service's actual journal, group repeat events and obtain a source-backed synopsis **without AI**. Capture real app screenshots **against the master golden visual**. No claim of finished product or qualified security release.
 
@@ -203,7 +203,7 @@ Create directories/files only at the milestone where a real feature uses them. N
 
 ## 8. Not in these sprints
 
-Mail/MIME, WebView proxy routing, full document/PDF pipeline, CPU AI/llama, commercial checkout, paid release, Linux/macOS/iOS clients, arbitrary remote GUI application streaming, a Docker/Podman admin suite, custom Linux agents or competing server backends.
+Mail/MIME, WebView proxy routing, full document/PDF pipeline, CPU AI/llama, Linux/macOS/iOS clients, arbitrary remote GUI application streaming, a Docker/Podman admin suite, custom Linux agents or competing server backends.
 
 ## 9. Definition of done
 

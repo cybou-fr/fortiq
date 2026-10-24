@@ -73,7 +73,6 @@ set(FORTIQ_SHELL_QML
     qml/shell/IncidentInspector.qml
     qml/shell/ServicePanel.qml
     qml/shell/ServerManager.qml
-    qml/shell/LicenseScreen.qml
     qml/shell/AppPanel.qml
     qml/shell/ToolButtonGlass.qml
     qml/shell/SymbolGlyph.qml
@@ -211,41 +210,6 @@ set(FORTIQ_SSH_SOURCES
     src/ssh/SshExec.cpp
 )
 
-# Product licence (docs/LICENSING.md, LIC-02..04): the client of the Lemon Squeezy License API. The store's public identifiers come from
-# config/lemon_squeezy.local.json (not committed) or, when it is missing, from the example (no store: activation reports "not configured").
-set(FORTIQ_LICENSE_SOURCES
-    src/license/LicenseInfo.cpp src/license/LicenseInfo.h
-    src/license/LicenseClient.cpp src/license/LicenseClient.h
-    src/license/LicenseController.cpp src/license/LicenseController.h)
-option(FORTIQ_REQUIRE_LICENSE "Release builds: the desktop is usable only with an active licence (needs a configured store)" OFF)
-set(FORTIQ_LS_CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/config/lemon_squeezy.local.json")
-if(NOT EXISTS "${FORTIQ_LS_CONFIG_FILE}")
-    set(FORTIQ_LS_CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/config/lemon_squeezy.example.json")
-endif()
-file(READ "${FORTIQ_LS_CONFIG_FILE}" FORTIQ_LS_JSON)
-set(FORTIQ_LICENSE_DEFINITIONS "")
-foreach(field store_id intro_variant_id pro_variant_id)
-    string(JSON type ERROR_VARIABLE err TYPE "${FORTIQ_LS_JSON}" ${field})
-    if(NOT err AND type STREQUAL "NUMBER")
-        string(JSON value GET "${FORTIQ_LS_JSON}" ${field})
-        string(TOUPPER "${field}" upper)
-        string(REPLACE "_VARIANT_ID" "_VARIANT" upper "${upper}")
-        list(APPEND FORTIQ_LICENSE_DEFINITIONS "FORTIQ_LS_${upper}=${value}LL")
-    endif()
-endforeach()
-foreach(field intro_checkout_url pro_checkout_url store_slug)
-    string(JSON type ERROR_VARIABLE err TYPE "${FORTIQ_LS_JSON}" ${field})
-    if(NOT err AND type STREQUAL "STRING")
-        string(JSON value GET "${FORTIQ_LS_JSON}" ${field})
-        string(TOUPPER "${field}" upper)
-        string(REPLACE "_CHECKOUT" "" upper "${upper}")
-        list(APPEND FORTIQ_LICENSE_DEFINITIONS "FORTIQ_LS_${upper}=\"${value}\"")
-    endif()
-endforeach()
-if(FORTIQ_REQUIRE_LICENSE AND NOT FORTIQ_LICENSE_DEFINITIONS MATCHES "FORTIQ_LS_STORE_ID")
-    message(FATAL_ERROR "FORTIQ_REQUIRE_LICENSE=ON needs config/lemon_squeezy.local.json with the store and variant ids: a build that requires a licence nobody can obtain would lock every user out.")
-endif()
-
 qt_add_executable(fortiq
     src/main.cpp
     src/core/LocalDocument.cpp
@@ -258,7 +222,6 @@ qt_add_executable(fortiq
     src/core/SecretStore.h
     src/core/TaskManager.cpp
     src/core/TaskManager.h
-    ${FORTIQ_LICENSE_SOURCES}
     ${FORTIQ_BROWSER_SOURCES}
     ${FORTIQ_NETWORK_SOURCES}
     ${FORTIQ_SYSTEM_SOURCES}
@@ -293,7 +256,6 @@ qt_add_qml_module(fortiq
     QML_FILES qml/Main.qml
 )
 
-target_compile_definitions(fortiq PRIVATE ${FORTIQ_LICENSE_DEFINITIONS} $<$<BOOL:${FORTIQ_REQUIRE_LICENSE}>:FORTIQ_REQUIRE_LICENSE>)
 target_link_libraries(fortiq PRIVATE
     Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Network
     Qt6::Concurrent fortiq_shellplugin ${FORTIQ_SSH_TARGET})
@@ -436,11 +398,6 @@ if(BUILD_TESTING)
         target_link_options(fortiq_fuzz PRIVATE -fsanitize=fuzzer,address,undefined)
         target_link_libraries(fortiq_fuzz PRIVATE Qt6::Core Qt6::Network)
     endif()
-    qt_add_executable(fortiq_license_tests tests/LicenseTest.cpp ${FORTIQ_LICENSE_SOURCES} src/core/SecretStore.cpp src/core/SecretStore.h)
-    target_include_directories(fortiq_license_tests PRIVATE src)
-    target_compile_definitions(fortiq_license_tests PRIVATE FORTIQ_LICENSE_TESTING)     # lets the test point the client at a loopback server; the application never defines it
-    target_link_libraries(fortiq_license_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Network Qt6::Test)
-    add_test(NAME fortiq_license COMMAND fortiq_license_tests -o "${CMAKE_CURRENT_BINARY_DIR}/license-results.txt,txt" -o "-,txt")
     qt_add_executable(fortiq_link_tests tests/LinkMonitorTest.cpp src/ssh/LinkMonitor.cpp src/ssh/LinkMonitor.h)
     target_include_directories(fortiq_link_tests PRIVATE src)
     target_link_libraries(fortiq_link_tests PRIVATE Qt6::Core Qt6::Concurrent Qt6::Test)
@@ -466,7 +423,7 @@ if(BUILD_TESTING)
         file(TO_CMAKE_PATH "$ENV{WINDIR}/Fonts" FORTIQ_TEST_FONT_DIR)
         set_property(TEST fortiq_layout APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=${FORTIQ_TEST_FONT_DIR}")
         # Developer tests need the matching Qt Test runtime, absent from the app package.
-        set_tests_properties(fortiq_markdown fortiq_license fortiq_link fortiq_disks fortiq_terminal_history fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_credentials fortiq_tasks fortiq_browser fortiq_network fortiq_system fortiq_db fortiq_mail fortiq_mailsend fortiq_publication fortiq_documents fortiq_layout PROPERTIES
+        set_tests_properties(fortiq_markdown fortiq_link fortiq_disks fortiq_terminal_history fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_credentials fortiq_tasks fortiq_browser fortiq_network fortiq_system fortiq_db fortiq_mail fortiq_mailsend fortiq_publication fortiq_documents fortiq_layout PROPERTIES
             ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:$<TARGET_FILE_DIR:${FORTIQ_SSH_TARGET}>")
     endif()
 endif()

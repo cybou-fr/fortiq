@@ -30,10 +30,9 @@ The binding contract for QML remains [UI SPEC](../UI_SPEC_V1.md), not this marke
 ## Release discipline
 
 - Do not publish download buttons or imply Qt Windows/Android builds exist without actual evidence.
-- Do not present Smart Files advanced operations, Logs, Browser SSH proxy, license flow or AI as implemented.
+- Do not present Smart Files advanced operations, Logs, Browser SSH proxy or AI as implemented.
 - Existing Qt R0.1 source has read-only SFTP path/listing and preliminary SSH only.
 - Before external publication, verify domain, asset attribution, security headers, translations, actual links, mobile responsiveness and brand rights.
-- No automatic checkout/payment CTA until Lemon Squeezy has been integrated and tested.
 
 See [Documentation Authority](../DOCUMENTATION_AUTHORITY.md).
 

@@ -1,9 +1,0 @@
-{
-  "store_id": null,
-  "intro_variant_id": null,
-  "pro_variant_id": null,
-  "intro_checkout_url": null,
-  "pro_checkout_url": null,
-  "store_slug": null,
-  "_note": "EXAMPLE ONLY. Copy to lemon_squeezy.local.json (git-ignored) with the real public ids: the Qt client reads them at build time. Never put API/webhook secrets here."
-}

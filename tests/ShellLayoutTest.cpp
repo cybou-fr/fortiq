@@ -257,18 +257,6 @@ QtObject {
     function saveAttachmentToServer(id, part, name) { calls = calls.concat(['attach-server:' + id + ':' + part + ':' + name]); attachStatus = 'Enregistré sur le serveur : /home/u/Downloads/' + name }
     function downloadAttachment(id, part, name, url) { calls = calls.concat(['attach-pc:' + id + ':' + part + ':' + name]) }
 })";
-static const char kFakeLicense[] = R"(import QtQml
-QtObject {
-    property bool configured: true; property bool required: true; property bool entitled: false; property string state: "none"
-    property string tierLabel: ""; property string expiresText: ""; property string message: ""; property bool busy: false
-    property bool hasKey: false; property string maskedKey: ""; property bool canRemember: true
-    property var calls: []
-    function activate(k) { calls = calls.concat(['activate:' + k]) }
-    function buy(t) { calls = calls.concat(['buy:' + t]); return true }
-    function manage() { calls = calls.concat(['manage']); return true }
-    function deactivateThisDevice() { calls = calls.concat(['release']) }
-    function validateNow() { calls = calls.concat(['recheck']) }
-})";
 static const char kFakeRemote[] = R"(import QtQml
 QtObject { property bool connected: true; property string serverLabel: "fixture@server"; property string activeServerId: "srvA"; property bool linkLost: false; property string linkText: "Connexion perdue à 12:00 — les données affichées datent d’avant la coupure." })";
 #endif
@@ -626,55 +614,6 @@ private slots:
                 }
                 shell->setProperty("mailOpen", false);
                 shell->setProperty("mailController", QVariant::fromValue<QObject *>(nullptr));
-            }
-            {   // Licence: the screen asks for a key, sends it once and clears the field, buys, and offers release only with a key.
-                QQmlComponent licComponent(&engine), screenComponent(&engine);
-                licComponent.setData(kFakeLicense, QUrl());
-                auto *fakeLicense = licComponent.create(); QVERIFY2(fakeLicense, qPrintable(licComponent.errorString()));
-                fakeLicense->setParent(window);
-                screenComponent.setData(R"(import QtQuick
-import Fortiq.Shell
-LicenseScreen { })", QUrl());
-                auto *screenObj = screenComponent.create(); QVERIFY2(screenObj, qPrintable(screenComponent.errorString()));
-                auto *screen = qobject_cast<QQuickItem *>(screenObj); QVERIFY(screen);
-                screen->setParentItem(window->contentItem()); screen->setZ(1000);
-                screen->setSize(window->contentItem()->size());
-                screen->setProperty("license", QVariant::fromValue(fakeLicense)); screen->setProperty("adaptive", adaptive);
-                settle(window);
-                auto click = [&](QQuickItem *item) {
-                    QVERIFY(item);
-                    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
-                    settle(window);
-                };
-                auto *keyField = findByName(screen, "licenseKey"); QVERIFY(keyField); QVERIFY(keyField->isVisible());
-                QCOMPARE(findByName(screen, "licenseTitle")->property("text").toString(), QString("Activer FORTIQ"));
-                QVERIFY(!findByName(screen, "licenseAction_release")->isVisible());                     // no key yet: nothing to release
-                QVERIFY(!findByName(screen, "licenseClose")->isVisible());                              // required and not entitled: no way past the screen
-                for (const char *name : {"licenseKey", "licenseSubmit", "licenseBuy_intro", "licenseBuy_pro", "licenseAction_manage"}) {
-                    auto *item = findByName(screen, name); QVERIFY2(item, name);
-                    const QPointF topLeft = item->mapToItem(screen, QPointF(0, 0));
-                    QVERIFY2(topLeft.x() >= 0 && topLeft.x() + item->width() <= screen->width(), name);
-                    QVERIFY2(topLeft.y() >= 0 && topLeft.y() + item->height() <= screen->height(), name);
-                }
-                keyField->forceActiveFocus();
-                for (const char c : QByteArray("abcd-1234-efgh")) QTest::keyClick(window, c);
-                click(findByName(screen, "licenseSubmit"));
-                QTRY_V(fakeLicense->property("calls").toStringList().contains("activate:abcd-1234-efgh"));
-                QCOMPARE(keyField->property("text").toString(), QString());                              // the typed key does not stay on screen
-                click(findByName(screen, "licenseBuy_pro")); click(findByName(screen, "licenseAction_manage"));
-                QCOMPARE(fakeLicense->property("calls").toStringList().mid(1), QStringList({"buy:pro", "manage"}));
-                fakeLicense->setProperty("state", "active"); fakeLicense->setProperty("entitled", true); fakeLicense->setProperty("hasKey", true);
-                fakeLicense->setProperty("maskedKey", QString::fromUtf8("••••-4d51")); fakeLicense->setProperty("tierLabel", "Pro (abonnement annuel)");
-                settle(window);
-                QCOMPARE(findByName(screen, "licenseTitle")->property("text").toString(), QString("Licence active"));
-                QVERIFY(!findByName(screen, "licenseKey")->isVisible());                                 // nothing to type once active
-                QVERIFY(findByName(screen, "licenseSummary")->property("text").toString().contains("4d51"));
-                QVERIFY(!findByName(screen, "licenseSummary")->property("text").toString().contains("abcd"));
-                QVERIFY(findByName(screen, "licenseClose")->isVisible());
-                click(findByName(screen, "licenseAction_release"));
-                QVERIFY(fakeLicense->property("calls").toStringList().contains("release"));
-                QVERIFY(window->grabWindow().save(QString("layout-captures/%1-license.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
-                delete screenObj;
             }
             {   // Bases de données: profile list, schema, read-only editor and the profile form.
                 QQmlComponent dbComponent(&engine), dbRemoteComponent(&engine);
