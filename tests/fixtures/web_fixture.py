@@ -21,6 +21,7 @@ Paths:
   /to-metadata 302 -> http://169.254.169.254/latest/meta-data/ (cloud metadata: never fetched)
   /to-odd      302 -> http://2130706433:<port>/page            (decimal spelling of 127.0.0.1)
   /to-public   302 -> http://public-fixture.test:<port>/page
+  /to-flip     302 -> http://flip-fixture.test:<port>/echo      (a name whose address flips: tool/setup_dns_rebind_fixture.sh)
   /to-other-port 302 -> http://127.0.0.1:8098/page             (another internal host:port)
   /echo        200: Host header and the local address the connection arrived on
   /_hits       200: JSON {path: number of requests}, to prove that nothing was fetched before a confirmation
@@ -71,6 +72,8 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(302, b"", "text/plain", [("Location", "http://2130706433:%d/page" % port)])
         elif path == "/to-public":
             self.reply(302, b"", "text/plain", [("Location", "http://public-fixture.test:%d/page" % port)])
+        elif path == "/to-flip":
+            self.reply(302, b"", "text/plain", [("Location", "http://flip-fixture.test:%d/echo" % port)])
         elif path == "/to-other-port":
             self.reply(302, b"", "text/plain", [("Location", "http://127.0.0.1:8098/page")])
         elif path == "/echo":

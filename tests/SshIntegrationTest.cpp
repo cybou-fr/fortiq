@@ -3045,6 +3045,58 @@ private slots:
         QVERIFY(session.emptyTrash().status == SshResult::Status::Ok);
     }
 
+    // S-9 (docs/STABILIZATION_PLAN.md): DNS rebinding. tool/setup_dns_rebind_fixture.sh makes the name
+    // flip-fixture.test alternate between a public and an internal address every ~15 ms. Whatever the Browser
+    // does, a page that is opened WITHOUT a question must have been fetched from the public address that was
+    // checked (curl is pinned with --resolve); the alternative outcome is the question about an internal address.
+    // A control run with a plain curl proves that the name really flips fast enough to catch a naive client.
+    void browserSurvivesDnsRebinding() {
+        if (qEnvironmentVariable("FORTIQ_IT_WEB_BASE").isEmpty() || qEnvironmentVariable("FORTIQ_IT_REBIND").isEmpty())
+            QSKIP("FORTIQ_IT_WEB_BASE and FORTIQ_IT_REBIND (tool/setup_dns_rebind_fixture.sh) are needed");
+        fortiq::RemoteController controller;
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        fortiq::BrowserController browser(&controller);
+        fortiq::SshSession shellSession;
+        QVERIFY(shellSession.open(controller.connectionRequest()).status == SshResult::Status::Ok);
+        auto shell = [&](const QByteArray &script) { return QString::fromUtf8(shellSession.runScript(script, 65536, {}).data).trimmed(); };
+        auto waitIdleOrAsk = [&] { QTRY_VERIFY_WITH_TIMEOUT(browser.state() == "confirm" || !browser.busy(), 30000); };
+
+        // Control: a client that resolves by itself sees both addresses.
+        const QString naive = shell("for i in $(seq 1 60); do curl -s --max-time 5 http://flip-fixture.test:8099/echo; echo; sleep 0.01; done | grep -o 'local=[0-9.]*' | sort | uniq -c\n");
+        QVERIFY2(naive.contains("local=127.0.0.1") && naive.contains("local=93.184.216.34"),
+                 qPrintable("the fixture does not flip fast enough to prove anything; a plain curl saw: " + naive));
+
+        int fetched = 0, asked = 0;
+        for (int i = 0; i < 40; ++i) {
+            // Even rounds open the name directly, odd rounds reach it through a redirect from a public host.
+            browser.open(i % 2 ? QStringLiteral("http://public-fixture.test:8099/to-flip") : QStringLiteral("http://flip-fixture.test:8099/echo"));
+            waitIdleOrAsk();
+            if (browser.state() == "confirm") {
+                ++asked;
+                QVERIFY2(!browser.pendingConfirm().value("host").toString().isEmpty(), "the question must name the host");
+                browser.cancelConfirm();
+                continue;
+            }
+            QCOMPARE(browser.state(), QStringLiteral("ready"));
+            ++fetched;
+            const QString where = QStringLiteral("round %1: pinned=%2 remote=%3 text=%4").arg(i)
+                .arg(browser.info().value("pinnedIp").toString(), browser.info().value("remoteIp").toString(), browser.contentText());
+            QVERIFY2(browser.info().value("pinnedIp").toString() == QLatin1String("93.184.216.34"), qPrintable(where));
+            QVERIFY2(browser.info().value("remoteIp").toString() == QLatin1String("93.184.216.34"), qPrintable(where));
+            QVERIFY2(browser.contentText().contains("local=93.184.216.34"), qPrintable(where));   // never served over the internal address
+            QVERIFY2(!browser.contentText().contains("local=127.0.0.1"), qPrintable(where));
+        }
+        qInfo("rebinding: %d opened from the public address, %d asked about an internal one; control curl: %s", fetched, asked, qPrintable(naive.simplified()));
+        QVERIFY2(fetched > 0 && asked > 0, "both outcomes are expected while the name flips");
+        settings.remove(pin);
+    }
+
     // S-5 (docs/STABILIZATION_PLAN.md): symbolic links and cycles. Nothing recursive follows a link out of its
     // tree, nothing hangs on a cycle or a special file, no write goes through a dangling link to create its target,
     // and deleting a link never touches what it points to.
