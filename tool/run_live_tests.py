@@ -4,7 +4,7 @@
 It never touches a real server: the fixture is a throw-away Debian (for example the WSL distro `fortiq-test`
 with sshd, PostgreSQL 17, notmuch, isync, msmtp, dovecot and tool/setup_mail_live_fixture.sh already run).
 Second host (needed by twoHostsNeverMix, otherwise it is SKIPPED and listed as such): a copy of the fixture made independent by tool/setup_second_host_fixture.sh, passed as --port-b/--user-b/--fingerprint-b.
-Fixtures to prepare once as root on the disposable Debian: tool/setup_mail_live_fixture.sh, tool/setup_browser_policy_fixture.sh, tool/setup_db_roles_fixture.sh.
+Fixtures to prepare once as root on the disposable Debian: tool/setup_mail_live_fixture.sh, then tool/setup_mail_tls_fixture.sh (real TLS; re-running the first one turns it off), tool/setup_browser_policy_fixture.sh, tool/setup_db_roles_fixture.sh.
 The live tests delete files in the test user's home (~/Mail, ~/.msmtprc, ~/Downloads, ...): see docs/AUDIT_2026-10-23.md.
 
 Usage (Windows, after a build in build-msvc):
@@ -59,7 +59,7 @@ def main():
     env["PATH"] = os.pathsep.join([opts.qt_bin, opts.vcpkg_bin, env.get("PATH", "")])
     env.update({
         "FORTIQ_IT_HOST": opts.host, "FORTIQ_IT_PORT": opts.port, "FORTIQ_IT_USER": opts.user, "FORTIQ_IT_FINGERPRINT": opts.fingerprint,
-        "FORTIQ_IT_DB": "1", "FORTIQ_IT_MAIL": "1", "FORTIQ_IT_MAILSEND": "1", "FORTIQ_IT_POLICY": "1",
+        "FORTIQ_IT_DB": "1", "FORTIQ_IT_MAIL": "1", "FORTIQ_IT_MAILSEND": "1", "FORTIQ_IT_MAILTLS": "1", "FORTIQ_IT_POLICY": "1",
         "FORTIQ_PUBLICATION_HOST": opts.host, "FORTIQ_PUBLICATION_PORT": opts.port, "FORTIQ_PUBLICATION_USER": opts.user,
         "FORTIQ_PUBLICATION_FINGERPRINT": opts.fingerprint,
     })

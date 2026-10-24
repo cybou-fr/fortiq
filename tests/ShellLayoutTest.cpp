@@ -246,6 +246,8 @@ QtObject {
                        { key: 'msmtprc', path: '/home/u/.msmtprc', kind: 'block', shown: 'password ********', content: 'password secret' } ]; return '' }
     function applySetup(keys) { calls = calls.concat(['apply:' + keys.join(',')]) }
     function clearSetup() { setupFiles = [] }
+    function passwordWarning() { return 'Le mot de passe sera écrit EN CLAIR dans ~/.mbsyncrc et ~/.msmtprc sur ce serveur.' }
+    function passwordAdviceFor(h, e) { return h.indexOf('gmail') >= 0 ? 'Gmail n’accepte que les mots de passe d’application.' : '' }
     function testSmtp(a) { calls = calls.concat(['smtp:' + a]) }
     function testImap(a) { calls = calls.concat(['imap:' + a]) }
     function syncNow(a) { calls = calls.concat(['sync:' + a]) }
@@ -256,7 +258,7 @@ QtObject {
     function downloadAttachment(id, part, name, url) { calls = calls.concat(['attach-pc:' + id + ':' + part + ':' + name]) }
 })";
 static const char kFakeRemote[] = R"(import QtQml
-QtObject { property bool connected: true; property string serverLabel: "fixture@server"; property bool linkLost: false; property string linkText: "Connexion perdue à 12:00 — les données affichées datent d’avant la coupure." })";
+QtObject { property bool connected: true; property string serverLabel: "fixture@server"; property string activeServerId: "srvA"; property bool linkLost: false; property string linkText: "Connexion perdue à 12:00 — les données affichées datent d’avant la coupure." })";
 #endif
 
 class ShellLayoutTest : public QObject {
@@ -579,10 +581,37 @@ private slots:
                 click(write);
                 QTRY_V(fakeMail->property("calls").toStringList().contains("apply:mbsyncrc,msmtprc"));
                 QVERIFY(findByName(mailWin, "mailWizPassword")->property("text").toString().isEmpty());   // the password field is cleared once submitted
+                {   // R3: the wizard says the password goes to the server in clear text; advice follows the provider.
+                    auto *warning = findByName(mailWin, "mailWizWarningText"); QVERIFY(warning); QVERIFY(warning->isVisible());
+                    QVERIFY(warning->property("text").toString().contains("EN CLAIR"));
+                    auto *advice = findByName(mailWin, "mailWizAdvice"); QVERIFY(advice); QVERIFY(!advice->isVisible());           // an unknown provider: the general warning only
+                    findByName(mailWin, "mailWizImapHost")->setProperty("text", "imap.gmail.com");
+                    settle(window);
+                    QVERIFY(advice->isVisible()); QVERIFY(advice->property("text").toString().contains("mots de passe d"));
+                    findByName(mailWin, "mailWizImapHost")->setProperty("text", "imap.example.net");
+                }
                 click(findByName(mailWin, "mailWizTestSmtp"));
                 QVERIFY(fakeMail->property("calls").toStringList().contains("smtp:perso"));
                 click(findByName(mailWin, "mailWizSync"));
                 QVERIFY(fakeMail->property("calls").toStringList().contains("sync:perso"));
+                {   // R8: typed secrets never outlive the session they were typed in.
+                    auto secretsGone = [&] { return findByName(mailWin, "mailWizPassword")->property("text").toString().isEmpty()
+                                                    && findByName(mailWin, "mailWizSmtpPassword")->property("text").toString().isEmpty(); };
+                    auto typeSecrets = [&] { findByName(mailWin, "mailWizPassword")->setProperty("text", "secret2"); findByName(mailWin, "mailWizSmtpPassword")->setProperty("text", "secret3"); };
+                    typeSecrets(); mailRemote->setProperty("activeServerId", "srvC");                  // the user switches server
+                    QTRY_V(!wizard->isVisible()); QVERIFY(secretsGone());
+                    QVERIFY(fakeMail->property("setupFiles").toList().isEmpty());                       // the preview with the password is forgotten too
+                    mailRemote->setProperty("activeServerId", "srvA");
+                    click(findByName(mailWin, "mailAccounts")); QTRY_V(wizard->isVisible());
+                    typeSecrets(); mailRemote->setProperty("connected", false);                         // the connection goes away
+                    QTRY_V(!wizard->isVisible()); QVERIFY(secretsGone());
+                    mailRemote->setProperty("connected", true);
+                    click(findByName(mailWin, "mailAccounts")); QTRY_V(wizard->isVisible());
+                    typeSecrets(); shell->setProperty("mailOpen", false);                               // the window is closed
+                    settle(window);
+                    QVERIFY(!wizard->isVisible()); QVERIFY(secretsGone());
+                    shell->setProperty("mailOpen", true); shell->setProperty("foregroundApp", "mail"); settle(window);
+                }
                 shell->setProperty("mailOpen", false);
                 shell->setProperty("mailController", QVariant::fromValue<QObject *>(nullptr));
             }

@@ -30,6 +30,11 @@ struct MailAccountSpec {
 MailAccountSpec accountSpecFromVariant(const QVariantMap &map);
 QString validateAccountSpec(const MailAccountSpec &spec);     // "" when valid
 QString validatePassword(const QString &password);            // "" when it can be written safely
+// What the wizard must say about the password it is about to write (audit R3): it ends up in clear text in files on the server.
+QString passwordStorageWarning();
+// Provider-specific advice (French) from the IMAP host or the address domain: an app password where the provider has them, a
+// known obstacle (OAuth2 only, Bridge) otherwise. Empty for an unknown provider.
+QString passwordAdvice(const QString &imapHost, const QString &email);
 
 struct MailSetupFile {
     QString key;            // "mbsyncrc" | "msmtprc" | "notmuch"

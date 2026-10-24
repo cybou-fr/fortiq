@@ -2085,6 +2085,134 @@ private slots:
         settings.remove("servers/profiles"); settings.remove(pinKey(hostB, portB));
     }
 
+    // Audit backlog 9: the TLS branches of the wizard against REAL TLS servers (dovecot imaps on 1993 and STARTTLS on 1143, a TLS
+    // sink on 2465 and a STARTTLS sink on 2587), and the two ways it must refuse: a name that is not in the certificate, and
+    // plain text spoken to a TLS port. Needs tool/setup_mail_tls_fixture.sh (after setup_mail_live_fixture.sh).
+    void mailTlsConnections() {
+        if (qEnvironmentVariable("FORTIQ_IT_MAILTLS").isEmpty()) QSKIP("FORTIQ_IT_MAILTLS not set (tool/setup_mail_tls_fixture.sh)");
+        const QString password = QStringLiteral("Zq\"7 #x\\y$z;w");
+        fortiq::RemoteController controller;
+        QSettings settings;
+        settings.remove("mail/notmuchConfig"); settings.remove("mail/displayName");
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        auto shell = [&](const QByteArray &script) {
+            fortiq::SshSession session;
+            const SshResult opened = session.open(controller.connectionRequest());
+            if (opened.status != SshResult::Status::Ok) return opened;
+            return session.runScript(script, 1048576, {});
+        };
+        auto text = [&](const QByteArray &script) { return QString::fromUtf8(shell(script).data).trimmed(); };
+        QVERIFY2(text("cd ~ && rm -rf .mbsyncrc* .msmtprc* .notmuch-config* Mail sinkout-tls-*/*.eml sinkout-tls-*/*.env sinkout-tls-*/auth_failed; echo cleaned\n") == "cleaned", "cleanup");
+        fortiq::MailController mail(&controller);
+        auto waitIdle = [&] { QTRY_VERIFY_WITH_TIMEOUT(!mail.actionBusy(), 60000); };
+        mail.probeSetup("tlsok"); QTest::qWait(100); waitIdle();
+        QVERIFY2(mail.setupState().value("ok").toBool(), qPrintable(mail.setupState().value("problem").toString()));
+
+        auto write = [&](const QString &name, const QString &host, const QString &imapSecurity, int imapPort, const QString &smtpSecurity, int smtpPort) {
+            QVariantMap spec { { "name", name }, { "displayName", "TLS Test" }, { "email", "me@example.net" },
+                               { "imapHost", host }, { "imapPort", imapPort }, { "imapSecurity", imapSecurity }, { "imapUser", "fqmail" },
+                               { "smtpHost", host }, { "smtpPort", smtpPort }, { "smtpSecurity", smtpSecurity }, { "smtpUser", "fqmail" }, { "password", password } };
+            QVERIFY2(mail.previewSetup(spec).isEmpty(), qPrintable(name));
+            mail.applySetup({ "mbsyncrc", "msmtprc", "notmuch" });
+            waitIdle();
+            QVERIFY2(mail.actionStatus().startsWith("Écrit"), qPrintable(mail.actionStatus()));
+        };
+
+        // ---- the two working branches, each over real TLS ----
+        struct Good { QString name, imapSecurity, smtpSecurity; int imapPort, smtpPort; };
+        const QList<Good> good = { { "tlsimps", "tls", "tls", 1993, 2465 }, { "tlsstart", "starttls", "starttls", 1143, 2587 } };
+        for (const Good &g : good) {
+            write(g.name, "localhost", g.imapSecurity, g.imapPort, g.smtpSecurity, g.smtpPort);
+            const QString rc = text("grep -A12 'FORTIQ account " + g.name.toUtf8() + "' ~/.mbsyncrc ~/.msmtprc\n");
+            QVERIFY2(rc.contains(g.imapSecurity == "tls" ? "TLSType IMAPS" : "TLSType STARTTLS") && rc.contains("tls on"), qPrintable(rc));
+            QVERIFY2(rc.contains(g.smtpSecurity == "tls" ? "tls_starttls off" : "tls_starttls on"), qPrintable(rc));
+            mail.testImap(g.name); waitIdle();
+            QVERIFY2(mail.actionStatus().contains("IMAP réussie") && mail.actionOutput().contains("INBOX"), qPrintable(g.name + ": " + mail.actionStatus() + mail.actionOutput()));
+            mail.testSmtp(g.name); waitIdle();
+            QVERIFY2(mail.actionStatus().contains("SMTP répond"), qPrintable(g.name + ": " + mail.actionStatus() + mail.actionOutput()));
+            QVERIFY2(mail.actionOutput().contains("TLS"), qPrintable(mail.actionOutput()));
+            // Mail really goes through the encrypted channel, with the authentication that is only offered after TLS.
+            mail.syncNow(g.name); waitIdle();
+            QVERIFY2(mail.actionStatus().contains("relevé"), qPrintable(g.name + ": " + mail.actionStatus() + mail.actionOutput()));
+            QTRY_VERIFY_WITH_TIMEOUT(mail.state() == "ready" && !mail.accounts().isEmpty(), 30000);
+            const QByteArray sink = g.smtpSecurity == "tls" ? "~/sinkout-tls-implicit" : "~/sinkout-tls-starttls";    // one sink per TLS mode
+            const int before = text("ls " + sink + " 2>/dev/null | grep -c eml\n").toInt();
+            QVERIFY2(mail.send({ { "account", g.name }, { "to", "you@example.org" }, { "subject", "TLS " + g.name }, { "body", "over " + g.smtpSecurity } }).isEmpty(), "send");
+            QTRY_VERIFY_WITH_TIMEOUT(mail.sendState() != "sending", 60000);
+            QVERIFY2(mail.sendState() == "sent", qPrintable(g.name + ": " + mail.sendState() + " " + mail.sendStatus()));
+            QCOMPARE(text("ls " + sink + " | grep -c eml\n").toInt(), before + 1);
+            QVERIFY(text("cat $(ls -t " + sink + "/*.eml | head -1)\n").contains("Subject: TLS " + g.name));
+            QCOMPARE(text("cat " + sink + "/auth_failed 2>/dev/null | wc -c\n"), QStringLiteral("0"));
+        }
+        // The same mailbox arrived through both IMAP branches (implicit TLS and STARTTLS), nothing less and nothing different.
+        const QString viaImaps = text("find ~/Mail/tlsimps/INBOX -type f | wc -l\n"), viaStarttls = text("find ~/Mail/tlsstart/INBOX -type f | wc -l\n");
+        QVERIFY2(viaImaps.toInt() > 0 && viaImaps == viaStarttls, qPrintable(viaImaps + " / " + viaStarttls));
+
+        // ---- refusals ----
+        // The certificate is valid for "localhost" only: the address 127.0.0.1 is a name mismatch, and nothing is sent in clear.
+        write("tlsbadname", "127.0.0.1", "tls", 1993, "tls", 2465);
+        mail.testImap("tlsbadname"); waitIdle();
+        QVERIFY2(!mail.actionStatus().contains("IMAP réussie"), qPrintable(mail.actionStatus() + mail.actionOutput()));
+        mail.testSmtp("tlsbadname"); waitIdle();
+        QVERIFY2(!mail.actionStatus().contains("SMTP répond"), qPrintable(mail.actionStatus() + mail.actionOutput()));
+        const int sentBefore = text("cat ~/sinkout-tls-*/*.eml 2>/dev/null | grep -c \"^Subject:\"\n").toInt();
+        QTRY_VERIFY_WITH_TIMEOUT(mail.accounts().size() >= 3, 20000);
+        if (mail.send({ { "account", "tlsbadname" }, { "to", "you@example.org" }, { "subject", "must not arrive" }, { "body", "x" } }).isEmpty()) {
+            QTRY_VERIFY_WITH_TIMEOUT(mail.sendState() != "sending", 60000);
+            QVERIFY2(mail.sendState() != "sent", qPrintable(mail.sendState() + " " + mail.sendStatus()));
+        }
+        QCOMPARE(text("cat ~/sinkout-tls-*/*.eml 2>/dev/null | grep -c \"^Subject:\"\n").toInt(), sentBefore);
+        // Plain text spoken to a TLS port gets nowhere either.
+        write("tlsplain", "localhost", "none", 1993, "none", 2465);
+        mail.testImap("tlsplain"); waitIdle();
+        QVERIFY2(!mail.actionStatus().contains("IMAP réussie"), qPrintable(mail.actionStatus() + mail.actionOutput()));
+        mail.testSmtp("tlsplain"); waitIdle();
+        QVERIFY2(!mail.actionStatus().contains("SMTP répond"), qPrintable(mail.actionStatus() + mail.actionOutput()));
+        QVERIFY(mail.actionStatus().length() > 0);
+        QVERIFY(!mail.actionStatus().contains("Zq\"7"));                                                  // the password never reaches the screen
+        shell("cd ~ && rm -rf .mbsyncrc* .msmtprc* .notmuch-config* Mail\n");
+    }
+
+    // Audit R9: `notmuch tag` renames Maildir files while `mbsync` reads and writes the same Maildir. The script (a private Maildir
+    // source and target below ~/par-test, no IMAP server) runs both at once, round after round; nothing may be lost, doubled or left
+    // half-written, every sync must finish, and a final quiet sync must converge. (With no pause at all between the tag
+    // operations mbsync waits forever for the directory to be quiet: a measured limit, not data loss; see docs/MAIL.md.)
+    void mailTagWhileSyncing() {
+        if (qEnvironmentVariable("FORTIQ_IT_MAIL").isEmpty()) QSKIP("FORTIQ_IT_MAIL not set");
+        fortiq::RemoteController controller;
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        QFile script(QString::fromUtf8(QT_TESTCASE_SOURCEDIR) + "/tests/fixtures/mail/parallel_sync_tag.sh");
+        QVERIFY(script.open(QIODevice::ReadOnly));
+        fortiq::SshSession session;
+        QVERIFY(session.open(controller.connectionRequest()).status == SshResult::Status::Ok);
+        const QByteArray body = script.readAll().replace("\r\n", "\n");
+        const SshResult run = session.runScript("bash -s 6 12 1.5 <<'FQ_PAR_END'\n" + body + "\nFQ_PAR_END\n", 1048576, {});
+        QVERIFY2(run.status == SshResult::Status::Ok && run.code == "exit:0", qPrintable(run.message + run.code));
+        QMap<QString, QString> facts;
+        for (const QByteArray &line : run.data.split('\n'))
+            if (const int eq = line.indexOf('='); eq > 0) facts.insert(QString::fromUtf8(line.left(eq)), QString::fromUtf8(line.mid(eq + 1)).trimmed());
+        const QString report = QString::fromUtf8(run.data);
+        QCOMPARE(facts.value("TOTAL"), QStringLiteral("84"));                                    // 12 first + 6 rounds of 12
+        QVERIFY2(facts.value("FAR_FILES") == "84" && facts.value("NEAR_FILES") == "84" && facts.value("INDEXED") == "84"
+                 && facts.value("UNIQUE_IDS") == "84", qPrintable(report));
+        QVERIFY2(facts.value("DUPLICATES") == "0" && facts.value("TMP_LEFT") == "0", qPrintable(report));
+        QVERIFY2(facts.value("SYNC_FAILURES") == "0" && facts.value("FINAL_SYNC_RC") == "0", qPrintable(report));
+        QVERIFY2(facts.value("SYNCS") == "6" && facts.value("TAG_OPS").toInt() >= 6, qPrintable(report));   // the tags really ran during the syncs
+        QVERIFY2(facts.value("SLOWEST_SYNC_SECONDS").toInt() < 100, qPrintable(report));
+        session.runScript("rm -rf ~/par-test\n", 4096, {});
+    }
+
     // Audit backlog 1: Logs, MDok, Disks and Terminal report their work to the TaskManager, with the right guarding and settling rules.
     void everyAppReportsItsWorkToTheTaskManager() {
         fortiq::RemoteController controller;

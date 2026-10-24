@@ -173,6 +173,23 @@ private slots:
     }
 
     // ---- account wizard ----
+    // Audit R3: the wizard says the password is written in clear text; advice follows the provider, by host or by address domain.
+    void passwordStorageIsSaidPlainly() {
+        const QString warning = passwordStorageWarning();
+        QVERIFY(warning.contains("EN CLAIR") && warning.contains("~/.mbsyncrc") && warning.contains("~/.msmtprc") && warning.contains("0600"));
+        QVERIFY(warning.contains("mot de passe d'application"));
+        QVERIFY(passwordAdvice("imap.gmail.com", "").contains("mots de passe d'application"));
+        QVERIFY(passwordAdvice("", "me@googlemail.com").contains("Gmail"));
+        QVERIFY(passwordAdvice("IMAP.MAIL.ME.COM", "").contains("iCloud"));
+        QVERIFY(passwordAdvice("imap.mail.yahoo.com", "").contains("Yahoo"));
+        QVERIFY(passwordAdvice("outlook.office365.com", "").contains("OAuth2"));
+        QVERIFY(passwordAdvice("imap.fastmail.com", "").contains("Fastmail"));
+        QVERIFY(passwordAdvice("127.0.0.1", "me@pm.me").contains("Bridge"));
+        QVERIFY(passwordAdvice("imap.example.org", "me@example.org").isEmpty());
+        QVERIFY(passwordAdvice("", "").isEmpty());
+        QVERIFY(passwordAdvice("notgmail.com", "me@xgmail.com").isEmpty());          // a name that merely ends in the same letters is not Gmail
+        QVERIFY(passwordAdvice("evil-gmail.com.example.org", "").isEmpty());
+    }
     void passwordRules() {
         QVERIFY(validatePassword("s3cret!").isEmpty());
         QVERIFY(validatePassword(QString("p\"a b#c\\d'e$f;g")).isEmpty());

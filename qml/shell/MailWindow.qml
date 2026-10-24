@@ -21,6 +21,7 @@ Item {
     property bool wizardOpen: false
     property string wizardError: ""
     property var wizardKeys: ({})
+    property string wizardServerId: ""
     property bool previewPending: false
     property string dlMessage: ""
     property int dlPart: 0
@@ -41,7 +42,7 @@ Item {
     signal requestServers()
 
     function sync() { if (mailer) mailer.setWindowActive(visible) }
-    onVisibleChanged: sync()
+    onVisibleChanged: { sync(); if (!visible && wizardOpen) closeWizard() }
     onMailerChanged: sync()
     Component.onCompleted: sync()
     function handleBack() {
@@ -73,12 +74,19 @@ Item {
     function openWizard() {
         if (!mailer) return
         wizardError = ""; wizardOpen = true
+        wizardServerId = remote ? remote.activeServerId : ""
         mailer.clearSetup()
         mailer.probeSetup(wName.text.trim())
     }
-    function closeWizard() {
-        if (mailer) mailer.clearSetup()
+    // Nothing typed as a secret survives the wizard: closing it, hiding the window, losing the connection or changing the
+    // server all clear the passwords, the revealed preview and the consent.
+    function clearWizardSecrets() {
         wPassword.text = ""; wSmtpPassword.text = ""
+        revealBox.checked = false; consentBox.checked = false
+        if (mailer) mailer.clearSetup()
+    }
+    function closeWizard() {
+        clearWizardSecrets()
         wizardOpen = false
     }
     function wizardSpec() {
@@ -542,6 +550,19 @@ Item {
                     }
                 }
                 TextField { id: wSmtpUser; objectName: "mailWizSmtpUser"; width: parent.width; placeholderText: "Utilisateur SMTP (vide = identique à IMAP)"; selectByMouse: true }
+                Rectangle {
+                    objectName: "mailWizPasswordWarning"
+                    width: parent.width; height: warningColumn.implicitHeight + 16; radius: 8
+                    color: "#33F59E0B"; border.width: 1; border.color: "#80F59E0B"
+                    Column {
+                        id: warningColumn
+                        x: 10; y: 8; width: parent.width - 20; spacing: 4
+                        Text { objectName: "mailWizWarningText"; width: parent.width; wrapMode: Text.Wrap; color: "#FDE68A"; font.pixelSize: 11; font.family: Theme.fontFamily
+                               text: win.mailer ? win.mailer.passwordWarning() : "" }
+                        Text { objectName: "mailWizAdvice"; visible: text !== ""; width: parent.width; wrapMode: Text.Wrap; color: "#FEF3C7"; font.pixelSize: 11; font.family: Theme.fontFamily
+                               text: win.mailer ? win.mailer.passwordAdviceFor(wImapHost.text, wEmail.text) : "" }
+                    }
+                }
                 TextField { id: wPassword; objectName: "mailWizPassword"; width: parent.width; echoMode: TextInput.Password; placeholderText: "Mot de passe"; selectByMouse: true }
                 TextField { id: wSmtpPassword; objectName: "mailWizSmtpPassword"; width: parent.width; echoMode: TextInput.Password; placeholderText: "Mot de passe SMTP (vide = identique)"; selectByMouse: true }
                 Text { visible: win.wizardError !== ""; width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; color: "#FCA5A5"; font.pixelSize: 11; text: win.wizardError }
@@ -587,7 +608,7 @@ Item {
                     }
                     CheckBox {
  palette.windowText: Theme.ink
- id: consentBox; objectName: "mailWizConsent"; text: "J'ai relu le contenu exact ci-dessus et j'autorise son écriture sur le serveur (mode 0600)" }
+ id: consentBox; objectName: "mailWizConsent"; text: "J'ai relu le contenu exact ci-dessus et j'autorise son écriture sur le serveur (mode 0600) ; je sais que le mot de passe y sera en clair" }
                     Button {
                         objectName: "mailWizWrite"
                         text: "Écrire sur le serveur"
@@ -622,6 +643,12 @@ Item {
         }
     }
 
+    Connections {
+        target: win.remote
+        ignoreUnknownSignals: true
+        function onConnectedChanged() { if (win.wizardOpen && win.remote && !win.remote.connected) win.closeWizard() }
+        function onActiveServerIdChanged() { if (win.wizardOpen && win.remote && win.remote.activeServerId !== win.wizardServerId) win.closeWizard() }
+    }
     Connections {
         target: win.mailer
         ignoreUnknownSignals: true

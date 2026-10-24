@@ -5,6 +5,38 @@
 
 namespace fortiq {
 
+QString passwordStorageWarning() {
+    return QStringLiteral("Le mot de passe sera écrit EN CLAIR dans ~/.mbsyncrc et ~/.msmtprc sur ce serveur (mode 0600, mais lisible par vous, par root et par toute sauvegarde ou accès à votre dossier personnel). "
+                          "Préférez un mot de passe d'application ou d'accès limité plutôt que le mot de passe principal du compte.");
+}
+
+QString passwordAdvice(const QString &imapHost, const QString &email) {
+    const QString host = imapHost.trimmed().toLower();
+    const QString domain = email.section(QLatin1Char('@'), 1).trimmed().toLower();
+    auto in = [&](std::initializer_list<const char *> names) {
+        for (const char *n : names) {
+            const QString name = QString::fromLatin1(n);
+            for (const QString &candidate : { host, domain })
+                if (!candidate.isEmpty() && (candidate == name || candidate.endsWith(QLatin1Char('.') + name))) return true;
+        }
+        return false;
+    };
+    if (in({ "gmail.com", "googlemail.com" }))
+        return QStringLiteral("Gmail n'accepte que les mots de passe d'application (la validation en deux étapes doit être active) : créez-en un dans votre compte Google et collez-le ici, jamais le mot de passe principal.");
+    if (in({ "icloud.com", "me.com", "mac.com" }))
+        return QStringLiteral("iCloud exige un mot de passe spécifique à l'app : créez-le sur appleid.apple.com (Connexion et sécurité).");
+    if (in({ "yahoo.com", "yahoo.fr", "ymail.com", "aol.com" }))
+        return QStringLiteral("Yahoo et AOL exigent un mot de passe d'application : générez-le dans les paramètres de sécurité du compte.");
+    if (in({ "outlook.com", "hotmail.com", "live.com", "office365.com", "outlook.office365.com", "microsoft.com" }))
+        return QStringLiteral("Microsoft réserve de plus en plus IMAP/SMTP à OAuth2, que FORTIQ ne gère pas : la connexion peut être refusée. Si votre compte le permet, utilisez un mot de passe d'application.");
+    if (in({ "fastmail.com", "fastmail.fm", "messagingengine.com" }))
+        return QStringLiteral("Fastmail : créez un mot de passe d'application limité à IMAP/SMTP dans Réglages > Confidentialité et sécurité.");
+    if (in({ "proton.me", "protonmail.com", "pm.me" }))
+        return QStringLiteral("Proton n'expose pas IMAP/SMTP directement : il faut Proton Mail Bridge (sur ce serveur) et le mot de passe propre au Bridge, pas celui du compte.");
+    return {};
+}
+
+
 namespace {
 QByteArray shQuote(const QString &value) {
     QByteArray v = value.toUtf8();

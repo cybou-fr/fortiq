@@ -108,6 +108,8 @@ public:
     Q_INVOKABLE void resetSend();
 
     // ---- account wizard ----
+    Q_INVOKABLE QString passwordWarning() const { return passwordStorageWarning(); }
+    Q_INVOKABLE QString passwordAdviceFor(const QString &imapHost, const QString &email) const { return passwordAdvice(imapHost, email); }
     Q_INVOKABLE void probeSetup(const QString &accountName);      // reads what exists on the server (no secrets)
     // Validates the form and builds the exact files; nothing is written. Returns an error text, empty on success.
     Q_INVOKABLE QString previewSetup(const QVariantMap &spec);
