@@ -12,6 +12,9 @@ private slots:
         QVERIFY(!fortiq::safeChildPath("/home", "a/b").has_value());
         QVERIFY(!fortiq::safeChildPath("/home", "").has_value());
         QVERIFY(!fortiq::safeChildPath("relative", "ok").has_value());
+        // A backslash is an ordinary character in a Linux name (QDir::cleanPath would split it on Windows).
+        QCOMPARE(fortiq::safeChildPath("/home/user", "a\\b").value(), QString("/home/user/a\\b"));
+        QCOMPARE(fortiq::safeChildPath("/home//user/", "x").value(), QString("/home/user/x"));
     }
     void cleanAbsolute() {
         QCOMPARE(fortiq::cleanAbsolutePath("/var//log/").value(), QString("/var/log"));
@@ -27,6 +30,8 @@ private slots:
         QCOMPARE(fortiq::parentPath("/home/user/docs"), QString("/home/user"));
         QCOMPARE(fortiq::parentPath("/home"), QString("/"));
         QCOMPARE(fortiq::parentPath("/"), QString("/"));
+        QCOMPARE(fortiq::parentPath("/home/user/"), QString("/home"));
+        QCOMPARE(fortiq::parentPath("/home/us\\er/docs"), QString("/home/us\\er"));
     }
 };
 QTEST_MAIN(RemotePathTest)

@@ -2897,6 +2897,154 @@ private slots:
         settings.remove(pin);
     }
 
+    // S-3 (docs/STABILIZATION_PLAN.md): file names are data in every Files adapter. For each hostile name the
+    // whole life cycle runs (create, read, list, rename, Trash + .trashinfo, restore, search, delete) and no
+    // marker file may appear, no stray entry may be created (an option-looking name such as "-rf"), and the
+    // payload must come back byte for byte.
+    void hostileNamesStayData() {
+        const QString remoteDir = qEnvironmentVariable("FORTIQ_IT_UPLOAD_DIR");
+        if (remoteDir.isEmpty()) QSKIP("FORTIQ_IT_UPLOAD_DIR not set");
+        ConnectionRequest request = base;
+        request.expectedHostFingerprint = fingerprint;
+        if (request.password.isEmpty()) request.keyPath = qEnvironmentVariable("FORTIQ_IT_KEY");
+        fortiq::SshSession session;
+        const SshResult opened = session.open(request);
+        QVERIFY2(opened.status == SshResult::Status::Ok, qPrintable(opened.message));
+        const QString home = opened.home;
+        const QString tag = QString::number(QDateTime::currentMSecsSinceEpoch());
+        const QString markerName = QStringLiteral("fortiq-pwned-") + tag; // relative: a hostile name runs, if ever, in the arena or home
+        const QString arena = QStringLiteral("hostile-") + tag;
+        const SshResult made = session.makeDirectory(remoteDir, arena);
+        QVERIFY2(made.status == SshResult::Status::Ok, qPrintable(made.message));
+        const QString base = remoteDir + "/" + arena;
+
+        const QStringList hostile = {
+            QStringLiteral("it's.txt"), QStringLiteral("a\"b.txt"), QStringLiteral("$(touch %1)").arg(markerName),
+            QStringLiteral("`touch %1`").arg(markerName), QStringLiteral("x; touch %1; y").arg(markerName),
+            QStringLiteral("x && touch %1").arg(markerName), QStringLiteral("x | touch %1").arg(markerName),
+            QStringLiteral("x > %1").arg(markerName), QStringLiteral("-rf"), QStringLiteral("--help"),
+            QStringLiteral("-n"), QStringLiteral("--"), QStringLiteral("-"), QStringLiteral("with space  double.txt"),
+            QStringLiteral(" leading space"), QStringLiteral("trailing space "), QStringLiteral("tab\there"),
+            QStringLiteral("new\nline.txt"), QStringLiteral("carriage\rreturn"), QStringLiteral("star*.txt"),
+            QStringLiteral("quest?.txt"), QStringLiteral("[abc].txt"), QStringLiteral("{a,b}.txt"), QStringLiteral("~"),
+            QStringLiteral("~root"), QStringLiteral(".hidden"), QStringLiteral("back\\slash"), QStringLiteral("100%.txt"),
+            QStringLiteral("%s%n%x"), QStringLiteral("#comment"), QStringLiteral("a!b"), QStringLiteral("é世界🙂.txt"),
+            QStringLiteral("é-combining.txt"), QStringLiteral("rtl‮gnp.txt"), QStringLiteral("$HOME"),
+            QStringLiteral("${IFS}"), QStringLiteral("\x01\x1b[31mesc"), QString(200, QLatin1Char('n')) };
+
+        QStringList expected;
+        for (const QString &name : hostile) {
+            const QByteArray payload = QByteArrayLiteral("payload:") + name.toUtf8();
+            const QString path = base + "/" + name;
+            const QString what = QStringLiteral("name=%1").arg(QString(name).replace('\n', "\\n"));
+
+            // Create (as a copy), read back byte for byte, list.
+            SshResult r = session.saveCopy(base, name, payload);
+            QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(what + ": " + r.message));
+            QCOMPARE(r.directory, path);
+            r = session.readFile(path, 4096);
+            QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(what + ": " + r.message));
+            QVERIFY2(r.data == payload, qPrintable(what));
+            QVERIFY2(names(session.list(base)).contains(name), qPrintable(what));
+
+            // Safe save over it (optimistic hash), still the same single file.
+            const QByteArray next = payload + "+2";
+            r = session.saveFile(path, next, QCryptographicHash::hash(payload, QCryptographicHash::Sha256), false);
+            QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(what + ": " + r.message));
+            QVERIFY2(session.readFile(path, 4096).data == next, qPrintable(what));
+
+            // Rename there and back. Names typed into mkdir/rename are trimmed by contract (UI input), so a name
+            // with edge whitespace cannot be the target of a rename; it is checked to lose only that whitespace.
+            const QString other = QStringLiteral("r-") + name;
+            r = session.renameEntry(path, other);
+            QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(what + ": " + r.message));
+            QVERIFY2(names(session.list(base)).contains(other.trimmed()) && !names(session.list(base)).contains(name), qPrintable(what));
+            r = session.renameEntry(base + "/" + other.trimmed(), name);
+            QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(what + ": " + r.message));
+            if (name != name.trimmed()) {
+                QVERIFY2(names(session.list(base)).contains(name.trimmed()), qPrintable(what + ": trimmed rename target missing"));
+                QVERIFY2(session.renameEntry(base + "/" + name.trimmed(), QStringLiteral("tmp-edge")).status == SshResult::Status::Ok, qPrintable(what));
+                QVERIFY2(session.saveCopy(base, name, next).status == SshResult::Status::Ok, qPrintable(what)); // exact name via saveCopy
+                QVERIFY2(session.moveToTrash(base + "/tmp-edge").status == SshResult::Status::Ok, qPrintable(what));
+            }
+
+            // Search by name finds it (a line break in the query is refused by contract).
+            if (!name.contains('\n') && !name.contains('\r')) {
+                r = session.search(base, name, "name", 50, [](int) { return true; }); // the query is trimmed by contract; a substring still matches
+                QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(what + ": " + r.message));
+                bool found = false;
+                for (const QVariant &v : r.entries) found = found || v.toMap().value("name").toString() == name;
+                QVERIFY2(found, qPrintable(what + ": search missed it"));
+                r = session.search(base, QStringLiteral("payload:"), "content", 500, [](int) { return true; });
+                QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(what + ": " + r.message));
+            }
+
+            // Trash: .trashinfo holds the original path percent-encoded; restore returns it.
+            r = session.moveToTrash(path);
+            QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(what + ": " + r.message));
+            const QString trashed = r.directory;
+            QVERIFY2(!names(session.list(base)).contains(name), qPrintable(what));
+            const QByteArray info = session.readFile(home + "/.local/share/Trash/info/" + trashed.section('/', -1) + ".trashinfo", 8192).data;
+            QVERIFY2(info.startsWith("[Trash Info]\nPath="), qPrintable(what));
+            const QByteArray encoded = info.mid(info.indexOf("Path=") + 5, info.indexOf('\n', info.indexOf("Path=")) - info.indexOf("Path=") - 5);
+            QVERIFY2(QUrl::fromPercentEncoding(encoded) == path, qPrintable(what + ": trashinfo path " + QString::fromUtf8(encoded)));
+            r = session.restoreFromTrash(trashed, fortiq::ConflictPolicy::Fail);
+            QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(what + ": " + r.message));
+            QCOMPARE(r.directory, path);
+            QVERIFY2(session.readFile(path, 4096).data == next, qPrintable(what));
+            expected << name;
+
+            // The same name as a folder with content: made, searched inside, trashed, deleted for good.
+            const QString folder = QStringLiteral("d-") + name + QStringLiteral("-x");
+            r = session.makeDirectory(base, folder);
+            QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(what + ": " + r.message));
+            QVERIFY2(session.saveCopy(base + "/" + folder, name, payload).status == SshResult::Status::Ok, qPrintable(what));
+            if (!name.contains('\n') && !name.contains('\r')) {
+                r = session.search(base + "/" + folder, QStringLiteral("payload:"), "content", 50, [](int) { return true; });
+                QVERIFY2(r.status == SshResult::Status::Ok && r.entries.size() == 1, qPrintable(what + ": " + r.message));
+            }
+            r = session.moveToTrash(base + "/" + folder);
+            QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(what + ": " + r.message));
+            r = session.deleteFromTrash(r.directory);
+            QVERIFY2(r.status == SshResult::Status::Ok, qPrintable(what + ": " + r.message));
+        }
+
+        // Names the contract refuses: nothing is created, nothing is executed, the session survives.
+        for (const QString &bad : { QString(), QStringLiteral("."), QStringLiteral(".."), QStringLiteral("a/b"),
+                                    QStringLiteral("/abs"), QString::fromLatin1("nul\0byte", 8), QString(300, QLatin1Char('n')) }) {
+            QVERIFY2(session.makeDirectory(base, bad).status == SshResult::Status::Error, qPrintable("mkdir " + bad.left(20)));
+            QVERIFY2(session.saveCopy(base, bad, "x").status == SshResult::Status::Error, qPrintable("copy " + bad.left(20)));
+            QVERIFY2(session.renameEntry(base + "/" + expected.first(), bad).status == SshResult::Status::Error,
+                     qPrintable("rename " + bad.left(20)));
+        }
+        QVERIFY(session.isOpen());
+
+        // Hostile directory path for listing and search (the folder itself is named like an attack).
+        const QString nasty = QStringLiteral("$(touch %1)'; touch %1; '").arg(markerName);
+        QVERIFY(session.makeDirectory(base, nasty).status == SshResult::Status::Ok);
+        QVERIFY(session.saveCopy(base + "/" + nasty, QStringLiteral("inside.txt"), "needle").status == SshResult::Status::Ok);
+        SshResult s = session.search(base + "/" + nasty, QStringLiteral("inside"), "name", 10, [](int) { return true; });
+        QVERIFY2(s.status == SshResult::Status::Ok && s.entries.size() == 1, qPrintable(s.message));
+        s = session.search(base + "/" + nasty, QStringLiteral("needle"), "content", 10, [](int) { return true; });
+        QVERIFY2(s.status == SshResult::Status::Ok && s.entries.size() == 1, qPrintable(s.message));
+        expected << nasty;
+
+        // Nothing executed, nothing stray: the arena holds exactly the names we made, /tmp has no marker.
+        QStringList listed = names(session.list(base));
+        QStringList want = expected;
+        listed.sort();
+        want.sort();
+        QCOMPARE(listed, want);
+        QVERIFY2(!names(session.list(QStringLiteral("/tmp"))).contains(markerName), "a hostile name was executed");
+        QVERIFY2(!names(session.list(base)).contains(markerName), "a hostile name was executed");
+        QVERIFY(!names(session.list(remoteDir)).contains(markerName));
+        QVERIFY(!names(session.list(home)).contains(markerName));
+
+        // Clean up through the Trash and empty it (these are throw-away fixtures).
+        QVERIFY(session.moveToTrash(base).status == SshResult::Status::Ok);
+        QVERIFY(session.emptyTrash().status == SshResult::Status::Ok);
+    }
+
     void pinnedHostListsHomeWithUnicodeNames() {
         ConnectionRequest request = base;
         request.expectedHostFingerprint = fingerprint;
