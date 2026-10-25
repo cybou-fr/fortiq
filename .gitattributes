@@ -1,2 +1,5 @@
 # Shell scripts run on Linux (fixtures, tests): a CRLF checkout on Windows breaks them (": command not found").
 *.sh text eol=lf
+
+# vcpkg overlay ports: patches and the OpenSSL configure script must keep LF (a CRLF checkout breaks patch application)
+third_party/vcpkg-overlay-ports/** text eol=lf
