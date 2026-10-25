@@ -161,6 +161,9 @@ def build_inventory(qt: Path, ifw: Path, vcpkg_windows: Path, vcpkg_android: Pat
                 cpe = None
                 props["fortiq:source"] += "; overlay port third_party/vcpkg-overlay-ports (pinned upstream commit)"
                 props["fortiq:upstream-commit"] = pinned
+            elif (ROOT / "third_party" / "vcpkg-overlay-ports" / name).is_dir():
+                # An overlay port that only updates a release the local vcpkg checkout does not have yet (R15: OpenSSL 3.6.5).
+                props["fortiq:source"] += "; overlay port third_party/vcpkg-overlay-ports (upstream release)"
             components.append(component(name, version, license=meta["license"], purl=purl,
                                         cpe=cpe, url=meta["url"], hashes=hashes, props=props))
     vt = libvterm_info()
