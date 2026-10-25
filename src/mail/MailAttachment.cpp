@@ -18,7 +18,8 @@ QString sanitizeAttachmentName(const QString &name) {
     QString out;
     for (const QChar c : name) {
         const ushort u = c.unicode();
-        if (u < 0x20 || u == 0x7f || c == QLatin1Char('/') || c == QLatin1Char('\\') || c == QLatin1Char(':') || c == QLatin1Char('*') || c == QLatin1Char('?')
+        const bool bidi = (u >= 0x202A && u <= 0x202E) || (u >= 0x2066 && u <= 0x2069) || u == 0x200E || u == 0x200F || u == 0x061C;   // spoofing: "invoice<RLO>txt.exe"
+        if (bidi || u < 0x20 || u == 0x7f || c == QLatin1Char('/') || c == QLatin1Char('\\') || c == QLatin1Char(':') || c == QLatin1Char('*') || c == QLatin1Char('?')
             || c == QLatin1Char('"') || c == QLatin1Char('<') || c == QLatin1Char('>') || c == QLatin1Char('|'))
             out += QLatin1Char('_');
         else out += c;

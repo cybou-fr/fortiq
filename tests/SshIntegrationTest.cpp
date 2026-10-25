@@ -11,6 +11,7 @@
 #include "network/NetworkController.h"
 #include "system/SystemController.h"
 #include "db/DbController.h"
+#include "mail/MailAttachment.h"
 #include "mail/MailController.h"
 #include "core/SecretStore.h"
 #include "core/TerminalController.h"
@@ -1260,6 +1261,86 @@ private slots:
     }
 
     // The Courrier app against the test server: a disposable notmuch database built by tool/make_mail_fixture.sh.
+    // S-8: real notmuch/gmime output for 20 hostile messages (tool/make_hostile_mime_fixture.py): deep and wide MIME, header floods,
+    // broken encodings, hostile attachment names and HTML, reply loops. The client must stay responsive, show every conversation
+    // or say clearly why not, keep memory/UI bounded, and never let a hostile name or markup through. Needs FORTIQ_IT_MAIL=1.
+    void mailSurvivesHostileMime() {
+        if (qEnvironmentVariable("FORTIQ_IT_MAIL").isEmpty()) QSKIP("FORTIQ_IT_MAIL not set");
+        fortiq::RemoteController controller;
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        fortiq::SshSession session;
+        QVERIFY(session.open(controller.connectionRequest()).status == SshResult::Status::Ok);
+        QFile generator(QString::fromUtf8(QT_TESTCASE_SOURCEDIR) + "/tool/make_hostile_mime_fixture.py");
+        QVERIFY(generator.open(QIODevice::ReadOnly));
+        const QString root = QStringLiteral("/home/") + base.user + QStringLiteral("/hostilemime");
+        const SshResult made = session.runScript("rm -rf " + root.toUtf8() + "; mkdir -p " + root.toUtf8() + "\npython3 - " + root.toUtf8() + " <<'FQ_HOSTILE_END'\n"
+                                                 + generator.readAll().replace("\r\n", "\n") + "\nFQ_HOSTILE_END\n", 262144, {});
+        QVERIFY2(made.status == SshResult::Status::Ok && made.code == "exit:0", qPrintable(made.message + QString::fromUtf8(made.data)));
+
+        fortiq::MailController mail(&controller);
+        mail.setWindowActive(true);
+        mail.setMarkReadOnOpen(false);
+        mail.setConfigPath(root + "/nm.conf");
+        QTRY_VERIFY_WITH_TIMEOUT(mail.state() == "ready" && !mail.threads().isEmpty(), 30000);
+        mail.search("HOSTILE");
+        QTRY_VERIFY_WITH_TIMEOUT(mail.threads().size() >= 18, 20000);   // 20 messages; the two loop messages share a thread
+        QCOMPARE(mail.state(), QStringLiteral("ready"));
+
+        QMap<QString, QString> idBySubject;
+        for (const QVariant &t : mail.threads()) idBySubject.insert(t.toMap().value("subject").toString().left(10), t.toMap().value("id").toString());
+        QElapsedTimer clock;
+        QStringList report;
+        for (int n = 1; n <= 20; ++n) {
+            const QString prefix = QStringLiteral("HOSTILE %1").arg(n, 2, 10, QLatin1Char('0'));
+            const QString id = idBySubject.value(n == 13 ? QStringLiteral("HOSTILE 14") : prefix);   // 13 and 14 reply to each other: one thread
+            QVERIFY2(!id.isEmpty(), qPrintable("no thread for " + prefix + " (a hostile subject must still list)"));
+            clock.restart();
+            mail.openThread(id);
+            QTRY_VERIFY_WITH_TIMEOUT(!mail.threadBusy(), 60000);
+            const qint64 ms = clock.elapsed();
+            const QVariantList messages = mail.messages();
+            // Either the conversation is shown, or the client says why it is not (never silence, never a stuck spinner).
+            QVERIFY2(!messages.isEmpty() || !mail.threadStatus().isEmpty(), qPrintable(prefix + ": nothing shown and no reason"));
+            QVERIFY2(ms < 30000, qPrintable(prefix + QStringLiteral(": %1 ms").arg(ms)));
+            int attachments = 0;
+            qint64 chars = 0;
+            for (const QVariant &mv : messages) {
+                const QVariantMap m = mv.toMap();
+                const QVariantList list = m.value("attachments").toList();
+                attachments += list.size();
+                chars += m.value("text").toString().size() + m.value("html").toString().size();
+                for (const QVariant &av : list) {
+                    const QString shown = fortiq::sanitizeAttachmentName(av.toMap().value("name").toString());
+                    for (const QChar c : shown) {
+                        QVERIFY2(c.unicode() >= 0x20 && c.unicode() != 0x7f && c != QLatin1Char('/') && c != QLatin1Char('\\'), qPrintable(prefix + ": unsafe character in a saved name"));
+                        QVERIFY2(!(c.unicode() >= 0x202A && c.unicode() <= 0x202E) && !(c.unicode() >= 0x2066 && c.unicode() <= 0x2069) && c.unicode() != 0x200E && c.unicode() != 0x200F && c.unicode() != 0x061C,
+                                 qPrintable(prefix + ": a bidirectional control character survives in a saved name (spoofing)"));
+                    }
+                    QVERIFY2(shown.size() <= 120, qPrintable(prefix + ": a name longer than 120 characters"));
+                }
+                const QString html = m.value("html").toString().toLower();
+                for (const char *bad : { "<script", "<iframe", "<form", "<object", "<embed", "onload", "javascript:", "http-equiv", "@import", "evil.example" })
+                    QVERIFY2(!html.contains(QLatin1String(bad)), qPrintable(prefix + QStringLiteral(": hostile markup survives: ") + QLatin1String(bad)));
+            }
+            QVERIFY2(attachments <= 1000, qPrintable(prefix + QStringLiteral(": %1 attachments handed to the UI").arg(attachments)));
+            QVERIFY2(chars < 8 * 1024 * 1024, qPrintable(prefix + QStringLiteral(": %1 characters of body handed to the UI").arg(chars)));
+            report << QStringLiteral("%1: %2 msg, %3 att, %4 chars, %5 ms, status=%6").arg(n).arg(messages.size()).arg(attachments).arg(chars).arg(ms).arg(mail.threadStatus());
+            mail.closeThread();
+        }
+        qInfo("%s", qPrintable(report.join(QLatin1Char('\n'))));
+        QCOMPARE(controller.connected(), true);
+        mail.search("HOSTILE 01");
+        QTRY_COMPARE_WITH_TIMEOUT(mail.threads().size(), 1, 15000);   // still responsive after the corpus
+        session.runScript("rm -rf " + root.toUtf8() + "\n", 4096, {});
+        settings.remove(pin);
+    }
+
     // Needs FORTIQ_IT_MAIL=1 and `notmuch` installed on the test server.
     void mailAppReadsAndTags() {
         if (qEnvironmentVariable("FORTIQ_IT_MAIL").isEmpty()) QSKIP("FORTIQ_IT_MAIL not set");
@@ -2580,6 +2661,16 @@ private slots:
         run("select * from big");
         QVERIFY2(db.error().isEmpty(), qPrintable(db.error()));
         QVERIFY(db.rows().size() <= 100);
+        // S-7: an answer far beyond the 4 MiB output cap (6 million rows) is cut, flagged, fast, and leaves no psql behind on the server.
+        db.setLimits(60, 5000);
+        timer.restart();
+        run("select i, repeat('x', 40) as pad from generate_series(1, 6000000) as i");
+        QVERIFY2(db.error().isEmpty(), qPrintable(db.error()));
+        QVERIFY2(db.rows().size() <= 5000 && !db.rows().isEmpty(), qPrintable(QString::number(db.rows().size())));
+        QVERIFY2(db.resultInfo().contains("tronqu"), qPrintable(db.resultInfo()));
+        QVERIFY2(timer.elapsed() < 45000, qPrintable(QString::number(timer.elapsed()) + " ms"));
+        QTRY_COMPARE_WITH_TIMEOUT(QString::fromUtf8(shell(QStringLiteral("pgrep -u \"$(id -u)\" -x psql | wc -l\n")).data).trimmed(),
+                                  QStringLiteral("0"), 15000);
         db.setLimits(15, 500);
         // Wrong password: a clear message, no secret in it.
         QVERIFY(db.saveProfile({ { "id", pgId }, { "name", "PG" }, { "engine", "postgres" }, { "host", "127.0.0.1" }, { "port", 5432 }, { "user", "fqdb" }, { "database", "fqtest" } },

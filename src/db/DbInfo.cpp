@@ -393,8 +393,9 @@ DbResult parsePostgresCsv(const QByteArray &data, const QString &nullMarker, int
         row << ((!quotedField && field == nullMarker) ? QVariant() : QVariant(field));
         field.clear(); quotedField = false; rowOpen = true;
     };
-    auto endRow = [&] { all << row; row.clear(); rowOpen = false; };
-    for (qsizetype i = 0; i < n; ++i) {
+    bool enough = false;   // header + maxRows rows + one more (proof of truncation): the rest of a 4 MiB answer is never materialized
+    auto endRow = [&] { all << row; row.clear(); rowOpen = false; if (all.size() > static_cast<qsizetype>(maxRows) + 1) enough = true; };
+    for (qsizetype i = 0; i < n && !enough; ++i) {
         const QChar c = text.at(i);
         if (inQuotes) {
             if (c == QLatin1Char('"')) { if (i + 1 < n && text.at(i + 1) == QLatin1Char('"')) { field += c; ++i; } else inQuotes = false; }
@@ -408,7 +409,8 @@ DbResult parsePostgresCsv(const QByteArray &data, const QString &nullMarker, int
         else { field += c; rowOpen = true; }
     }
     // A final row without newline is complete only if the output was not cut.
-    if (rowOpen && !inQuotes && !incomplete) { endField(); endRow(); }
+    if (enough) r.truncated = true;
+    else if (rowOpen && !inQuotes && !incomplete) { endField(); endRow(); }
     else if (rowOpen) r.truncated = true;
     if (all.isEmpty()) { r.ok = true; r.truncated = r.truncated || incomplete; return r; }
     for (const QVariant &h : all.first()) r.columns << h.toString();
@@ -435,9 +437,13 @@ DbResult parseSqliteQuote(const QByteArray &data, int maxRows, bool incomplete) 
     QVariantList row;
     qsizetype i = 0;
     bool rowOpen = false, cut = false;
-    while (i < n) {
+    bool enough = false;   // header + maxRows rows + one more: the rest of a 4 MiB answer is never materialized
+    while (i < n && !enough) {
         const QChar c = text.at(i);
-        if (c == QLatin1Char('\n')) { if (rowOpen) { all << row; row.clear(); rowOpen = false; } ++i; continue; }
+        if (c == QLatin1Char('\n')) {
+            if (rowOpen) { all << row; row.clear(); rowOpen = false; if (all.size() > static_cast<qsizetype>(maxRows) + 1) enough = true; }
+            ++i; continue;
+        }
         if (c == QLatin1Char(',')) { ++i; continue; }
         rowOpen = true;
         if (c == QLatin1Char('\'') || ((c == QLatin1Char('X') || c == QLatin1Char('x')) && i + 1 < n && text.at(i + 1) == QLatin1Char('\''))) {
@@ -463,7 +469,8 @@ DbResult parseSqliteQuote(const QByteArray &data, int maxRows, bool incomplete) 
             i = j;
         }
     }
-    if (rowOpen && !row.isEmpty()) { if (incomplete || cut) r.truncated = true; else all << row; }
+    if (enough) r.truncated = true;
+    else if (rowOpen && !row.isEmpty()) { if (incomplete || cut) r.truncated = true; else all << row; }
     if (all.isEmpty()) { r.ok = true; r.truncated = r.truncated || incomplete; return r; }
     for (const QVariant &h : all.first()) r.columns << h.toString();
     r.totalParsed = static_cast<int>(all.size()) - 1;

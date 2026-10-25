@@ -1,5 +1,6 @@
 #include "db/DbInfo.h"
 
+#include <QElapsedTimer>
 #include <QRandomGenerator>
 #include <QSet>
 #include <QtTest>
@@ -313,6 +314,39 @@ private slots:
         QCOMPARE(r.rows[2][2].toString(), QString("line1\nline2"));
         QVERIFY(r.numeric[0]); QVERIFY(!r.numeric[1]);
         QVERIFY(!r.truncated);
+    }
+
+    // S-7: a 4 MiB answer of tiny rows must not be turned into millions of QVariants: parsing stops right after maxRows + 1 rows.
+    void hugeResultsAreCutEarly() {
+        QByteArray csv = "n\n";
+        csv.reserve(4 * 1024 * 1024);
+        while (csv.size() < 4 * 1024 * 1024) csv += "1\n";
+        QElapsedTimer clock; clock.start();
+        const DbResult r = parsePostgresCsv(csv, "<<N>>", 500, true);
+        QCOMPARE(r.rows.size(), 500); QVERIFY(r.truncated); QVERIFY(r.ok);
+        QVERIFY2(r.totalParsed <= 501, "the parser kept going after the limit");
+        QVERIFY2(clock.elapsed() < 2000, qPrintable(QString::number(clock.elapsed()) + " ms"));
+        QByteArray q = "n\n";
+        while (q.size() < 4 * 1024 * 1024) q += "1\n";
+        const DbResult s = parseSqliteQuote(q, 500, true);
+        QCOMPARE(s.rows.size(), 500); QVERIFY(s.truncated);
+        QVERIFY2(s.totalParsed <= 501, "the SQLite parser kept going after the limit");
+        // One cell as large as the whole cap, and a very wide row: bounded by the byte cap, nothing quadratic.
+        QByteArray fat = "x\n\"" + QByteArray(4 * 1024 * 1024 - 8, 'a') + "\"\n";
+        clock.restart();
+        const DbResult f = parsePostgresCsv(fat, "<<N>>", 500, false);
+        QCOMPARE(f.rows.size(), 1); QVERIFY(f.rows[0][0].toString().size() > 4000000);
+        QVERIFY2(clock.elapsed() < 3000, qPrintable(QString::number(clock.elapsed()) + " ms"));
+        QByteArray wide = "c0";
+        for (int i = 1; i < 20000; ++i) wide += ",c" + QByteArray::number(i);
+        wide += "\n1";
+        for (int i = 1; i < 20000; ++i) wide += ",1";
+        wide += "\n";
+        const DbResult w = parsePostgresCsv(wide, "<<N>>", 500, false);
+        QCOMPARE(w.columns.size(), 20000); QCOMPARE(w.rows.size(), 1);
+        // Cut inside a quoted field (the output cap hit mid-cell): flagged, no partial row.
+        const DbResult cut = parsePostgresCsv("a\n\"unfinished", "<<N>>", 500, true);
+        QCOMPARE(cut.rows.size(), 0); QVERIFY(cut.truncated);
     }
 
     void postgresCsvLimits() {

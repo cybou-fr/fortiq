@@ -324,7 +324,7 @@ Item {
                     Text { width: parent.width; textFormat: Text.PlainText; text: modelData.date; color: Theme.inkMuted; font.pixelSize: 10 }
                     Text {
                         visible: modelData.attachments.length > 0; width: parent.width; textFormat: Text.PlainText; font.pixelSize: 11; color: "#FCD34D"
-                        text: "Pièces jointes (elles restent sur le serveur) :"
+                        text: "Pièces jointes (elles restent sur le serveur) :" + (modelData.attachmentsOmitted > 0 ? "  —  " + modelData.attachmentsOmitted + " autres non affichées" : "")
                     }
                     Repeater {
                         model: modelData.attachments

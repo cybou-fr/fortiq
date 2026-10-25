@@ -44,6 +44,23 @@ QString header(const QJsonObject &h, const char *name) {
 
 void collectBody(const QJsonArray &parts, MailMessage &m, QString &text, QString &rawHtml);
 
+// A name shown in the list: control characters and bidirectional overrides ("invoice<RLO>txt.exe" reads as "invoiceexe.txt") become "_".
+QString displaySafeName(const QString &name) {
+    QString out;
+    for (const QChar c : name) {
+        const ushort u = c.unicode();
+        const bool bidi = (u >= 0x202A && u <= 0x202E) || (u >= 0x2066 && u <= 0x2069) || u == 0x200E || u == 0x200F || u == 0x061C;
+        out += (u < 0x20 || u == 0x7f || bidi) ? QLatin1Char('_') : c;
+    }
+    return out.left(300);
+}
+
+void addAttachment(MailMessage &m, MailAttachment a) {
+    if (m.attachments.size() >= kMaxAttachmentsShown) { ++m.attachmentsOmitted; return; }
+    a.name = displaySafeName(a.name);
+    m.attachments.push_back(a);
+}
+
 void collectPart(const QJsonObject &part, MailMessage &m, QString &text, QString &rawHtml) {
     const QString type = part.value("content-type").toString().toLower();
     const QString disposition = part.value("content-disposition").toString().toLower();
@@ -64,7 +81,7 @@ void collectPart(const QJsonObject &part, MailMessage &m, QString &text, QString
         a.size = toInt64(part.value("content-length").toDouble());
         a.part = part.value("id").toInt();
         if (a.name.isEmpty()) a.name = QStringLiteral("(sans nom)");
-        m.attachments.push_back(a);
+        addAttachment(m, a);
         return;
     }
     if (type == QLatin1String("text/plain")) {
@@ -80,7 +97,7 @@ void collectPart(const QJsonObject &part, MailMessage &m, QString &text, QString
         a.type = type;
         a.size = toInt64(part.value("content-length").toDouble());
         a.part = part.value("id").toInt();
-        m.attachments.push_back(a);
+        addAttachment(m, a);
     }
 }
 
@@ -257,7 +274,7 @@ QVariantList messagesToVariant(const QList<MailMessage> &messages) {
                                     { "date", m.date }, { "when", mailDateText(m.timestamp, now) }, { "subject", m.subject.isEmpty() ? QStringLiteral("(sans objet)") : m.subject },
                                     { "tags", m.tags }, { "unread", m.tags.contains(QLatin1String("unread")) },
                                     { "text", m.text }, { "html", m.html }, { "htmlPlain", m.htmlPlain }, { "hasText", !m.text.isEmpty() }, { "hasHtml", !m.html.isEmpty() },
-                                    { "htmlLinks", m.htmlLinks }, { "htmlScripts", m.htmlScripts }, { "htmlImages", m.htmlImages }, { "attachments", attachments } });
+                                    { "htmlLinks", m.htmlLinks }, { "htmlScripts", m.htmlScripts }, { "htmlImages", m.htmlImages }, { "attachments", attachments }, { "attachmentsOmitted", m.attachmentsOmitted } });
     }
     return out;
 }

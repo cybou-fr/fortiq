@@ -1,6 +1,10 @@
+#include "mail/MailAttachment.h"
 #include "mail/MailInfo.h"
 
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QRandomGenerator>
 #include <QtTest>
 
@@ -107,6 +111,39 @@ private slots:
         QCOMPARE(m[0].attachments[0].part, 3);
         QCOMPARE(messagesToVariant(m).first().toMap().value("attachments").toList().first().toMap().value("part").toInt(), 3);
         QVERIFY(m[0].html.isEmpty());
+    }
+
+    // S-8: what a hostile sender controls in the notmuch JSON: thousands of attachments, spoofed names, absurd nesting.
+    void hostileMimeShapesAreBounded() {
+        QJsonArray parts;
+        parts.append(QJsonObject { { "id", 1 }, { "content-type", "text/plain" }, { "content", "body" } });
+        for (int i = 0; i < 5000; ++i)
+            parts.append(QJsonObject { { "id", i + 2 }, { "content-type", "application/octet-stream" }, { "filename", QString("f%1.bin").arg(i) }, { "content-disposition", "attachment" } });
+        parts.append(QJsonObject { { "id", 9000 }, { "content-type", "application/pdf" }, { "content-disposition", "attachment" },
+                                   { "filename", QString::fromUtf8("invoice\xE2\x80\xAE" "txt.exe\x07") } });
+        const QJsonObject message { { "id", "hostile@x" }, { "match", true }, { "timestamp", 1 }, { "tags", QJsonArray() },
+                                    { "headers", QJsonObject { { "Subject", "s" }, { "From", "a@b" } } }, { "body", parts } };
+        const QJsonArray thread { QJsonArray { QJsonArray { message, QJsonArray() } } };
+        const QList<MailMessage> m = parseMailThread(QJsonDocument(thread).toJson(QJsonDocument::Compact));
+        QCOMPARE(m.size(), 1);
+        QCOMPARE(m[0].attachments.size(), kMaxAttachmentsShown);
+        QVERIFY(m[0].attachmentsOmitted >= 4800);
+        QCOMPARE(messagesToVariant(m).first().toMap().value("attachmentsOmitted").toInt(), m[0].attachmentsOmitted);
+        // multipart nested far deeper than any real message: bounded by the JSON parser, no stack exhaustion
+        QJsonObject deep { { "id", 2 }, { "content-type", "text/plain" }, { "content", "x" } };
+        for (int i = 0; i < 400; ++i) deep = QJsonObject { { "id", 3 }, { "content-type", "multipart/mixed" }, { "content", QJsonArray { deep } } };
+        const QJsonObject m2 { { "id", "deep@x" }, { "match", true }, { "timestamp", 1 }, { "tags", QJsonArray() }, { "headers", QJsonObject() }, { "body", QJsonArray { deep } } };
+        const QList<MailMessage> d = parseMailThread(QJsonDocument(QJsonArray { QJsonArray { QJsonArray { m2, QJsonArray() } } }).toJson(QJsonDocument::Compact));
+        QVERIFY(d.size() <= 1);
+    }
+
+    void spoofedAttachmentNamesAreNeutralized() {
+        const QString spoof = QString::fromUtf8("invoice\xE2\x80\xAE" "txt.exe");
+        const QString saved = sanitizeAttachmentName(spoof);
+        QVERIFY2(!saved.contains(QChar(0x202E)), "the right-to-left override survives in the saved name");
+        QCOMPARE(saved, QStringLiteral("invoice_txt.exe"));
+        for (const ushort u : { 0x202A, 0x202B, 0x202C, 0x202D, 0x202E, 0x2066, 0x2067, 0x2068, 0x2069, 0x200E, 0x200F, 0x061C })
+            QVERIFY2(!sanitizeAttachmentName(QStringLiteral("a") + QChar(u) + QStringLiteral("b.txt")).contains(QChar(u)), qPrintable(QString::number(u, 16)));
     }
 
     void htmlOnlyMessageIsInert() {

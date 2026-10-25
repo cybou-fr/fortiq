@@ -30,6 +30,8 @@ struct MailAttachment {
     int part = 0;              // MIME part number for `notmuch show --part`
 };
 
+constexpr int kMaxAttachmentsShown = 200;
+
 struct MailMessage {
     QString id;                // Message-ID without angle brackets
     qint64 timestamp = 0;
@@ -41,7 +43,8 @@ struct MailMessage {
     QString html;              // sanitized rich text ("" when there is no HTML part)
     QString htmlPlain;         // plain text of the HTML part (shown when there is no text part)
     int htmlLinks = 0, htmlScripts = 0, htmlImages = 0;   // what the sanitizer removed or kept
-    QList<MailAttachment> attachments;
+    QList<MailAttachment> attachments;   // at most kMaxAttachmentsShown
+    int attachmentsOmitted = 0;          // parts beyond that cap (a hostile message can carry thousands)
 };
 
 // ---- validation (everything below is sent to the server as data) ----
