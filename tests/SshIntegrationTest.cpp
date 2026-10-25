@@ -3072,7 +3072,8 @@ private slots:
         QVERIFY2(naive.contains("local=127.0.0.1") && naive.contains("local=93.184.216.34"),
                  qPrintable("the fixture does not flip fast enough to prove anything; a plain curl saw: " + naive));
 
-        int fetched = 0, asked = 0;
+        int fetched = 0, asked = 0, refused = 0;
+        QStringList errors;
         for (int i = 0; i < 40; ++i) {
             // Even rounds open the name directly, odd rounds reach it through a redirect from a public host.
             browser.open(i % 2 ? QStringLiteral("http://public-fixture.test:8099/to-flip") : QStringLiteral("http://flip-fixture.test:8099/echo"));
@@ -3081,6 +3082,14 @@ private slots:
                 ++asked;
                 QVERIFY2(!browser.pendingConfirm().value("host").toString().isEmpty(), "the question must name the host");
                 browser.cancelConfirm();
+                continue;
+            }
+            if (browser.state() == "error") {
+                // A name that flips under the browser may also be refused outright (the address it resolved to changed between the
+                // policy check and the pinned connection): safe, as long as nothing was served over the internal address.
+                ++refused;
+                if (!errors.contains(browser.status())) errors << browser.status();
+                QVERIFY2(!browser.contentText().contains("local=127.0.0.1"), qPrintable("served over the internal address: " + browser.contentText()));
                 continue;
             }
             QCOMPARE(browser.state(), QStringLiteral("ready"));
@@ -3092,7 +3101,8 @@ private slots:
             QVERIFY2(browser.contentText().contains("local=93.184.216.34"), qPrintable(where));   // never served over the internal address
             QVERIFY2(!browser.contentText().contains("local=127.0.0.1"), qPrintable(where));
         }
-        qInfo("rebinding: %d opened from the public address, %d asked about an internal one; control curl: %s", fetched, asked, qPrintable(naive.simplified()));
+        qInfo("rebinding: %d opened from the public address, %d asked about an internal one, %d refused (%s); control curl: %s", fetched, asked, refused,
+              qPrintable(errors.join(QStringLiteral(" | "))), qPrintable(naive.simplified()));
         QVERIFY2(fetched > 0 && asked > 0, "both outcomes are expected while the name flips");
         settings.remove(pin);
     }
