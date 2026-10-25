@@ -122,6 +122,15 @@ def component(name: str, version: str | None, kind: str = "library", *, license:
     return comp
 
 
+def overlay_commit(name: str) -> str | None:
+    """Upstream commit pinned by an overlay port of FORTIQ (third_party/vcpkg-overlay-ports/<name>/portfile.cmake)."""
+    portfile = ROOT / "third_party" / "vcpkg-overlay-ports" / name / "portfile.cmake"
+    if not portfile.is_file():
+        return None
+    match = re.search(r"^\s*REF\s+([0-9a-f]{40})\s*$", portfile.read_text(encoding="utf-8"), re.M)
+    return match.group(1) if match else None
+
+
 def build_inventory(qt: Path, ifw: Path, vcpkg_windows: Path, vcpkg_android: Path) -> list[dict]:
     components: list[dict] = []
     qtv = qt_version(qt)
@@ -142,8 +151,18 @@ def build_inventory(qt: Path, ifw: Path, vcpkg_windows: Path, vcpkg_android: Pat
                     if digest:
                         hashes[dll] = digest
             props = {"fortiq:platform": platform, "fortiq:source": f"vcpkg {triplet}" + (f" (port revision {full.split('#')[1]})" if full and '#' in full else "")}
-            components.append(component(name, version, license=meta["license"], purl=f"pkg:vcpkg/{name}@{version}" if version else None,
-                                        cpe=meta["cpe"].format(v=version) if version else None, url=meta["url"], hashes=hashes, props=props))
+            purl = f"pkg:vcpkg/{name}@{version}" if version else None
+            cpe = meta["cpe"].format(v=version) if version else None
+            pinned = overlay_commit(name) if version and "-git" in version else None
+            if pinned:
+                # An overlay port pinned to an upstream commit (R14): the release number would match the CVEs the commit fixes, so the
+                # component is identified by the commit and carries no CPE.
+                purl = f"pkg:github/libssh2/libssh2@{pinned}"
+                cpe = None
+                props["fortiq:source"] += "; overlay port third_party/vcpkg-overlay-ports (pinned upstream commit)"
+                props["fortiq:upstream-commit"] = pinned
+            components.append(component(name, version, license=meta["license"], purl=purl,
+                                        cpe=cpe, url=meta["url"], hashes=hashes, props=props))
     vt = libvterm_info()
     components.append(component("libvterm", vt["version"], license="MIT", purl=f"pkg:github/neovim/libvterm@{vt['commit']}" if vt["commit"] else None,
                                 url="https://github.com/neovim/libvterm",

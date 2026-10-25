@@ -40,6 +40,16 @@ bool applyAlgorithmPolicy(LIBSSH2_SESSION *session)
         for (int i = 0; i < count; ++i)
             if (!obsoleteAlgorithm(method, QByteArray(supported[i]))) allowed << QByteArray(supported[i]);
         libssh2_free(session, static_cast<void *>(supported));
+        if (method == LIBSSH2_METHOD_HOSTKEY) {
+            // The host-key type decides the fingerprint a user has pinned. Keep the order that libssh2 1.11.1 negotiated (ECDSA before
+            // Ed25519 before RSA/SHA-2) whatever the order of the library in use is, so that saved pins survive a libssh2 update.
+            static const QByteArrayList preferred = { "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521", "ssh-ed25519",
+                                                      "rsa-sha2-512", "rsa-sha2-256" };
+            QByteArrayList ordered;
+            for (const QByteArray &name : preferred) if (allowed.contains(name)) ordered << name;
+            for (const QByteArray &name : allowed) if (!ordered.contains(name)) ordered << name;
+            allowed = ordered;
+        }
         if (allowed.isEmpty() || libssh2_session_method_pref(session, method, allowed.join(',').constData()) != 0) return false;
     }
     return true;

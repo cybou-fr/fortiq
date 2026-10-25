@@ -85,6 +85,16 @@ def main():
         env["FORTIQ_TEST_WSL"] = opts.wsl_distro
     env["MSYS_NO_PATHCONV"] = "1"
 
+    # A hostile SSH server on the loopback of THIS machine (tests/fixtures/evil_ssh_server.py): malformed transport packets, R14.
+    import atexit, socket
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        evil_port = probe.getsockname()[1]
+    evil = subprocess.Popen([sys.executable, str(Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "evil_ssh_server.py"), str(evil_port)],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    atexit.register(evil.terminate)
+    env["FORTIQ_IT_EVIL_PORT"] = str(evil_port)
+
     results = []
     # Offline suites first (they also run under ctest), then the live ones.
     for name in ["fortiq_task_tests", "fortiq_db_tests", "fortiq_mail_tests", "fortiq_mailsend_tests", "fortiq_browser_tests", "fortiq_network_tests",

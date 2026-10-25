@@ -170,9 +170,9 @@
     },
     {
       "type": "library",
-      "bom-ref": "libssh2@1.11.1:android-arm64",
+      "bom-ref": "libssh2@1.11.1-git6e7b207:android-arm64",
       "name": "libssh2",
-      "version": "1.11.1",
+      "version": "1.11.1-git6e7b207",
       "licenses": [
         {
           "license": {
@@ -180,8 +180,7 @@
           }
         }
       ],
-      "purl": "pkg:vcpkg/libssh2@1.11.1",
-      "cpe": "cpe:2.3:a:libssh2:libssh2:1.11.1:*:*:*:*:*:*:*",
+      "purl": "pkg:github/libssh2/libssh2@6e7b2076a6ced2230968b27ee7c1abb77fe5a88d",
       "externalReferences": [
         {
           "type": "website",
@@ -195,7 +194,11 @@
         },
         {
           "name": "fortiq:source",
-          "value": "vcpkg arm64-android (port revision 3)"
+          "value": "vcpkg arm64-android; overlay port third_party/vcpkg-overlay-ports (pinned upstream commit)"
+        },
+        {
+          "name": "fortiq:upstream-commit",
+          "value": "6e7b2076a6ced2230968b27ee7c1abb77fe5a88d"
         },
         {
           "name": "fortiq:version-known",
@@ -205,9 +208,9 @@
     },
     {
       "type": "library",
-      "bom-ref": "libssh2@1.11.1:windows-x64",
+      "bom-ref": "libssh2@1.11.1-git6e7b207:windows-x64",
       "name": "libssh2",
-      "version": "1.11.1",
+      "version": "1.11.1-git6e7b207",
       "licenses": [
         {
           "license": {
@@ -215,8 +218,7 @@
           }
         }
       ],
-      "purl": "pkg:vcpkg/libssh2@1.11.1",
-      "cpe": "cpe:2.3:a:libssh2:libssh2:1.11.1:*:*:*:*:*:*:*",
+      "purl": "pkg:github/libssh2/libssh2@6e7b2076a6ced2230968b27ee7c1abb77fe5a88d",
       "externalReferences": [
         {
           "type": "website",
@@ -226,7 +228,7 @@
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "c8a53a38d13a53ee4b7ebc2bd31e6157de227c13953f8aa048d1c12700d7931d"
+          "content": "65eb85a1e783cf2d9349f3f544eb396389c44f7c3d707d58e2b1f07a8ac67809"
         }
       ],
       "properties": [
@@ -236,7 +238,11 @@
         },
         {
           "name": "fortiq:source",
-          "value": "vcpkg x64-windows (port revision 3)"
+          "value": "vcpkg x64-windows; overlay port third_party/vcpkg-overlay-ports (pinned upstream commit)"
+        },
+        {
+          "name": "fortiq:upstream-commit",
+          "value": "6e7b2076a6ced2230968b27ee7c1abb77fe5a88d"
         },
         {
           "name": "fortiq:version-known",
@@ -458,8 +464,8 @@
         "Qt Installer Framework@4.11:windows-x64",
         "Qt for Android Gradle dependencies@unknown:android-arm64",
         "Qt@6.12.0:windows-x64,android-arm64",
-        "libssh2@1.11.1:android-arm64",
-        "libssh2@1.11.1:windows-x64",
+        "libssh2@1.11.1-git6e7b207:android-arm64",
+        "libssh2@1.11.1-git6e7b207:windows-x64",
         "libvterm@0.3.3:windows-x64,android-arm64",
         "openssl@3.6.3:android-arm64",
         "openssl@3.6.3:windows-x64",
@@ -468,5 +474,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:08b4ff4c-9de9-683c-b713-d1f698818681"
+  "serialNumber": "urn:uuid:17b3228c-2b1d-6525-43ae-968ca6e6ca4c"
 }

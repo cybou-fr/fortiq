@@ -3097,6 +3097,28 @@ private slots:
         settings.remove(pin);
     }
 
+    // R14 (docs/SBOM.md): a hostile server sends malformed transport packets before authentication (the class of
+    // CVE-2026-55200: unchecked packet_length). tests/fixtures/evil_ssh_server.py serves 23 variants in turn, started by
+    // tool/run_live_tests.py (FORTIQ_IT_EVIL_PORT). Every connection must end in a clean error: no crash, no hang, never a
+    // host key offered for trust.
+    void maliciousServerCannotCrashTheClient() {
+        const int port = qEnvironmentVariableIntValue("FORTIQ_IT_EVIL_PORT");
+        if (port <= 0) QSKIP("FORTIQ_IT_EVIL_PORT (tests/fixtures/evil_ssh_server.py) is needed");
+        ConnectionRequest request;
+        request.host = QStringLiteral("127.0.0.1");
+        request.port = port;
+        request.user = QStringLiteral("nobody");
+        request.password = QStringLiteral("unused");
+        QElapsedTimer clock;
+        for (int round = 0; round < 46; ++round) {   // two passes over the 23 variants
+            clock.restart();
+            const SshResult r = SshClient::list(request);
+            QVERIFY2(r.status == SshResult::Status::Error, qPrintable(QStringLiteral("variant %1: %2").arg(round % 23).arg(r.message)));
+            QVERIFY2(r.fingerprint.isEmpty(), qPrintable(QStringLiteral("variant %1 offered a host key").arg(round % 23)));
+            QVERIFY2(clock.elapsed() < 20000, qPrintable(QStringLiteral("variant %1 took %2 ms").arg(round % 23).arg(clock.elapsed())));
+        }
+    }
+
     // S-1 (docs/STABILIZATION_PLAN.md): the client offers no obsolete algorithm. tool/setup_weak_ssh_fixture.sh starts
     // sshd instances that offer ONLY a SHA-1 key exchange (2231), only a CBC cipher (2232), only HMAC-SHA1 (2233) or only
     // an ssh-rsa (SHA-1) host key (2234); 2235 offers only modern algorithms. The handshake with a weak one must fail before
