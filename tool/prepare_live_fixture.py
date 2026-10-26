@@ -9,7 +9,7 @@ What it does (everything as root INSIDE the throw-away distro, never on a real s
   1. keeps the distro alive (WSL stops idle distros together with sshd and the background services) and checks sshd;
   2. creates a THROW-AWAY key pair and password for the test user for this run only (the key lives in a temporary folder, the
      password only in this process' environment) and authorizes the key;
-  3. runs tool/setup_mail_live_fixture.sh, setup_mail_tls_fixture.sh, setup_browser_policy_fixture.sh, setup_db_roles_fixture.sh,
+  3. runs tool/setup_mail_live_fixture.sh, setup_mail_tls_fixture.sh, setup_browser_policy_fixture.sh, setup_gateway_fixture.sh (HTTPS for the gateway), setup_db_roles_fixture.sh,
      setup_logs_fixture.sh, setup_weak_ssh_fixture.sh start, setup_dns_rebind_fixture.sh start, in the order their comments demand;
   4. reads the host key fingerprint of the server (ECDSA first: FORTIQ pins that type first) and the values the scripts print;
   5. checks that every service the tests need is really listening and fails loudly if not (a dead TLS sink is exactly what made a
@@ -108,6 +108,7 @@ def main():
         wsl(d, f"""sed -i '/{MARK}/d' /home/{u}/.ssh/authorized_keys 2>/dev/null
 bash {wslpath(d, TOOL / 'setup_weak_ssh_fixture.sh')} stop >/dev/null 2>&1
 bash {wslpath(d, TOOL / 'setup_dns_rebind_fixture.sh')} stop >/dev/null 2>&1
+bash {wslpath(d, TOOL / 'setup_gateway_fixture.sh')} stop >/dev/null 2>&1
 true""", check=False)
 
     if opts.teardown_only:
@@ -165,6 +166,8 @@ echo 'second sshd is not listening on {port_b}' >&2; exit 1""")
         wsl(d, f"bash {t('setup_mail_live_fixture.sh')} {sink} {u}")
         wsl(d, f"bash {t('setup_mail_tls_fixture.sh')} {sink} {u}")
         wsl(d, f"bash {t('setup_browser_policy_fixture.sh')} {web} {u}")
+        tls_web = wslpath(d, ROOT / "tests" / "fixtures" / "tls_web_fixture.py")
+        wsl(d, f"bash {t('setup_gateway_fixture.sh')} {tls_web} {u}")        # HTTPS endpoint for the Browser gateway tests
         wsl(d, f"bash {t('setup_db_roles_fixture.sh')}", check=False)       # needs the research database; the DB tests report their own state
         logs = wsl(d, f"sh {t('setup_logs_fixture.sh')} {u}").strip().splitlines()[-1].split()
         weak_base = free_weak_base()
@@ -178,18 +181,18 @@ echo 'second sshd is not listening on {port_b}' >&2; exit 1""")
 
         # 5. every service the tests rely on must really listen (a silently dead helper = a red test that proves nothing)
         listening = wsl(d, "ss -ltn")
-        missing = [p for p in ("1143", "1993", "2525", "2465", "2587", "8099", *[str(weak_base + i) for i in range(5)], "5432") if f":{p} " not in listening]
+        missing = [p for p in ("1143", "1993", "2525", "2465", "2587", "8099", "8443", *[str(weak_base + i) for i in range(5)], "5432") if f":{p} " not in listening]
         if missing:
             raise RuntimeError("fixture services are not listening: " + ", ".join(missing))
 
         cmd = [sys.executable, str(TOOL / "run_live_tests.py"), "--build", opts.build, "--host", "127.0.0.1", "--port", opts.ssh_port,
                "--user", u, "--fingerprint", fp, "--key", str(key), "--wsl-distro", d, "--weak-ssh", "--weak-base", str(weak_base), "--rebind",
-               "--web-base", "http://127.0.0.1:8099"]
+               "--web-base", "http://127.0.0.1:8099", "--gateway-tls"]
         for k, v in args.items():
             cmd += [k, v]
         # every port the tests rely on must be reachable FROM WINDOWS too (a WSL-side listener is not enough: see free_weak_base)
         import socket
-        for port in [int(opts.ssh_port), 1143, 1993, 8099] + [weak_base + i for i in range(5)]:
+        for port in [int(opts.ssh_port), 1143, 1993, 8099, 8443] + [weak_base + i for i in range(5)]:
             try:
                 socket.create_connection(("127.0.0.1", port), timeout=3).close()
             except OSError:

@@ -181,7 +181,17 @@ set(FORTIQ_BROWSER_PURE_SOURCES
     src/browser/HtmlSanitizer.cpp
     src/browser/UrlPolicy.cpp
 )
-set(FORTIQ_BROWSER_SOURCES ${FORTIQ_BROWSER_PURE_SOURCES} src/browser/BrowserController.cpp src/browser/BrowserController.h)
+# SSH proxy gateway of the Browser (docs/BROWSER.md, "Passerelle SSH"): pure part (HTTP wire, proxy, address policy; no libssh2) and the tunnel.
+set(FORTIQ_GATEWAY_PURE_SOURCES
+    src/browser/gateway/HttpWire.cpp src/browser/gateway/HttpWire.h
+    src/browser/gateway/TunnelBackend.h
+    src/browser/gateway/ProxyGateway.cpp src/browser/gateway/ProxyGateway.h
+    src/browser/UrlPolicy.cpp src/browser/UrlPolicy.h
+)
+set(FORTIQ_GATEWAY_TUNNEL_SOURCES src/browser/gateway/SshTunnel.cpp src/browser/gateway/SshTunnel.h src/ssh/SshAlgorithms.cpp src/ssh/SshAlgorithms.h)
+set(FORTIQ_BROWSER_SOURCES ${FORTIQ_BROWSER_PURE_SOURCES} src/browser/BrowserController.cpp src/browser/BrowserController.h
+    ${FORTIQ_GATEWAY_PURE_SOURCES} ${FORTIQ_GATEWAY_TUNNEL_SOURCES})
+list(REMOVE_DUPLICATES FORTIQ_BROWSER_SOURCES)
 
 set(FORTIQ_NETWORK_PURE_SOURCES src/network/NetworkInfo.cpp src/network/NetworkInfo.h)
 set(FORTIQ_NETWORK_SOURCES ${FORTIQ_NETWORK_PURE_SOURCES} src/network/NetworkController.cpp src/network/NetworkController.h)
@@ -211,6 +221,8 @@ set(FORTIQ_SSH_SOURCES
     src/ssh/SshTrash.cpp
     src/ssh/SshEdit.cpp
     src/ssh/SshExec.cpp
+    src/ssh/SshAlgorithms.cpp
+    src/ssh/SshAlgorithms.h
 )
 
 qt_add_executable(fortiq
@@ -397,6 +409,20 @@ if(BUILD_TESTING)
     target_include_directories(fortiq_browser_tests PRIVATE src)
     target_link_libraries(fortiq_browser_tests PRIVATE Qt6::Core Qt6::Network Qt6::Test)
     add_test(NAME fortiq_browser COMMAND fortiq_browser_tests -o "${CMAKE_CURRENT_BINARY_DIR}/browser-results.txt,txt" -o "-,txt")
+    qt_add_executable(fortiq_gateway_tests tests/GatewayTest.cpp ${FORTIQ_GATEWAY_PURE_SOURCES})
+    target_include_directories(fortiq_gateway_tests PRIVATE src)
+    target_compile_definitions(fortiq_gateway_tests PRIVATE FORTIQ_SRC_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(fortiq_gateway_tests PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+    add_test(NAME fortiq_gateway COMMAND fortiq_gateway_tests -o "${CMAKE_CURRENT_BINARY_DIR}/gateway-results.txt,txt" -o "-,txt")
+    # Live check of the gateway + SSH tunnel against the disposable fixture (skips itself unless FORTIQ_IT_* are set; tool/run_live_tests.py runs it).
+    qt_add_executable(fortiq_gateway_it tests/GatewayLiveTest.cpp ${FORTIQ_GATEWAY_PURE_SOURCES} ${FORTIQ_GATEWAY_TUNNEL_SOURCES} src/ssh/SshClient.h)
+    target_include_directories(fortiq_gateway_it PRIVATE src)
+    target_compile_definitions(fortiq_gateway_it PRIVATE FORTIQ_SRC_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(fortiq_gateway_it PRIVATE Qt6::Core Qt6::Network Qt6::Test ${FORTIQ_SSH_TARGET})
+    if(WIN32)
+        target_link_libraries(fortiq_gateway_it PRIVATE iphlpapi ws2_32)
+    endif()
+    add_test(NAME fortiq_gateway_live COMMAND fortiq_gateway_it -o "${CMAKE_CURRENT_BINARY_DIR}/gateway-live-results.txt,txt" -o "-,txt")
     qt_add_executable(fortiq_network_tests tests/NetworkTest.cpp ${FORTIQ_NETWORK_PURE_SOURCES})
     target_include_directories(fortiq_network_tests PRIVATE src)
     target_compile_definitions(fortiq_network_tests PRIVATE FORTIQ_NET_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/network")
@@ -466,7 +492,7 @@ if(BUILD_TESTING)
         file(TO_CMAKE_PATH "$ENV{WINDIR}/Fonts" FORTIQ_TEST_FONT_DIR)
         set_property(TEST fortiq_layout APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=${FORTIQ_TEST_FONT_DIR}")
         # Developer tests need the matching Qt Test runtime, absent from the app package.
-        set_tests_properties(fortiq_markdown fortiq_link fortiq_disks fortiq_terminal_history fortiq_terminal_sequences fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_credentials fortiq_tasks fortiq_browser fortiq_network fortiq_system fortiq_db fortiq_mail fortiq_mailsend fortiq_publication fortiq_documents fortiq_highlighter fortiq_layout PROPERTIES
+        set_tests_properties(fortiq_markdown fortiq_link fortiq_disks fortiq_terminal_history fortiq_terminal_sequences fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_credentials fortiq_tasks fortiq_browser fortiq_gateway fortiq_gateway_live fortiq_network fortiq_system fortiq_db fortiq_mail fortiq_mailsend fortiq_publication fortiq_documents fortiq_highlighter fortiq_layout PROPERTIES
             ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:$<TARGET_FILE_DIR:${FORTIQ_SSH_TARGET}>")
     endif()
 endif()

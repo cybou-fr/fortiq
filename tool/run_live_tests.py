@@ -57,6 +57,7 @@ def main():
     ap.add_argument("--weak-base", default="2431", help="base port of the weak-ssh fixture (tool/setup_weak_ssh_fixture.sh)")
     ap.add_argument("--weak-ssh", action="store_true", help="tool/setup_weak_ssh_fixture.sh is running: enables obsoleteAlgorithmsAreRefused")
     ap.add_argument("--web-base", default="", help="URL of tests/fixtures/web_fixture.py as seen from the fixture")
+    ap.add_argument("--gateway-tls", action="store_true", help="tool/setup_gateway_fixture.sh is running (HTTPS on 8443): enables the TLS check of the gateway live test")
     ap.add_argument("--qt-bin", default="C:/Qt/6.12.0/msvc2022_64/bin")
     ap.add_argument("--vcpkg-bin", default="C:/Users/cybou/vcpkg/installed/x64-windows/bin")
     ap.add_argument("--timeout", type=int, default=900)
@@ -69,7 +70,7 @@ def main():
     env["PATH"] = os.pathsep.join([opts.qt_bin, opts.vcpkg_bin, env.get("PATH", "")])
     env.update({
         "FORTIQ_IT_HOST": opts.host, "FORTIQ_IT_PORT": opts.port, "FORTIQ_IT_USER": opts.user, "FORTIQ_IT_FINGERPRINT": opts.fingerprint,
-        "FORTIQ_IT_DB": "1", "FORTIQ_IT_MAIL": "1", "FORTIQ_IT_MAILSEND": "1", "FORTIQ_IT_MAILTLS": "1", "FORTIQ_IT_POLICY": "1", "FORTIQ_IT_REBIND": "1" if opts.rebind else "", "FORTIQ_IT_WEAK": "1" if opts.weak_ssh else "", "FORTIQ_IT_WEAK_BASE": opts.weak_base,
+        "FORTIQ_IT_DB": "1", "FORTIQ_IT_MAIL": "1", "FORTIQ_IT_MAILSEND": "1", "FORTIQ_IT_MAILTLS": "1", "FORTIQ_IT_POLICY": "1", "FORTIQ_IT_REBIND": "1" if opts.rebind else "", "FORTIQ_IT_GATEWAY_TLS": "1" if opts.gateway_tls else "", "FORTIQ_IT_WEAK": "1" if opts.weak_ssh else "", "FORTIQ_IT_WEAK_BASE": opts.weak_base,
         "FORTIQ_PUBLICATION_HOST": opts.host, "FORTIQ_PUBLICATION_PORT": opts.port, "FORTIQ_PUBLICATION_USER": opts.user,
         "FORTIQ_PUBLICATION_FINGERPRINT": opts.fingerprint,
     })
@@ -104,7 +105,7 @@ def main():
     results = []
     # Offline suites first (they also run under ctest), then the live ones.
     for name in ["fortiq_task_tests", "fortiq_db_tests", "fortiq_mail_tests", "fortiq_mailsend_tests", "fortiq_browser_tests", "fortiq_network_tests",
-                 "fortiq_system_tests", "fortiq_credentials_tests", "fortiq_document_tests", "fortiq_logs_tests", "fortiq_publication_tests", "fortiq_ssh_it"]:
+                 "fortiq_system_tests", "fortiq_credentials_tests", "fortiq_document_tests", "fortiq_logs_tests", "fortiq_publication_tests", "fortiq_gateway_tests", "fortiq_gateway_it", "fortiq_ssh_it"]:
         exe = build / f"{name}.exe"
         if not exe.exists():
             results.append({"name": name, "rc": -1, "totals": "NOT BUILT", "failed": ["missing executable"], "skipped": []})

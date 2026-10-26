@@ -6,6 +6,10 @@
     "reason": "the live SSH suite needs the disposable Linux fixture; the offline gate cannot run it (tool/run_live_tests.py does, and fails on any skip there)",
     "scopes": ["offline"]
   },
+  "GatewayLiveTest::initTestCase": {
+    "reason": "the gateway live suite needs the disposable Linux fixture (tool/prepare_live_fixture.py); the offline gate cannot run it, the live run does and fails on any skip there",
+    "scopes": ["offline"]
+  },
   "PublicationTest::initTestCase": {
     "reason": "the publication suite needs the disposable Linux fixture; the offline gate cannot run it (tool/run_live_tests.py does)",
     "scopes": ["offline"]
