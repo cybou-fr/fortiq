@@ -9,6 +9,7 @@ GridView {
     visible: files.viewMode === "grid"
     anchors.fill: parent; anchors.margins: 10
     anchors.topMargin: files.inTrash ? 52 : 10
+    anchors.bottomMargin: 10 + files.moreBarHeight
     cellWidth: Math.max(104, width / Math.max(1, Math.floor(width / 116)))
     cellHeight: 108
     model: files.shown

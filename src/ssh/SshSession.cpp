@@ -5,7 +5,6 @@ namespace {
 // libssh2's global init is not per-request. No concurrent libssh2_exit calls.
 std::once_flag sshInitFlag;
 int sshInitResult = -1;
-constexpr int kMaxEntries = 20000;
 QString sshError(LIBSSH2_SESSION *session, const QString &prefix) {
     // Never echo unknown server text or credential data into the UI.
     return prefix + QStringLiteral(" (SSH code %1)").arg(libssh2_session_last_errno(session));
@@ -186,13 +185,38 @@ SshResult SshSession::open(const ConnectionRequest &req)
     if (n <= 0) { d->close(); return fail(QStringLiteral("Cannot resolve remote home directory.")); }
     d->home = QString::fromUtf8(buffer, n);
 
-    SshResult result = list(req.directory.isEmpty() ? d->home : req.directory);
+    SshResult result = list(req.directory.isEmpty() ? d->home : req.directory, kListPageSize);
     if (result.status == SshResult::Status::Ok)
         result.message = QStringLiteral("Connected to Linux over verified SSH/SFTP.");
     return result;   // list() reported the link as working
 }
 
-SshResult SshSession::list(const QString &remoteDir)
+QVariantList listedPage(const QString &directory, const Listing &listing, int offset, int count)
+{
+    QVariantList out;
+    const int end = static_cast<int>((std::min)(static_cast<qint64>(offset) + (std::max)(count, 0), static_cast<qint64>(listing.size())));
+    if (offset < 0 || offset >= end) return out;
+    out.reserve(end - offset);
+    for (int i = offset; i < end; ++i) {
+        const ListedEntry &e = listing[static_cast<size_t>(i)];
+        const auto child = safeChildPath(directory, e.name);
+        if (!child) continue;   // cannot happen: list() only keeps names that passed the same check
+        QVariantMap entry;
+        entry.insert("name", e.name);
+        entry.insert("directory", e.directory);
+        entry.insert("link", e.link);
+        entry.insert("hidden", e.name.startsWith('.'));
+        entry.insert("path", *child);
+        entry.insert("size", static_cast<double>(e.size));
+        entry.insert("mtime", static_cast<double>(e.mtime));
+        entry.insert("mode", e.mode);
+        entry.insert("owner", e.owner);
+        out.push_back(entry);
+    }
+    return out;
+}
+
+SshResult SshSession::list(const QString &remoteDir, int pageSize)
 {
     if (!isOpen()) return fail(QStringLiteral("La session SSH n'est pas ouverte."));
     if (!remoteDir.startsWith('/'))
@@ -208,7 +232,8 @@ SshResult SshSession::list(const QString &remoteDir)
         return fail(QStringLiteral("Cannot open remote folder (permission or path error)."));
     }
 
-    QVariantList entries;
+    auto listing = std::make_shared<Listing>();
+    bool cut = false;
     char name[8192];
     char longentry[8192];
     while (true) {
@@ -224,43 +249,37 @@ SshResult SshSession::list(const QString &remoteDir)
         const QByteArray rawName(name, n);
         const QString fileName = QString::fromUtf8(rawName);
         if (fileName.toUtf8() != rawName) continue; // no lossy path reconstruction
-        const auto child = safeChildPath(remoteDir, fileName);
-        if (!child) continue;
+        if (!safeChildPath(remoteDir, fileName)) continue;
+        if (listing->size() >= static_cast<size_t>(kMaxListedEntries)) { cut = true; break; }
         const bool hasMode = attr.flags & LIBSSH2_SFTP_ATTR_PERMISSIONS;
-        const bool isDirectory = hasMode && LIBSSH2_SFTP_S_ISDIR(attr.permissions);
+        ListedEntry entry;
+        entry.name = fileName;
+        entry.directory = hasMode && LIBSSH2_SFTP_S_ISDIR(attr.permissions);
         // Link targets are not stat'ed here: one round trip per link made
         // listings of / or /etc seconds slow. Opening a link resolves it.
-        const bool isLink = hasMode && LIBSSH2_SFTP_S_ISLNK(attr.permissions);
-        QVariantMap entry;
-        entry.insert("name", fileName);
-        entry.insert("directory", isDirectory);
-        entry.insert("link", isLink);
-        entry.insert("hidden", fileName.startsWith('.'));
-        entry.insert("path", *child);
-        entry.insert("size", static_cast<double>((attr.flags & LIBSSH2_SFTP_ATTR_SIZE) ? attr.filesize : 0));
-        entry.insert("mtime", static_cast<double>((attr.flags & LIBSSH2_SFTP_ATTR_ACMODTIME) ? attr.mtime : 0));
-        entry.insert("mode", hasMode ? modeString(attr.permissions) : QString());
-        entry.insert("owner", ownerFrom(longentry, static_cast<int>(qstrnlen(longentry, sizeof(longentry)))));
-        entries.push_back(entry);
-        if (entries.size() > kMaxEntries) {
-            libssh2_sftp_closedir(dir);
-            return fail(QStringLiteral("Directory has more than %1 entries; paging is not implemented yet.").arg(kMaxEntries));
-        }
+        entry.link = hasMode && LIBSSH2_SFTP_S_ISLNK(attr.permissions);
+        entry.size = (attr.flags & LIBSSH2_SFTP_ATTR_SIZE) ? static_cast<qint64>(attr.filesize) : 0;
+        entry.mtime = (attr.flags & LIBSSH2_SFTP_ATTR_ACMODTIME) ? static_cast<qint64>(attr.mtime) : 0;
+        entry.mode = hasMode ? modeString(attr.permissions) : QString();
+        entry.owner = ownerFrom(longentry, static_cast<int>(qstrnlen(longentry, sizeof(longentry))));
+        listing->push_back(std::move(entry));
     }
     libssh2_sftp_closedir(dir);
-    std::sort(entries.begin(), entries.end(), [](const QVariant &a, const QVariant &b) {
-        const auto aa = a.toMap(), bb = b.toMap();
-        if (aa.value("directory").toBool() != bb.value("directory").toBool())
-            return aa.value("directory").toBool();
-        return aa.value("name").toString().compare(bb.value("name").toString(), Qt::CaseInsensitive) < 0;
+    std::sort(listing->begin(), listing->end(), [](const ListedEntry &a, const ListedEntry &b) {
+        if (a.directory != b.directory) return a.directory;
+        return a.name.compare(b.name, Qt::CaseInsensitive) < 0;
     });
     SshResult result;
     result.status = SshResult::Status::Ok;
     result.fingerprint = d->fingerprint;
     result.directory = remoteDir;
     result.home = d->home;
-    result.entries = entries;
-    result.message = QStringLiteral("%1 items").arg(entries.size());
+    result.total = static_cast<int>(listing->size());
+    result.truncated = cut;
+    result.entries = listedPage(remoteDir, *listing, 0, pageSize > 0 ? pageSize : result.total);
+    if (pageSize > 0 && result.total > pageSize) result.listing = listing;
+    result.message = cut ? QStringLiteral("%1 items (folder cut at %1)").arg(result.total)
+                         : QStringLiteral("%1 items").arg(result.total);
     LinkMonitor::reportOk(d->key);
     return result;
 }

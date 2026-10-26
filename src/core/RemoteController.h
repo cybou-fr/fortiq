@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SecureWipe.h"
+#include "../ssh/SshClient.h"
 
 #include <QHash>
 #include <QObject>
@@ -32,6 +33,10 @@ class RemoteController : public QObject {
     Q_PROPERTY(QString serverLabel READ serverLabel NOTIFY changed)
     Q_PROPERTY(QString pendingFingerprint READ pendingFingerprint NOTIFY changed)
     Q_PROPERTY(QVariantList entries READ entries NOTIFY changed)
+    // Huge folders are shown a page at a time: `entries` holds what is loaded, `totalEntries` the whole folder.
+    Q_PROPERTY(int totalEntries READ totalEntries NOTIFY changed)
+    Q_PROPERTY(bool hasMore READ hasMore NOTIFY changed)
+    Q_PROPERTY(bool listingCut READ listingCut NOTIFY changed)   // the folder is larger than even the compact listing allows
     Q_PROPERTY(bool canGoBack READ canGoBack NOTIFY changed)
     Q_PROPERTY(bool canGoForward READ canGoForward NOTIFY changed)
     Q_PROPERTY(int lastLatencyMs READ lastLatencyMs NOTIFY changed)
@@ -84,6 +89,11 @@ public:
     QString serverLabel() const { return m_connected ? m_user + "@" + m_host : QString(); }
     QString pendingFingerprint() const { return m_pendingFingerprint; }
     QVariantList entries() const { return m_entries; }
+    int totalEntries() const { return (std::max<int>)(m_total, static_cast<int>(m_entries.size())); }
+    bool hasMore() const { return m_listing && static_cast<qsizetype>(m_entries.size()) < static_cast<qsizetype>(m_listing->size()); }
+    bool listingCut() const { return m_listingCut; }
+    static constexpr int kPageSize = kListPageSize;
+    static constexpr int kShownCap = 50000;     // most entries the UI is given for one folder ("load all" stops here)
     bool canGoBack() const { return !m_back.isEmpty(); }
     bool canGoForward() const { return !m_forward.isEmpty(); }
     int lastLatencyMs() const { return m_latencyMs; }
@@ -147,6 +157,8 @@ public:
     Q_INVOKABLE void goForward();
     Q_INVOKABLE void goHome();
     Q_INVOKABLE void refresh();
+    // Next page of a huge folder (all = up to kShownCap entries at once); a no-op when everything is loaded.
+    Q_INVOKABLE void loadMore(bool all = false);
     Q_INVOKABLE void disconnectServer();
     // Opens a remote file read-only in the viewer: text (first 1 MiB),
     // image (up to 16 MiB) or a hex dump of the first bytes for binaries.
@@ -226,10 +238,13 @@ private:
     QString m_home;
     QString m_pendingDirectory;
     QVariantList m_entries;
+    std::shared_ptr<const Listing> m_listing;   // the whole sorted folder when it did not fit in one page, else empty
+    int m_total = 0;
+    bool m_listingCut = false;
     QStringList m_back;
     QStringList m_forward;
     // RAM-only listing cache for instant back/forward; cleared on disconnect.
-    QHash<QString, QVariantList> m_cache;
+    QHash<QString, QVariantList> m_cache;   // only folders that fit in one page: huge ones are re-read
     bool m_operationBusy = false;
     QString m_activeServerId;
     bool m_saving = false;

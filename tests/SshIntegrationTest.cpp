@@ -1500,6 +1500,74 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(!term.running(), 20000);
     }
 
+    // A folder far larger than the old 20,000 limit: the session reads it whole (compact), the controller hands the UI one page at a time
+    // and loads more on request; nothing is lost, the order is the same as for a small folder, and a small folder afterwards has no "more".
+    void hugeFolderIsPagedNotRefused() {
+        fortiq::RemoteController controller;
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        fortiq::SshSession shell;
+        QVERIFY(shell.open(controller.connectionRequest()).status == SshResult::Status::Ok);
+        const QString home = shell.homeDirectory();
+        const QString dir = home + QStringLiteral("/fortiq-paging-test");
+        const int count = 25000;
+        auto cleanup = qScopeGuard([&] { shell.runScript("rm -rf \"$HOME/fortiq-paging-test\"; true\n", 4096, {}); settings.remove(pin); });
+        const SshResult made = shell.runScript(("rm -rf \"$HOME/fortiq-paging-test\"; mkdir -p \"$HOME/fortiq-paging-test/sub\" && cd \"$HOME/fortiq-paging-test\" && seq 1 "
+            + QByteArray::number(count - 1) + " | sed 's/^/Fichier-/' | xargs touch && touch 'zz dernier' && echo made\n"), 4096, {}, 120000);
+        QVERIFY2(QString::fromUtf8(made.data).contains("made"), qPrintable(made.message));
+
+        // the plain call (page size 0) now returns every entry instead of refusing the folder
+        const SshResult all = shell.list(dir);
+        QCOMPARE(all.status, SshResult::Status::Ok);
+        QCOMPARE(all.entries.size(), count + 1);                   // 24,999 files + "zz dernier" + the sub folder
+        QCOMPARE(all.total, count + 1);
+        QVERIFY(!all.truncated);
+        QCOMPARE(all.entries.constFirst().toMap().value("name").toString(), QStringLiteral("sub"));   // folders first
+
+        // a page: the first entries, the whole folder kept compactly, identical order
+        const SshResult page = shell.list(dir, 100);
+        QCOMPARE(page.entries.size(), 100);
+        QCOMPARE(page.total, count + 1);
+        QVERIFY(page.listing && int(page.listing->size()) == count + 1);
+        for (int i = 0; i < 100; ++i)
+            QCOMPARE(page.entries.at(i).toMap().value("path").toString(), all.entries.at(i).toMap().value("path").toString());
+        const QVariantList tail = fortiq::listedPage(dir, *page.listing, count - 3, 50);          // asking past the end gives what exists
+        QCOMPARE(tail.size(), 4);
+        QCOMPARE(tail.last().toMap().value("name").toString(), QStringLiteral("zz dernier"));
+        QVERIFY(fortiq::listedPage(dir, *page.listing, count + 5, 10).isEmpty());
+        QVERIFY(fortiq::listedPage(dir, *page.listing, -1, 10).isEmpty());
+
+        // the controller: first page, "more", "all"
+        controller.navigate(dir);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.currentDirectory() == dir && !controller.busy(), 60000);
+        QCOMPARE(controller.entries().size(), fortiq::kListPageSize);
+        QCOMPARE(controller.totalEntries(), count + 1);
+        QVERIFY(controller.hasMore());
+        QVERIFY(!controller.listingCut());
+        controller.loadMore(false);
+        QCOMPARE(controller.entries().size(), 2 * fortiq::kListPageSize);
+        controller.loadMore(true);
+        QCOMPARE(controller.entries().size(), count + 1);          // below the 50,000 cap, so everything
+        QVERIFY(!controller.hasMore());
+        QSet<QString> names;
+        for (const QVariant &e : controller.entries()) names.insert(e.toMap().value("name").toString());
+        QCOMPARE(names.size(), count + 1);                         // no entry lost, none repeated
+        controller.loadMore(false);                                // nothing left: harmless
+        QCOMPARE(controller.entries().size(), count + 1);
+
+        // a small folder afterwards has no "more" and shows its real size
+        controller.navigate(dir + QStringLiteral("/sub"));
+        QTRY_VERIFY_WITH_TIMEOUT(controller.currentDirectory() == dir + QStringLiteral("/sub") && !controller.busy(), 20000);
+        QVERIFY(!controller.hasMore());
+        QCOMPARE(controller.totalEntries(), 0);
+        QCOMPARE(controller.entries().size(), 0);
+    }
+
     // S-8: real notmuch/gmime output for 20 hostile messages (tool/make_hostile_mime_fixture.py): deep and wide MIME, header floods,
     // broken encodings, hostile attachment names and HTML, reply loops. The client must stay responsive, show every conversation
     // or say clearly why not, keep memory/UI bounded, and never let a hostile name or markup through. Needs FORTIQ_IT_MAIL=1.

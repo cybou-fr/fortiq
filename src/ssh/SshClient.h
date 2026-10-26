@@ -8,6 +8,7 @@
 
 #include <functional>
 #include <memory>
+#include <vector>
 
 namespace fortiq {
 struct ConnectionRequest {
@@ -20,6 +21,21 @@ struct ConnectionRequest {
     QString directory; // empty = remote SFTP home
 };
 
+// One directory entry in compact form. A huge folder is kept like this (about 150 bytes per entry instead of a QVariantMap of
+// ten keys) and turned into the maps the QML side wants one page at a time (listedPage).
+struct ListedEntry {
+    QString name;
+    QString mode;
+    QString owner;
+    qint64 size = 0;
+    qint64 mtime = 0;
+    bool directory = false;
+    bool link = false;
+};
+using Listing = std::vector<ListedEntry>;
+constexpr int kListPageSize = 5000;         // entries handed to the UI per page
+constexpr int kMaxListedEntries = 300000;   // beyond this the listing is cut and flagged `truncated` (the server may hold millions)
+
 struct SshResult {
     enum class Status { Ok, TrustRequired, Error };
     Status status = Status::Error;
@@ -28,6 +44,9 @@ struct SshResult {
     QString directory;
     QString home;
     QVariantList entries;
+    // list(dir, pageSize): all entries of the folder (sorted: folders first, then by name), `entries` holds only the first page.
+    std::shared_ptr<const Listing> listing;
+    int total = 0;        // list(): number of entries in the whole folder (may exceed entries.size())
     QByteArray data;      // readFile(): bytes read, never written to disk
     qint64 fileSize = -1; // readFile(): full size reported by the server
     bool truncated = false;
@@ -37,6 +56,9 @@ struct SshResult {
     QString code;
     qint64 bytes = 0;
 };
+
+// Entries [offset, offset + count) of a sorted listing as the maps the UI uses ({name, directory, link, hidden, path, size, mtime, mode, owner}).
+QVariantList listedPage(const QString &directory, const Listing &listing, int offset, int count);
 
 // Called after every chunk; return false to cancel before publication.
 using TransferProgress = std::function<bool(qint64 done, qint64 total)>;
@@ -55,8 +77,9 @@ public:
     // Handshake, host-key pin check BEFORE authentication, auth, SFTP, then
     // lists req.directory (or home). On TrustRequired/Error the session is closed.
     SshResult open(const ConnectionRequest &req);
-    // Lists an absolute directory on the open session.
-    SshResult list(const QString &directory);
+    // Lists an absolute directory on the open session. pageSize 0 = every entry in `entries` (at most kMaxListedEntries);
+    // pageSize > 0 = `entries` holds only the first page and `listing` the whole sorted folder in compact form (see listedPage).
+    SshResult list(const QString &directory, int pageSize = 0);
     // Reads at most maxBytes of a regular file, read-only (SFTP READ open).
     SshResult readFile(const QString &path, qint64 maxBytes);
     // Remote regular file -> local file. Written through QSaveFile (local

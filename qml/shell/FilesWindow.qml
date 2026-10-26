@@ -47,6 +47,9 @@ Item {
         : (connected && controller.trashDirectory.length > 0 && location === controller.trashDirectory)
     readonly property bool busy: controller !== null && controller.busy
     readonly property var entries: fixture ? (fixturePreview === "trashview" ? fixtureData.sampleTrash : fixtureData.sampleEntries) : (connected ? controller.entries : [])
+    // Huge folders arrive a page at a time (RemoteController::loadMore); the bar below the items says so and loads the rest.
+    readonly property bool morePending: !fixture && connected && controller.hasMore === true
+    readonly property int moreBarHeight: morePending ? (adaptive ? 52 : 36) : 0
     readonly property string location: fixture ? "/home/demo" : (connected ? controller.currentDirectory : "")
     readonly property string home: fixture ? "/home/demo" : (connected ? controller.homeDirectory : "")
 
@@ -271,6 +274,39 @@ Item {
         }
 
         FilesTrashBanner { files: win }
+
+        Rectangle {
+            objectName: "filesMoreBar"
+            visible: win.morePending
+            z: 6; anchors.bottom: parent.bottom; width: parent.width; height: win.moreBarHeight
+            color: "#CC121C30"
+            Rectangle { width: parent.width; height: 1; color: "#14FFFFFF" }
+            Text {
+                x: 14; anchors.verticalCenter: parent.verticalCenter
+                width: parent.width - moreChips.width - 40; elide: Text.ElideRight
+                color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
+                text: win.morePending
+                    ? (win.entries.length + " éléments affichés sur " + win.controller.totalEntries
+                       + (win.controller.listingCut ? "+ (dossier tronqué)" : "")
+                       + (win.filterText.trim().length > 0 ? " · le filtre ne porte que sur les éléments affichés" : ""))
+                    : ""
+            }
+            Row {
+                id: moreChips
+                anchors.right: parent.right; anchors.rightMargin: 14; anchors.verticalCenter: parent.verticalCenter
+                spacing: 8
+                CopyChip {
+                    objectName: "filesLoadMore"
+                    label: "Afficher plus"; touch: win.adaptive
+                    onClicked: win.controller.loadMore(false)
+                }
+                CopyChip {
+                    objectName: "filesLoadAll"
+                    label: "Tout afficher"; touch: win.adaptive
+                    onClicked: win.controller.loadMore(true)
+                }
+            }
+        }
 
         FilesGrid { id: grid; files: win; onMenuRequested: itemMenu.popup() }
 

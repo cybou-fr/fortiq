@@ -68,6 +68,9 @@ void RemoteController::request(Kind kind, const QString &directory, bool record)
     if (kind == Kind::List && m_cache.contains(directory)) {
         m_currentDirectory = directory;
         m_entries = m_cache.value(directory);
+        m_listing.reset();
+        m_total = static_cast<int>(m_entries.size());
+        m_listingCut = false;
     }
     m_busy = true;
     emit changed();
@@ -79,7 +82,7 @@ void RemoteController::request(Kind kind, const QString &directory, bool record)
         watcher->deleteLater();
         if (token != m_generation) return; // old server's async response
         const SshResult &result = outcome.result;
-        if (result.status == SshResult::Status::Ok) m_cache.insert(result.directory, result.entries);
+        if (result.status == SshResult::Status::Ok && !result.listing) m_cache.insert(result.directory, result.entries);
         // A newer navigation is queued; only its answer may change the view.
         if (kind == Kind::List && result.status == SshResult::Status::Ok
             && result.directory != m_pendingDirectory) return;
@@ -100,6 +103,9 @@ void RemoteController::request(Kind kind, const QString &directory, bool record)
             m_currentDirectory = result.directory;
             m_home = result.home;
             m_entries = result.entries;
+            m_listing = result.listing;
+            m_total = result.total;
+            m_listingCut = result.truncated;
             m_status = result.message;
             if (kind == Kind::Open && m_rememberPending && !m_activeServerId.isEmpty()) {
                 m_rememberPending = false;
@@ -120,6 +126,9 @@ void RemoteController::request(Kind kind, const QString &directory, bool record)
                 m_rememberPending = false;
                 m_connected = false;
                 m_entries.clear();
+                m_listing.reset();
+                m_total = 0;
+                m_listingCut = false;
                 m_currentDirectory.clear();
             } else {
                 // Keep the user where they were; the failed folder is not entered.
@@ -138,12 +147,21 @@ void RemoteController::request(Kind kind, const QString &directory, bool record)
         if (kind == Kind::Open || !session.isOpen()) {
             outcome.result = session.open(req);
         } else {
-            outcome.result = session.list(req.directory);
+            outcome.result = session.list(req.directory, kPageSize);
             if (!session.isOpen()) outcome.result = session.open(req); // one reconnect, pin re-checked
         }
         outcome.elapsedMs = static_cast<int>(timer.elapsed());
         return outcome;
     }));
+}
+
+void RemoteController::loadMore(bool all) {
+    if (!hasMore()) return;
+    const int have = static_cast<int>(m_entries.size());
+    const int want = all ? (std::max)(kShownCap - have, 0) : kPageSize;
+    if (want <= 0) return;
+    m_entries.append(listedPage(m_currentDirectory, *m_listing, have, want));
+    emit changed();
 }
 
 void RemoteController::navigate(const QString &path) {
@@ -233,6 +251,9 @@ void RemoteController::disconnectServer() {
     m_connected = false;
     m_pendingFingerprint.clear();
     m_entries.clear();
+    m_listing.reset();
+    m_total = 0;
+    m_listingCut = false;
     m_currentDirectory.clear();
     m_home.clear();
     m_back.clear();

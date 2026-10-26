@@ -9,6 +9,7 @@ ListView {
     visible: files.viewMode === "list"
     anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6
     anchors.topMargin: files.inTrash ? 50 : 0
+    anchors.bottomMargin: files.moreBarHeight
     model: files.shown
     currentIndex: -1
     keyNavigationEnabled: true
