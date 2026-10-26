@@ -250,6 +250,8 @@ qt_add_resources(fortiq "fortiq_third_party" PREFIX "/licenses"
     FILES third_party/libvterm/LICENSE)
 if(WIN32)
     target_sources(fortiq PRIVATE "${FORTIQ_BRAND_OUTPUT}/fortiq.rc")
+    # The .rc only names fortiq.ico: without this the resource is not recompiled when the icon changes (the exe kept the old icon).
+    set_source_files_properties("${FORTIQ_BRAND_OUTPUT}/fortiq.rc" PROPERTIES OBJECT_DEPENDS "${FORTIQ_BRAND_OUTPUT}/fortiq.ico")
 endif()
 
 qt_add_qml_module(fortiq
