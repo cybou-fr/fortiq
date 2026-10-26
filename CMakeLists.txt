@@ -350,6 +350,9 @@ if(BUILD_TESTING)
     if(WIN32)
         target_link_libraries(fortiq_perf PRIVATE psapi)
     endif()
+    # Scene-cost baseline of the Files window with N entries (docs/PERFORMANCE_BASELINE.md); never part of ctest.
+    qt_add_executable(fortiq_perf_scene tests/PerfFilesScene.cpp)
+    target_link_libraries(fortiq_perf_scene PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 fortiq_shellplugin)
     qt_add_executable(fortiq_logs_tests tests/LogsControllerTest.cpp
         ${FORTIQ_SSH_SOURCES} src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h
         src/core/LocalDocument.cpp src/core/LocalDocument.h

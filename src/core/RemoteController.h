@@ -32,7 +32,7 @@ class RemoteController : public QObject {
     Q_PROPERTY(bool operationBusy READ operationBusy NOTIFY operationBusyChanged)
     Q_PROPERTY(QString serverLabel READ serverLabel NOTIFY changed)
     Q_PROPERTY(QString pendingFingerprint READ pendingFingerprint NOTIFY changed)
-    Q_PROPERTY(QVariantList entries READ entries NOTIFY changed)
+    Q_PROPERTY(QVariantList entries READ entries NOTIFY entriesChanged)   // own signal: re-reading 50,000 entries on every busy/status change cost seconds
     // Huge folders are shown a page at a time: `entries` holds what is loaded, `totalEntries` the whole folder.
     Q_PROPERTY(int totalEntries READ totalEntries NOTIFY changed)
     Q_PROPERTY(bool hasMore READ hasMore NOTIFY changed)
@@ -192,6 +192,7 @@ public:
 
 signals:
     void changed();
+    void entriesChanged();   // the list of entries shown (not any other state) changed
     void linkChanged();
     void previewChanged();
     void operationBusyChanged();

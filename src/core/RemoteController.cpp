@@ -73,6 +73,7 @@ void RemoteController::request(Kind kind, const QString &directory, bool record)
         m_listing.reset();
         m_total = static_cast<int>(m_entries.size());
         m_listingCut = false;
+        emit entriesChanged();
     }
     m_busy = true;
     emit changed();
@@ -140,6 +141,7 @@ void RemoteController::request(Kind kind, const QString &directory, bool record)
                 m_entries = m_cache.value(previous, m_entries);
             }
         }
+        emit entriesChanged();
         emit changed();
     });
     watcher->setFuture(QtConcurrent::run(&m_pool, [slot, req, kind] {
@@ -165,6 +167,7 @@ void RemoteController::loadMore(bool all) {
     const int want = all ? (std::max)(kShownCap - have, 0) : kPageSize;
     if (want <= 0) return;
     m_entries.append(listedPage(m_currentDirectory, *m_listing, have, want));
+    emit entriesChanged();
     emit changed();
 }
 
@@ -258,6 +261,7 @@ void RemoteController::disconnectServer() {
     m_listing.reset();
     m_total = 0;
     m_listingCut = false;
+    emit entriesChanged();
     m_currentDirectory.clear();
     m_home.clear();
     m_back.clear();

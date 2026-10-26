@@ -1549,7 +1549,9 @@ private slots:
         QCOMPARE(controller.totalEntries(), count + 1);
         QVERIFY(controller.hasMore());
         QVERIFY(!controller.listingCut());
+        QSignalSpy entriesSpy(&controller, &fortiq::RemoteController::entriesChanged);
         controller.loadMore(false);
+        QCOMPARE(entriesSpy.count(), 1);                          // the list announces itself once, apart from the general "changed"
         QCOMPARE(controller.entries().size(), 2 * fortiq::kListPageSize);
         controller.loadMore(true);
         QCOMPARE(controller.entries().size(), count + 1);          // below the 50,000 cap, so everything
