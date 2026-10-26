@@ -353,6 +353,19 @@ if(BUILD_TESTING)
     # Scene-cost baseline of the Files window with N entries (docs/PERFORMANCE_BASELINE.md); never part of ctest.
     qt_add_executable(fortiq_perf_scene tests/PerfFilesScene.cpp)
     target_link_libraries(fortiq_perf_scene PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 fortiq_shellplugin)
+    # Real screenshot of the running app on a disposable Linux server (website hero); run by tool/capture_app_screenshot.py, never shipped.
+    get_target_property(FORTIQ_APP_SOURCES fortiq SOURCES)
+    list(FILTER FORTIQ_APP_SOURCES EXCLUDE REGEX "src/main\.cpp$")
+    list(FILTER FORTIQ_APP_SOURCES EXCLUDE REGEX "\.rc$")
+    list(FILTER FORTIQ_APP_SOURCES EXCLUDE REGEX "(qmltyperegistrations|_qml_Main_qml|qrc_|_autogen|mocs_compilation)")
+    qt_add_executable(fortiq_live_capture tests/LiveCapture.cpp ${FORTIQ_APP_SOURCES})
+    target_include_directories(fortiq_live_capture PRIVATE src)
+    qt_add_qml_module(fortiq_live_capture URI Fortiq.App VERSION 1.0
+        IMPORT_PATH ${CMAKE_CURRENT_BINARY_DIR}/qml
+        OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/capture_qml/Fortiq/App QML_FILES qml/Main.qml)
+    qt_add_resources(fortiq_live_capture "capture_icon" PREFIX "/branding" BASE "${FORTIQ_BRAND_OUTPUT}"
+        FILES "${FORTIQ_BRAND_OUTPUT}/fortiq_mark.png")
+    target_link_libraries(fortiq_live_capture PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Network Qt6::Concurrent fortiq_shellplugin ${FORTIQ_SSH_TARGET} fortiq_vterm)
     qt_add_executable(fortiq_logs_tests tests/LogsControllerTest.cpp
         ${FORTIQ_SSH_SOURCES} src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h
         src/core/LocalDocument.cpp src/core/LocalDocument.h
