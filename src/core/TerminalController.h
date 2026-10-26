@@ -25,6 +25,8 @@ public:
     Q_INVOKABLE void start();
     Q_INVOKABLE void stop();
     Q_INVOKABLE void send(const QByteArray &data);
+    // The window has more unprocessed output than it should: stop reading from the server (typing is still sent, so Ctrl+C works).
+    Q_INVOKABLE void setBackpressure(bool on) { m_backpressure = on; }
     Q_INVOKABLE void resize(int columns, int rows);
 signals:
     void changed();
@@ -33,6 +35,7 @@ signals:
     void historyChanged();
 private:
     void poll();
+    bool m_backpressure = false;
     void endTask(const QString &how, const QString &message);
     void maybeStart();
     RemoteController *m_remote;

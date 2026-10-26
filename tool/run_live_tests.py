@@ -33,6 +33,7 @@ def run(exe: Path, env: dict, args: list[str], report: Path, timeout: int):
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")   # a failure message may hold a replacement character; never crash while reporting
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--build", default="build-msvc")
     ap.add_argument("--host", required=True)
@@ -49,6 +50,7 @@ def main():
     ap.add_argument("--log-tag", default="", help="tool/setup_logs_fixture.sh: tag of the three user.err lines")
     ap.add_argument("--crash-unit", default="", help="tool/setup_logs_fixture.sh: failing user service")
     ap.add_argument("--rebind", action="store_true", help="tool/setup_dns_rebind_fixture.sh is running: enables browserSurvivesDnsRebinding")
+    ap.add_argument("--weak-base", default="2431", help="base port of the weak-ssh fixture (tool/setup_weak_ssh_fixture.sh)")
     ap.add_argument("--weak-ssh", action="store_true", help="tool/setup_weak_ssh_fixture.sh is running: enables obsoleteAlgorithmsAreRefused")
     ap.add_argument("--web-base", default="", help="URL of tests/fixtures/web_fixture.py as seen from the fixture")
     ap.add_argument("--qt-bin", default="C:/Qt/6.12.0/msvc2022_64/bin")
@@ -63,7 +65,7 @@ def main():
     env["PATH"] = os.pathsep.join([opts.qt_bin, opts.vcpkg_bin, env.get("PATH", "")])
     env.update({
         "FORTIQ_IT_HOST": opts.host, "FORTIQ_IT_PORT": opts.port, "FORTIQ_IT_USER": opts.user, "FORTIQ_IT_FINGERPRINT": opts.fingerprint,
-        "FORTIQ_IT_DB": "1", "FORTIQ_IT_MAIL": "1", "FORTIQ_IT_MAILSEND": "1", "FORTIQ_IT_MAILTLS": "1", "FORTIQ_IT_POLICY": "1", "FORTIQ_IT_REBIND": "1" if opts.rebind else "", "FORTIQ_IT_WEAK": "1" if opts.weak_ssh else "",
+        "FORTIQ_IT_DB": "1", "FORTIQ_IT_MAIL": "1", "FORTIQ_IT_MAILSEND": "1", "FORTIQ_IT_MAILTLS": "1", "FORTIQ_IT_POLICY": "1", "FORTIQ_IT_REBIND": "1" if opts.rebind else "", "FORTIQ_IT_WEAK": "1" if opts.weak_ssh else "", "FORTIQ_IT_WEAK_BASE": opts.weak_base,
         "FORTIQ_PUBLICATION_HOST": opts.host, "FORTIQ_PUBLICATION_PORT": opts.port, "FORTIQ_PUBLICATION_USER": opts.user,
         "FORTIQ_PUBLICATION_FINGERPRINT": opts.fingerprint,
     })

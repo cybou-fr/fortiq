@@ -126,7 +126,9 @@ public:
     void setCommandTimeout(int ms);
     // Interactive PTY on this worker-owned connection; no automatic replay.
     SshResult startTerminal(int columns, int rows);
-    SshResult terminalExchange(const QByteArray &input, int columns, int rows);
+    // readOutput=false (backpressure: the screen still has unprocessed output) only sends input and leaves the remote output
+    // waiting in the SSH window, which stops the remote program; reading resumes with the next call that asks for it.
+    SshResult terminalExchange(const QByteArray &input, int columns, int rows, bool readOutput = true);
     static QByteArray shellQuote(const QString &value);
     QString homeDirectory() const;
     bool isOpen() const;

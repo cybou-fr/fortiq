@@ -16,7 +16,7 @@ SshResult SshSession::startTerminal(int columns, int rows) {
     SshResult r; r.status = SshResult::Status::Ok; return r;
 }
 
-SshResult SshSession::terminalExchange(const QByteArray &input, int columns, int rows) {
+SshResult SshSession::terminalExchange(const QByteArray &input, int columns, int rows, bool readOutput) {
     if (!d->terminal) return fail(QStringLiteral("Terminal is closed."));
     if (columns < 2 || columns > 240 || rows < 2 || rows > 100 || d->terminalQueued + input.size() > 65536)
         return fail(QStringLiteral("Terminal input limit exceeded."));
@@ -39,11 +39,20 @@ SshResult SshSession::terminalExchange(const QByteArray &input, int columns, int
         if (d->terminalOffset == bytes.size()) { d->terminalWrites.removeFirst(); d->terminalOffset = 0; }
     }
     char buffer[8192];
-    for (int n = 0; !failed && n < 8; ++n) {
+    for (int n = 0; readOutput && !failed && n < 8; ++n) {
         const auto rc = libssh2_channel_read(d->terminal, buffer, sizeof(buffer));
         if (rc == LIBSSH2_ERROR_EAGAIN || rc == 0) break;
         if (rc < 0) { failed = true; break; }
         result.data.append(buffer, rc);
+    }
+    if (!readOutput && !failed) {
+        // Backpressure: do not hand output to the caller, but keep pulling packets off the socket into libssh2's own (window-bounded) queue.
+        // A server whose output cannot be delivered stops reading the connection, and with it our input: Ctrl+C would never arrive.
+        LIBSSH2_POLLFD pfd {};
+        pfd.type = LIBSSH2_POLLFD_CHANNEL;
+        pfd.fd.channel = d->terminal;
+        pfd.events = LIBSSH2_POLLFD_POLLIN;
+        for (int n = 0; n < 16; ++n) { pfd.revents = 0; if (libssh2_poll(&pfd, 1, 0) <= 0) break; }
     }
     const bool ended = libssh2_channel_eof(d->terminal);
     const int exitCode = ended ? libssh2_channel_get_exit_status(d->terminal) : 0;

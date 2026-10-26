@@ -45,7 +45,7 @@ void TerminalController::endTask(const QString &how, const QString &message) {
 void TerminalController::stop() {
     endTask(m_endHow.isEmpty() ? QStringLiteral("succeeded") : m_endHow, m_endMessage.isEmpty() ? QStringLiteral("Terminal fermé.") : m_endMessage);
     m_endHow.clear(); m_endMessage.clear();
-    ++m_seq; m_timer.stop(); m_input.clear(); m_running = m_busy = m_pollBusy = false; m_serverToken = -1;
+    ++m_seq; m_timer.stop(); m_input.clear(); m_backpressure = false; m_running = m_busy = m_pollBusy = false; m_serverToken = -1;
     auto slot = m_session;
     (void)QtConcurrent::run(&m_pool, [slot] { slot->reset(); });
     m_session = std::make_shared<std::unique_ptr<SshSession>>();
@@ -114,9 +114,10 @@ void TerminalController::send(const QByteArray &data) {
 }
 void TerminalController::poll() {
     if (!m_running || m_pollBusy) return;
+    if (m_backpressure && m_input.isEmpty()) return;                 // nothing to send and the screen is still busy: do not read more
     if (!m_remote->connected() || m_remote->connectionToken() != m_serverToken) { stop(); emit resetScreen(); return; }
     m_pollBusy = true; const int seq = m_seq; auto slot = m_session;
-    const auto input = std::exchange(m_input, {}); const int columns = m_columns, rows = m_rows;
+    const auto input = std::exchange(m_input, {}); const int columns = m_columns, rows = m_rows; const bool readOutput = !m_backpressure;
     auto *watcher = new QFutureWatcher<SshResult>(this);
     connect(watcher, &QFutureWatcher<SshResult>::finished, this, [this, watcher, seq] {
         const auto r = watcher->result(); watcher->deleteLater(); if (seq != m_seq) return;
@@ -129,9 +130,9 @@ void TerminalController::poll() {
             emit changed();
         }
     });
-    watcher->setFuture(QtConcurrent::run(&m_pool, [slot, input, columns, rows] {
+    watcher->setFuture(QtConcurrent::run(&m_pool, [slot, input, columns, rows, readOutput] {
         if (!*slot) return SshResult{};
-        return (*slot)->terminalExchange(input, columns, rows);
+        return (*slot)->terminalExchange(input, columns, rows, readOutput);
     }));
 }
 }

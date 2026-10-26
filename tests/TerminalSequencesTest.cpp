@@ -121,6 +121,44 @@ private slots:
         view->clearSelection();
     }
 
+    // Performance baseline finding: libvterm's screen layer costs about 10 us per scrolled line (a flood of short lines froze the window for
+    // hundreds of milliseconds per read). feedLater() interprets the same bytes in ~8 ms slices between event-loop turns.
+    void feedLaterGivesTheSameScreenAndKeepsTheLoopAlive() {
+        QByteArray flood;
+        for (int i = 0; i < 60000; ++i) flood += "y" + QByteArray::number(i % 7) + "\r\n";
+        flood += "\x1b[31mred\x1b[0m end\r\n";
+        std::unique_ptr<TerminalView> direct(make()), sliced(make());
+        direct->feed(flood);
+        QSignalSpy backlog(sliced.get(), &TerminalView::backlogChanged);
+        sliced->feedLater(flood.left(100000));
+        sliced->feedLater(flood.mid(100000));                                    // two writes: the order must be kept
+        QVERIFY(sliced->backlog() > 0);                                          // nothing interpreted yet: the caller returned at once
+        qint64 worstGapMs = 0;
+        QElapsedTimer sinceTick;
+        sinceTick.start();
+        QTimer ticker;
+        ticker.setInterval(1);
+        connect(&ticker, &QTimer::timeout, this, [&] { worstGapMs = qMax(worstGapMs, sinceTick.elapsed()); sinceTick.restart(); });
+        ticker.start();
+        QTRY_VERIFY_WITH_TIMEOUT(sliced->backlog() == 0, 30000);
+        ticker.stop();
+        QCOMPARE(sliced->screenText(), direct->screenText());
+        QCOMPARE(sliced->scrollbackLines(), direct->scrollbackLines());
+        QVERIFY2(worstGapMs < 150, qPrintable(QStringLiteral("the event loop was blocked for %1 ms").arg(worstGapMs)));
+        QVERIFY(backlog.size() >= 2);
+    }
+    void resetDropsTheBacklog() {
+        std::unique_ptr<TerminalView> view(make());
+        view->feedLater(QByteArray(2000000, 'z'));
+        QVERIFY(view->backlog() > 0);
+        view->reset();
+        QCOMPARE(view->backlog(), 0);
+        QTest::qWait(50);                                                       // a slice scheduled before the reset must not resurrect old output
+        QVERIFY(!view->screenText().contains(QLatin1Char('z')));
+        view->feedLater("after\r\n");
+        QTRY_VERIFY_WITH_TIMEOUT(view->screenText().contains(QStringLiteral("after")), 5000);
+    }
+
     void scrollbackStaysBounded() {
         std::unique_ptr<TerminalView> view(make());
         QElapsedTimer clock;

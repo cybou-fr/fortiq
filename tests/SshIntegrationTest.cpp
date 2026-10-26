@@ -1457,6 +1457,49 @@ private slots:
         }
     }
 
+    // Backpressure: while the screen is busy the terminal stops READING from the server (the remote `yes` blocks on the full SSH window), yet typing
+    // still goes out, so Ctrl+C ends the flood; reading resumes afterwards.
+    void terminalBackpressureStopsReadingNotTyping() {
+        fortiq::RemoteController controller;
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        fortiq::SshSession shell;
+        QVERIFY(shell.open(controller.connectionRequest()).status == SshResult::Status::Ok);
+        auto yesCount = [&] { return QString::fromUtf8(shell.runScript("pgrep -u \"$(id -u)\" -x yes | wc -l\n", 4096, {}).data).trimmed().toInt(); };
+        auto cleanup = qScopeGuard([&] { shell.runScript("pkill -u \"$(id -u)\" -x yes; true\n", 4096, {}); settings.remove(pin); });
+
+        fortiq::TerminalController term(&controller);
+        term.setWindowActive(true);
+        QSignalSpy output(&term, &fortiq::TerminalController::output);
+        auto received = [&] { qint64 n = 0; for (const auto &a : output) n += a.first().toByteArray().size(); return n; };
+        term.start();
+        QTRY_VERIFY_WITH_TIMEOUT(term.running(), 20000);
+        term.send("stty -echo; yes\r");
+        QTRY_VERIFY_WITH_TIMEOUT(received() > 200000, 20000);                  // a real flood is flowing
+        QCOMPARE(yesCount(), 1);
+
+        term.setBackpressure(true);
+        QTest::qWait(600);                                                      // let a poll that was already in flight finish
+        const qint64 frozenAt = received();
+        QTest::qWait(1500);
+        QVERIFY2(received() - frozenAt <= 65536, qPrintable(QStringLiteral("%1 more bytes were read under backpressure").arg(received() - frozenAt)));
+        QCOMPARE(yesCount(), 1);                                                // the remote program is still there, blocked on the full window
+
+        term.send("\x03");                                                      // Ctrl+C must get through although nothing is being read
+        QTRY_COMPARE_WITH_TIMEOUT(yesCount(), 0, 15000);
+
+        term.setBackpressure(false);
+        term.send("echo BACKPRESSURE-DONE\r");
+        QTRY_VERIFY_WITH_TIMEOUT([&] { QByteArray all; for (const auto &a : output) all += a.first().toByteArray(); return all.contains("BACKPRESSURE-DONE"); }(), 20000);
+        term.send("exit\r");
+        QTRY_VERIFY_WITH_TIMEOUT(!term.running(), 20000);
+    }
+
     // S-8: real notmuch/gmime output for 20 hostile messages (tool/make_hostile_mime_fixture.py): deep and wide MIME, header floods,
     // broken encodings, hostile attachment names and HTML, reply loops. The client must stay responsive, show every conversation
     // or say clearly why not, keep memory/UI bounded, and never let a hostile name or markup through. Needs FORTIQ_IT_MAIL=1.
@@ -3418,8 +3461,8 @@ private slots:
     }
 
     // S-1 (docs/STABILIZATION_PLAN.md): the client offers no obsolete algorithm. tool/setup_weak_ssh_fixture.sh starts
-    // sshd instances that offer ONLY a SHA-1 key exchange (2231), only a CBC cipher (2232), only HMAC-SHA1 (2233) or only
-    // an ssh-rsa (SHA-1) host key (2234); 2235 offers only modern algorithms. The handshake with a weak one must fail before
+    // sshd instances that offer ONLY a SHA-1 key exchange (base), only a CBC cipher (base+1), only HMAC-SHA1 (base+2) or only
+    // an ssh-rsa (SHA-1) host key (base+3); base+4 offers only modern algorithms (FORTIQ_IT_WEAK_BASE, default 2431). The handshake with a weak one must fail before
     // any host key is shown for trust; the modern one and the normal server must still work with the SAME host-key
     // fingerprint as before (saved pins must not break).
     void obsoleteAlgorithmsAreRefused() {
@@ -3432,13 +3475,14 @@ private slots:
             request.expectedHostFingerprint.clear();
             return SshClient::list(request);   // never authenticates: it stops at the trust question
         };
-        for (const int port : { 2231, 2232, 2233, 2234 }) {
+        const int weakBase = qEnvironmentVariableIntValue("FORTIQ_IT_WEAK_BASE") ? qEnvironmentVariableIntValue("FORTIQ_IT_WEAK_BASE") : 2431;
+        for (const int port : { weakBase, weakBase + 1, weakBase + 2, weakBase + 3 }) {
             const SshResult r = handshake(port);
             QVERIFY2(r.status == SshResult::Status::Error, qPrintable(QStringLiteral("port %1 was accepted: %2").arg(port).arg(r.message)));
             QVERIFY2(r.fingerprint.isEmpty(), "no host key may be offered for trust over an obsolete algorithm");
             QVERIFY2(r.message.contains(QStringLiteral("obsol")), qPrintable(r.message));
         }
-        const SshResult modern = handshake(2235);
+        const SshResult modern = handshake(weakBase + 4);
         QVERIFY2(modern.status == SshResult::Status::TrustRequired, qPrintable(modern.message));
         QVERIFY(!modern.fingerprint.isEmpty());
         // the usual server: still negotiates, and the fingerprint is the one already pinned (same host key type as before)

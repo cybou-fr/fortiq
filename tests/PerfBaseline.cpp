@@ -11,6 +11,10 @@
 #include "ssh/SshClient.h"
 #include "terminal/TerminalView.h"
 
+extern "C" {
+#include "vterm.h"
+}
+
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QGuiApplication>
@@ -100,6 +104,46 @@ void terminal() {
         const ProcessStats after = stats();
         row(c.name, QStringLiteral("%1 MiB/s").arg(fed / 1048576.0 / seconds, 0, 'f', 1),
             QStringLiteral("%1 MiB fed in %2 s; working set %3 → %4 MiB").arg(fed / 1048576.0, 0, 'f', 0).arg(seconds, 0, 'f', 2).arg(before.workingSetMiB, 0, 'f', 0).arg(after.workingSetMiB, 0, 'f', 0));
+    }
+}
+
+
+// ------------------------------------------------------------------------------------------------ raw libvterm (where does the time go?)
+void vtermRaw() {
+    QByteArray yes;
+    for (int i = 0; i < 32768; ++i) yes += "y\n";
+    const qint64 total = 8 << 20;
+    struct Variant { const char *name; bool screen; bool pushline; bool flush; };
+    const Variant variants[] = { { "libvterm only (no screen layer)", false, false, false }, { "screen layer, scrolling dropped", true, false, true },
+                                 { "screen layer + scrollback push (as TerminalView)", true, true, true }, { "same, flush once per 64 KiB chunk", true, true, false } };
+    for (const Variant &v : variants) {
+        VTerm *vt = vterm_new(40, 150);
+        vterm_set_utf8(vt, 1);
+        VTermScreen *screen = nullptr;
+        std::vector<std::vector<VTermScreenCell>> scrollback;
+        static const VTermScreenCallbacks cbPush = [] {
+            VTermScreenCallbacks cb{};
+            cb.sb_pushline = [](int cols, const VTermScreenCell *cells, void *user) {
+                auto *sb = static_cast<std::vector<std::vector<VTermScreenCell>> *>(user);
+                sb->emplace_back(cells, cells + cols);
+                if (sb->size() > 1000) sb->erase(sb->begin());      // not a deque here: the measurement is of libvterm, the container is a stand-in
+                return 1;
+            };
+            return cb;
+        }();
+        static const VTermScreenCallbacks cbNone = [] { VTermScreenCallbacks cb{}; cb.sb_pushline = [](int, const VTermScreenCell *, void *) { return 1; }; return cb; }();
+        if (v.screen) { screen = vterm_obtain_screen(vt); vterm_screen_reset(screen, 1); vterm_screen_set_callbacks(screen, v.pushline ? &cbPush : &cbNone, &scrollback); }
+        QElapsedTimer t; t.start();
+        qint64 fed = 0;
+        while (fed < total) {
+            vterm_input_write(vt, yes.constData(), size_t(yes.size()));
+            if (screen && v.flush) vterm_screen_flush_damage(screen);
+            fed += yes.size();
+        }
+        if (screen) vterm_screen_flush_damage(screen);
+        const double seconds = t.elapsed() / 1000.0;
+        row(v.name, QStringLiteral("%1 MiB/s").arg(fed / 1048576.0 / seconds, 0, 'f', 2), QStringLiteral("%1 MiB of `yes` in %2 s = %3 µs per line").arg(fed / 1048576.0, 0, 'f', 0).arg(seconds, 0, 'f', 2).arg(seconds * 1e6 / (fed / 2.0), 0, 'f', 2));
+        vterm_free(vt);
     }
 }
 
@@ -239,6 +283,7 @@ int main(int argc, char **argv) {
     for (int i = 1; i < argc; ++i) {
         const QString a = QString::fromLocal8Bit(argv[i]);
         if (a == QLatin1String("terminal")) terminal();
+        else if (a == QLatin1String("vterm")) vtermRaw();
         else if (a == QLatin1String("ssh")) ssh();
         else if (a == QLatin1String("files")) files();
         else if (a == QLatin1String("parsers")) parsers();

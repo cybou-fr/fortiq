@@ -37,6 +37,26 @@ def wsl(distro, script, check=True, user="root", capture=True):
     return out
 
 
+def free_weak_base() -> int:
+    """A base port B such that B..B+4 can be bound on Windows: ports inside the Hyper-V/WinNAT excluded ranges (they MOVE between boots)
+    cannot be forwarded from WSL to Windows, which made the weak-ssh fixture silently unreachable."""
+    import socket
+    for base in range(2431, 3000, 5):
+        socks = []
+        try:
+            for port in range(base, base + 5):
+                s = socket.socket()
+                s.bind(("127.0.0.1", port))
+                socks.append(s)
+            return base
+        except OSError:
+            continue
+        finally:
+            for s in socks:
+                s.close()
+    raise RuntimeError("no block of five free ports found for the weak-ssh fixture")
+
+
 def wslpath(distro, path: Path) -> str:
     out = subprocess.run(["wsl", "-d", distro, "--", "wslpath", "-a", str(path).replace("\\", "/")], capture_output=True, text=True, encoding="utf-8")
     return out.stdout.strip()
@@ -93,7 +113,8 @@ sshd -T | grep -qi '^passwordauthentication yes' || {{ echo 'sshd must allow pas
         wsl(d, f"bash {t('setup_browser_policy_fixture.sh')} {web} {u}")
         wsl(d, f"bash {t('setup_db_roles_fixture.sh')}", check=False)       # needs the research database; the DB tests report their own state
         logs = wsl(d, f"sh {t('setup_logs_fixture.sh')} {u}").strip().splitlines()[-1].split()
-        wsl(d, f"bash {t('setup_weak_ssh_fixture.sh')} start")
+        weak_base = free_weak_base()
+        wsl(d, f"bash {t('setup_weak_ssh_fixture.sh')} start {weak_base}")
         wsl(d, f"bash {t('setup_dns_rebind_fixture.sh')} start")
 
         # 4. values the tests need
@@ -103,15 +124,22 @@ sshd -T | grep -qi '^passwordauthentication yes' || {{ echo 'sshd must allow pas
 
         # 5. every service the tests rely on must really listen (a silently dead helper = a red test that proves nothing)
         listening = wsl(d, "ss -ltn")
-        missing = [p for p in ("1143", "1993", "2525", "2465", "2587", "8099", "2231", "2232", "2233", "2234", "2235", "5432") if f":{p} " not in listening]
+        missing = [p for p in ("1143", "1993", "2525", "2465", "2587", "8099", *[str(weak_base + i) for i in range(5)], "5432") if f":{p} " not in listening]
         if missing:
             raise RuntimeError("fixture services are not listening: " + ", ".join(missing))
 
         cmd = [sys.executable, str(TOOL / "run_live_tests.py"), "--build", opts.build, "--host", "127.0.0.1", "--port", opts.ssh_port,
-               "--user", u, "--fingerprint", fp, "--key", str(key), "--wsl-distro", d, "--weak-ssh", "--rebind",
+               "--user", u, "--fingerprint", fp, "--key", str(key), "--wsl-distro", d, "--weak-ssh", "--weak-base", str(weak_base), "--rebind",
                "--web-base", "http://127.0.0.1:8099"]
         for k, v in args.items():
             cmd += [k, v]
+        # every port the tests rely on must be reachable FROM WINDOWS too (a WSL-side listener is not enough: see free_weak_base)
+        import socket
+        for port in [int(opts.ssh_port), 1143, 1993, 8099] + [weak_base + i for i in range(5)]:
+            try:
+                socket.create_connection(("127.0.0.1", port), timeout=3).close()
+            except OSError:
+                raise RuntimeError(f"port {port} listens in WSL but is not reachable from Windows (excluded port range? `netsh int ipv4 show excludedportrange protocol=tcp`)")
         print("fixture ready; fingerprint", fp)
         if opts.no_run:
             keep_fixture = True

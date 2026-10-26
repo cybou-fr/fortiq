@@ -1,4 +1,5 @@
 #include "TerminalView.h"
+#include <QElapsedTimer>
 #include <QPainter>
 #include <QFontDatabase>
 #include <QFontMetricsF>
@@ -74,6 +75,7 @@ TerminalView::TerminalView(QQuickItem *parent) : QQuickPaintedItem(parent), m_vt
 bool TerminalView::terminalFocused() const { return hasActiveFocus() && window() && window()->isActive(); }
 TerminalView::~TerminalView() { vterm_free(m_vt); }
 void TerminalView::reset() {
+    m_queue.clear(); m_queueOffset = 0; emit backlogChanged();
     clearSearch();
     clearSelection();
     m_scrollback.clear(); m_scrollOffset = 0; m_wheelRemainder = 0;
@@ -85,6 +87,27 @@ void TerminalView::feed(const QByteArray &data) {
     if (!data.isEmpty()) { clearSelection(); invalidateSearch(); }
     m_cursorOn = true;
     vterm_input_write(m_vt, data.constData(), data.size()); vterm_screen_flush_damage(m_screen); update(); emit scrollbackChanged();
+}
+void TerminalView::feedLater(const QByteArray &data) {
+    if (data.isEmpty()) return;
+    if (m_queueOffset > 0 && m_queueOffset == m_queue.size()) { m_queue.clear(); m_queueOffset = 0; }
+    m_queue += data;
+    emit backlogChanged();
+    if (!m_drainScheduled) { m_drainScheduled = true; QTimer::singleShot(0, this, &TerminalView::drainQueue); }
+}
+void TerminalView::drainQueue() {
+    m_drainScheduled = false;
+    QElapsedTimer clock; clock.start();
+    constexpr qsizetype slice = 4096;
+    while (m_queueOffset < m_queue.size() && clock.elapsed() < 8) {
+        const qsizetype n = qMin(slice, m_queue.size() - m_queueOffset);
+        feed(QByteArray::fromRawData(m_queue.constData() + m_queueOffset, n));
+        m_queueOffset += n;
+    }
+    if (m_queueOffset >= m_queue.size()) { m_queue.clear(); m_queueOffset = 0; }
+    else if (m_queueOffset > (1 << 20)) { m_queue.remove(0, m_queueOffset); m_queueOffset = 0; }   // do not keep an ever longer consumed prefix
+    emit backlogChanged();
+    if (m_queueOffset < m_queue.size()) { m_drainScheduled = true; QTimer::singleShot(0, this, &TerminalView::drainQueue); }
 }
 void TerminalView::geometryChange(const QRectF &n, const QRectF &o) { QQuickPaintedItem::geometryChange(n, o); sizeGrid(); }
 void TerminalView::sizeGrid() {

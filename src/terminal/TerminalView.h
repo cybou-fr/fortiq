@@ -17,17 +17,22 @@ class TerminalView : public QQuickPaintedItem {
     Q_PROPERTY(int scrollOffset READ scrollOffset NOTIFY scrollbackChanged)
     Q_PROPERTY(bool hasSelection READ hasSelection NOTIFY selectionChanged)
     Q_PROPERTY(QString searchStatus READ searchStatus NOTIFY searchChanged)
+    Q_PROPERTY(int backlog READ backlog NOTIFY backlogChanged)   // bytes received but not yet interpreted (feedLater)
 public:
     explicit TerminalView(QQuickItem *parent = nullptr);
     int columns() const { return m_columns; }
     int rows() const { return m_rows; }
     int scrollbackLines() const { return m_alternateScreen ? 0 : int(m_scrollback.size()); }
     int scrollOffset() const { return m_scrollOffset; }
+    int backlog() const { return int(m_queue.size() - m_queueOffset); }
     bool hasSelection() const { return m_selectionStart >= 0 && m_selectionEnd >= 0; }
     QString searchStatus() const { return m_searchStatus; }
     ~TerminalView() override;
     void paint(QPainter *painter) override;
     Q_INVOKABLE void feed(const QByteArray &data);
+    // Same as feed(), but the bytes are interpreted in short slices between event-loop turns (about 8 ms of work each), so a flood of
+    // short lines cannot freeze the window; the order is kept. The owner should stop reading while backlog() is large (backpressure).
+    Q_INVOKABLE void feedLater(const QByteArray &data);
     Q_INVOKABLE void reset();
     Q_INVOKABLE QString screenText() const;
     Q_INVOKABLE QString clipboardText() const;
@@ -50,6 +55,7 @@ signals:
     void selectionChanged();
     void searchChanged();
     void searchRequested();
+    void backlogChanged();
 protected:
     void geometryChange(const QRectF &n, const QRectF &o) override;
     void keyPressEvent(QKeyEvent *event) override;
@@ -61,6 +67,10 @@ protected:
     QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
 private:
     void sizeGrid();
+    void drainQueue();
+    QByteArray m_queue;
+    qsizetype m_queueOffset = 0;
+    bool m_drainScheduled = false;
     void textInput(const QString &text);
     bool terminalFocused() const;
     bool viewportCell(int row, int col, VTermScreenCell *cell) const;

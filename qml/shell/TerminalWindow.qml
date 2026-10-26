@@ -182,10 +182,20 @@ Item {
             }
         }
     }
+    property bool outputThrottled:false
+    Connections {
+        target:surface
+        // Backpressure with hysteresis: stop reading from the server while more than 256 KiB of output waits to be drawn, resume below 64 KiB.
+        function onBacklogChanged(){
+            if(!win.terminal)return
+            if(!win.outputThrottled && surface.backlog>262144){win.outputThrottled=true;win.terminal.setBackpressure(true)}
+            else if(win.outputThrottled && surface.backlog<65536){win.outputThrottled=false;win.terminal.setBackpressure(false)}
+        }
+    }
     Connections {
         target:win.terminal
-        function onOutput(data){surface.feed(data)}
-        function onResetScreen(){searchDelay.stop();surface.reset();searchInput.clear();win.searchOpen=false}
+        function onOutput(data){surface.feedLater(data)}
+        function onResetScreen(){win.outputThrottled=false;if(win.terminal)win.terminal.setBackpressure(false);searchDelay.stop();surface.reset();searchInput.clear();win.searchOpen=false}
         function onChanged(){if(win.terminal.running && win.visible && !win.searchOpen)surface.forceActiveFocus()}
     }
     Text {
