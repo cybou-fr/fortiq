@@ -15,7 +15,7 @@
     "scopes": ["offline"]
   },
   "SshIntegrationTest::twoHostsNeverMix": {
-    "reason": "needs a second disposable host (tool/setup_second_host_fixture.sh: a copy of the fixture distro); not yet run - blocks the release gate",
-    "scopes": ["offline", "live"]
+    "reason": "needs a second disposable host (WSL distro fortiq-test-b, tool/setup_second_host_fixture.sh); the live run provides it (tool/prepare_live_fixture.py), so a skip there is a failure",
+    "scopes": ["offline"]
   }
 }
