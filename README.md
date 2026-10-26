@@ -1,5 +1,7 @@
 # FORTIQ — Distributed Desktop (Qt rebuild)
 
+**License:** GNU GPL v3.0 (`GPL-3.0-only`) for original FORTIQ code. See [LICENSE](LICENSE). FORTIQ is intended to become a fully public, free/open-source GitHub project. The repository remains private until the pre-publication audit is complete. Third-party components retain their own licenses; see [third-party notices](docs/THIRD_PARTY_LICENSES.md).
+
 **Fortiq — удалённый Linux-рабочий стол.** Нативное приложение показывает файлы, документы,
 почту, браузер и системные инструменты выбранного Linux-сервера, а вся работа происходит на самом
 сервере: клиент только рисует интерфейс и по **SSH** запускает существующие проверенные утилиты.
@@ -84,7 +86,7 @@ CI, AI. Ни одно приложение не проверено на устр
 - **Терминал один** (качественный, в tmux-сессии на сервере).
 - **Цвет домена — только метка пользователя.** Он не навязывает политик и ограничений.
 - Браузер сейчас — **GUI к `curl` на сервере** ([BROWSER](docs/BROWSER.md)): запросы выполняет сервер, JavaScript не выполняется; полноценный движок (если будет) пойдёт через SSH SOCKS-прокси сервера.
-- **Закрытый исходный код.** Пользователь получает готовую сборку.
+- **Свободное ПО:** собственный код FORTIQ — GPL-3.0-only; исходный код и право на модификацию и распространение предоставляются в рамках GPLv3. Публичное открытие GitHub — отдельный будущий шаг.
 - **Подготовка сервера при подключении — явная.** Проверка, обновления и защита (fail2ban, SSH,
   файрвол) идут в окне с живым логом; шаги, способные отрезать доступ, подтверждаются вторым входом
   и откатываются.
@@ -101,7 +103,7 @@ CI, AI. Ни одно приложение не проверено на устр
 ## Стек
 
 C++20, Qt 6 (целевая 6.12, минимум в CMake — 6.8), CMake 3.21+, libssh2. Открытые вопросы — в
-[ARCHITECTURE](docs/ARCHITECTURE.md#открытые-решения): лицензия Qt для закрытого продукта,
+[ARCHITECTURE](docs/ARCHITECTURE.md#открытые-решения): лицензии Qt при распространении FORTIQ под GPLv3,
 терминальный движок, безопасный веб-движок. Qt Quick/QML и **точный визуальный эталон уже утверждены**.
 
 ## Сборка
@@ -120,7 +122,7 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 Квалификация платформ (эмулятор Android сделан; чистая Windows и физический Android — за владельцем): [PLATFORM_QUALIFICATION](docs/PLATFORM_QUALIFICATION.md).
-Выпуск, подпись и обновления: [RELEASE](docs/RELEASE.md); лицензии Qt и сторонних компонентов (**пакеты, собранные до 24.10.2026, содержат GPL-модуль Qt и не должны распространяться**): [THIRD_PARTY_LICENSES](docs/THIRD_PARTY_LICENSES.md).
+Выпуск, подпись и обновления: [RELEASE](docs/RELEASE.md); лицензии Qt и сторонних компонентов (**старые пакеты не выпускать без повторного аудита и актуальных уведомлений**): [THIRD_PARTY_LICENSES](docs/THIRD_PARTY_LICENSES.md).
 Фаззинг и санитайзеры: [FUZZING](docs/FUZZING.md) (`tool/fuzz_linux.sh`, `-DFORTIQ_SANITIZE=ON`).
 
 Все проверки, которые обязан пройти коммит в `main` (документы, компиляция скриптов, сборка, офлайн-тесты, по желанию layout-тест под нагрузкой), одной командой:
@@ -203,3 +205,14 @@ adaptive launcher icon. `QT_ANDROID_APP_ICON` применяется на Qt **6
 Интеграция исходников — **не подтверждение готовых EXE/APK**: иконки ещё необходимо проверить
 после реальной сборки Windows и установки Android APK. Контракт:
 [assets/branding/README.md](assets/branding/README.md).
+
+## Debian 13 (client .deb)
+
+A native CPack .deb target is available for a Debian 13 graphical VM:
+
+```sh
+python3 tool/package_debian.py
+sudo apt install ./build-debian/fortiq_*.deb
+```
+
+Build prerequisites, security caveats and production acceptance gates: [DEBIAN_RELEASE](docs/DEBIAN_RELEASE.md). The `.deb` is built **on Debian**, not committed as a binary. This is an initial packaging path, not yet a production-qualified release.

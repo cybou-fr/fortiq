@@ -452,3 +452,41 @@ if(BUILD_TESTING)
             ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:$<TARGET_FILE_DIR:${FORTIQ_SSH_TARGET}>")
     endif()
 endif()
+
+# Debian graphical-client package. Enabled only on native Linux builds, never
+# for the Android cross build. The remote Linux host still needs no agent.
+option(FORTIQ_DEB "Enable native Debian .deb packaging (client)" OFF)
+if(FORTIQ_DEB)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        message(FATAL_ERROR "FORTIQ_DEB requires a native Linux target")
+    endif()
+    execute_process(COMMAND dpkg --print-architecture
+        OUTPUT_VARIABLE FORTIQ_DEB_ARCH OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE FORTIQ_DPKG_RESULT)
+    if(NOT FORTIQ_DPKG_RESULT EQUAL 0 OR FORTIQ_DEB_ARCH STREQUAL "")
+        message(FATAL_ERROR "dpkg is required to build a Debian package")
+    endif()
+    include(GNUInstallDirs)
+    install(TARGETS fortiq RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(FILES packaging/debian/fr.cybou.fortiq.desktop
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+    install(FILES assets/branding/fortiq_mark.png
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps
+        RENAME fr.cybou.fortiq.png)
+    install(FILES LICENSE docs/THIRD_PARTY_LICENSES.md
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/fortiq)
+    set(CPACK_GENERATOR "DEB")
+    set(CPACK_PACKAGE_NAME "fortiq")
+    set(CPACK_PACKAGE_VENDOR "CYBOU")
+    set(CPACK_PACKAGE_CONTACT "FORTIQ maintainers")
+    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "FORTIQ remote Linux desktop client over SSH")
+    set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+    set(CPACK_PACKAGE_FILE_NAME "fortiq_${PROJECT_VERSION}_${FORTIQ_DEB_ARCH}")
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "${FORTIQ_DEB_ARCH}")
+    set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+    # ELF dependency discovery cannot see QML imports.
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS
+        "qml6-module-qtquick, qml6-module-qtquick-controls, qml6-module-qtquick-controls-fusion, qml6-module-qtquick-layouts, qml6-module-qtquick-window")
+    set(CPACK_DEBIAN_PACKAGE_SECTION "net")
+    include(CPack)
+endif()
