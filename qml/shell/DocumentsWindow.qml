@@ -90,8 +90,25 @@ Item {
         enabled:!win.documents || !win.documents.busy
         onAccepted:win.request("open",text)
     }
+    Rectangle {
+        id:recoveryBanner;objectName:"documentsRecoveryBanner"
+        visible:win.documents!==null && win.documents.recovery!==undefined && win.documents.recovery.available===true && !win.documents.dirty
+        x:win.contentLeft+12;y:pathInput.y+pathInput.height+6;width:win.width-x-12;height:visible?(win.adaptive?84:62):0;radius:10;color:"#33FCD34D";border.color:"#66FCD34D"
+        Text {
+            x:10;y:6;width:parent.width-20;wrapMode:Text.WordWrap;textFormat:Text.PlainText;color:Theme.ink;font.pixelSize:12
+            text:win.documents && win.documents.recovery!==undefined && win.documents.recovery.available===true
+                 ?"Brouillon non enregistré du "+win.documents.recovery.savedAt+" trouvé sur le serveur ("+win.documents.recovery.changedLines+" ligne(s) différentes)"+(win.documents.recovery.baseMatches?".":" — le fichier a changé depuis.")
+                 :""
+        }
+        Row {
+            x:10;anchors.bottom:parent.bottom;anchors.bottomMargin:6;spacing:8
+            Button { objectName:"documentsRestoreDraft";text:"Restaurer";onClicked:win.documents.restoreDraft() }
+            Button { objectName:"documentsKeepDraft";text:"Plus tard";onClicked:win.documents.dismissRecovery(false) }
+            Button { objectName:"documentsDeleteDraft";text:"Supprimer";onClicked:win.documents.dismissRecovery(true) }
+        }
+    }
     Item {
-        id:body;x:win.contentLeft+12;y:pathInput.y+pathInput.height+8;width:win.width-x-12;height:Math.max(32,win.height-y-80)
+        id:body;x:win.contentLeft+12;y:pathInput.y+pathInput.height+8+(recoveryBanner.visible?recoveryBanner.height+6:0);width:win.width-x-12;height:Math.max(32,win.height-y-80)
         visible:win.documents!==null && win.documents.hasDocument
         Flickable {
             id:editScroll;objectName:"documentsEditorScroll";visible:win.split || !win.previewMode
@@ -115,6 +132,24 @@ Item {
             MarkdownPreview { id:preview;objectName:"documentsPreview";y:previewScroll.contentY;width:previewScroll.width;height:previewScroll.height;scrollY:previewScroll.contentY }
         }
     }
+    Rectangle {
+        id:conflictPanel;objectName:"documentsConflict";z:50
+        visible:win.documents!==null && win.documents.conflictActive
+        x:win.contentLeft+12;y:pathInput.y+pathInput.height+8;width:win.width-x-12;height:Math.max(120,win.height-y-12);radius:12;color:"#F2121C30";border.color:"#40FFFFFF"
+        Text { x:14;y:10;width:parent.width-28;wrapMode:Text.WordWrap;textFormat:Text.PlainText;color:Theme.ink;font.pixelSize:14;text:"Conflit : le fichier a changé sur le serveur" }
+        Text { x:14;y:36;width:parent.width-28;wrapMode:Text.WordWrap;textFormat:Text.PlainText;color:Theme.inkMuted;font.pixelSize:12;text:win.documents?win.documents.conflictSummary:"" }
+        Flickable {
+            x:14;y:72;width:parent.width-28;height:parent.height-72-(win.adaptive?104:56);clip:true;contentWidth:width;contentHeight:diffText.implicitHeight+8;boundsBehavior:Flickable.StopAtBounds
+            ScrollBar.vertical:ScrollBar { policy:ScrollBar.AsNeeded }
+            Text { id:diffText;objectName:"documentsConflictDiff";width:parent.width;wrapMode:Text.WrapAnywhere;textFormat:Text.PlainText;color:Theme.ink;font.family:"monospace";font.pixelSize:12;text:win.documents?win.documents.conflictDiff:"" }
+        }
+        Flow {
+            x:14;anchors.bottom:parent.bottom;anchors.bottomMargin:10;width:parent.width-28;spacing:8
+            Button { objectName:"documentsConflictCopy";enabled:win.documents!==null && !win.documents.conflictBusy && !win.documents.busy;text:"Enregistrer ma version comme copie";onClicked:win.documents.resolveConflictSaveCopy() }
+            Button { objectName:"documentsConflictServer";enabled:win.documents!==null && !win.documents.conflictBusy && !win.documents.busy;text:"Charger la version du serveur";onClicked:win.documents.resolveConflictTakeServer() }
+            Button { objectName:"documentsConflictClose";text:"Garder mon texte, décider plus tard";onClicked:win.documents.closeConflict() }
+        }
+    }
     Timer { id:previewTimer;interval:180;onTriggered:{preview.source=editor.text} }
     Column {
         visible:!win.documents || !win.documents.hasDocument
@@ -123,7 +158,7 @@ Item {
         Button { objectName:"documentsConnectButton";visible:!win.connected;anchors.horizontalCenter:parent.horizontalCenter;text:"Choisir un serveur…";onClicked:win.requestServers() }
         Text { width:parent.width;horizontalAlignment:Text.AlignHCenter;wrapMode:Text.WordWrap;text:"Ouvrez un .md depuis Fichiers ou saisissez son chemin ci-dessus.";color:Theme.inkMuted;font.pixelSize:12 }
     }
-    Text { x:win.contentLeft+12;anchors.bottom:parent.bottom;anchors.bottomMargin:34;width:win.width-x-12;height:42;wrapMode:Text.WordWrap;maximumLineCount:3;elide:Text.ElideRight;textFormat:Text.PlainText;color:Theme.inkMuted;font.pixelSize:11;text:win.documents?win.documents.status:"Choisissez un serveur Linux." }
+    Text { x:win.contentLeft+12;anchors.bottom:parent.bottom;anchors.bottomMargin:34;width:win.width-x-12;height:42;wrapMode:Text.WordWrap;maximumLineCount:3;elide:Text.ElideRight;textFormat:Text.PlainText;color:Theme.inkMuted;font.pixelSize:11;text:win.documents?win.documents.status+(win.documents.draftStatus!==""?"  ·  "+win.documents.draftStatus:""):"Choisissez un serveur Linux." }
     ToolButtonGlass { x:win.contentLeft+12;anchors.bottom:parent.bottom;anchors.bottomMargin:4;glyph:"⧉";tip:"Copier le brouillon dans le presse-papiers";enabledState:win.documents!==null && win.documents.hasDocument;onClicked:{const start=editor.selectionStart,end=editor.selectionEnd;editor.selectAll();editor.copy();editor.select(start,end)} }
     Text { x:win.contentLeft+50;anchors.bottom:parent.bottom;anchors.bottomMargin:10;visible:preview.limited;text:"Aperçu limité aux 64 000 premiers caractères";color:Theme.inkMuted;font.pixelSize:10 }
     Keys.onPressed:event=>{if(event.key===Qt.Key_S && event.modifiers&Qt.ControlModifier){win.saveDocument();event.accepted=true}}

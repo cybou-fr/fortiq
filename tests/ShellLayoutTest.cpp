@@ -1123,6 +1123,17 @@ QtObject { property bool connected: true; property bool linkLost: false; propert
                     function saveAs(p){save()}
                     function open(p){}
                     function createNew(){}
+                    property var recovery:({})
+                    property string draftStatus:""
+                    property bool conflictActive:false
+                    property bool conflictBusy:false
+                    property string conflictDiff:""
+                    property string conflictSummary:""
+                    function restoreDraft(){}
+                    function dismissRecovery(d){}
+                    function resolveConflictSaveCopy(){}
+                    function resolveConflictTakeServer(){}
+                    function closeConflict(){}
                     function copyDraft(){}
                 })",QUrl());
 #endif

@@ -16,6 +16,7 @@
 #include "core/SecretStore.h"
 #include "core/TerminalController.h"
 #include "core/DisksController.h"
+#include "core/DocumentDraft.h"
 #include "core/DocumentsController.h"
 #include "core/MarkdownData.h"
 #include "core/DiskInfo.h"
@@ -1360,6 +1361,100 @@ private slots:
         QCOMPARE(store.first, 0);
         QCOMPARE(db.first, 0);
 #endif
+    }
+
+    // MDok: the draft of an open document is kept on the SERVER (~/.cache/fortiq-mdok, 0600), survives a "crash" (a fresh controller), is offered
+    // on the next open, and a save over a changed file ends in the comparison screen, never in a silent overwrite.
+    void mdokServerDraftAndConflict() {
+        fortiq::RemoteController controller;
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        fortiq::SshSession shell;
+        QVERIFY(shell.open(controller.connectionRequest()).status == SshResult::Status::Ok);
+        auto sh = [&](const QString &script) { return QString::fromUtf8(shell.runScript(script.toUtf8(), 65536, {}).data).trimmed(); };
+        const QString tag = QString::number(QRandomGenerator::global()->generate(), 16);
+        const QString home = sh(QStringLiteral("printf %s \"$HOME\"\n"));
+        const QString doc = home + QStringLiteral("/mdok-draft-") + tag + QStringLiteral(".md");
+        const QString cacheDir = QStringLiteral("${XDG_CACHE_HOME:-$HOME/.cache}/fortiq-mdok");
+        const QString draftFile = cacheDir + QLatin1Char('/') + fortiq::draftId(doc) + QStringLiteral(".md");
+        sh(QStringLiteral("printf '# Titre\\n\\nligne un\\nligne deux\\nligne trois\\n' > '%1'\n").arg(doc));
+        auto cleanup = qScopeGuard([&] { sh(QStringLiteral("rm -f '%1' %2/%3.* '%4'*\n").arg(doc, cacheDir, fortiq::draftId(doc), home + QStringLiteral("/mdok-draft-") + tag)); settings.remove(pin); });
+
+        {   // 1. edit -> the draft appears on the server, private, while the file itself is untouched
+            fortiq::DocumentsController docs(&controller);
+            docs.setAutosaveDelay(300);
+            docs.open(doc);
+            QTRY_VERIFY_WITH_TIMEOUT(!docs.busy() && docs.hasDocument(), 20000);
+            QVERIFY(!docs.recovery().value("available").toBool());
+            docs.setText(QStringLiteral("# Titre\n\nligne un\nMA LIGNE\nligne trois\n"));
+            QTRY_VERIFY_WITH_TIMEOUT(docs.draftStatus().contains("Brouillon gardé"), 20000);
+            QCOMPARE(sh(QStringLiteral("stat -c %a ") + draftFile + QStringLiteral(" ") + cacheDir + QStringLiteral("\n")).replace(QLatin1Char('\n'), QLatin1Char(' ')), QStringLiteral("600 700"));
+            QVERIFY(sh(QStringLiteral("cat ") + draftFile + QStringLiteral("\n")).contains("MA LIGNE"));
+            QVERIFY(!sh(QStringLiteral("cat '%1'\n").arg(doc)).contains("MA LIGNE"));
+            QCOMPARE(sh(QStringLiteral("ls %1 | grep -c mdok-draft; true\n").arg(cacheDir)), QStringLiteral("0"));   // the file name does not reveal the document
+        }   // "crash": the controller is gone, only the server remembers
+
+        {   // 2. a fresh controller opens the same file: the draft is offered and can be restored
+            fortiq::DocumentsController docs(&controller);
+            docs.open(doc);
+            QTRY_VERIFY_WITH_TIMEOUT(docs.recovery().value("available").toBool(), 20000);
+            QVERIFY(docs.recovery().value("baseMatches").toBool());
+            QVERIFY(!docs.dirty());
+            docs.restoreDraft();
+            QCOMPARE(docs.text(), QStringLiteral("# Titre\n\nligne un\nMA LIGNE\nligne trois\n"));
+            QVERIFY(docs.dirty());
+            QVERIFY(!docs.recovery().value("available").toBool());
+            // 3. somebody else changes the file in the meantime; saving meets the check and opens the comparison
+            sh(QStringLiteral("printf '# Titre\\n\\nligne un\\nLEUR LIGNE\\nligne trois\\najout externe\\n' > '%1'\n").arg(doc));
+            docs.save();
+            QTRY_VERIFY_WITH_TIMEOUT(docs.conflictActive() && !docs.conflictBusy(), 20000);
+            QVERIFY2(docs.conflictDiff().contains("- MA LIGNE") && docs.conflictDiff().contains("+ LEUR LIGNE") && docs.conflictDiff().contains("+ ajout externe"), qPrintable(docs.conflictDiff()));
+            QVERIFY(sh(QStringLiteral("cat '%1'\n").arg(doc)).contains("LEUR LIGNE"));               // the server file was not overwritten
+            // 4a. my version as a copy: the original stays as the other person left it
+            docs.resolveConflictSaveCopy();
+            QTRY_VERIFY_WITH_TIMEOUT(!docs.busy() && docs.path().contains("(ma version)"), 20000);
+            QVERIFY(!docs.conflictActive());
+            QVERIFY(sh(QStringLiteral("cat '%1'\n").arg(doc)).contains("LEUR LIGNE"));
+            QVERIFY(sh(QStringLiteral("cat '%1'\n").arg(docs.path())).contains("MA LIGNE"));
+            sh(QStringLiteral("rm -f '%1'\n").arg(docs.path()));
+        }
+
+        {   // 4b. the other way: take the server version, my text stays in the draft and is offered again
+            sh(QStringLiteral("rm -f %1/%2.*\n").arg(cacheDir, fortiq::draftId(doc)));
+            fortiq::DocumentsController docs(&controller);
+            docs.setAutosaveDelay(300);
+            docs.open(doc);
+            QTRY_VERIFY_WITH_TIMEOUT(!docs.busy() && docs.hasDocument(), 20000);
+            docs.setText(docs.text() + QStringLiteral("MON AJOUT\n"));
+            sh(QStringLiteral("printf 'remplace par un tiers\\n' > '%1'\n").arg(doc));
+            docs.save();
+            QTRY_VERIFY_WITH_TIMEOUT(docs.conflictActive() && !docs.conflictBusy(), 20000);
+            docs.resolveConflictTakeServer();
+            QVERIFY(!docs.conflictActive());
+            QCOMPARE(docs.text(), QStringLiteral("remplace par un tiers\n"));
+            QVERIFY(!docs.dirty());
+            QTRY_VERIFY_WITH_TIMEOUT(sh(QStringLiteral("cat ") + draftFile + QStringLiteral("\n")).contains("MON AJOUT"), 20000);
+        }
+        {   // 5. next open offers my version (the base moved on), and a successful save removes the draft
+            fortiq::DocumentsController docs(&controller);
+            docs.open(doc);
+            QTRY_VERIFY_WITH_TIMEOUT(docs.recovery().value("available").toBool(), 20000);
+            QVERIFY(!docs.recovery().value("baseMatches").toBool());
+            docs.dismissRecovery(true);                                                        // "Supprimer"
+            QTRY_COMPARE_WITH_TIMEOUT(sh(QStringLiteral("ls %1 2>/dev/null | wc -l\n").arg(cacheDir)), QStringLiteral("0"), 15000);
+            docs.setAutosaveDelay(300);
+            docs.setText(QStringLiteral("final\n"));
+            QTRY_VERIFY_WITH_TIMEOUT(docs.draftStatus().contains("Brouillon gardé"), 20000);
+            docs.save();
+            QTRY_VERIFY_WITH_TIMEOUT(!docs.busy() && !docs.dirty(), 20000);
+            QTRY_COMPARE_WITH_TIMEOUT(sh(QStringLiteral("ls %1 2>/dev/null | wc -l\n").arg(cacheDir)), QStringLiteral("0"), 15000);   // saved: the safety copy is gone
+            QCOMPARE(sh(QStringLiteral("cat '%1'\n").arg(doc)), QStringLiteral("final"));
+        }
     }
 
     // S-8: real notmuch/gmime output for 20 hostile messages (tool/make_hostile_mime_fixture.py): deep and wide MIME, header floods,
