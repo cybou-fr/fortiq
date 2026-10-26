@@ -3062,6 +3062,26 @@ private slots:
         QVERIFY(browser.reader() && !browser.contentHtml().contains("Footer text"));
         QVERIFY(!browser.headers().isEmpty());
 
+        // A search box of the page is offered as a GET form; submitting it sends exactly what the user typed (encoded), plus the hidden field.
+        browser.open(web + "/searchform");
+        settle(20000);
+        QCOMPARE(browser.forms().size(), 1);
+        QCOMPARE(browser.forms().first().toMap().value("host").toString(), QStringLiteral("127.0.0.1"));
+        QCOMPARE(browser.forms().first().toMap().value("submit").toString(), QStringLiteral("Chercher"));
+        browser.submitForm(0, QVariantMap { { "q", QString::fromUtf8("\u00e0 b&c=d") } });
+        settle(20000);
+        QVERIFY2(browser.contentHtml().contains(QString::fromUtf8("Found: q=[\u00e0 b&amp;c=d] ie=[UTF-8] keys=ie,q")), qPrintable(browser.contentHtml()));
+        QVERIFY(browser.forms().isEmpty());                                   // the answer page has no form
+        browser.submitForm(5, {});                                            // an index that does not exist does nothing
+        QCOMPARE(browser.state(), QStringLiteral("ready"));
+        // A phrase is a search with the chosen engine; an address is not.
+        QVERIFY(browser.searchEngines().size() >= 3);
+        browser.setSearchEngine(QStringLiteral("wikipedia"));
+        QCOMPARE(browser.searchEngine(), QStringLiteral("wikipedia"));
+        browser.setSearchEngine(QStringLiteral("nonexistent"));
+        QCOMPARE(browser.searchEngine(), QStringLiteral("wikipedia"));         // unknown engines are refused
+        browser.setSearchEngine(QStringLiteral("bing"));
+
         // Redirects are followed by the server and reported.
         browser.open(web + "/redir");
         settle(20000);

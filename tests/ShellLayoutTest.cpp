@@ -81,6 +81,11 @@ QtObject {
     property bool canGoBack: true
     property bool canGoForward: false
     property var calls: []
+    property var forms: [ { action: "https:\u002f\u002fexample.com/search", host: "example.com", submit: "Chercher",
+        fields: [ { name: "q", type: "text", value: "", placeholder: "Rechercher" }, { name: "hl", type: "hidden", value: "fr", placeholder: "" } ] } ]
+    property string searchEngine: "bing"
+    property var searchEngines: [ { id: "bing", name: "Bing", note: "ok" }, { id: "google", name: "Google", note: "js" } ]
+    function submitForm(i, v) { calls = calls.concat(["form:" + i + ":" + JSON.stringify(v)]) }
     function open(t) { calls = calls.concat(["open:" + t]) }
     function openLink(h) { calls = calls.concat(["link:" + h]) }
     function reload() { calls = calls.concat(["reload"]) }
@@ -887,6 +892,15 @@ QtObject { property bool connected: true; property bool linkLost: false; propert
                 for (const char c : QByteArray("example.org/a")) QTest::keyClick(window, c);
                 QTest::keyClick(window, Qt::Key_Return);
                 QTRY_C(fakeBrowser->property("calls").toStringList(), QStringList{ "open:example.org/a" });
+                // The page's search box is a native bar; typing and Enter send exactly the typed text, by form index.
+                auto *formBar = findByName(web, "webForms"); QVERIFY(formBar); QVERIFY(formBar->isVisible());
+                auto *formField = findByName(web, "webFormField"); QVERIFY(formField);
+                formField->forceActiveFocus();
+                for (const char c : QByteArray("chat")) QTest::keyClick(window, c);
+                QTest::keyClick(window, Qt::Key_Return);
+                QTRY_C(fakeBrowser->property("calls").toStringList(), (QStringList{ "open:example.org/a", "form:0:{\"q\":\"chat\"}" }));
+                auto *enginePill = findByName(web, "webEngine"); QVERIFY(enginePill); QVERIFY(enginePill->isVisible());
+                fakeBrowser->setProperty("calls", QStringList{ "open:example.org/a" });   // keep the rest of the sequence as it was
                 // A link clicked in the page is handed over unresolved (the controller applies the rules).
                 QVERIFY(QMetaObject::invokeMethod(html, "linkActivated", Q_ARG(QString, QString("https://example.com/more"))));
                 QTRY_C(fakeBrowser->property("calls").toStringList(), (QStringList{ "open:example.org/a", "link:https://example.com/more" }));

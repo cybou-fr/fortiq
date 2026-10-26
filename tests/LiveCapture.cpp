@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
 
     QCommandLineParser p;
     p.addHelpOption();
-    for (const char *name : { "host", "port", "user", "fingerprint", "key", "out", "demo-dir", "width", "height", "wallpaper" })
+    for (const char *name : { "host", "port", "user", "fingerprint", "key", "out", "demo-dir", "width", "height", "wallpaper", "browse" })
         p.addOption(QCommandLineOption(QString::fromLatin1(name), QString(), QStringLiteral("value")));
     p.process(app);
     const QString out = p.value("out");
@@ -131,6 +131,21 @@ int main(int argc, char *argv[]) {
     if (!demo.isEmpty()) {
         controller.navigate(demo);
         waitFor([&] { return controller.currentDirectory() == demo && !controller.busy(); }, 20000, "the demo folder listing");
+    }
+    if (!p.value("browse").isEmpty()) {   // diagnostic / documentation shot of the Browser app instead of Files + Terminal
+        shell->setProperty("webOpen", true);
+        shell->setProperty("foregroundApp", "web");
+        pause(800);
+        browser.open(p.value("browse"));
+        waitFor([&] { return browser.state() != QLatin1String("loading") && browser.state() != QLatin1String("idle"); }, 60000, "the page");
+        pause(1500);
+        std::printf("browser state=%s kind=%s status=[%s] title=[%s] notes=[%s]\n", qPrintable(browser.state()), qPrintable(browser.kind()),
+                    qPrintable(browser.status()), qPrintable(browser.title()), qPrintable(browser.notes().join(" | ")));
+        QImage shot = window->grabWindow();
+        if (!shot.save(out, "PNG")) return 4;
+        std::printf("saved %s (%dx%d)\n", qPrintable(out), shot.width(), shot.height());
+        controller.disconnectServer();
+        return 0;
     }
     shell->setProperty("filesOpen", true);
     shell->setProperty("terminalOpen", true);

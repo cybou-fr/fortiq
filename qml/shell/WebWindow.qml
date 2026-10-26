@@ -14,6 +14,11 @@ Item {
     property bool infoOpen: false
     readonly property bool connected: remote !== null && remote.connected
     readonly property string kind: browser ? browser.kind : "empty"
+    readonly property string engineName: {
+        if (!browser) return ""
+        for (const e of browser.searchEngines) if (e.id === browser.searchEngine) return e.name
+        return ""
+    }
     signal closeRequested()
     signal requestServers()
 
@@ -86,14 +91,14 @@ Item {
                 font.pixelSize: win.adaptive ? 14 : 12; font.family: Theme.fontFamily
                 clip: true
                 selectByMouse: true
-                inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoPredictiveText
+                inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
                 enabled: win.connected
                 onAccepted: if (win.browser) { win.browser.open(text); win.forceActiveFocus() }
                 Keys.onEscapePressed: { text = win.browser ? win.browser.url : ""; win.forceActiveFocus() }
                 Text {
                     visible: parent.text.length === 0 && !parent.activeFocus
                     anchors.verticalCenter: parent.verticalCenter
-                    text: win.connected ? "Adresse web — chargée par le serveur Linux" : "Aucun serveur connecté"
+                    text: win.connected ? "Rechercher ou saisir une adresse — chargé par le serveur Linux" : "Aucun serveur connecté"
                     color: "#7F93B5"; font.pixelSize: win.adaptive ? 14 : 12; font.family: Theme.fontFamily
                 }
             }
@@ -108,6 +113,33 @@ Item {
             anchors.right: parent.right; anchors.rightMargin: 8
             anchors.verticalCenter: parent.verticalCenter
             spacing: 2
+            Rectangle {
+                id: enginePill
+                objectName: "webEngine"
+                anchors.verticalCenter: parent.verticalCenter
+                height: win.adaptive ? 36 : 24; radius: height / 2
+                width: engineLabel.implicitWidth + 22
+                color: engineMouse.containsMouse ? "#33FFFFFF" : "#1AFFFFFF"
+                Text {
+                    id: engineLabel; anchors.centerIn: parent; color: Theme.ink; font.family: Theme.fontFamily
+                    font.pixelSize: win.adaptive ? 13 : 11
+                    text: "⌕ " + win.engineName
+                }
+                MouseArea { id: engineMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; enabled: win.browser !== null; onClicked: engineMenu.popup() }
+                Menu {
+                    id: engineMenu
+                    Repeater {
+                        model: win.browser ? win.browser.searchEngines : []
+                        MenuItem {
+                            required property var modelData
+                            text: modelData.name + " — " + modelData.note
+                            checkable: true
+                            checked: win.browser !== null && win.browser.searchEngine === modelData.id
+                            onTriggered: win.browser.searchEngine = modelData.id
+                        }
+                    }
+                }
+            }
             ToolButtonGlass {
                 objectName: "webReader"
                 visible: win.kind === "html"
@@ -151,10 +183,81 @@ Item {
         }
     }
 
+    // Search boxes of the page (GET forms): shown natively, sent only when the user submits (docs/BROWSER.md).
+    Rectangle {
+        id: formBar
+        objectName: "webForms"
+        visible: win.browser !== null && win.browser.forms.length > 0 && win.kind === "html"
+        y: toolbar.height + notes.height; width: parent.width
+        height: visible ? formColumn.implicitHeight + 12 : 0
+        color: "#14FFFFFF"
+        Column {
+            id: formColumn
+            x: 14; y: 6; width: parent.width - 28; spacing: 6
+            Repeater {
+                model: win.browser ? win.browser.forms.slice(0, 2) : []
+                Item {
+                    id: formItem
+                    required property var modelData
+                    required property int index
+                    property var typed: ({})
+                    width: formColumn.width
+                    height: win.adaptive ? 44 : 30
+                    function send() { win.browser.submitForm(formItem.index, formItem.typed) }
+                    Row {
+                        spacing: 8
+                        height: parent.height
+                        Repeater {
+                            model: formItem.modelData.fields.filter(f => f.type === "text").slice(0, 3)
+                            Rectangle {
+                                id: fieldBox
+                                required property var modelData
+                                height: parent.height; radius: height / 2
+                                width: Math.max(160, Math.min(380, formItem.width - 220))
+                                color: "#1AFFFFFF"
+                                border.width: 1; border.color: fieldInput.activeFocus ? Theme.accent : "#1FFFFFFF"
+                                TextInput {
+                                    id: fieldInput
+                                    objectName: "webFormField"
+                                    x: 14; width: parent.width - 28; anchors.verticalCenter: parent.verticalCenter
+                                    color: Theme.ink; selectionColor: Theme.accent; clip: true; selectByMouse: true
+                                    font.pixelSize: win.adaptive ? 14 : 12; font.family: Theme.fontFamily
+                                    text: fieldBox.modelData.value
+                                    inputMethodHints: Qt.ImhNoPredictiveText
+                                    Component.onCompleted: formItem.typed[fieldBox.modelData.name] = text
+                                    onTextChanged: formItem.typed[fieldBox.modelData.name] = text
+                                    onAccepted: formItem.send()
+                                    Text {
+                                        visible: parent.text.length === 0
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: fieldBox.modelData.placeholder.length > 0 ? fieldBox.modelData.placeholder : "Rechercher"
+                                        color: "#7F93B5"; font.pixelSize: parent.font.pixelSize; font.family: Theme.fontFamily
+                                    }
+                                }
+                            }
+                        }
+                        Button {
+                            objectName: "webFormSubmit"
+                            height: parent.height
+                            text: formItem.modelData.submit.length > 0 ? formItem.modelData.submit : "Envoyer"
+                            onClicked: formItem.send()
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: !win.adaptive
+                            text: "→ " + formItem.modelData.host
+                            color: Theme.inkMuted; font.pixelSize: 10; font.family: Theme.fontFamily
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // ── page ───────────────────────────────────────────────────────────
     Item {
         id: page
-        y: toolbar.height + notes.height
+        y: toolbar.height + notes.height + formBar.height
         width: parent.width - (win.infoOpen && !win.adaptive ? 300 : 0)
         height: Math.max(0, parent.height - y - 26)
         clip: true
@@ -224,9 +327,25 @@ Item {
                 width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; textFormat: Text.PlainText
                 text: !win.connected ? "Le navigateur charge les pages depuis le serveur Linux choisi."
                     : win.kind === "empty" && win.browser && win.browser.url.length === 0
-                        ? "Saisissez une adresse : curl, exécuté sur le serveur, récupère la page ; ici elle est affichée sans JavaScript ni ressources externes."
+                        ? "Saisissez une adresse, ou des mots à chercher avec " + win.engineName + ". curl, exécuté sur le serveur, récupère la page ; ici elle est affichée sans JavaScript ni ressources externes."
                     : win.browser ? win.browser.status : ""
                 color: Theme.inkMuted; font.pixelSize: 12; font.family: Theme.fontFamily
+            }
+            Flow {
+                visible: win.connected && win.kind === "empty" && win.browser !== null && win.browser.url.length === 0
+                width: parent.width; spacing: 8
+                Repeater {
+                    model: [ { t: "Wikipédia", u: "https://fr.wikipedia.org" }, { t: "Hacker News", u: "https://news.ycombinator.com" },
+                             { t: "Debian", u: "https://www.debian.org" }, { t: "Ubuntu", u: "https://ubuntu.com" } ]
+                    Rectangle {
+                        required property var modelData
+                        objectName: "webQuick"
+                        height: 30; radius: 15; width: quickLabel.implicitWidth + 28
+                        color: quickMouse.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
+                        Text { id: quickLabel; anchors.centerIn: parent; text: parent.modelData.t; color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily }
+                        MouseArea { id: quickMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.browser.open(parent.modelData.u) }
+                    }
+                }
             }
             Rectangle {
                 visible: !win.connected
@@ -252,7 +371,7 @@ Item {
         id: confirmPanel
         objectName: "webConfirm"
         visible: win.browser !== null && win.browser.state === "confirm"
-        x: 0; y: toolbar.height + notes.height; z: 30
+        x: 0; y: toolbar.height + notes.height + formBar.height; z: 30
         width: page.width; height: page.height
         color: "#E6101A2E"
         MouseArea { anchors.fill: parent }   // modal for the page area

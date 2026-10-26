@@ -33,6 +33,12 @@ class BrowserController : public QObject {
     Q_PROPERTY(QVariantMap info READ info NOTIFY changed)
     Q_PROPERTY(QStringList notes READ notes NOTIFY changed)
     Q_PROPERTY(QString refreshUrl READ refreshUrl NOTIFY changed)
+    // GET forms of the shown page (search boxes): [{action, host, submit, fields:[{name, type, value, placeholder}]}]. Submitting is always
+    // the user's act (submitForm); nothing is sent by itself.
+    Q_PROPERTY(QVariantList forms READ forms NOTIFY changed)
+    // What a typed phrase is searched with (docs/BROWSER.md): the request leaves from the server like every other page.
+    Q_PROPERTY(QString searchEngine READ searchEngine WRITE setSearchEngine NOTIFY changed)
+    Q_PROPERTY(QVariantList searchEngines READ searchEngines CONSTANT)   // [{id, name, note}]
     Q_PROPERTY(bool reader READ reader WRITE setReader NOTIFY changed)
     Q_PROPERTY(bool canGoBack READ canGoBack NOTIFY changed)
     Q_PROPERTY(bool canGoForward READ canGoForward NOTIFY changed)
@@ -57,6 +63,10 @@ public:
     QVariantMap info() const { return m_info; }
     QStringList notes() const { return m_notes; }
     QString refreshUrl() const { return m_refreshUrl; }
+    QVariantList forms() const { return m_forms; }
+    QString searchEngine() const { return m_engine; }
+    void setSearchEngine(const QString &id);
+    QVariantList searchEngines() const;
     bool reader() const { return m_reader; }
     void setReader(bool on);
     QVariantMap pendingConfirm() const { return m_pendingMap; }
@@ -65,6 +75,8 @@ public:
 
     // What the user typed in the address bar.
     Q_INVOKABLE void open(const QString &text);
+    // Submits GET form `index` of the shown page with the user's text for each "text" field (values: {fieldName: text}).
+    Q_INVOKABLE void submitForm(int index, const QVariantMap &values);
     // A link clicked in the page (resolved against the current address; unsafe targets are ignored).
     Q_INVOKABLE void openLink(const QString &href);
     Q_INVOKABLE void reload();
@@ -100,6 +112,8 @@ private:
     QString m_url, m_title, m_kind = QStringLiteral("empty"), m_html, m_text, m_image, m_refreshUrl;
     QString m_requested;       // address being (or last) requested
     QVariantList m_headers;
+    QVariantList m_forms;
+    QString m_engine = QStringLiteral("bing");
     QVariantMap m_info;
     QStringList m_notes;
     QVariantMap m_pendingMap;

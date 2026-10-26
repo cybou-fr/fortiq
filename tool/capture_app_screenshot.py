@@ -37,6 +37,7 @@ def main():
     ap.add_argument("--ssh-port", default="2222")
     ap.add_argument("--build", default="build-msvc")
     ap.add_argument("--wallpaper", default="aurora")
+    ap.add_argument("--browse", default="", help="open the Browser app on this address instead of Files + Terminal (diagnostics, docs)")
     opts = ap.parse_args()
     d, u = opts.distro, opts.user
     home = f"/home/{u}"
@@ -77,7 +78,7 @@ touch -d '2026-10-18 14:30' presentation.pdf budget-2026.csv; touch -d '2026-10-
         exe = ROOT / opts.build / "fortiq_live_capture.exe"
         env = {**os.environ, "PATH": "C:/Qt/6.12.0/msvc2022_64/bin;C:/Users/cybou/vcpkg/installed/x64-windows/bin;" + os.environ["PATH"]}
         rc = subprocess.run([str(exe), "--host", "127.0.0.1", "--port", opts.ssh_port, "--user", u, "--fingerprint", fp, "--key", str(key),
-                             "--demo-dir", demo, "--out", str(out), "--wallpaper", opts.wallpaper], env=env, cwd=exe.parent, timeout=180).returncode
+                             "--demo-dir", demo, "--out", str(out), "--wallpaper", opts.wallpaper] + (["--browse", opts.browse] if opts.browse else []), env=env, cwd=exe.parent, timeout=180).returncode
         if rc != 0:
             sys.exit(f"capture failed (exit {rc})")
         print("saved", out)

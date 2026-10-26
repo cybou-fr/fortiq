@@ -80,6 +80,15 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(200, ("host=%s local=%s" % (self.headers.get("Host"), self.connection.getsockname()[0])).encode(), "text/plain")
         elif path == "/page":
             self.reply(200, PAGE, "text/html; charset=utf-8")
+        elif path == "/searchform":
+            self.reply(200, b'<html><title>Search</title><body><form action="/found" method="get"><input type="hidden" name="ie" value="UTF-8">'
+                            b'<input name="q" placeholder="Rechercher"><input type="submit" value="Chercher"></form><p>Search page</p></body></html>', "text/html")
+        elif path == "/found":
+            from urllib.parse import parse_qs, urlsplit
+            query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
+            body = "<html><title>Found</title><body><p>Found: q=[%s] ie=[%s] keys=%s</p></body></html>" % (
+                query.get("q", [""])[0], query.get("ie", [""])[0], ",".join(sorted(query)))
+            self.reply(200, body.encode("utf-8"), "text/html; charset=utf-8")
         elif path == "/page2":
             self.reply(200, b"<html><title>Second</title><body><p>Second page</p></body></html>", "text/html")
         elif path == "/redir":

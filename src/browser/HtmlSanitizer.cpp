@@ -412,6 +412,62 @@ SanitizedPage sanitizeHtml(const QString &html, const QString &baseUrl, bool rea
     }
     while (!stack.isEmpty()) closeTop(true);
 
+    // Pass 3: GET forms (search boxes). Independent of what was emitted: reader mode and furniture removal do not hide them.
+    {
+        constexpr int kMaxForms = 4, kMaxFields = 24, kMaxValue = 2048;
+        SanitizedForm current;
+        bool open = false, isGet = false;
+        bool hasText = false;
+        auto finish = [&] {
+            if (!open) return;
+            open = false;
+            if (isGet && hasText && page.forms.size() < kMaxForms) page.forms.push_back(current);
+            else ++page.skippedForms;
+        };
+        for (qsizetype k = 0; k < tokens.size(); ++k) {
+            const Token &t = tokens.at(k);
+            if (t.kind == Token::Start && t.name == QLatin1String("form")) {
+                finish();
+                open = true;
+                current = SanitizedForm();
+                hasText = false;
+                const QString method = attr(t, "method").trimmed();
+                isGet = method.isEmpty() || method.compare(QLatin1String("get"), Qt::CaseInsensitive) == 0;
+                const QString action = attr(t, "action").trimmed();
+                current.action = action.isEmpty() ? baseUrl : resolveLink(baseUrl, action);
+                if (current.action.isEmpty()) isGet = false;
+            } else if (t.kind == Token::End && t.name == QLatin1String("form")) {
+                finish();
+            } else if (open && t.kind == Token::Start && t.name == QLatin1String("input")) {
+                if (current.fields.size() >= kMaxFields) continue;
+                const QString type = attr(t, "type").trimmed().toLower();
+                const QString name = attr(t, "name").trimmed().left(128);
+                if (type == QLatin1String("submit") || type == QLatin1String("button") || type == QLatin1String("image")) {
+                    if (current.submit.isEmpty()) current.submit = collapse(attr(t, "value")).trimmed().left(60);
+                    continue;
+                }
+                if (name.isEmpty()) continue;
+                if (type == QLatin1String("hidden")) {
+                    current.fields.push_back({ name, QStringLiteral("hidden"), attr(t, "value").left(kMaxValue), QString() });
+                } else if (type.isEmpty() || type == QLatin1String("text") || type == QLatin1String("search")) {
+                    QString hint = attr(t, "placeholder");
+                    if (hint.isEmpty()) hint = attr(t, "aria-label");
+                    if (hint.isEmpty()) hint = attr(t, "title");
+                    current.fields.push_back({ name, QStringLiteral("text"), attr(t, "value").left(kMaxValue), collapse(hint).trimmed().left(80) });
+                    hasText = true;
+                }
+                // password, file, checkbox, radio, email... are not offered: a form that needs them is not usable here
+            } else if (open && t.kind == Token::Start && t.name == QLatin1String("button")) {
+                const QString type = attr(t, "type").trimmed().toLower();
+                if ((type.isEmpty() || type == QLatin1String("submit")) && current.submit.isEmpty() && k + 1 < tokens.size() && tokens.at(k + 1).kind == Token::Text)
+                    current.submit = collapse(tokens.at(k + 1).text).trimmed().left(60);
+            } else if (open && t.kind == Token::Start && (t.name == QLatin1String("textarea") || t.name == QLatin1String("select"))) {
+                isGet = false;   // a form with a free-text area or a menu is not a simple search bar
+            }
+        }
+        finish();
+    }
+
     page.html = out;
     page.plainText = plain.trimmed();
     return page;

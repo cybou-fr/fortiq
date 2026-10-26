@@ -85,4 +85,37 @@ QString resolveLink(const QString &base, const QString &href) {
     return check.ok ? check.url : QString();
 }
 
+bool looksLikeSearch(const QString &typed) {
+    const QString text = typed.trimmed();
+    if (text.isEmpty()) return false;
+    for (const QChar c : text)
+        if (c.isSpace()) return !text.startsWith(QStringLiteral("http://"), Qt::CaseInsensitive) && !text.startsWith(QStringLiteral("https://"), Qt::CaseInsensitive);
+    if (text.startsWith(QLatin1Char('['))) return false;                                   // bracketed IPv6
+    if (text.contains(QLatin1Char('.')) || text.contains(QLatin1Char(':')) || text.contains(QLatin1Char('/'))) return false;
+    if (text.compare(QStringLiteral("localhost"), Qt::CaseInsensitive) == 0) return false;
+    return true;
+}
+
+QString searchUrl(const QString &engineTemplate, const QString &query) {
+    const QString encoded = QString::fromLatin1(QUrl::toPercentEncoding(query.trimmed()));
+    QString url = engineTemplate;
+    url.replace(QStringLiteral("%s"), encoded);
+    return url.size() > kMaxUrlLength ? QString() : url;
+}
+
+QString formUrl(const QString &action, const QList<FormValue> &values) {
+    const UrlCheck check = normalizeUrl(action);
+    if (!check.ok) return {};
+    QString url = check.url;
+    const int hash = url.indexOf(QLatin1Char('#'));
+    if (hash >= 0) url.truncate(hash);
+    QStringList parts;
+    for (const FormValue &v : values) {
+        if (v.name.isEmpty()) continue;
+        parts << QString::fromLatin1(QUrl::toPercentEncoding(v.name)) + QLatin1Char('=') + QString::fromLatin1(QUrl::toPercentEncoding(v.value));
+    }
+    if (!parts.isEmpty()) url += (url.contains(QLatin1Char('?')) ? QLatin1Char('&') : QLatin1Char('?')) + parts.join(QLatin1Char('&'));
+    return url.size() > kMaxUrlLength ? QString() : url;
+}
+
 }  // namespace fortiq

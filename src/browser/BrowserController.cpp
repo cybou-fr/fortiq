@@ -10,6 +10,7 @@
 
 #include <QFutureWatcher>
 #include <QJsonDocument>
+#include <QSettings>
 #include <QLocale>
 #include <QtConcurrentRun>
 
@@ -78,8 +79,52 @@ QString statusLine(int status, const QString &text) {
 }
 }  // namespace
 
+namespace {
+struct SearchEngine { const char *id; const char *name; const char *url; const char *note; };
+// Engines that answer a plain request. Many refuse automated clients or require JavaScript, so this is a short, tested list.
+const SearchEngine kEngines[] = {
+    { "bing", "Bing", "https://www.bing.com/search?q=%s", "Fonctionne sans JavaScript (testé le 26.10.2026)." },
+    { "duckduckgo", "DuckDuckGo", "https://html.duckduckgo.com/html/?q=%s", "Peut demander une vérification anti-robot depuis certaines adresses de serveurs." },
+    { "wikipedia", "Wikipédia", "https://fr.wikipedia.org/w/index.php?search=%s", "Recherche dans l'encyclopédie." },
+    { "google", "Google", "https://www.google.com/search?q=%s", "Exige JavaScript pour les résultats : en général inutilisable ici." },
+};
+const SearchEngine *engineById(const QString &id) {
+    for (const SearchEngine &e : kEngines) if (id == QLatin1String(e.id)) return &e;
+    return nullptr;
+}
+}  // namespace
+
+QVariantList BrowserController::searchEngines() const {
+    QVariantList list;
+    for (const SearchEngine &e : kEngines)
+        list << QVariantMap { { "id", QString::fromLatin1(e.id) }, { "name", QString::fromUtf8(e.name) }, { "note", QString::fromUtf8(e.note) } };
+    return list;
+}
+
+void BrowserController::setSearchEngine(const QString &id) {
+    if (!engineById(id) || id == m_engine) return;
+    m_engine = id;
+    QSettings().setValue(QStringLiteral("browser/searchEngine"), id);
+    emit changed();
+}
+
+namespace {
+QVariantList formsToVariant(const QList<SanitizedForm> &forms) {
+    QVariantList out;
+    for (const SanitizedForm &f : forms) {
+        QVariantList fields;
+        for (const SanitizedFormField &x : f.fields)
+            fields << QVariantMap { { "name", x.name }, { "type", x.type }, { "value", x.value }, { "placeholder", x.placeholder } };
+        out << QVariantMap { { "action", f.action }, { "host", QUrl(f.action).host() }, { "submit", f.submit }, { "fields", fields } };
+    }
+    return out;
+}
+}  // namespace
+
 BrowserController::BrowserController(RemoteController *remote, QObject *parent)
     : QObject(parent), m_remote(remote), m_session(std::make_shared<std::unique_ptr<SshSession>>()) {
+    const QString saved = QSettings().value(QStringLiteral("browser/searchEngine")).toString();
+    if (engineById(saved)) m_engine = saved;
     m_pool.setMaxThreadCount(1);
     m_pool.setExpiryTimeout(-1);
     connect(remote, &RemoteController::changed, this, &BrowserController::onRemoteChanged);
@@ -117,12 +162,24 @@ void BrowserController::onRemoteChanged() {
 void BrowserController::clearPage(const QString &state, const QString &status) {
     m_state = state; m_status = status;
     m_url.clear(); m_title.clear(); m_kind = QStringLiteral("empty");
-    m_html.clear(); m_text.clear(); m_image.clear(); m_refreshUrl.clear(); m_rawHtml.clear();
+    m_html.clear(); m_forms.clear(); m_text.clear(); m_image.clear(); m_refreshUrl.clear(); m_rawHtml.clear();
     m_headers.clear(); m_info.clear(); m_notes.clear();
     emit changed();
 }
 
 void BrowserController::open(const QString &text) {
+    if (looksLikeSearch(text)) {
+        const SearchEngine *engine = engineById(m_engine);
+        const QString url = engine ? searchUrl(QString::fromLatin1(engine->url), text) : QString();
+        if (url.isEmpty()) {
+            m_state = QStringLiteral("error");
+            m_status = QStringLiteral("Recherche trop longue (limite 2048 caractères).");
+            emit changed();
+            return;
+        }
+        navigate(url, true);
+        return;
+    }
     const UrlCheck check = normalizeUrl(text);
     if (!check.ok) {
         m_state = QStringLiteral("error");
@@ -131,6 +188,27 @@ void BrowserController::open(const QString &text) {
         return;
     }
     navigate(check.url, true);
+}
+
+void BrowserController::submitForm(int index, const QVariantMap &values) {
+    if (index < 0 || index >= m_forms.size()) return;
+    const QVariantMap form = m_forms.at(index).toMap();
+    QList<FormValue> fields;
+    for (const QVariant &v : form.value(QStringLiteral("fields")).toList()) {
+        const QVariantMap f = v.toMap();
+        const QString name = f.value(QStringLiteral("name")).toString();
+        QString value = f.value(QStringLiteral("value")).toString();
+        if (f.value(QStringLiteral("type")).toString() == QLatin1String("text") && values.contains(name)) value = values.value(name).toString();
+        fields.push_back({ name, value });
+    }
+    const QString url = formUrl(form.value(QStringLiteral("action")).toString(), fields);
+    if (url.isEmpty()) {
+        m_state = QStringLiteral("error");
+        m_status = QStringLiteral("Ce formulaire ne peut pas être envoyé (adresse non autorisée ou trop longue).");
+        emit changed();
+        return;
+    }
+    navigate(url, true);
 }
 
 void BrowserController::openLink(const QString &href) {
@@ -171,6 +249,7 @@ void BrowserController::setReader(bool on) {
             watcher->deleteLater();
             if (generation != m_readerGeneration || seq != m_seq || m_kind != QLatin1String("html")) return;   // a newer toggle or page won
             m_html = page.html;
+            m_forms = formsToVariant(page.forms);
             m_title = page.title.isEmpty() ? m_title : page.title;
             emit changed();
         });
@@ -339,7 +418,7 @@ void BrowserController::onChain(const FetchOutcome &outcome, const Chain &chain)
         m_state = QStringLiteral("error");
         m_status = outcome.error;
         m_kind = QStringLiteral("error");
-        m_html.clear(); m_text.clear(); m_image.clear(); m_rawHtml.clear(); m_headers.clear();
+        m_html.clear(); m_forms.clear(); m_text.clear(); m_image.clear(); m_rawHtml.clear(); m_headers.clear();
         m_info = QVariantMap { { "requested", chain.requested }, { "blocked", outcome.blocked } };
         if (tasks) tasks->fail(chain.taskId, outcome.error, outcome.blocked ? QStringLiteral("blocked") : QString());
         emit changed();
@@ -382,7 +461,7 @@ void BrowserController::apply(const FetchOutcome &outcome, int, int, const QStri
         m_state = QStringLiteral("error");
         m_status = message;
         m_kind = QStringLiteral("error");
-        m_html.clear(); m_text.clear(); m_image.clear(); m_rawHtml.clear();
+        m_html.clear(); m_forms.clear(); m_text.clear(); m_image.clear(); m_rawHtml.clear();
         m_info = QVariantMap { { "requested", requested } };
         m_headers.clear();
         if (tasks) tasks->fail(taskId, message);
@@ -425,7 +504,7 @@ void BrowserController::apply(const FetchOutcome &outcome, int, int, const QStri
     m_headers = r.headers;
     m_notes.clear();
     m_refreshUrl.clear();
-    m_html.clear(); m_text.clear(); m_image.clear(); m_rawHtml.clear(); m_title.clear();
+    m_html.clear(); m_forms.clear(); m_text.clear(); m_image.clear(); m_rawHtml.clear(); m_title.clear();
     const QString mime = baseMime(r.contentType);
     m_kind = r.body.isEmpty() ? QStringLiteral("empty") : kindOf(mime);
     QString charset;
@@ -437,12 +516,14 @@ void BrowserController::apply(const FetchOutcome &outcome, int, int, const QStri
         m_rawHtml = decoded.text;
         const SanitizedPage page = prepared ? outcome.page : sanitizeHtml(m_rawHtml, m_url, m_reader);
         m_html = page.html;
+        m_forms = formsToVariant(page.forms);
         m_title = page.title;
         m_refreshUrl = page.refreshUrl;
         if (page.readerExtracted) m_notes << QStringLiteral("Mode lecture : seul le contenu principal est affiché.");
         if (page.scriptCount > 0 && page.plainText.size() < 300)
             m_notes << QStringLiteral("Cette page dépend de JavaScript, qui n'est jamais exécuté : le contenu affiché est limité.");
         if (page.truncated) m_notes << QStringLiteral("Page très longue : affichage tronqué.");
+        if (page.skippedForms > 0 && m_forms.isEmpty()) m_notes << QStringLiteral("Cette page contient un formulaire que le navigateur ne peut pas envoyer (seuls les formulaires de recherche simples sont pris en charge).");
         if (!m_refreshUrl.isEmpty()) m_notes << QStringLiteral("La page demande une redirection vers %1 (non suivie automatiquement).").arg(m_refreshUrl);
         if (page.imageCount > 0) m_notes << QStringLiteral("%1 image(s) non chargée(s) : le texte alternatif est affiché.").arg(page.imageCount);
     } else if (m_kind == QLatin1String("text") || m_kind == QLatin1String("json")) {

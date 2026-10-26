@@ -76,6 +76,73 @@ private slots:
     }
 
     // ---------------- script and framing ----------------
+    void searchOrAddress_data() {
+        QTest::addColumn<QString>("typed");
+        QTest::addColumn<bool>("search");
+        QTest::newRow("two words") << "linux debian" << true;
+        QTest::newRow("one word") << "fortiq" << true;
+        QTest::newRow("a question") << "how do i restart ssh?" << true;
+        QTest::newRow("host") << "example.com" << false;
+        QTest::newRow("host path") << "example.com/a" << false;
+        QTest::newRow("localhost") << "localhost" << false;
+        QTest::newRow("host port") << "example.org:8080" << false;
+        QTest::newRow("ipv4") << "192.168.1.1" << false;
+        QTest::newRow("ipv6") << "[::1]:80" << false;
+        QTest::newRow("url") << "https://example.com/a" << false;
+        QTest::newRow("url with a stray space") << "https://example.com/a b" << false;   // refused as an address, not turned into a search
+        QTest::newRow("empty") << "   " << false;
+    }
+    void searchOrAddress() {
+        QFETCH(QString, typed);
+        QFETCH(bool, search);
+        QCOMPARE(looksLikeSearch(typed), search);
+    }
+    void searchUrlsAreEncodedAndBounded() {
+        const QString engine = QStringLiteral("https://www.bing.com/search?q=%s");
+        QCOMPARE(searchUrl(engine, QStringLiteral("debian ssh & café")), QStringLiteral("https://www.bing.com/search?q=debian%20ssh%20%26%20caf%C3%A9"));
+        QCOMPARE(searchUrl(engine, QStringLiteral("a=b&c=d#e")), QStringLiteral("https://www.bing.com/search?q=a%3Db%26c%3Dd%23e"));   // the query cannot add parameters
+        QVERIFY(searchUrl(engine, QString(3000, QLatin1Char('x'))).isEmpty());
+        QVERIFY(normalizeUrl(searchUrl(engine, QStringLiteral("x y"))).ok);
+    }
+    void formUrlsAreBuiltForGetOnly() {
+        QCOMPARE(formUrl(QStringLiteral("https://www.google.com/search"), { { "q", "a b" }, { "hl", "fr" } }), QStringLiteral("https://www.google.com/search?q=a%20b&hl=fr"));
+        QCOMPARE(formUrl(QStringLiteral("https://example.com/s?lang=fr#top"), { { "q", "x" } }), QStringLiteral("https://example.com/s?lang=fr&q=x"));
+        QCOMPARE(formUrl(QStringLiteral("https://example.com/s"), {}), QStringLiteral("https://example.com/s"));
+        QCOMPARE(formUrl(QStringLiteral("https://example.com/s"), { { "q", "é&=?" } }), QStringLiteral("https://example.com/s?q=%C3%A9%26%3D%3F"));
+        QVERIFY(formUrl(QStringLiteral("javascript:alert(1)"), { { "q", "x" } }).isEmpty());
+        QVERIFY(formUrl(QStringLiteral("file:///etc/passwd"), { { "q", "x" } }).isEmpty());
+        QVERIFY(formUrl(QStringLiteral("https://example.com/s"), { { "q", QString(3000, QLatin1Char('x')) } }).isEmpty());
+    }
+    void getFormsBecomeNativeBarsAndNothingElseDoes() {
+        const QString html = QStringLiteral(
+            "<html><body>"
+            "<form action=\"/search\" name=\"f\"><input type=\"hidden\" name=\"ie\" value=\"UTF-8\"><input class=\"lst\" name=\"q\" title=\"Recherche\" value=\"\">"
+            "<input type=\"submit\" value=\"Recherche Google\" name=\"btnG\"><input type=\"submit\" value=\"Chance\" name=\"btnI\"></form>"
+            "<form method=\"post\" action=\"/login\"><input name=\"u\"><input name=\"p\" type=\"password\"></form>"
+            "<form action=\"/pw\"><input name=\"q\"><input name=\"p\" type=\"password\"><textarea name=\"t\"></textarea></form>"
+            "<form action=\"/only-hidden\"><input type=\"hidden\" name=\"a\" value=\"1\"></form>"
+            "<form method=\"GET\"><input type=\"search\" name=\"s\" placeholder=\"Chercher\"><button>Go</button></form>"
+            "</body></html>");
+        const SanitizedPage page = sanitizeHtml(html, QStringLiteral("https://www.example.com/dir/page"), true);
+        QCOMPARE(page.forms.size(), 2);
+        QCOMPARE(page.skippedForms, 3);                                   // POST, textarea, no text field
+        const SanitizedForm &f = page.forms.at(0);
+        QCOMPARE(f.action, QStringLiteral("https://www.example.com/search"));
+        QCOMPARE(f.submit, QStringLiteral("Recherche Google"));          // the first submit label
+        QCOMPARE(f.fields.size(), 2);
+        QCOMPARE(f.fields.at(0).name, QStringLiteral("ie"));
+        QCOMPARE(f.fields.at(0).type, QStringLiteral("hidden"));
+        QCOMPARE(f.fields.at(1).name, QStringLiteral("q"));
+        QCOMPARE(f.fields.at(1).type, QStringLiteral("text"));
+        QCOMPARE(f.fields.at(1).placeholder, QStringLiteral("Recherche"));
+        const SanitizedForm &g = page.forms.at(1);
+        QCOMPARE(g.action, QStringLiteral("https://www.example.com/dir/page"));   // no action: the page itself
+        QCOMPARE(g.submit, QStringLiteral("Go"));
+        QCOMPARE(g.fields.at(0).placeholder, QStringLiteral("Chercher"));
+        QVERIFY(!page.html.contains(QStringLiteral("<form")) && !page.html.contains(QStringLiteral("<input")));   // the page body still shows no form markup
+        QVERIFY(!sanitizeHtml(html, QStringLiteral("https://www.example.com/"), false).forms.isEmpty());   // reader mode does not hide them
+        QVERIFY(sanitizeHtml(QStringLiteral("<form action=\"javascript:x\"><input name=\"q\"></form>"), QStringLiteral("https://e.com/"), true).forms.isEmpty());
+    }
     void scriptRestrictsProtocolsAndQuotesTheUrl() {
         const QByteArray s = buildCurlScript(QStringLiteral("https://e.com/?q='; rm -rf /; echo '"));
         QVERIFY(s.startsWith("u='https://e.com/?q='\\''; rm -rf /; echo '\\'''\n"));
