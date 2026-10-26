@@ -1,22 +1,9 @@
 #!/usr/bin/env python3
-"""Packaging licence safety check for GPL-3.0-only FORTIQ.
-Qt modules offering GPLv3 or LGPLv3 are allowed. Unknown third-party DLLs and missing notices remain errors. This SPDX-based check does not replace a legal audit.
-"""
-icence check of what FORTIQ ships (audit backlog 10): fails when a package contains a Qt module that is not available under the LGPL.
+"""Check distributable runtime dependencies for GPL-3.0-only FORTIQ.
 
-FORTIQ is a closed-source product linked dynamically against Qt under the LGPLv3 (docs/THIRD_PARTY_LICENSES.md). Some Qt modules are
-only available under the GPLv3 or a commercial licence (Qt Virtual Keyboard, Qt Quick Timeline, Qt Charts, Qt Graphs, Qt Quick 3D, Qt Data
-Visualization, Qt Network Authorization, ...). Shipping one of them in the application would be a licence violation unless the product
-holds a commercial Qt licence. The check reads the SPDX-License-Identifier of every public header of the installed Qt kit: a module any of
-whose headers lacks "LGPL-3.0" is "not LGPL". It then looks at the package:
-
-  python tool/check_third_party.py --stage build-dist/stage/FORTIQ [--qt C:/Qt/6.12.0/msvc2022_64]
-  python tool/check_third_party.py --apk build-android-arm64/android-build/build/outputs/apk/debug/android-build-debug.apk
-
-Checked in the package: every Qt library (Qt6X.dll, libQt6X_<abi>.so), every Qt plugin whose file name contains the name of a non-LGPL
-module (qtvirtualkeyboardplugin, ...), every QML module directory that holds files, and every non-Qt DLL against a list of known components
-(each of which must have its licence text in <stage>/licenses). Exit status 1 on any violation or unknown component.
-This is a technical check of file names against header licences; it is not legal advice and does not replace reading the notices.
+Qt modules with GPLv3 or LGPLv3 grants are permitted, while unknown shared
+libraries and missing required notices are rejected. This heuristic examines
+Qt header SPDX identifiers and package file names; it is not legal advice.
 """
 from __future__ import annotations
 
