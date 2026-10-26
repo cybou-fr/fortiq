@@ -191,6 +191,7 @@ def main() -> int:
     lic = stage / "licenses"
     lic.mkdir(exist_ok=True)
     shutil.copy2(ROOT / "third_party/libvterm/LICENSE", lic / "libvterm.txt")
+    shutil.copy2(ROOT / "LICENSE", lic / "FORTIQ-LICENSE.txt")   # FORTIQ itself is GPL-3.0: the text travels with every binary
     for pkg in ("libssh2", "openssl", "zlib"):
         src = VCPKG / "share" / pkg / "copyright"
         if src.exists():
@@ -203,12 +204,15 @@ def main() -> int:
     contact = os.environ.get("FORTIQ_NOTICE_CONTACT", "l'éditeur (CYBOU), par le site du produit")
     qt_version = QT.parent.name
     (lic / "THIRD_PARTY_NOTICES.txt").write_text(
+        "FORTIQ is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License version 3\n"
+        "(see FORTIQ-LICENSE.txt). The complete corresponding source code of this exact version is available from the FORTIQ source repository\n"
+        f"and, on request, from {contact}.\n\n"
         "FORTIQ includes the following third-party software:\n\n"
         f"- Qt {qt_version}, used under the GNU Lesser General Public License version 3 (LGPLv3); see Qt-COPYING.txt, Qt-LICENSE and Qt-Copyright.txt.\n"
         "  The Qt libraries (Qt6*.dll, the plugins and the qml folder) are separate, unmodified files in this folder that are loaded dynamically:\n"
         "  you may replace them with your own build of the same Qt version. The corresponding Qt source code is available from\n"
         f"  https://download.qt.io/official_releases/qt/{qt_version.rsplit('.', 1)[0]}/{qt_version}/ and, on request, from {contact}.\n"
-        "  FORTIQ uses no Qt module that is only available under the GPL or a commercial licence (checked by tool/check_third_party.py).\n"
+        "  FORTIQ ships no Qt module that is only available under a commercial licence or GPL-2.0-only (checked by tool/check_third_party.py).\n"
         "- libvterm 0.3.3 (MIT), statically linked, unmodified sources: see libvterm.txt.\n"
         "- libssh2 (BSD-3-Clause), OpenSSL 3 (Apache-2.0), zlib (zlib license): see the matching files.\n"
         "- Mesa llvmpipe software renderer (opengl32sw.dll, MIT and others) and Microsoft d3dcompiler_47.dll, both shipped with Qt for Windows.\n"

@@ -198,7 +198,7 @@ Services → Logs → Editor → Restart → Verify сохраняет `serverId
 | Вопрос | Варианты и ограничения |
 |---|---|
 | UI и технология **(решено)** | C++20 + Qt Quick/QML и строгое соответствие [UI SPEC v1](UI_SPEC_V1.md). Не открытый вопрос. |
-| Лицензия Qt | закрытый платный продукт: коммерческая лицензия Qt либо динамическая линковка по LGPL без GPL-модулей |
+| Лицензия | **решено владельцем 26.10.2026:** код FORTIQ — GPL-3.0 (`LICENSE`); Qt линкуется динамически, допустимы модули Qt с GPL-3.0/LGPL-3.0 (проверка `tool/check_third_party.py`), см. [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES.md) |
 | SSH-библиотека | **libssh2 выбрана**; отдельный PTY с pin-проверкой есть первым срезом; forwarding и полная квалификация ещё впереди |
 | Терминал | **libvterm 0.3.3 (MIT) встроен**, Qt рисует сетку; [контракт/ограничения](TERMINAL.md). GPL-виджеты не используются |
 | Браузер | Qt WebEngine (Windows) и Qt WebView (Android); принудительный SOCKS-прокси поверх SSH, запрет WebRTC вне прокси |

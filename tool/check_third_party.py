@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
-"""Licence check of what FORTIQ ships (audit backlog 10): fails when a package contains a Qt module that is not available under the LGPL.
+"""Licence check of what FORTIQ ships (audit backlog 10): fails when a package contains a component FORTIQ may not distribute.
 
-FORTIQ is a closed-source product linked dynamically against Qt under the LGPLv3 (docs/THIRD_PARTY_LICENSES.md). Some Qt modules are
-only available under the GPLv3 or a commercial licence (Qt Virtual Keyboard, Qt Quick Timeline, Qt Charts, Qt Graphs, Qt Quick 3D, Qt Data
-Visualization, Qt Network Authorization, ...). Shipping one of them in the application would be a licence violation unless the product
-holds a commercial Qt licence. The check reads the SPDX-License-Identifier of every public header of the installed Qt kit: a module any of
-whose headers lacks "LGPL-3.0" is "not LGPL". It then looks at the package:
+FORTIQ's own code is published under the GNU GPL v3 (LICENSE) and links Qt dynamically. Qt modules are available under different terms
+(docs/THIRD_PARTY_LICENSES.md); the check reads the SPDX-License-Identifier of every public header of the installed Qt kit and sorts a module into:
 
-  python tool/check_third_party.py --stage build-dist/stage/FORTIQ [--qt C:/Qt/6.12.0/msvc2022_64]
+  LGPL    every header offers LGPL-3.0 (QtCore, QtQuick, ...)             allowed under both policies
+  GPL     every header offers GPL-3.0 but some not LGPL (QtCharts, ...)   allowed under policy "gpl3" (the default), reported as a note,
+                                                                           refused under policy "lgpl"
+  BLOCKED some header offers neither (commercial-only or GPL-2-only)     refused under both policies
+
+  python tool/check_third_party.py --stage build-dist/stage/FORTIQ [--qt C:/Qt/6.12.0/msvc2022_64] [--policy gpl3|lgpl]
   python tool/check_third_party.py --apk build-android-arm64/android-build/build/outputs/apk/debug/android-build-debug.apk
+  python tool/check_third_party.py --self-test        (uses a synthetic Qt kit: no Qt installation needed)
 
-Checked in the package: every Qt library (Qt6X.dll, libQt6X_<abi>.so), every Qt plugin whose file name contains the name of a non-LGPL
-module (qtvirtualkeyboardplugin, ...), every QML module directory that holds files, and every non-Qt DLL against a list of known components
-(each of which must have its licence text in <stage>/licenses). Exit status 1 on any violation or unknown component.
+Checked in the package: every Qt library (Qt6X.dll, libQt6X_<abi>.so), every Qt plugin whose file name contains the name of a refused
+module, every QML module directory of a refused module, QML debugging plugins (qmltooling / qmldbg: never distributable, reported only with
+--allow-debug-tooling for debug builds) and, for Windows, every non-Qt DLL against a list of known components (each of which must have its
+licence text in <stage>/licenses). Exit status 1 on any violation or unknown component.
 This is a technical check of file names against header licences; it is not legal advice and does not replace reading the notices.
 """
 from __future__ import annotations
@@ -38,28 +42,35 @@ KNOWN_COMPONENTS = {
 MSVC_RUNTIME = re.compile(r"^(vcruntime140.*|msvcp140.*|concrt140|vccorlib140|vcomp140)\.dll$", re.I)
 
 
-def module_licences(qt_root: Path) -> dict[str, tuple[int, int]]:
-    """module include dir name (QtCore, QtVirtualKeyboard...) -> (headers with an SPDX line, of those: with LGPL-3.0)."""
-    result: dict[str, tuple[int, int]] = {}
+def module_licences(qt_root: Path) -> dict[str, tuple[int, int, int]]:
+    """module include dir name (QtCore, QtCharts...) -> (headers with an SPDX line, of those: offering LGPL-3.0, offering GPL-3.0 or LGPL-3.0)."""
+    result: dict[str, tuple[int, int, int]] = {}
     include = qt_root / "include"
     for d in sorted(include.iterdir()):
         if not d.is_dir() or not d.name.startswith("Qt"):
             continue
-        total = lgpl = 0
+        total = lgpl = gpl = 0
         for h in d.glob("*.h"):
             head = h.read_text(encoding="utf-8", errors="replace")[:4000]
             m = re.search(r"SPDX-License-Identifier:\s*(.*)", head)
             if m:
                 total += 1
-                lgpl += "LGPL-3.0" in m.group(1)
+                ids = m.group(1)
+                lgpl += "LGPL-3.0" in ids
+                gpl += "GPL-3.0" in ids      # also true for "LGPL-3.0"
         if total:
-            result[d.name] = (total, lgpl)
+            result[d.name] = (total, lgpl, gpl)
     return result
 
 
-def not_lgpl(licences: dict[str, tuple[int, int]]) -> set[str]:
-    # A module is flagged when any header lacks an LGPL alternative (one stray header is enough: it is a different component).
-    return {name for name, (total, lgpl) in licences.items() if lgpl < total}
+def classify(licences: dict[str, tuple[int, int, int]], policy: str) -> tuple[set[str], set[str]]:
+    """-> (refused modules, GPL-only modules that are allowed). One stray header is enough to move a module: it is a different component."""
+    gpl_only = {n for n, (total, lgpl, gpl) in licences.items() if gpl == total and lgpl < total}
+    blocked = {n for n, (total, lgpl, gpl) in licences.items() if gpl < total}
+    if policy == "lgpl":
+        blocked |= gpl_only
+        gpl_only = set()
+    return blocked, gpl_only
 
 
 def qt_module_of_library(file_name: str) -> str | None:
@@ -67,55 +78,124 @@ def qt_module_of_library(file_name: str) -> str | None:
     return "Qt" + m.group(1) if m else None
 
 
-def self_test(qt: Path) -> int:
+DEBUG_TOOLING = ("qmltooling", "qmldbg")
+
+
+def make_fake_kit(root: Path) -> Path:
+    """A synthetic Qt kit with one module of every licence class, so the self-test needs no Qt installation."""
+    kit = root / "fakeqt"
+    modules = {
+        "QtCore": "LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only",
+        "QtQuick": "LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only",
+        "QtCharts": "LicenseRef-Qt-Commercial OR GPL-3.0-only",
+        "QtSecretSauce": "LicenseRef-Qt-Commercial",
+        "QtOldGpl": "LicenseRef-Qt-Commercial OR GPL-2.0-only",
+    }
+    for name, spdx in modules.items():
+        (kit / "include" / name).mkdir(parents=True)
+        (kit / "include" / name / (name.lower() + ".h")).write_text(f"// Copyright (C) The Qt Company Ltd.\n// SPDX-License-Identifier: {spdx}\n", encoding="utf-8")
+    return kit
+
+
+def self_test(_qt: Path) -> int:
     import subprocess
     import tempfile
     me = Path(__file__).resolve()
+    failures: list[str] = []
 
-    def run(stage: Path) -> tuple[int, str]:
-        r = subprocess.run([sys.executable, str(me), "--stage", str(stage), "--qt", str(qt)], capture_output=True, text=True)
+    def run(*args: str) -> tuple[int, str]:
+        r = subprocess.run([sys.executable, str(me), *args], capture_output=True, text=True)
         return r.returncode, r.stdout + r.stderr
 
+    def expect(label: str, code: int, out: str, want_ok: bool, needle: str = "") -> None:
+        if (code == 0) != want_ok or (needle and needle.lower() not in out.lower()):
+            failures.append(f"{label}: expected {'pass' if want_ok else 'failure'}" + (f" mentioning '{needle}'" if needle else "") + f", got exit {code}:\n{out.strip()}")
+
     with tempfile.TemporaryDirectory() as tmp:
-        clean = Path(tmp) / "clean"
+        tmp_path = Path(tmp)
+        kit = make_fake_kit(tmp_path)
+        clean = tmp_path / "clean"
         (clean / "licenses").mkdir(parents=True)
-        for name in ("THIRD_PARTY_NOTICES.txt", "Qt-COPYING.txt", "libssh2.txt"):
+        for name in ("THIRD_PARTY_NOTICES.txt", "Qt-COPYING.txt", "FORTIQ-LICENSE.txt", "libssh2.txt", "openssl.txt"):
             (clean / "licenses" / name).write_text("x", encoding="utf-8")
-        for name in ("fortiq.exe", "Qt6Core.dll", "Qt6Quick.dll", "libssh2.dll", "vcruntime140.dll"):
+        for name in ("fortiq.exe", "Qt6Core.dll", "Qt6Quick.dll", "libssh2.dll", "libcrypto-3-x64.dll", "vcruntime140.dll"):
             (clean / name).write_bytes(b"MZ")
-        code, out = run(clean)
-        if code != 0:
-            print("SELF-TEST FAILED: a clean package was rejected:\n" + out)
-            return 1
-        cases = {
-            "Qt6VirtualKeyboard.dll": "QtVirtualKeyboard",
-            "Qt6QuickTimeline.dll": "QtQuickTimeline",
-            "platforminputcontexts/qtvirtualkeyboardplugin.dll": "virtualkeyboard",
-            "qml/QtCharts/qtchartsqml2plugin.dll": "charts",
-            "mystery.dll": "unknown third-party library",
-        }
-        for rel, expected in cases.items():
-            bad = Path(tmp) / ("bad-" + str(abs(hash(rel))))
-            (bad / "licenses").mkdir(parents=True)
+
+        def stage_with(label: str, extra: str | None = None, drop: str | None = None) -> Path:
+            d = tmp_path / ("s-" + re.sub(r"\W+", "_", label))
             for f in clean.rglob("*"):
                 if f.is_file():
-                    t = bad / f.relative_to(clean)
-                    t.parent.mkdir(parents=True, exist_ok=True)
-                    t.write_bytes(f.read_bytes())
-            (bad / rel).parent.mkdir(parents=True, exist_ok=True)
-            (bad / rel).write_bytes(b"MZ")
-            code, out = run(bad)
-            if code == 0 or expected.lower() not in out.lower():
-                print(f"SELF-TEST FAILED: {rel} was not reported ({expected}):\n" + out)
-                return 1
-        missing = Path(tmp) / "nolicence"
-        (missing / "licenses").mkdir(parents=True)
-        (missing / "libssh2.dll").write_bytes(b"MZ")
-        code, out = run(missing)
-        if code == 0 or "missing" not in out.lower():
-            print("SELF-TEST FAILED: missing licence texts were not reported:\n" + out)
-            return 1
-    print("SELF-TEST OK: forbidden Qt modules, plugins, QML modules, unknown libraries and missing licence texts are all rejected; a clean package passes.")
+                    target = d / f.relative_to(clean)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(f.read_bytes())
+            if drop:
+                (d / drop).unlink()
+            if extra:
+                (d / extra).parent.mkdir(parents=True, exist_ok=True)
+                (d / extra).write_bytes(b"MZ")
+            return d
+
+        base = ["--qt", str(kit)]
+        code, out = run("--stage", str(clean), *base)
+        expect("clean package, default policy", code, out, True)
+        code, out = run("--stage", str(clean), *base, "--policy", "lgpl")
+        expect("clean package, lgpl policy", code, out, True)
+
+        # GPL-3.0-only module (Qt Charts): fine for a GPLv3 product, refused when the policy is LGPL-only
+        d = stage_with("charts", "Qt6Charts.dll")
+        code, out = run("--stage", str(d), *base)
+        expect("GPL-only Qt module under policy gpl3", code, out, True, "GPL-3.0")
+        code, out = run("--stage", str(d), *base, "--policy", "lgpl")
+        expect("GPL-only Qt module under policy lgpl", code, out, False, "QtCharts")
+        # commercial-only and GPL-2.0-only modules can never be shipped in a GPLv3 product
+        for dll, module in (("Qt6SecretSauce.dll", "QtSecretSauce"), ("Qt6OldGpl.dll", "QtOldGpl")):
+            code, out = run("--stage", str(stage_with(module, dll)), *base)
+            expect(f"{module} library", code, out, False, module)
+        code, out = run("--stage", str(stage_with("plugin", "plugins/platforminputcontexts/qtsecretsauceplugin.dll")), *base)
+        expect("plugin of a refused module", code, out, False, "secretsauce")
+        code, out = run("--stage", str(stage_with("qml", "qml/QtSecretSauce/qmldir")), *base)
+        expect("QML module of a refused module", code, out, False, "secretsauce")
+        # debug tooling
+        d = stage_with("debug", "plugins/qmltooling/qmldbg_tcp.dll")
+        code, out = run("--stage", str(d), *base)
+        expect("QML debugging plugin", code, out, False, "debug")
+        code, out = run("--stage", str(d), *base, "--allow-debug-tooling")
+        expect("QML debugging plugin allowed for a debug build", code, out, True, "debug")
+        # unknown libraries and missing notices
+        code, out = run("--stage", str(stage_with("unknown", "mystery.dll")), *base)
+        expect("unknown third-party DLL", code, out, False, "unknown third-party library")
+        code, out = run("--stage", str(stage_with("nolic", drop="licenses/libssh2.txt")), *base)
+        expect("missing licence text of a shipped component", code, out, False, "libssh2.txt")
+        code, out = run("--stage", str(stage_with("nonotice", drop="licenses/THIRD_PARTY_NOTICES.txt")), *base)
+        expect("missing THIRD_PARTY_NOTICES", code, out, False, "THIRD_PARTY_NOTICES")
+        code, out = run("--stage", str(stage_with("noqtcopy", drop="licenses/Qt-COPYING.txt")), *base)
+        expect("missing Qt licence text", code, out, False, "Qt-COPYING")
+        code, out = run("--stage", str(stage_with("nogpl", drop="licenses/FORTIQ-LICENSE.txt")), *base)
+        expect("missing FORTIQ GPL text", code, out, False, "FORTIQ-LICENSE")
+
+        # Android package
+        def apk(name: str, *members: str) -> Path:
+            path = tmp_path / name
+            with zipfile.ZipFile(path, "w") as z:
+                for m in members:
+                    z.writestr(m, b"\x7fELF")
+            return path
+
+        code, out = run("--apk", str(apk("ok.apk", "lib/arm64-v8a/libQt6Core_arm64-v8a.so", "lib/arm64-v8a/libfortiq_arm64-v8a.so")), *base)
+        expect("clean APK", code, out, True)
+        code, out = run("--apk", str(apk("bad.apk", "lib/arm64-v8a/libQt6Core_arm64-v8a.so", "lib/arm64-v8a/libQt6SecretSauce_arm64-v8a.so")), *base)
+        expect("APK with a refused Qt module", code, out, False, "QtSecretSauce")
+        code, out = run("--apk", str(apk("dbg.apk", "lib/arm64-v8a/libQt6Core_arm64-v8a.so", "lib/arm64-v8a/libplugins_qmltooling_qmldbg_tcp_arm64-v8a.so")), *base)
+        expect("debug APK", code, out, False, "debug")
+        # no arguments at all must not pass silently
+        code, out = run(*base)
+        expect("no package given", code, out, False)
+
+    if failures:
+        print("SELF-TEST FAILED:\n" + "\n---\n".join(failures))
+        return 1
+    print("SELF-TEST OK: GPL-only modules pass under policy gpl3 and fail under lgpl; commercial-only and GPL-2-only modules, their plugins and QML modules, debug tooling, "
+          "unknown libraries and missing licence texts are rejected in packages and APKs; clean packages pass.")
     return 0
 
 
@@ -124,6 +204,8 @@ def main() -> int:
     ap.add_argument("--stage", help="staged Windows application folder")
     ap.add_argument("--apk", help="Android package (.apk)")
     ap.add_argument("--qt", default=str(DEFAULT_QT), help="Qt kit whose headers give the licences")
+    ap.add_argument("--policy", choices=("gpl3", "lgpl"), default="gpl3",
+                    help="gpl3 (default, FORTIQ is GPL-3.0): Qt modules offered under GPL-3.0 are allowed; lgpl: only modules offered under LGPL-3.0")
     ap.add_argument("--self-test", action="store_true", help="prove that the check itself fails on a forbidden package and passes on a clean one")
     ap.add_argument("--allow-debug-tooling", action="store_true", help="debug builds only: QML debugging plugins (qmltooling) are reported, not failed")
     opts = ap.parse_args()
@@ -133,7 +215,7 @@ def main() -> int:
         ap.error("exactly one of --stage and --apk")
 
     licences = module_licences(Path(opts.qt))
-    bad = not_lgpl(licences)
+    bad, gpl_only = classify(licences, opts.policy)
     bad_keys = {b[2:].lower() for b in bad}               # "virtualkeyboard", "quicktimeline", ...
     problems: list[str] = []
     notes: list[str] = []
@@ -155,28 +237,35 @@ def main() -> int:
         if mod:
             qt_libs.add(mod)
             if mod in bad:
-                problems.append(f"{rel}: Qt module {mod} is not available under the LGPL (GPL-3.0 or commercial only)")
+                why = "GPL-3.0 only, refused by policy lgpl" if mod in {n for n, (t_, l_, g_) in licences.items() if g_ == t_} else "commercial-only or GPL-2-only"
+                problems.append(f"{rel}: Qt module {mod} cannot be distributed ({why})")
+        # QML debugging plugins are never distributable
+        if any(tag in low for tag in DEBUG_TOOLING):
+            if opts.allow_debug_tooling:
+                notes.append(f"{rel}: QML debugging plugin (debug build only, must not be distributed)")
+            else:
+                problems.append(f"{rel}: QML debug tooling must not be distributed (build a release package, or pass --allow-debug-tooling for a debug build)")
         # plugins and QML modules are named after their module
-        for key in bad_keys:
-            if key in low.replace("_", "").replace("-", "") and not mod:
-                if opts.allow_debug_tooling and ("qmltooling" in low or "qmldbg" in low):
-                    notes.append(f"{rel}: debugging plugin of the non-LGPL module '{key}' (debug build only, must not be distributed)")
-                else:
-                    problems.append(f"{rel}: belongs to the non-LGPL Qt module '{key}'")
+        elif not mod:
+            for key in bad_keys:
+                if key in low.replace("_", "").replace("-", ""):
+                    problems.append(f"{rel}: belongs to the refused Qt module '{key}'")
         if opts.stage and "/" not in rel and base.lower().endswith(".dll") and not mod and not MSVC_RUNTIME.match(base):
             known = KNOWN_COMPONENTS.get(base.lower())
             if not known:
                 problems.append(f"{rel}: unknown third-party library (add it to KNOWN_COMPONENTS with its licence file)")
             elif known[0] and not (stage / "licenses" / known[0]).is_file():
                 problems.append(f"{rel}: licence text licenses/{known[0]} is missing from the package")
+    for lib in sorted(qt_libs & gpl_only):
+        notes.append(f"{lib}: offered by Qt under GPL-3.0 only; allowed because FORTIQ is GPL-3.0 (its source and the Qt source must be offered with the binaries)")
     if opts.stage:
-        for need in ("THIRD_PARTY_NOTICES.txt", "Qt-COPYING.txt"):
+        for need in ("THIRD_PARTY_NOTICES.txt", "Qt-COPYING.txt", "FORTIQ-LICENSE.txt"):
             if not (stage / "licenses" / need).is_file():
                 problems.append(f"licenses/{need} is missing from the package")
         for lib in sorted(qt_libs):
             if lib not in licences:
                 notes.append(f"{lib}: no public headers in the kit, licence not checked (private module?)")
-    print(f"Qt libraries shipped: {len(qt_libs)}; modules of this kit that are not LGPL: {', '.join(sorted(bad)) or 'none'}")
+    print(f"Policy: {opts.policy}; Qt libraries shipped: {len(qt_libs)}; modules of this kit refused by the policy: {', '.join(sorted(bad)) or 'none'}")
     for n in notes:
         print("note:", n)
     if problems:
@@ -184,7 +273,7 @@ def main() -> int:
         for p in problems:
             print(" -", p)
         return 1
-    print("OK: no non-LGPL Qt module, no unknown third-party library, licence texts present.")
+    print("OK: no refused Qt module, no unknown third-party library, no debug tooling, licence texts present.")
     return 0
 
 
