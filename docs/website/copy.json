@@ -67,7 +67,7 @@
       "doneTitle": "Verified so far",
       "done": [
         "Builds on Windows with MSVC and Qt 6.12.",
-        "A live SSH suite of 57 tests passes against real Debian hosts, including two independent servers.",
+        "A live SSH suite of 57 tests passes against disposable Debian 13 servers, including two independent ones.",
         "Android arm64 debug build passed sign-in, Files and storage-picker checks in an emulator."
       ],
       "todoTitle": "Still to prove",
@@ -245,7 +245,7 @@
       "doneTitle": "Vérifié à ce jour",
       "done": [
         "Compile sous Windows avec MSVC et Qt 6.12.",
-        "Une suite SSH en direct de 57 tests réussit sur de vrais hôtes Debian, dont deux serveurs indépendants.",
+        "Une suite SSH en direct de 57 tests réussit sur des serveurs Debian 13 jetables, dont deux indépendants.",
         "La version de débogage Android arm64 a passé les contrôles de connexion, de Fichiers et du sélecteur de stockage dans un émulateur."
       ],
       "todoTitle": "Reste à démontrer",
@@ -423,7 +423,7 @@
       "doneTitle": "Проверено",
       "done": [
         "Собирается на Windows с MSVC и Qt 6.12.",
-        "Живой набор из 57 тестов SSH проходит на настоящих хостах Debian, включая два независимых сервера.",
+        "Живой набор из 57 тестов SSH проходит на одноразовых серверах Debian 13, включая два независимых.",
         "Отладочная сборка Android arm64 прошла вход, Files и выбор хранилища в эмуляторе."
       ],
       "todoTitle": "Ещё предстоит доказать",
