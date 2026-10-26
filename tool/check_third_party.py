@@ -90,27 +90,34 @@ def self_test(qt: Path) -> int:
         if code != 0:
             print("SELF-TEST FAILED: a clean package was rejected:\n" + out)
             return 1
-        cases = {
-            "Qt6VirtualKeyboard.dll": "QtVirtualKeyboard",
-            "Qt6QuickTimeline.dll": "QtQuickTimeline",
-            "platforminputcontexts/qtvirtualkeyboardplugin.dll": "virtualkeyboard",
-            "qml/QtCharts/qtchartsqml2plugin.dll": "charts",
-            "mystery.dll": "unknown third-party library",
-        }
-        for rel, expected in cases.items():
-            bad = Path(tmp) / ("bad-" + str(abs(hash(rel))))
-            (bad / "licenses").mkdir(parents=True)
+        # GPLv3-only Qt modules are permitted by the GPLv3 FORTIQ license.
+        allowed = ("Qt6VirtualKeyboard.dll", "Qt6QuickTimeline.dll",
+                   "platforminputcontexts/qtvirtualkeyboardplugin.dll",
+                   "qml/QtCharts/qtchartsqml2plugin.dll")
+        for rel in allowed:
+            case = Path(tmp) / ("allowed-" + str(abs(hash(rel))))
             for f in clean.rglob("*"):
                 if f.is_file():
-                    t = bad / f.relative_to(clean)
+                    t = case / f.relative_to(clean)
                     t.parent.mkdir(parents=True, exist_ok=True)
                     t.write_bytes(f.read_bytes())
-            (bad / rel).parent.mkdir(parents=True, exist_ok=True)
-            (bad / rel).write_bytes(b"MZ")
-            code, out = run(bad)
-            if code == 0 or expected.lower() not in out.lower():
-                print(f"SELF-TEST FAILED: {rel} was not reported ({expected}):\n" + out)
+            (case / rel).parent.mkdir(parents=True, exist_ok=True)
+            (case / rel).write_bytes(b"MZ")
+            code, out = run(case)
+            if code != 0:
+                print(f"SELF-TEST FAILED: GPL-compatible Qt module {rel} was rejected:\\n" + out)
                 return 1
+        unknown = Path(tmp) / "unknown"
+        for f in clean.rglob("*"):
+            if f.is_file():
+                t = unknown / f.relative_to(clean)
+                t.parent.mkdir(parents=True, exist_ok=True)
+                t.write_bytes(f.read_bytes())
+        (unknown / "mystery.dll").write_bytes(b"MZ")
+        code, out = run(unknown)
+        if code == 0 or "unknown third-party library" not in out:
+            print("SELF-TEST FAILED: unknown DLL was accepted:\\n" + out)
+            return 1
         missing = Path(tmp) / "nolicence"
         (missing / "licenses").mkdir(parents=True)
         (missing / "libssh2.dll").write_bytes(b"MZ")
@@ -118,7 +125,7 @@ def self_test(qt: Path) -> int:
         if code == 0 or "missing" not in out.lower():
             print("SELF-TEST FAILED: missing licence texts were not reported:\n" + out)
             return 1
-    print("SELF-TEST OK: forbidden Qt modules, plugins, QML modules, unknown libraries and missing licence texts are all rejected; a clean package passes.")
+    print("SELF-TEST OK: GPL Qt modules accepted; unknown libraries and missing licence texts rejected; clean package passes.")
     return 0
 
 
