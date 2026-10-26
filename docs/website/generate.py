@@ -132,7 +132,7 @@ def footer(lang: str, ui: dict) -> str:
 
 
 def cards(items: list, cls: str = "") -> str:
-    body = "".join(f'<li class="card"><h3>{e(i["t"])}</h3><p>{e(i["d"])}</p></li>' for i in items)
+    body = "".join(f'<li class="card rv"><h3>{e(i["t"])}</h3><p>{e(i["d"])}</p></li>' for i in items)
     return f'<ul class="cards {cls}">{body}</ul>'
 
 
@@ -165,16 +165,16 @@ def build_index(lang: str, ui: dict, c: dict) -> str:
             f'<div class="actions"><a class="btn primary" href="{href(lang, "download")}">{e(c["ctaPrimary"])}</a>'
             f'<a class="btn ghost" href="{href(lang, "security")}">{e(c["ctaSecondary"])} {icon("arrow", "ic sm")}</a></div>'
             f'<p class="hero-status"><span class="amber"></span>{e(c["heroStatus"])}</p></div>'
-            f'<figure class="stage wrap"><div class="glow" aria-hidden="true"></div>{hero_img}'
+            f'<figure class="stage wrap"><div class="glow" aria-hidden="true"></div><div class="frame-wrap"><div class="frame">{hero_img}</div></div>'
             f'<figcaption>{e(c["heroCaption"])} <a href="{up}assets/fortiq-app-1536.png">{e(c["heroOriginal"])}</a></figcaption>'
             f'</figure></section>')
-    pillars = "".join(f'<li><span class="num" aria-hidden="true">{n}</span><h3>{e(p["t"])}</h3><p>{e(p["d"])}</p></li>'
+    pillars = "".join(f'<li class="rv"><span class="num" aria-hidden="true">{n}</span><h3>{e(p["t"])}</h3><p>{e(p["d"])}</p></li>'
                       for n, p in enumerate(c["pillars"], 1))
     pillar_sec = f'<section class="section tight"><div class="wrap"><ul class="pillars">{pillars}</ul></div></section>'
     tiles = ""
     order = ["files", "logs", "terminal", "mdok", "system", "mail", "browser", "databases"]
     for a in sorted(c["apps"], key=lambda a: order.index(a["id"])):
-        tiles += (f'<li class="tile {a["id"]}"><div class="tile-top"><span class="app-ic">{app_icon(a["id"])}</span>'
+        tiles += (f'<li class="tile rv {a["id"]}"><div class="tile-top"><span class="app-ic">{app_icon(a["id"])}</span>'
                   f'<span class="badge {a["status"]}">{e(ui["badge"][a["status"]])}</span></div>'
                   f'<h3>{e(a["name"])}</h3><p>{e(a["d"])}</p>'
                   f'<p class="limit"><b>{e(ui["limitLabel"])}</b> {e(a["limit"])}</p></li>')
@@ -182,12 +182,12 @@ def build_index(lang: str, ui: dict, c: dict) -> str:
             f'<h2>{c["appsTitleHtml"]}</h2><p class="lead">{e(c["appsLead"])}</p>'
             f'<ul class="bento">{tiles}</ul><p class="fine">{e(c["appsNote"])}</p></div></section>')
     d = c["diagram"]
-    steps = "".join(f'<li><span class="step-n" aria-hidden="true">{n}</span><div><h3>{e(s["t"])}</h3><p>{e(s["d"])}</p></div></li>'
+    steps = "".join(f'<li class="rv"><span class="step-n" aria-hidden="true">{n}</span><div><h3>{e(s["t"])}</h3><p>{e(s["d"])}</p></div></li>'
                     for n, s in enumerate(c["steps"], 1))
     how = (f'<section class="section alt" id="how"><div class="wrap split"><div>'
            f'<p class="eyebrow">{e(c["howEyebrow"])}</p><h2>{c["howTitleHtml"]}</h2><p class="lead">{e(c["howLead"])}</p>'
            f'<ol class="steps">{steps}</ol></div>'
-           f'<div class="diagram" role="img" aria-label="{e(d["client"])} — {e(d["transport"])} — {e(d["server"])}">'
+           f'<div class="diagram rv" role="img" aria-label="{e(d["client"])} — {e(d["transport"])} — {e(d["server"])}">'
            f'<div class="node"><small>{e(d["clientSub"])}</small><strong>{e(d["client"])}</strong><span>{e(d["clientTech"])}</span></div>'
            f'<div class="link"><i></i><b>{icon("lock", "ic sm")} {e(d["transport"])}</b><small>{e(d["transportSub"])}</small><i></i></div>'
            f'<div class="node"><small>{e(d["serverSub"])}</small><strong>{e(d["server"])}</strong><span>{e(d["serverTech"])}</span></div>'
@@ -196,8 +196,8 @@ def build_index(lang: str, ui: dict, c: dict) -> str:
     todo = "".join(f'<li>{icon("dash")}<span>{e(t)}</span></li>' for t in c["todo"])
     status = (f'<section class="section" id="status"><div class="wrap"><p class="eyebrow">{e(c["statusEyebrow"])}</p>'
               f'<h2>{c["statusTitleHtml"]}</h2><p class="lead">{e(c["statusLead"])}</p>'
-              f'<div class="twocol"><div class="panel done"><h3>{e(c["doneTitle"])}</h3><ul>{done}</ul></div>'
-              f'<div class="panel todo"><h3>{e(c["todoTitle"])}</h3><ul>{todo}</ul></div></div></div></section>')
+              f'<div class="twocol"><div class="panel rv done"><h3>{e(c["doneTitle"])}</h3><ul>{done}</ul></div>'
+              f'<div class="panel rv todo"><h3>{e(c["todoTitle"])}</h3><ul>{todo}</ul></div></div></div></section>')
     closing = (f'<section class="section closing"><div class="wrap narrow center"><h2>{c["ctaTitleHtml"]}</h2>'
                f'<p class="lead">{e(c["ctaText"])}</p><a class="btn primary" href="{href(lang, "download")}">{e(c["ctaButton"])}</a>'
                f'</div></section>')
@@ -206,19 +206,19 @@ def build_index(lang: str, ui: dict, c: dict) -> str:
 
 def build_security(lang: str, ui: dict, c: dict) -> str:
     secs = "".join(section(s, i % 2 == 1) for i, s in enumerate(c["sections"]))
-    note = (f'<section class="section"><div class="wrap narrow"><div class="panel note"><h3>{e(c["noteTitle"])}</h3>'
+    note = (f'<section class="section"><div class="wrap narrow"><div class="panel rv note"><h3>{e(c["noteTitle"])}</h3>'
             f'<p>{e(c["note"])}</p></div></div></section>')
     return page_head(c) + secs + note + cta(lang, c["ctaText"], c["ctaButton"], "faq")
 
 
 def build_download(lang: str, ui: dict, c: dict) -> str:
     n = c["notice"]
-    notice = (f'<section class="section tight"><div class="wrap narrow"><div class="panel notice"><h3>{e(n["t"])}</h3>'
+    notice = (f'<section class="section tight"><div class="wrap narrow"><div class="panel rv notice"><h3>{e(n["t"])}</h3>'
               f'<p>{e(n["d"])}</p></div></div></section>')
     plats = ""
     for icon_name, p in zip(("windows", "android"), c["platforms"]):
         items = "".join(f"<li>{icon('dash')}<span>{e(t)}</span></li>" for t in p["items"])
-        plats += (f'<div class="platform"><div class="tile-top"><span class="tile-ic">{icon(icon_name)}</span>'
+        plats += (f'<div class="platform rv"><div class="tile-top"><span class="tile-ic">{icon(icon_name)}</span>'
                   f'<span class="badge preview">{e(p["badge"])}</span></div><h3>{e(p["name"])}</h3>'
                   f'<p class="sub">{e(p["sub"])}</p><ul class="plain">{items}</ul></div>')
     platforms = f'<section class="section tight"><div class="wrap"><div class="twocol">{plats}</div></div></section>'
@@ -227,7 +227,7 @@ def build_download(lang: str, ui: dict, c: dict) -> str:
 
 
 def build_faq(lang: str, ui: dict, c: dict) -> str:
-    qa = "".join(f'<details class="qa"><summary>{e(i["q"])}</summary><p>{e(i["a"])}</p></details>' for i in c["items"])
+    qa = "".join(f'<details class="qa rv"><summary>{e(i["q"])}</summary><p>{e(i["a"])}</p></details>' for i in c["items"])
     faq = f'<section class="section tight"><div class="wrap narrow"><div class="qa-list">{qa}</div></div></section>'
     return page_head(c) + faq + section(c["license"], True)
 

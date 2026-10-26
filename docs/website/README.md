@@ -18,7 +18,7 @@ English lives in `www/`, French in `www/fr/`, Russian in `www/ru/`.
 - `docs/website/copy.json`: all localized text (per language: `ui`, `index`, `security`, `download`, `faq`).
 - `docs/website/generate.py`: deterministic stdlib generator; `outputs()` yields every page, `render(lang, content, page)` builds one.
 - `www/styles.css`: dark by default, light via `prefers-color-scheme` or the toggle; system fonts; responsive from 320 px; focus rings, `prefers-reduced-motion`, forced-colors.
-- `www/assets/site.js`: only the optional theme toggle (the site works without JavaScript).
+- `www/assets/site.js`: progressive enhancement only - theme toggle with a smooth transition, scroll reveal (IntersectionObserver), pointer light on app tiles, hero tilt/sheen, firmer header on scroll. Without JavaScript, or with `prefers-reduced-motion`, everything is simply visible and static. Motion in CSS: hero entrance and drifting aurora, scroll-progress bar under the header (`animation-timeline: scroll()`), SSH diagram with traffic flowing both ways. Inline styles are not used (CSP); the script sets CSS variables via CSSOM.
 - Generated HTML is committed; `tool/check_docs_consistency.py` fails on drift or on a stray page.
 
 ```sh
