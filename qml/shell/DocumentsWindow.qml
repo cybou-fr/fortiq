@@ -13,6 +13,13 @@ Item {
     property bool syncing:false
     property string pendingAction:""
     property string pendingPath:""
+    property bool findOpen:false
+    property bool replaceMode:false
+    property var matchStarts:[]
+    property int matchIndex:-1
+    property var stats:({ "words":0, "characters":0, "lines":0 })
+    DocumentSearch { id:finder }
+    MarkdownHighlighter { document:editor.textDocument }
     readonly property bool drawer:adaptive && width<900
     readonly property real contentLeft:drawer?0:196
     readonly property bool connected:remote!==null && remote.connected
@@ -35,6 +42,54 @@ Item {
         if(documents && documents.busy)return
         if(documents && documents.dirty){pendingAction=action;pendingPath=path||"";confirm.openWith("Modifications non enregistrées","Conservez le brouillon en enregistrant ou en copiant son texte avant de continuer.","Abandonner le brouillon",true,false,"");return}
         perform(action,path||"")
+    }
+    // ---- find / replace (the TextEdit is edited in place, so Undo keeps working) ----
+    function openFind(withReplace){
+        findOpen=true;replaceMode=withReplace
+        const sel=editor.selectedText
+        if(sel.length>0 && sel.indexOf("\n")<0)findField.text=sel
+        refreshMatches();findField.forceActiveFocus();findField.selectAll()
+    }
+    function closeFind(){findOpen=false;editor.forceActiveFocus()}
+    function refreshMatches(){
+        matchStarts=findOpen && findField.text.length>0?finder.matches(editor.text,findField.text,caseButton.checked,wordButton.checked):[]
+        matchIndex=-1
+    }
+    function goTo(forward){
+        refreshMatches()
+        if(matchStarts.length===0)return
+        const cursor=forward?Math.max(editor.selectionEnd,editor.cursorPosition):Math.min(editor.selectionStart,editor.cursorPosition)
+        matchIndex=finder.step(matchStarts,cursor,findField.text.length,forward)
+        const at=matchStarts[matchIndex]
+        editor.select(at,at+findField.text.length)
+    }
+    function replaceCurrent(){
+        if(findField.text.length===0)return
+        const same=caseButton.checked?editor.selectedText===findField.text:editor.selectedText.toLowerCase()===findField.text.toLowerCase()
+        if(same){
+            const at=editor.selectionStart
+            editor.remove(at,at+findField.text.length);editor.insert(at,replaceField.text)
+            editor.cursorPosition=at+replaceField.text.length
+        }
+        goTo(true)
+    }
+    function replaceEverything(){
+        refreshMatches()
+        const starts=matchStarts.slice(),n=findField.text.length
+        if(starts.length===0)return
+        syncing=true
+        for(let i=starts.length-1;i>=0;--i){editor.remove(starts[i],starts[i]+n);editor.insert(starts[i],replaceField.text)}
+        syncing=false
+        if(documents)documents.text=editor.text
+        previewTimer.restart();refreshMatches()
+        findCount.text=starts.length+" remplacement(s)"
+    }
+    function wrapSelection(prefix,suffix,selectInner){
+        const a=editor.selectionStart,b=editor.selectionEnd
+        if(a===b){editor.insert(a,prefix+suffix);editor.cursorPosition=a+prefix.length;return}
+        editor.insert(b,suffix);editor.insert(a,prefix)
+        if(selectInner)editor.select(b+prefix.length+suffix.indexOf("(")+1,b+prefix.length+suffix.length-1)
+        else editor.select(a+prefix.length,b+prefix.length)
     }
     function allowAppClose(){if(documents && documents.busy)return false;if(documents && documents.dirty){request("quit","");return false}return true}
     function handleBack(){
@@ -107,8 +162,42 @@ Item {
             Button { objectName:"documentsDeleteDraft";text:"Supprimer";onClicked:win.documents.dismissRecovery(true) }
         }
     }
+    Rectangle {
+        id:findBar;objectName:"documentsFindBar"
+        visible:win.findOpen && win.documents!==null && win.documents.hasDocument
+        x:win.contentLeft+12;y:pathInput.y+pathInput.height+6+(recoveryBanner.visible?recoveryBanner.height+6:0);width:win.width-x-12
+        height:visible?(win.replaceMode?(win.adaptive?96:70):(win.adaptive?48:36)):0;radius:10;color:"#26FFFFFF";border.color:"#40FFFFFF"
+        Row {
+            x:8;y:4;spacing:6;height:win.adaptive?40:28
+            TextField {
+                id:findField;objectName:"documentsFind";width:Math.max(80,findBar.width-(win.adaptive?340:300));height:parent.height;placeholderText:"Rechercher";selectByMouse:true
+                onTextChanged:{win.refreshMatches();findCount.text=win.matchStarts.length>0?win.matchStarts.length+" résultat(s)":(text.length>0?"aucun résultat":"")}
+                onAccepted:win.goTo(true)
+                Keys.onPressed:event=>{
+                    if(event.key===Qt.Key_Escape){win.closeFind();event.accepted=true}
+                    else if((event.key===Qt.Key_Return||event.key===Qt.Key_Enter)&&(event.modifiers&Qt.ShiftModifier)){win.goTo(false);event.accepted=true}
+                }
+            }
+            Button { objectName:"documentsFindPrev";width:win.adaptive?44:30;height:parent.height;text:"↑";onClicked:win.goTo(false) }
+            Button { objectName:"documentsFindNext";width:win.adaptive?44:30;height:parent.height;text:"↓";onClicked:win.goTo(true) }
+            Button { id:caseButton;objectName:"documentsFindCase";width:win.adaptive?44:34;height:parent.height;text:"Aa";checkable:true;onToggled:win.refreshMatches() }
+            Button { id:wordButton;objectName:"documentsFindWord";width:win.adaptive?54:40;height:parent.height;text:"Mot";checkable:true;onToggled:win.refreshMatches() }
+            Text { id:findCount;objectName:"documentsFindCount";height:parent.height;verticalAlignment:Text.AlignVCenter;color:Theme.inkMuted;font.pixelSize:11;text:"" }
+        }
+        Row {
+            visible:win.replaceMode
+            x:8;y:(win.adaptive?52:36);spacing:6;height:win.adaptive?40:28
+            TextField {
+                id:replaceField;objectName:"documentsReplace";width:Math.max(80,findBar.width-(win.adaptive?340:300));height:parent.height;placeholderText:"Remplacer par";selectByMouse:true
+                Keys.onPressed:event=>{if(event.key===Qt.Key_Escape){win.closeFind();event.accepted=true}}
+            }
+            Button { objectName:"documentsReplaceOne";height:parent.height;text:"Remplacer";onClicked:win.replaceCurrent() }
+            Button { objectName:"documentsReplaceAll";height:parent.height;text:"Tout";onClicked:win.replaceEverything() }
+        }
+        Button { x:parent.width-(win.adaptive?48:34);y:4;width:win.adaptive?44:30;height:win.adaptive?40:28;text:"×";onClicked:win.closeFind() }
+    }
     Item {
-        id:body;x:win.contentLeft+12;y:pathInput.y+pathInput.height+8+(recoveryBanner.visible?recoveryBanner.height+6:0);width:win.width-x-12;height:Math.max(32,win.height-y-80)
+        id:body;x:win.contentLeft+12;y:pathInput.y+pathInput.height+8+(recoveryBanner.visible?recoveryBanner.height+6:0)+(findBar.visible?findBar.height+6:0);width:win.width-x-12;height:Math.max(32,win.height-y-80)
         visible:win.documents!==null && win.documents.hasDocument
         Flickable {
             id:editScroll;objectName:"documentsEditorScroll";visible:win.split || !win.previewMode
@@ -118,7 +207,7 @@ Item {
             TextEdit {
                 id:editor;objectName:"documentsEditor"
                 x:10;y:8;width:parent.width-24;textFormat:TextEdit.PlainText;wrapMode:TextEdit.Wrap
-                color:Theme.ink;selectionColor:Theme.accent;font.pixelSize:14;selectByMouse:true
+                color:Theme.ink;selectionColor:Theme.accent;font.pixelSize:14;selectByMouse:true;persistentSelection:true
                 readOnly:win.documents!==null && win.documents.busy
                 onTextChanged:{if(!win.syncing && win.documents)win.documents.text=text;previewTimer.restart()}
                 onCursorRectangleChanged:{if(cursorRectangle.y<editScroll.contentY)editScroll.contentY=Math.max(0,cursorRectangle.y);else if(cursorRectangle.y+cursorRectangle.height>editScroll.contentY+editScroll.height)editScroll.contentY=cursorRectangle.y+cursorRectangle.height-editScroll.height+16}
@@ -150,7 +239,12 @@ Item {
             Button { objectName:"documentsConflictClose";text:"Garder mon texte, décider plus tard";onClicked:win.documents.closeConflict() }
         }
     }
-    Timer { id:previewTimer;interval:180;onTriggered:{preview.source=editor.text} }
+    Timer { id:previewTimer;interval:180;onTriggered:{preview.source=editor.text;win.stats=finder.stats(editor.text);if(win.findOpen)win.refreshMatches()} }
+    Text {
+        objectName:"documentsStats";visible:win.documents!==null && win.documents.hasDocument
+        anchors.right:parent.right;anchors.rightMargin:12;anchors.bottom:parent.bottom;anchors.bottomMargin:10;color:Theme.inkMuted;font.pixelSize:10
+        text:win.stats.words+" mots · "+win.stats.characters+" car. · "+win.stats.lines+" lignes"
+    }
     Column {
         visible:!win.documents || !win.documents.hasDocument
         x:win.contentLeft+16;y:160;width:win.width-x-16;spacing:14
@@ -161,7 +255,18 @@ Item {
     Text { x:win.contentLeft+12;anchors.bottom:parent.bottom;anchors.bottomMargin:34;width:win.width-x-12;height:42;wrapMode:Text.WordWrap;maximumLineCount:3;elide:Text.ElideRight;textFormat:Text.PlainText;color:Theme.inkMuted;font.pixelSize:11;text:win.documents?win.documents.status+(win.documents.draftStatus!==""?"  ·  "+win.documents.draftStatus:""):"Choisissez un serveur Linux." }
     ToolButtonGlass { x:win.contentLeft+12;anchors.bottom:parent.bottom;anchors.bottomMargin:4;glyph:"⧉";tip:"Copier le brouillon dans le presse-papiers";enabledState:win.documents!==null && win.documents.hasDocument;onClicked:{const start=editor.selectionStart,end=editor.selectionEnd;editor.selectAll();editor.copy();editor.select(start,end)} }
     Text { x:win.contentLeft+50;anchors.bottom:parent.bottom;anchors.bottomMargin:10;visible:preview.limited;text:"Aperçu limité aux 64 000 premiers caractères";color:Theme.inkMuted;font.pixelSize:10 }
-    Keys.onPressed:event=>{if(event.key===Qt.Key_S && event.modifiers&Qt.ControlModifier){win.saveDocument();event.accepted=true}}
+    Keys.onPressed:event=>{
+        const ctrl=event.modifiers&Qt.ControlModifier
+        if(ctrl && event.key===Qt.Key_S){win.saveDocument();event.accepted=true}
+        else if(!win.documents || !win.documents.hasDocument)return
+        else if(ctrl && event.key===Qt.Key_F){win.openFind(false);event.accepted=true}
+        else if(ctrl && event.key===Qt.Key_H){win.openFind(true);event.accepted=true}
+        else if(event.key===Qt.Key_F3){win.findOpen=true;win.goTo(!(event.modifiers&Qt.ShiftModifier));event.accepted=true}
+        else if(event.key===Qt.Key_Escape && win.findOpen){win.closeFind();event.accepted=true}
+        else if(ctrl && event.key===Qt.Key_B){win.wrapSelection("**","**",false);event.accepted=true}
+        else if(ctrl && event.key===Qt.Key_I){win.wrapSelection("*","*",false);event.accepted=true}
+        else if(ctrl && event.key===Qt.Key_K){win.wrapSelection("[","](https://)",true);event.accepted=true}
+    }
     GlassDialog {
         id:confirm;objectName:"documentsUnsavedDialog";anchors.fill:parent;touchMode:win.adaptive
         onAccepted:{visible=false;if(win.documents)win.documents.discardDraft();win.perform(win.pendingAction,win.pendingPath)}

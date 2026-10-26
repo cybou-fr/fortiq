@@ -1153,6 +1153,23 @@ QtObject { property bool connected: true; property bool linkLost: false; propert
             QCOMPARE(shell->property("foregroundApp").toString(),QString("docs"));
             QVariant allowed;QVERIFY(QMetaObject::invokeMethod(shell,"allowAppClose",Q_RETURN_ARG(QVariant,allowed)));QVERIFY(!allowed.toBool());QVERIFY(dialog->isVisible());
             QTest::keyClick(window,Qt::Key_Escape);QVERIFY(!dialog->isVisible());
+            // MDok find / replace and Markdown shortcuts
+            editor->setProperty("text",QString("one two one\n"));editor->forceActiveFocus();
+            QTest::keyClick(window,Qt::Key_F,Qt::ControlModifier);
+            auto *findBar=doc->findChild<QQuickItem *>("documentsFindBar");QVERIFY(findBar);QTRY_V(findBar->isVisible());
+            auto *findField=doc->findChild<QQuickItem *>("documentsFind");QVERIFY(findField);findField->setProperty("text",QString("one"));
+            auto *findCount=doc->findChild<QQuickItem *>("documentsFindCount");QVERIFY(findCount);
+            QTRY_V(findCount->property("text").toString().startsWith("2"));
+            QVERIFY(QMetaObject::invokeMethod(doc,"openFind",Q_ARG(QVariant,QVariant(true))));
+            auto *replaceField=doc->findChild<QQuickItem *>("documentsReplace");QVERIFY(replaceField);QTRY_V(replaceField->isVisible());replaceField->setProperty("text",QString("1"));
+            QVERIFY(QMetaObject::invokeMethod(doc,"replaceEverything"));
+            QCOMPARE(editor->property("text").toString(),QString("1 two 1\n"));
+            QCOMPARE(fixture->property("text").toString(),QString("1 two 1\n"));
+            QTest::keyClick(window,Qt::Key_Escape);QTRY_V(!findBar->isVisible());
+            QVERIFY(QMetaObject::invokeMethod(editor,"select",Q_ARG(int,2),Q_ARG(int,5)));          // "two"
+            QVERIFY(QMetaObject::invokeMethod(doc,"wrapSelection",Q_ARG(QVariant,QVariant("**")),Q_ARG(QVariant,QVariant("**")),Q_ARG(QVariant,QVariant(false))));
+            QCOMPARE(editor->property("text").toString(),QString("1 **two** 1\n"));
+            auto *statsText=doc->findChild<QQuickItem *>("documentsStats");QVERIFY(statsText);
             editor->setProperty("text",QString::fromUtf8("# Projet Été\n\n**Objectif** : Bonjour Привет.\n\n- Document serveur\n- Enregistrement sûr\n\n> Note de travail\n"));
             fixture->setProperty("base",fixture->property("text"));
             if(adaptive)doc->setProperty("previewMode",true);

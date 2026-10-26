@@ -1,6 +1,7 @@
 #include <QtTest>
 #include "core/DocumentDraft.h"
 #include "core/MarkdownData.h"
+#include "documents/TextSearch.h"
 class MarkdownDataTest:public QObject {
     Q_OBJECT
 private slots:
@@ -62,6 +63,40 @@ private slots:
         const auto empty=fortiq::lineDiff("","x");QCOMPARE(empty.onlyServer,1);
         QStringList many;for(int i=0;i<fortiq::kDraftDiffMaxLines+5;++i)many<<QString::number(i);
         const auto big=fortiq::lineDiff(many.join('\n'),"x");QVERIFY(big.tooLong);QVERIFY(!big.text.isEmpty());
+    }
+    // ---- MDok find / replace (src/documents/TextSearch.h) ----
+    void searchFindsPlainAndCaseAndWords(){
+        using fortiq::findAll;
+        QCOMPARE(findAll("Un chat, un CHAT, un chaton","chat"),(QList<qsizetype>{3,12,21}));
+        QCOMPARE(findAll("Un chat, un CHAT, un chaton","chat",{true,false}),(QList<qsizetype>{3,21}));
+        QCOMPARE(findAll("Un chat, un CHAT, un chaton","chat",{false,true}),(QList<qsizetype>{3,12}));      // not "chaton"
+        QCOMPARE(findAll("aaaa","aa"),(QList<qsizetype>{0,2}));                                                // non-overlapping
+        QVERIFY(findAll("abc","").isEmpty());QVERIFY(findAll("","a").isEmpty());
+        QCOMPARE(findAll(QString::fromUtf8("Été été ÉTÉ"),QString::fromUtf8("été")).size(),3);                // Unicode case folding
+        QCOMPARE(findAll("snake_case snake","snake",{false,true}),(QList<qsizetype>{11}));                    // "_" is a word character
+        QCOMPARE(findAll("$(rm -rf ~) .*","$(rm -rf ~)").size(),1);                                           // the query is never a pattern
+        QCOMPARE(findAll(".*",".*").size(),1);
+        QStringList many;for(int i=0;i<30000;++i)many<<"x";
+        QCOMPARE(findAll(many.join(' '),"x").size(),fortiq::kSearchMaxMatches);                              // bounded
+    }
+    void searchReplaceIsLiteral(){
+        int n=0;
+        QCOMPARE(fortiq::replaceAll("a.b a.b","a.b","$1\\0&",{},&n),QString("$1\\0& $1\\0&"));QCOMPARE(n,2);
+        QCOMPARE(fortiq::replaceAll("chat chaton","chat","chien",{false,true},&n),QString("chien chaton"));QCOMPARE(n,1);
+        QCOMPARE(fortiq::replaceAll("abc","x","y",{},&n),QString("abc"));QCOMPARE(n,0);
+        QCOMPARE(fortiq::replaceAll("aaa","a","",{},&n),QString(""));QCOMPARE(n,3);
+        QCOMPARE(fortiq::replaceAll("aaa","a","aa",{},&n),QString("aaaaaa"));                                  // a replacement is never searched again
+    }
+    void searchStepsAndWraps(){
+        const QList<qsizetype> m{3,12,21};
+        QCOMPARE(fortiq::stepMatch(m,0,4,true),0);QCOMPARE(fortiq::stepMatch(m,7,4,true),1);QCOMPARE(fortiq::stepMatch(m,22,4,true),0);   // wraps to the first
+        QCOMPARE(fortiq::stepMatch(m,19,4,false),1);QCOMPARE(fortiq::stepMatch(m,2,4,false),2);                                            // wraps to the last
+        QCOMPARE(fortiq::stepMatch({},0,1,true),-1);
+    }
+    void textStatsCountWordsLinesCharacters(){
+        auto s=fortiq::textStats("");QCOMPARE(s.words,0);QCOMPARE(s.lines,0);
+        s=fortiq::textStats("un deux\ntrois\n");QCOMPARE(s.words,3);QCOMPARE(s.lines,2);QCOMPARE(s.characters,14);
+        s=fortiq::textStats("   \n\n  ");QCOMPARE(s.words,0);QCOMPARE(s.lines,3);
     }
     void extensions(){QVERIFY(fortiq::markdownPath("/home/été espace.MD"));QVERIFY(fortiq::markdownPath("/a.markdown"));QVERIFY(!fortiq::markdownPath("/a.pdf"));QVERIFY(!fortiq::markdownPath("/a.md.exe"));}
 };

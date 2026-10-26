@@ -116,6 +116,8 @@ qt_add_qml_module(fortiq_shell
     QML_FILES ${FORTIQ_SHELL_QML}
     SOURCES src/terminal/TerminalView.cpp src/terminal/TerminalView.h
         src/documents/MarkdownPreview.cpp src/documents/MarkdownPreview.h
+        src/documents/MarkdownHighlighter.cpp src/documents/MarkdownHighlighter.h
+        src/documents/DocumentSearch.cpp src/documents/DocumentSearch.h
     RESOURCES
         assets/wallpapers/aurora.jpg
         assets/wallpapers/desert.jpg
@@ -334,6 +336,20 @@ if(BUILD_TESTING)
     target_include_directories(fortiq_ssh_it PRIVATE src)
     target_link_libraries(fortiq_ssh_it PRIVATE Qt6::Core Qt6::Network Qt6::Concurrent Qt6::Test ${FORTIQ_SSH_TARGET})
     add_test(NAME fortiq_ssh_integration COMMAND fortiq_ssh_it -o "${CMAKE_CURRENT_BINARY_DIR}/ssh-results.txt,txt" -o "-,txt")
+    # Performance baseline (docs/PERFORMANCE_BASELINE.md): measures and prints, never part of ctest; run through tool/run_perf_baseline.py.
+    qt_add_executable(fortiq_perf tests/PerfBaseline.cpp src/terminal/TerminalView.cpp src/terminal/TerminalView.h
+        src/core/TerminalController.cpp src/core/TerminalController.h
+        src/core/DisksController.cpp src/core/DisksController.h
+        src/core/DocumentsController.cpp src/core/DocumentsController.h
+        ${FORTIQ_SSH_SOURCES} src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h
+        src/core/LocalDocument.cpp src/core/LocalDocument.h
+        ${FORTIQ_REMOTE_SOURCES} src/core/RemoteController.h src/core/SecretStore.cpp src/core/SecretStore.h src/core/TaskManager.cpp src/core/TaskManager.h
+        ${FORTIQ_LOGS_SOURCES} src/core/LogsController.h ${FORTIQ_BROWSER_SOURCES} ${FORTIQ_NETWORK_SOURCES} ${FORTIQ_SYSTEM_SOURCES} ${FORTIQ_DB_SOURCES} ${FORTIQ_MAIL_SOURCES})
+    target_include_directories(fortiq_perf PRIVATE src)
+    target_link_libraries(fortiq_perf PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::Network Qt6::Concurrent ${FORTIQ_SSH_TARGET} fortiq_vterm)
+    if(WIN32)
+        target_link_libraries(fortiq_perf PRIVATE psapi)
+    endif()
     qt_add_executable(fortiq_logs_tests tests/LogsControllerTest.cpp
         ${FORTIQ_SSH_SOURCES} src/ssh/SshClient.h src/core/RemotePath.cpp src/core/RemotePath.h
         src/core/LocalDocument.cpp src/core/LocalDocument.h
@@ -411,6 +427,10 @@ if(BUILD_TESTING)
     target_include_directories(fortiq_document_tests PRIVATE src)
     target_link_libraries(fortiq_document_tests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME fortiq_documents COMMAND fortiq_document_tests -o "${CMAKE_CURRENT_BINARY_DIR}/document-results.txt,txt" -o "-,txt")
+    qt_add_executable(fortiq_highlighter_tests tests/MarkdownHighlighterTest.cpp src/documents/MarkdownHighlighter.cpp src/documents/MarkdownHighlighter.h)
+    target_include_directories(fortiq_highlighter_tests PRIVATE src)
+    target_link_libraries(fortiq_highlighter_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml Qt6::Test)
+    add_test(NAME fortiq_highlighter COMMAND fortiq_highlighter_tests -o "${CMAKE_CURRENT_BINARY_DIR}/highlighter-results.txt,txt" -o "-,txt")
     qt_add_executable(fortiq_layout_tests tests/ShellLayoutTest.cpp src/core/TaskManager.cpp src/core/TaskManager.h)
     qt_add_qml_module(fortiq_layout_tests URI Fortiq.App VERSION 1.0
         IMPORT_PATH ${CMAKE_CURRENT_BINARY_DIR}/qml
@@ -428,7 +448,7 @@ if(BUILD_TESTING)
         file(TO_CMAKE_PATH "$ENV{WINDIR}/Fonts" FORTIQ_TEST_FONT_DIR)
         set_property(TEST fortiq_layout APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=${FORTIQ_TEST_FONT_DIR}")
         # Developer tests need the matching Qt Test runtime, absent from the app package.
-        set_tests_properties(fortiq_markdown fortiq_link fortiq_disks fortiq_terminal_history fortiq_terminal_sequences fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_credentials fortiq_tasks fortiq_browser fortiq_network fortiq_system fortiq_db fortiq_mail fortiq_mailsend fortiq_publication fortiq_documents fortiq_layout PROPERTIES
+        set_tests_properties(fortiq_markdown fortiq_link fortiq_disks fortiq_terminal_history fortiq_terminal_sequences fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_credentials fortiq_tasks fortiq_browser fortiq_network fortiq_system fortiq_db fortiq_mail fortiq_mailsend fortiq_publication fortiq_documents fortiq_highlighter fortiq_layout PROPERTIES
             ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:$<TARGET_FILE_DIR:${FORTIQ_SSH_TARGET}>")
     endif()
 endif()
