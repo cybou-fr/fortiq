@@ -1,9 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2540 958" role="img" aria-label="FORTIQ">
-<g transform="translate(-318,-154)">
-<polygon points="333,444 493,364 546,394 545,1084 538,1098 346,964 333,946" fill="#8657FA" stroke="#8657FA" stroke-width="18" stroke-linejoin="round"/>
-<polygon points="536,348 1004,172 1024,186 1024,364 1012,380 627,522 594,512 594,398" fill="#BDABFB" stroke="#BDABFB" stroke-width="18" stroke-linejoin="round"/>
-<polygon points="594,552 780,640 780,650 594,718" fill="#5FE8D4" stroke="#5FE8D4" stroke-width="18" stroke-linejoin="round"/>
-<polygon points="594,772 968,630 992,646 992,796 982,816 596,962 594,962" fill="#8657FA" stroke="#8657FA" stroke-width="18" stroke-linejoin="round"/>
-</g>
-<text x="820" y="690" font-family="'SF Pro Rounded','Segoe UI Variable Display','Segoe UI',system-ui,sans-serif" font-size="500" font-weight="700" textLength="1660" lengthAdjust="spacingAndGlyphs" fill="#1D1B3A">fortiq</text>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 602 132" role="img" aria-label="FORTIQ">
+<defs><linearGradient id="ice" x1=".12" y1=".05" x2=".88" y2=".96"><stop stop-color="#91F8FF"/><stop offset=".4" stop-color="#1BBDFC"/><stop offset="1" stop-color="#2274FC"/></linearGradient><linearGradient id="mid" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#00C2FF"/><stop offset=".6" stop-color="#284DF6"/><stop offset="1" stop-color="#6F59FD"/></linearGradient><linearGradient id="violet" x1="0" y1="0" x2=".9" y2="1"><stop stop-color="#398BFF"/><stop offset=".6" stop-color="#875CF5"/><stop offset="1" stop-color="#C8A0FF"/></linearGradient></defs>
+<g transform="translate(2,-5) scale(.91)">
+<path d="M19 128C21 88 27 42 51 26C64 17 79 17 95 17H135C132 41 116 57 88 57H66C40 57 32 85 30 103Z" fill="url(#ice)"/>
+<path d="M30 103C34 71 47 57 73 57H120C117 77 101 91 80 91H62C45 91 33 108 19 130L30 103Z" fill="url(#mid)"/>
+<path d="M19 130C21 106 32 90 51 87C58 86 80 87 103 87C99 105 82 114 65 114H50C37 114 31 125 19 130Z" fill="url(#violet)"/>
+</g><text x="151" y="91" font-family="Inter, Segoe UI, DejaVu Sans, sans-serif" font-size="76" font-weight="600" letter-spacing="9" fill="#0B1F44">FORTIQ</text></svg>
