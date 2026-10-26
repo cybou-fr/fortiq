@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Licence check of what FORTIQ ships (audit backlog 10): fails when a package contains a Qt module that is not available under the LGPL.
+"""Packaging licence safety check for GPL-3.0-only FORTIQ.
+Qt modules offering GPLv3 or LGPLv3 are allowed. Unknown third-party DLLs and missing notices remain errors. This SPDX-based check does not replace a legal audit.
+"""
+icence check of what FORTIQ ships (audit backlog 10): fails when a package contains a Qt module that is not available under the LGPL.
 
 FORTIQ is a closed-source product linked dynamically against Qt under the LGPLv3 (docs/THIRD_PARTY_LICENSES.md). Some Qt modules are
 only available under the GPLv3 or a commercial licence (Qt Virtual Keyboard, Qt Quick Timeline, Qt Charts, Qt Graphs, Qt Quick 3D, Qt Data
@@ -39,27 +42,27 @@ MSVC_RUNTIME = re.compile(r"^(vcruntime140.*|msvcp140.*|concrt140|vccorlib140|vc
 
 
 def module_licences(qt_root: Path) -> dict[str, tuple[int, int]]:
-    """module include dir name (QtCore, QtVirtualKeyboard...) -> (headers with an SPDX line, of those: with LGPL-3.0)."""
+    """Qt module -> (headers with SPDX, headers offering GPLv3 or LGPLv3)."""
     result: dict[str, tuple[int, int]] = {}
     include = qt_root / "include"
     for d in sorted(include.iterdir()):
         if not d.is_dir() or not d.name.startswith("Qt"):
             continue
-        total = lgpl = 0
+        total = compatible = 0
         for h in d.glob("*.h"):
             head = h.read_text(encoding="utf-8", errors="replace")[:4000]
             m = re.search(r"SPDX-License-Identifier:\s*(.*)", head)
             if m:
                 total += 1
-                lgpl += "LGPL-3.0" in m.group(1)
+                compatible += ("LGPL-3.0" in m.group(1) or "GPL-3.0" in m.group(1))
         if total:
-            result[d.name] = (total, lgpl)
+            result[d.name] = (total, compatible)
     return result
 
 
-def not_lgpl(licences: dict[str, tuple[int, int]]) -> set[str]:
+def not_gpl_compatible(licences: dict[str, tuple[int, int]]) -> set[str]:
     # A module is flagged when any header lacks an LGPL alternative (one stray header is enough: it is a different component).
-    return {name for name, (total, lgpl) in licences.items() if lgpl < total}
+    return {name for name, (total, compatible) in licences.items() if compatible < total}
 
 
 def qt_module_of_library(file_name: str) -> str | None:
@@ -133,7 +136,7 @@ def main() -> int:
         ap.error("exactly one of --stage and --apk")
 
     licences = module_licences(Path(opts.qt))
-    bad = not_lgpl(licences)
+    bad = not_gpl_compatible(licences)
     bad_keys = {b[2:].lower() for b in bad}               # "virtualkeyboard", "quicktimeline", ...
     problems: list[str] = []
     notes: list[str] = []
@@ -155,7 +158,7 @@ def main() -> int:
         if mod:
             qt_libs.add(mod)
             if mod in bad:
-                problems.append(f"{rel}: Qt module {mod} is not available under the LGPL (GPL-3.0 or commercial only)")
+                problems.append(f"{rel}: Qt module {mod} has public headers without a GPLv3/LGPLv3 grant")
         # plugins and QML modules are named after their module
         for key in bad_keys:
             if key in low.replace("_", "").replace("-", "") and not mod:
@@ -176,7 +179,7 @@ def main() -> int:
         for lib in sorted(qt_libs):
             if lib not in licences:
                 notes.append(f"{lib}: no public headers in the kit, licence not checked (private module?)")
-    print(f"Qt libraries shipped: {len(qt_libs)}; modules of this kit that are not LGPL: {', '.join(sorted(bad)) or 'none'}")
+    print(f"Qt libraries shipped: {len(qt_libs)}; modules of this kit flagged as not GPLv3-compatible: {', '.join(sorted(bad)) or 'none'}")
     for n in notes:
         print("note:", n)
     if problems:
@@ -184,7 +187,7 @@ def main() -> int:
         for p in problems:
             print(" -", p)
         return 1
-    print("OK: no non-LGPL Qt module, no unknown third-party library, licence texts present.")
+    print("OK: no flagged incompatible Qt module, no unknown third-party library, licence texts present.")
     return 0
 
 
