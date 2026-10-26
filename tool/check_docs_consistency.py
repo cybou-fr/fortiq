@@ -67,12 +67,17 @@ for target in ("README.md", "AGENTS.md", "docs/PRODUCT_SCOPE.md",
 
 # Verify that the site is reproducibly generated from the shared sources.
 website = runpy.run_path(str(ROOT / "docs/website/generate.py"))
-for lang, content in website["COPY"].items():
-    path = ROOT / "www" / (lang if lang != "en" else "") / "index.html"
+expected_pages = {}
+for rel, html in website["outputs"]():
+    expected_pages[rel] = html
+    path = ROOT / rel
     if not path.is_file():
-        errors.append(f"missing generated website: {path.relative_to(ROOT)}")
-    elif path.read_text(encoding="utf-8") != website["render"](lang, content):
-        errors.append(f"website drift: regenerate {path.relative_to(ROOT)}")
+        errors.append(f"missing generated website: {rel.as_posix()}")
+    elif path.read_bytes().decode("utf-8").replace("\r\n", "\n") != html:
+        errors.append(f"website drift: regenerate {rel.as_posix()}")
+for path in (ROOT / "www").rglob("*.html"):
+    if path.relative_to(ROOT) not in expected_pages:
+        errors.append(f"stray website page not produced by the generator: {path.relative_to(ROOT).as_posix()}")
 
 image = ROOT / "docs/design/reference/fortiq-shell-master.png"
 site_image = ROOT / "www/assets/fortiq-shell-master.png"

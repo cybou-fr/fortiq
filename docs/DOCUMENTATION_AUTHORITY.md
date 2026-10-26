@@ -55,7 +55,7 @@ No one should move a planned feature into “implemented” because its document
 
 ## Separate marketing website caveat
 
-Static pages in `www/` have been rewritten for Windows+Android, Smart Files, Logs, local Qt/SSH architecture and an explicit **development / no-download-yet** status. Their CSS desktop illustration remains clearly labeled conceptual until the verified original screenshot is imported; it does **not** qualify as exact UI or an app build. The site's source of truth is `docs/website/site-template.html` + `copy.json` and generator `generate.py`.
+Static pages in `www/` (EN/FR/RU; Home, Security, Download, FAQ + license) present FORTIQ as an engineering prototype with an explicit **no public download yet** status. The hero shows the byte-exact approved design reference (with lightweight WebP derivatives of the same 3:2 image), labelled as a design target, never as a running Qt screenshot. App statuses (supported / preview) and limits follow [RELEASE_SCOPE_1_0](RELEASE_SCOPE_1_0.md); the site must not claim anything beyond it. The site's source of truth is `docs/website/copy.json` and generator `generate.py`.
 
 ## Automated checks
 

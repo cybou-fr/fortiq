@@ -1,248 +1,536 @@
 {
   "en": {
-    "title": "FORTIQ — Your Linux. A new desktop.",
-    "description": "FORTIQ is a local desktop shell for remote Debian and Ubuntu systems. Windows and Android first. Smart Files and explainable Linux Logs are in development.",
-    "navWhy": "Concept",
-    "navApps": "Applications",
-    "navHow": "Architecture",
-    "navProgress": "Progress",
-    "navPlatform": "Windows + Android",
-    "eyebrow": "LOCAL INTERFACE · REMOTE LINUX",
-    "heroTitle": "Your Linux.<br><em>A desktop of its own.</em>",
-    "heroDescription": "A complete desktop experience on your device, with files, tools and work living on your Debian or Ubuntu server. One native Qt application for Windows and Android.",
-    "heroStatus": "In active development · No public download yet",
-    "heroPrimary": "Explore the experience",
-    "heroSecondary": "How it works",
-    "visualTitle": "Design direction · Illustrative composition",
-    "visualNote": "Conceptual browser illustration — not a running application, a security claim, or a pixel-accurate copy of the approved desktop reference.",
-    "heroChip1": "Local Qt / QML shell",
-    "heroChip2": "Remote via SSH",
-    "heroChip3": "Windows & Android first",
-    "sect1Eyebrow": "TWO FLAGSHIP EXPERIENCES",
-    "sect1Title": "Useful every day.<br><span>Thoughtful by design.</span>",
-    "sect1Sub": "We are starting with two genuinely useful applications rather than twelve superficial demos.",
-    "filesLabel": "01 / SMART FILES",
-    "filesTitle": "Your remote files. <em>At your fingertips.</em>",
-    "filesCopy": "Browse your Linux home, search intelligently, preview documents, and manage transfers with clear progress and conflict handling. White content area, dark sidebar, blue folder icons — exactly the visual language specified for FORTIQ.",
-    "filesTags": [
-      "Remote SFTP",
-      "Search & collections",
-      "Safe transfers"
-    ],
-    "filesPlanned": "Basic read-only SFTP exists in source. Advanced file operations are planned.",
-    "logsLabel": "02 / LOGS INTELLIGENCE",
-    "logsTitle": "Understand what happened.",
-    "logsCopy": "Read journald and application logs, focus on an affected service, group recurring errors and produce evidence-linked summaries. Clear distinctions between observed events and hypotheses; no AI subscription required.",
-    "logsTags": [
-      "journalctl & files",
-      "Live timeline",
-      "Evidence-backed synthesis"
-    ],
-    "logsPlanned": "Logs application is specified, not yet implemented.",
-    "howEyebrow": "ONE CLEAR ARCHITECTURE",
-    "howTitle": "A desktop here.<br><span>A Linux system there.</span>",
-    "howCopy": "FORTIQ renders locally. The server remains the source of working data and computations. SSH, SFTP and verified Linux tools bridge the two. No custom Linux daemon, remote GNOME installation or pixel-streaming session required.",
-    "client": "LOCAL DEVICE",
-    "clientSub": "Windows · Android",
-    "transport": "TRUSTED SSH",
-    "server": "LINUX HOST",
-    "serverSub": "Debian · Ubuntu · WSL · VPS",
-    "howNote": "No direct work-data network fallback. The optional browser requires separate proxy-security validation.",
-    "statusEyebrow": "DEVELOPMENT STATUS",
-    "statusTitle": "Architecture decided. Product underway.",
-    "statusCopy": "The first Qt/C++ prototype can express an SSH connection and browse remote SFTP directories in source. Windows/Android builds, the screenshot-accurate desktop, advanced Smart Files and Logs still need validation or implementation.",
-    "statusA": "Qt 6 / C++20 source",
-    "statusA2": "Prototype code exists",
-    "statusB": "Desktop visual fidelity",
-    "statusB2": "Not yet verified",
-    "statusC": "Android & Windows binaries",
-    "statusC2": "Not yet validated",
-    "statusD": "Smart Files + Logs",
-    "statusD2": "In development",
-    "future": "Later: terminal, editor, documents and mail. Browser only after SSH-only network behavior is proven. AI remains optional.",
-    "footerLine": "A new way to feel at home in your Linux system.",
-    "footerNote": "Product concept and development preview. Interface visuals are illustrative unless explicitly labeled as verified screenshots.",
-    "filesWindow": "Personal folder",
-    "home": "Home",
-    "projects": "Projects",
-    "documents": "Documents",
-    "downloads": "Downloads",
-    "logsWindow": "Logs",
-    "logsService": "Service events",
-    "logLine1": "ssh.service · Session opened",
-    "logLine2": "nginx.service · Repeated warning",
-    "logLine3": "systemd · Service restarted",
-    "offline": "Demo / example data",
-    "tabFiles": "Files",
-    "tabLogs": "Logs",
-    "tabTerminal": "Terminal",
-    "dock": "Workspace",
-    "referenceAlt": "Approved exact 1536×1024 FORTIQ desktop design reference, not a screenshot of the running Qt application.",
-    "visualTitleReference": "Approved desktop design reference",
-    "visualNoteReference": "Exact owner-supplied reference image, unchanged. This is a visual target, not a verified running Qt screenshot."
+    "ui": {
+      "skip": "Skip to content",
+      "navLabel": "Main navigation",
+      "nav": {"apps": "Apps", "security": "Security", "download": "Download", "faq": "FAQ"},
+      "langLabel": "Language",
+      "theme": "Toggle light and dark theme",
+      "badge": {"supported": "Supported", "preview": "Preview"},
+      "limitLabel": "Limits",
+      "footerLine": "Your Linux. A desktop of its own.",
+      "footerNote": "Engineering prototype R0.x. Interface imagery is the approved design reference, not a screenshot of a finished product. Third-party components keep their own licenses.",
+      "license": "License: GPL-3.0-only",
+      "status": "Status",
+      "backTop": "Back to top"
+    },
+    "index": {
+      "title": "FORTIQ — Your Linux. A desktop of its own.",
+      "description": "FORTIQ is a native desktop for your remote Debian or Ubuntu server. Files, Terminal, Logs, Markdown, Mail and more over SSH, with nothing to install on the server. Engineering prototype for Windows and Android.",
+      "eyebrow": "Native desktop · Remote Linux · SSH only",
+      "h1Html": "Your Linux.<br><em>A desktop of its own.</em>",
+      "lead": "FORTIQ gives your Debian or Ubuntu server a real desktop on Windows and Android. Your files, tools and work stay on the server. The app only draws the interface and talks to it over SSH.",
+      "ctaPrimary": "Get FORTIQ",
+      "ctaSecondary": "How it stays secure",
+      "heroStatus": "Engineering prototype · No public download yet",
+      "heroAlt": "The approved FORTIQ desktop design: a Files window, a launcher, a browser, a control center and a dock over a mountain lake wallpaper.",
+      "heroCaption": "The approved desktop design reference, 1536×1024. It is the target for the interface — not a screenshot of the running application.",
+      "heroOriginal": "Open the original PNG",
+      "pillars": [
+        {"t": "SSH is the only road", "d": "The client opens no connection except SSH to the server you choose. Nothing else leaves your device."},
+        {"t": "Nothing to install on the server", "d": "No agent, no daemon, no remote desktop. FORTIQ drives the Linux tools you already have, such as journalctl, notmuch and curl."},
+        {"t": "Every tool works without AI", "d": "Everyday apps stand on their own. An optional assistant is planned; it is not available today."}
+      ],
+      "appsId": "apps",
+      "appsEyebrow": "Applications",
+      "appsTitleHtml": "Everything you do on a server.<br><span>Now with a front door.</span>",
+      "appsLead": "Each app is a graphical front end to a proven Linux tool, with clear errors when a source is unavailable.",
+      "apps": [
+        {"id": "files", "name": "Files", "status": "supported", "d": "Browse, preview, upload and download, rename, search, a server-side Trash and a built-in editor. Folders with tens of thousands of entries are shown page by page.", "limit": "Visual acceptance pending."},
+        {"id": "terminal", "name": "Terminal", "status": "supported", "d": "A real interactive shell over SSH with full terminal emulation, command history and Ctrl+C that works under heavy output.", "limit": "No tmux integration yet."},
+        {"id": "logs", "name": "Logs", "status": "supported", "d": "Read journald and /var/log, filter by period and severity, follow live, group repeated events and inspect an incident, without AI.", "limit": "Correlation is a first slice; the full specification is still a target."},
+        {"id": "mdok", "name": "MDok", "status": "supported", "d": "A Markdown editor with preview, search and replace, and drafts kept on the server. If the file changed meanwhile, a conflict screen shows the difference.", "limit": "No PDF export yet."},
+        {"id": "mail", "name": "Mail", "status": "preview", "d": "Read and tag mail through notmuch on the server and send with msmtp. FORTIQ never talks to your mail provider directly.", "limit": "Needs notmuch, mbsync and msmtp set up on the server."},
+        {"id": "browser", "name": "Browser", "status": "preview", "d": "A web reader that fetches pages with curl on the server and shows them as safe text. The sites see your server, not your device.", "limit": "No JavaScript, styles, forms or cookies."},
+        {"id": "system", "name": "System", "status": "supported", "d": "Services, processes, network interfaces and disks at a glance. Strictly read-only: no kill, no restart, no changes.", "limit": "Overview only, by design."},
+        {"id": "databases", "name": "Databases", "status": "preview", "d": "Query SQLite and PostgreSQL read-only, with row and time limits and cancellation.", "limit": "Read-only protection is a safeguard, not a security boundary."}
+      ],
+      "appsNote": "“Supported” means part of the 1.0 contract, with an acceptance scenario and automated evidence. “Preview” means it works within the stated limits and is labelled as preliminary. Release qualification is still in progress.",
+      "howId": "how",
+      "howEyebrow": "How it works",
+      "howTitleHtml": "A desktop here.<br><span>A Linux system there.</span>",
+      "howLead": "FORTIQ renders locally and works remotely. The server stays the source of your files and computation, so a slow connection never moves your data onto the device.",
+      "diagram": {
+        "client": "Your device", "clientSub": "Windows · Android", "clientTech": "Qt 6 · C++20 · QML",
+        "transport": "SSH", "transportSub": "Fingerprint pinned",
+        "server": "Your Linux server", "serverSub": "Debian · Ubuntu · WSL · VPS", "serverTech": "Existing tools, no agent"
+      },
+      "steps": [
+        {"t": "Add your server", "d": "Host, user, password or key. Profiles are saved on your device."},
+        {"t": "Verify it once", "d": "FORTIQ shows the host fingerprint and pins it before any credential is sent."},
+        {"t": "Work", "d": "Open Files, Terminal, Logs and the rest in one desktop. Sessions are reused, not reopened."}
+      ],
+      "statusId": "status",
+      "statusEyebrow": "Honest status",
+      "statusTitleHtml": "Early, and clear about it.",
+      "statusLead": "FORTIQ is an engineering prototype. Here is what stands on evidence today and what still has to be proven before a release.",
+      "doneTitle": "Verified so far",
+      "done": [
+        "Builds on Windows with MSVC and Qt 6.12.",
+        "A live SSH suite of 57 tests passes against real Debian hosts, including two independent servers.",
+        "Android arm64 debug build passed sign-in, Files and storage-picker checks in an emulator."
+      ],
+      "todoTitle": "Still to prove",
+      "todo": [
+        "Installation on a clean Windows machine, and a signed installer (no certificate yet).",
+        "A physical Android device and a signed release APK.",
+        "Visual acceptance of the desktop against the approved reference.",
+        "Hosted CI results, and the pre-publication audit before the source is opened."
+      ],
+      "ctaTitleHtml": "See where it stands.",
+      "ctaText": "Download status, requirements and what to expect from the first builds.",
+      "ctaButton": "Download and install"
+    },
+    "security": {
+      "title": "Security — FORTIQ",
+      "description": "How FORTIQ keeps connections and credentials safe: SSH only, pinned host fingerprints, secrets in the operating system store, and no direct client connections to anything else.",
+      "eyebrow": "Security",
+      "h1Html": "One connection.<br><em>Yours to verify.</em>",
+      "lead": "FORTIQ is built so that its security story fits in a sentence: the client talks SSH to the one server you picked, and nothing else.",
+      "sections": [
+        {"id": "network", "eyebrow": "Network", "title": "SSH only, by design", "lead": "No analytics, no telemetry, no hidden services.", "items": [
+          {"t": "The only connection is SSH", "d": "The client has no direct connection to mail providers, web servers, databases or update services. Applications run their tools on your server and receive the results over SSH."},
+          {"t": "No update checks", "d": "The client does not look for updates on its own, because that would be a second connection. You download new versions yourself."},
+          {"t": "Two servers never mix", "d": "Every result is tied to the server and connection that produced it. A late answer from a previous host is discarded."}
+        ]},
+        {"id": "trust", "eyebrow": "Trust", "title": "Know who you are talking to", "lead": "Trust is established before a secret is ever sent.", "items": [
+          {"t": "Fingerprint pinned first", "d": "The SHA-256 fingerprint of the server key is shown and pinned before authentication. If the key later changes, sign-in is blocked until you decide explicitly."},
+          {"t": "Obsolete algorithms refused", "d": "Weak or outdated key exchange, ciphers and host key types are rejected rather than silently accepted. A test covers this."},
+          {"t": "Password or key", "d": "Sign in with a password or a private key. Sessions are reused so you are not asked again and again."}
+        ]},
+        {"id": "secrets", "eyebrow": "Secrets", "title": "Handled with care", "lead": "Where your credentials live, and where they never go.", "items": [
+          {"t": "Operating system store", "d": "A remembered password lives only in the system secure store: Windows Credential Manager or Android Keystore. If it is unavailable, FORTIQ refuses to save. It never falls back to a file."},
+          {"t": "Not in arguments or logs", "d": "Secrets are not passed on command lines and are not written to logs. Tests check that no copy remains in memory after use."},
+          {"t": "Known limits", "d": "ssh-agent is not supported yet. The Android Keystore path has been verified only by a self-test on an emulator."}
+        ]},
+        {"id": "server", "eyebrow": "On the server", "title": "Careful with what it touches", "lead": "Safer defaults, and honesty about their limits.", "items": [
+          {"t": "Read-only where it matters", "d": "System and Databases only read. Database protection is layered, but it is a safeguard, not a security boundary: use a read-only role for sensitive data."},
+          {"t": "Browser guard rails", "d": "Internal server addresses open only after your confirmation, and cloud metadata addresses never open."},
+          {"t": "Mail passwords live on the server", "d": "Mail credentials are kept in the server's own configuration, protected by file permissions (0600), but stored in clear text there."}
+        ]}
+      ],
+      "noteTitle": "What we do not claim",
+      "note": "These properties are backed by the project's own automated tests on development builds. They have not yet been re-run on packaged release binaries, and no release has been security-qualified.",
+      "ctaText": "Questions about how it works?",
+      "ctaButton": "Read the FAQ"
+    },
+    "download": {
+      "title": "Download — FORTIQ",
+      "description": "FORTIQ download status for Windows and Android, installation plan, server requirements and licensing. No public build yet.",
+      "eyebrow": "Download",
+      "h1Html": "Not public yet.<br><em>Here is the plan.</em>",
+      "lead": "FORTIQ is an engineering prototype. There is no public download today, and we would rather say so than hand out something unqualified.",
+      "notice": {"t": "No public build yet", "d": "The repository is private until a pre-publication audit is complete. When the first builds appear, this page will carry the installers, checksums and the source."},
+      "platforms": [
+        {"name": "Windows", "sub": "x64 · primary platform", "badge": "In development", "items": [
+          "Per-user installer: no administrator rights, installs into your profile with a Start menu shortcut and an uninstaller.",
+          "A portable ZIP is produced as well.",
+          "Not signed yet: Windows SmartScreen will warn, because there is no code-signing certificate.",
+          "Installation on a clean Windows 11 machine is not yet tested.",
+          "No automatic updates: install a newer version over the old one."
+        ]},
+        {"name": "Android", "sub": "arm64 · beta", "badge": "Beta, in testing", "items": [
+          "A debug build passes sign-in, Files and storage-picker checks in an emulator.",
+          "Not yet tested on a physical device.",
+          "The release APK is not signed yet."
+        ]}
+      ],
+      "sections": [
+        {"id": "requirements", "eyebrow": "Requirements", "title": "What your server needs", "lead": "FORTIQ adds nothing to your server. These are the things it expects to find.", "items": [
+          {"t": "A Debian or Ubuntu host", "d": "Reachable over SSH with a password or a key. A VPS, a machine at home or WSL all work."},
+          {"t": "Core apps", "d": "Files, Terminal, Logs, MDok and System rely on standard tools that a typical Debian or Ubuntu already has."},
+          {"t": "Optional tools", "d": "Mail needs notmuch, mbsync and msmtp configured. Browser needs curl. Databases need sqlite3 or psql."}
+        ]},
+        {"id": "first-run", "eyebrow": "First run", "title": "What the first minute looks like", "lead": "Once a build is available.", "items": [
+          {"t": "1 · Add a server", "d": "Enter host, user and a password or key."},
+          {"t": "2 · Verify the fingerprint", "d": "Compare the shown SHA-256 fingerprint with your server. FORTIQ pins it."},
+          {"t": "3 · Open your desktop", "d": "Files, Terminal, Logs and more, all on the one connection."}
+        ]},
+        {"id": "source", "eyebrow": "Source", "title": "Free software, GPL-3.0", "lead": "FORTIQ is free software under the GNU GPL v3.0, intended to be published in full on GitHub.", "items": [
+          {"t": "What you will receive", "d": "Source code and build scripts for every binary release, the license text and third-party notices."},
+          {"t": "When", "d": "After the pre-publication audit of secrets and asset rights. Until then the repository stays private."}
+        ]}
+      ]
+    },
+    "faq": {
+      "title": "FAQ and license — FORTIQ",
+      "description": "Frequently asked questions about FORTIQ: how it differs from remote desktop, what runs on the server, what needs AI, what works today, and how it is licensed.",
+      "eyebrow": "FAQ",
+      "h1Html": "Questions,<br><em>answered plainly.</em>",
+      "lead": "Short answers, consistent with the project documents.",
+      "items": [
+        {"q": "Is this a remote desktop like VNC or RDP?", "a": "No. FORTIQ does not stream a screen. It is a native app that draws its own interface locally and runs existing Linux tools on the server over SSH. The server needs no graphical desktop."},
+        {"q": "What do I have to install on my server?", "a": "Nothing from FORTIQ. There is no agent and no daemon. Some apps use tools such as notmuch, curl or psql if you want those apps."},
+        {"q": "Which systems does it run on?", "a": "Windows x64 is the primary platform. Android arm64 is in beta. The server is Debian or Ubuntu."},
+        {"q": "Can I download it today?", "a": "Not yet. FORTIQ is an engineering prototype, and the repository is private until the pre-publication audit is done."},
+        {"q": "Does it need AI?", "a": "No. Every everyday tool works without it. An optional offline assistant is planned and is not available today."},
+        {"q": "Does it send data anywhere else?", "a": "No. The client connects only to the SSH server you choose. It has no analytics and does not check for updates by itself."},
+        {"q": "Can it change my server?", "a": "Files can create, rename and delete in your own folders, and Terminal is a real shell. System, Databases and Logs are read-only. FORTIQ does not run suggested commands on its own."},
+        {"q": "Does the browser run JavaScript?", "a": "No. It is a safe text reader built on curl running on your server, and it is labelled as preview."},
+        {"q": "Why does Windows warn about the installer?", "a": "The installer is not code-signed yet because the project has no certificate. Expect a SmartScreen warning until that changes."},
+        {"q": "Which languages does the product speak?", "a": "The desktop interface is currently in French. This site is in English, French and Russian."}
+      ],
+      "license": {"id": "license", "eyebrow": "License", "title": "GNU GPL v3.0 only", "lead": "FORTIQ's own code is licensed as GPL-3.0-only.", "items": [
+        {"t": "Free software", "d": "You may use, study, share and change FORTIQ under the terms of the GPL. Recipients of binaries are entitled to the matching source."},
+        {"t": "Third-party parts", "d": "Qt, libssh2, OpenSSL and other components keep their own licenses. They are listed in the third-party notices and are not automatically GPL code."},
+        {"t": "Publication", "d": "The repository will be opened after a secrets and asset-rights audit. Its visibility has not changed yet."}
+      ]}
+    }
   },
   "fr": {
-    "title": "FORTIQ — Votre Linux. Un nouveau bureau.",
-    "description": "FORTIQ crée un bureau local pour un Linux Debian ou Ubuntu distant. Windows et Android d'abord. Smart Files et Logs sont en développement.",
-    "navWhy": "Concept",
-    "navApps": "Applications",
-    "navHow": "Architecture",
-    "navProgress": "Avancement",
-    "navPlatform": "Windows + Android",
-    "eyebrow": "INTERFACE LOCALE · LINUX DISTANT",
-    "heroTitle": "Votre Linux.<br><em>Son propre bureau.</em>",
-    "heroDescription": "Une véritable expérience de bureau sur votre appareil, tandis que fichiers, outils et données restent sur votre serveur Debian ou Ubuntu. Une seule application native Qt pour Windows et Android.",
-    "heroStatus": "Développement en cours · Pas de téléchargement public",
-    "heroPrimary": "Découvrir l'expérience",
-    "heroSecondary": "Comprendre l'architecture",
-    "visualTitle": "Direction graphique · Composition illustrative",
-    "visualNote": "Illustration conceptuelle du bureau — ni application fonctionnelle, ni garantie de sécurité, ni reproduction pixel par pixel du visuel de référence approuvé.",
-    "heroChip1": "Bureau Qt / QML local",
-    "heroChip2": "Linux distant via SSH",
-    "heroChip3": "Windows et Android",
-    "sect1Eyebrow": "DEUX APPLICATIONS PHARES",
-    "sect1Title": "Utile au quotidien.<br><span>Conçu avec précision.</span>",
-    "sect1Sub": "Nous commençons par deux applications réellement utiles, plutôt que douze démonstrations superficielles.",
-    "filesLabel": "01 / SMART FILES",
-    "filesTitle": "Vos fichiers distants. <em>À portée de main.</em>",
-    "filesCopy": "Parcourez vos dossiers Linux, recherchez intelligemment, prévisualisez les documents et gérez les transferts avec une progression et des conflits explicites. Zone de contenu claire, barre latérale sombre et icônes bleues : la grammaire visuelle définie pour FORTIQ.",
-    "filesTags": [
-      "SFTP distant",
-      "Recherche et collections",
-      "Transferts sûrs"
-    ],
-    "filesPlanned": "Le prototype possède une navigation SFTP en lecture seule. Les fonctions avancées sont prévues.",
-    "logsLabel": "02 / LOGS INTELLIGENCE",
-    "logsTitle": "Comprenez ce qui s'est passé.",
-    "logsCopy": "Consultez journald et les journaux applicatifs, isolez un service, regroupez les erreurs répétées et obtenez des synthèses liées aux événements sources. Distinction claire entre faits observés et hypothèses ; aucune IA obligatoire.",
-    "logsTags": [
-      "journalctl et fichiers",
-      "Chronologie en direct",
-      "Synthèse vérifiable"
-    ],
-    "logsPlanned": "L'application Logs est spécifiée, mais pas encore implémentée.",
-    "howEyebrow": "UNE ARCHITECTURE COHÉRENTE",
-    "howTitle": "Le bureau ici.<br><span>Linux là-bas.</span>",
-    "howCopy": "FORTIQ affiche l'interface en local. Le serveur conserve les données de travail et les traitements. SSH, SFTP et les outils Linux vérifiés relient les deux. Aucun agent propriétaire, ni bureau GNOME distant, ni streaming d'écran n'est requis.",
-    "client": "APPAREIL LOCAL",
-    "clientSub": "Windows · Android",
-    "transport": "SSH VÉRIFIÉ",
-    "server": "HÔTE LINUX",
-    "serverSub": "Debian · Ubuntu · WSL · VPS",
-    "howNote": "Aucune connexion directe de secours pour les données. Le navigateur facultatif exige des tests spécifiques du proxy.",
-    "statusEyebrow": "ÉTAT D'AVANCEMENT",
-    "statusTitle": "Architecture définie. Produit en construction.",
-    "statusCopy": "Le premier prototype Qt/C++ contient une connexion SSH et la navigation dans les dossiers SFTP. Les exécutables Windows/Android, le bureau fidèle au visuel approuvé, Smart Files avancé et Logs restent à réaliser ou valider.",
-    "statusA": "Sources Qt 6 / C++20",
-    "statusA2": "Prototype disponible",
-    "statusB": "Fidélité visuelle du bureau",
-    "statusB2": "Non encore vérifiée",
-    "statusC": "Exécutables Android et Windows",
-    "statusC2": "Non encore validés",
-    "statusD": "Smart Files et Logs",
-    "statusD2": "En cours de développement",
-    "future": "Ensuite : terminal, éditeur, documents et messagerie. Navigateur après validation du routage réseau SSH. IA toujours facultative.",
-    "footerLine": "Un nouveau bureau pour retrouver votre Linux.",
-    "footerNote": "Concept et aperçu de développement. Les visuels ne sont pas des captures de fonctions vérifiées, sauf mention contraire.",
-    "filesWindow": "Dossier personnel",
-    "home": "Accueil",
-    "projects": "Projets",
-    "documents": "Documents",
-    "downloads": "Téléchargements",
-    "logsWindow": "Journaux",
-    "logsService": "Événements des services",
-    "logLine1": "ssh.service · Session ouverte",
-    "logLine2": "nginx.service · Avertissement répété",
-    "logLine3": "systemd · Service redémarré",
-    "offline": "Démo / données fictives",
-    "tabFiles": "Fichiers",
-    "tabLogs": "Journaux",
-    "tabTerminal": "Terminal",
-    "dock": "Bureau",
-    "referenceAlt": "Visuel de référence approuvé du bureau FORTIQ (1536×1024), et non une capture de l'application Qt en cours d'exécution.",
-    "visualTitleReference": "Référence graphique approuvée",
-    "visualNoteReference": "Image originale exacte, non retouchée. C'est un objectif graphique, pas une capture vérifiée de l'application Qt."
+    "ui": {
+      "skip": "Aller au contenu",
+      "navLabel": "Navigation principale",
+      "nav": {"apps": "Applications", "security": "Sécurité", "download": "Télécharger", "faq": "FAQ"},
+      "langLabel": "Langue",
+      "theme": "Basculer entre thème clair et sombre",
+      "badge": {"supported": "Pris en charge", "preview": "Aperçu"},
+      "limitLabel": "Limites",
+      "footerLine": "Votre Linux. Son propre bureau.",
+      "footerNote": "Prototype d'ingénierie R0.x. Les visuels sont la référence graphique approuvée, pas la capture d'un produit terminé. Les composants tiers conservent leurs licences.",
+      "license": "Licence : GPL-3.0-only",
+      "status": "État",
+      "backTop": "Haut de page"
+    },
+    "index": {
+      "title": "FORTIQ — Votre Linux. Son propre bureau.",
+      "description": "FORTIQ est un bureau natif pour votre serveur Debian ou Ubuntu distant. Fichiers, Terminal, Journaux, Markdown, courrier et plus, par SSH, sans rien installer sur le serveur. Prototype d'ingénierie pour Windows et Android.",
+      "eyebrow": "Bureau natif · Linux distant · SSH uniquement",
+      "h1Html": "Votre Linux.<br><em>Son propre bureau.</em>",
+      "lead": "FORTIQ offre à votre serveur Debian ou Ubuntu un vrai bureau sur Windows et Android. Vos fichiers, vos outils et votre travail restent sur le serveur. L'application dessine seulement l'interface et lui parle en SSH.",
+      "ctaPrimary": "Obtenir FORTIQ",
+      "ctaSecondary": "Comment il reste sûr",
+      "heroStatus": "Prototype d'ingénierie · Pas encore de téléchargement public",
+      "heroAlt": "Le bureau FORTIQ approuvé : une fenêtre Fichiers, un lanceur, un navigateur, un centre de contrôle et un dock sur un fond de lac de montagne.",
+      "heroCaption": "La référence graphique approuvée du bureau, 1536×1024. C'est l'objectif de l'interface, pas une capture de l'application en fonctionnement.",
+      "heroOriginal": "Ouvrir le PNG original",
+      "pillars": [
+        {"t": "SSH est la seule route", "d": "Le client n'ouvre aucune connexion hormis SSH vers le serveur que vous choisissez. Rien d'autre ne quitte votre appareil."},
+        {"t": "Rien à installer sur le serveur", "d": "Pas d'agent, pas de démon, pas de bureau distant. FORTIQ pilote les outils Linux que vous avez déjà, comme journalctl, notmuch ou curl."},
+        {"t": "Chaque outil fonctionne sans IA", "d": "Les applications du quotidien se suffisent. Un assistant facultatif est prévu ; il n'est pas disponible aujourd'hui."}
+      ],
+      "appsId": "apps",
+      "appsEyebrow": "Applications",
+      "appsTitleHtml": "Tout ce que vous faites sur un serveur.<br><span>Enfin avec une porte d'entrée.</span>",
+      "appsLead": "Chaque application est une interface graphique pour un outil Linux éprouvé, avec des erreurs claires quand une source est indisponible.",
+      "apps": [
+        {"id": "files", "name": "Fichiers", "status": "supported", "d": "Parcourir, prévisualiser, envoyer et télécharger, renommer, rechercher, corbeille côté serveur et éditeur intégré. Les dossiers de dizaines de milliers d'éléments s'affichent page par page.", "limit": "Validation visuelle en attente."},
+        {"id": "terminal", "name": "Terminal", "status": "supported", "d": "Un vrai shell interactif par SSH avec émulation complète, historique des commandes et Ctrl+C qui fonctionne même sous un flux de sortie intense.", "limit": "Pas encore d'intégration tmux."},
+        {"id": "logs", "name": "Journaux", "status": "supported", "d": "Lisez journald et /var/log, filtrez par période et gravité, suivez en direct, regroupez les événements répétés et inspectez un incident, sans IA.", "limit": "La corrélation est un premier jalon ; la spécification complète reste un objectif."},
+        {"id": "mdok", "name": "MDok", "status": "supported", "d": "Un éditeur Markdown avec aperçu, recherche et remplacement, et brouillons conservés sur le serveur. Si le fichier a changé entre-temps, un écran de conflit montre la différence.", "limit": "Pas encore d'export PDF."},
+        {"id": "mail", "name": "Courrier", "status": "preview", "d": "Lisez et étiquetez vos messages via notmuch sur le serveur, envoyez avec msmtp. FORTIQ ne parle jamais directement à votre fournisseur de messagerie.", "limit": "Exige notmuch, mbsync et msmtp configurés sur le serveur."},
+        {"id": "browser", "name": "Navigateur", "status": "preview", "d": "Un lecteur web qui récupère les pages avec curl sur le serveur et les affiche en texte sûr. Les sites voient votre serveur, pas votre appareil.", "limit": "Ni JavaScript, ni styles, ni formulaires, ni cookies."},
+        {"id": "system", "name": "Système", "status": "supported", "d": "Services, processus, interfaces réseau et disques d'un coup d'œil. Strictement en lecture seule : ni kill, ni redémarrage, aucune modification.", "limit": "Vue d'ensemble uniquement, par conception."},
+        {"id": "databases", "name": "Bases de données", "status": "preview", "d": "Interrogez SQLite et PostgreSQL en lecture seule, avec limites de lignes et de durée, et annulation.", "limit": "La protection en lecture seule est un garde-fou, pas une frontière de sécurité."}
+      ],
+      "appsNote": "« Pris en charge » signifie qu'il fait partie du contrat 1.0, avec un scénario de recette et des preuves automatisées. « Aperçu » signifie qu'il fonctionne dans les limites indiquées et reste présenté comme préliminaire. La qualification de la version est toujours en cours.",
+      "howId": "how",
+      "howEyebrow": "Fonctionnement",
+      "howTitleHtml": "Le bureau ici.<br><span>Linux là-bas.</span>",
+      "howLead": "FORTIQ affiche en local et travaille à distance. Le serveur reste la source de vos fichiers et des calculs : une connexion lente ne déplace jamais vos données sur l'appareil.",
+      "diagram": {
+        "client": "Votre appareil", "clientSub": "Windows · Android", "clientTech": "Qt 6 · C++20 · QML",
+        "transport": "SSH", "transportSub": "Empreinte épinglée",
+        "server": "Votre serveur Linux", "serverSub": "Debian · Ubuntu · WSL · VPS", "serverTech": "Outils existants, aucun agent"
+      },
+      "steps": [
+        {"t": "Ajoutez votre serveur", "d": "Hôte, utilisateur, mot de passe ou clé. Les profils sont enregistrés sur votre appareil."},
+        {"t": "Vérifiez-le une fois", "d": "FORTIQ affiche l'empreinte de l'hôte et l'épingle avant l'envoi de tout identifiant."},
+        {"t": "Travaillez", "d": "Ouvrez Fichiers, Terminal, Journaux et le reste dans un seul bureau. Les sessions sont réutilisées, pas rouvertes."}
+      ],
+      "statusId": "status",
+      "statusEyebrow": "État sincère",
+      "statusTitleHtml": "Tôt, et honnête là-dessus.",
+      "statusLead": "FORTIQ est un prototype d'ingénierie. Voici ce qui repose aujourd'hui sur des preuves et ce qu'il faut encore démontrer avant une version.",
+      "doneTitle": "Vérifié à ce jour",
+      "done": [
+        "Compile sous Windows avec MSVC et Qt 6.12.",
+        "Une suite SSH en direct de 57 tests réussit sur de vrais hôtes Debian, dont deux serveurs indépendants.",
+        "La version de débogage Android arm64 a passé les contrôles de connexion, de Fichiers et du sélecteur de stockage dans un émulateur."
+      ],
+      "todoTitle": "Reste à démontrer",
+      "todo": [
+        "Installation sur une machine Windows vierge, et un installateur signé (pas encore de certificat).",
+        "Un appareil Android physique et un APK de version signé.",
+        "Validation visuelle du bureau par rapport à la référence approuvée.",
+        "Résultats d'une CI hébergée, et l'audit de pré-publication avant l'ouverture du code."
+      ],
+      "ctaTitleHtml": "Voyez où nous en sommes.",
+      "ctaText": "État du téléchargement, prérequis et à quoi s'attendre des premières versions.",
+      "ctaButton": "Télécharger et installer"
+    },
+    "security": {
+      "title": "Sécurité — FORTIQ",
+      "description": "Comment FORTIQ protège connexions et identifiants : SSH uniquement, empreintes d'hôte épinglées, secrets dans le coffre du système, et aucune autre connexion directe du client.",
+      "eyebrow": "Sécurité",
+      "h1Html": "Une seule connexion.<br><em>À vous de la vérifier.</em>",
+      "lead": "FORTIQ est conçu pour que sa sécurité tienne en une phrase : le client parle SSH au seul serveur que vous avez choisi, et à rien d'autre.",
+      "sections": [
+        {"id": "network", "eyebrow": "Réseau", "title": "SSH uniquement, par conception", "lead": "Ni analyse d'usage, ni télémétrie, ni service caché.", "items": [
+          {"t": "La seule connexion est SSH", "d": "Le client n'a aucune connexion directe vers des fournisseurs de messagerie, des sites web, des bases de données ou des services de mise à jour. Les applications exécutent leurs outils sur votre serveur et reçoivent les résultats par SSH."},
+          {"t": "Aucune vérification de mise à jour", "d": "Le client ne cherche pas seul de mises à jour, car ce serait une seconde connexion. Vous téléchargez vous-même les nouvelles versions."},
+          {"t": "Deux serveurs ne se mélangent jamais", "d": "Chaque résultat est lié au serveur et à la connexion qui l'ont produit. Une réponse tardive d'un hôte précédent est écartée."}
+        ]},
+        {"id": "trust", "eyebrow": "Confiance", "title": "Sachez à qui vous parlez", "lead": "La confiance est établie avant l'envoi du moindre secret.", "items": [
+          {"t": "Empreinte épinglée d'abord", "d": "L'empreinte SHA-256 de la clé du serveur est affichée et épinglée avant l'authentification. Si la clé change plus tard, la connexion est bloquée jusqu'à votre décision explicite."},
+          {"t": "Algorithmes obsolètes refusés", "d": "Les échanges de clés, chiffrements et types de clé d'hôte faibles ou dépassés sont rejetés, pas acceptés en silence. Un test le vérifie."},
+          {"t": "Mot de passe ou clé", "d": "Connectez-vous avec un mot de passe ou une clé privée. Les sessions sont réutilisées pour ne pas vous redemander sans cesse."}
+        ]},
+        {"id": "secrets", "eyebrow": "Secrets", "title": "Traités avec soin", "lead": "Où vivent vos identifiants, et où ils ne vont jamais.", "items": [
+          {"t": "Coffre du système", "d": "Un mot de passe mémorisé n'existe que dans le coffre sécurisé du système : Gestionnaire d'identifiants Windows ou Android Keystore. S'il est indisponible, FORTIQ refuse d'enregistrer. Jamais de repli sur un fichier."},
+          {"t": "Ni en argument, ni dans les journaux", "d": "Les secrets ne passent pas en ligne de commande et ne sont pas écrits dans les journaux. Des tests vérifient qu'aucune copie ne reste en mémoire après usage."},
+          {"t": "Limites connues", "d": "ssh-agent n'est pas encore pris en charge. Le chemin Android Keystore n'a été vérifié que par un autotest sur émulateur."}
+        ]},
+        {"id": "server", "eyebrow": "Sur le serveur", "title": "Prudent avec ce qu'il touche", "lead": "Des valeurs par défaut plus sûres, et de l'honnêteté sur leurs limites.", "items": [
+          {"t": "Lecture seule là où c'est important", "d": "Système et Bases de données ne font que lire. La protection des bases est stratifiée, mais c'est un garde-fou, pas une frontière de sécurité : utilisez un rôle en lecture seule pour les données sensibles."},
+          {"t": "Garde-fous du navigateur", "d": "Les adresses internes du serveur ne s'ouvrent qu'après votre confirmation, et les adresses de métadonnées cloud ne s'ouvrent jamais."},
+          {"t": "Les mots de passe de messagerie restent sur le serveur", "d": "Les identifiants de messagerie sont conservés dans la configuration du serveur, protégés par les droits du fichier (0600), mais stockés en clair à cet endroit."}
+        ]}
+      ],
+      "noteTitle": "Ce que nous n'affirmons pas",
+      "note": "Ces propriétés reposent sur les tests automatisés du projet sur des versions de développement. Ils n'ont pas encore été rejoués sur les binaires empaquetés, et aucune version n'a été qualifiée en sécurité.",
+      "ctaText": "Des questions sur le fonctionnement ?",
+      "ctaButton": "Lire la FAQ"
+    },
+    "download": {
+      "title": "Télécharger — FORTIQ",
+      "description": "État du téléchargement de FORTIQ pour Windows et Android, plan d'installation, prérequis du serveur et licence. Pas encore de version publique.",
+      "eyebrow": "Télécharger",
+      "h1Html": "Pas encore public.<br><em>Voici le plan.</em>",
+      "lead": "FORTIQ est un prototype d'ingénierie. Il n'existe pas de téléchargement public aujourd'hui, et nous préférons le dire plutôt que distribuer quelque chose de non qualifié.",
+      "notice": {"t": "Pas encore de version publique", "d": "Le dépôt reste privé jusqu'à la fin d'un audit de pré-publication. Quand les premières versions paraîtront, cette page proposera les installateurs, les sommes de contrôle et le code source."},
+      "platforms": [
+        {"name": "Windows", "sub": "x64 · plateforme principale", "badge": "En développement", "items": [
+          "Installateur par utilisateur : sans droits d'administrateur, installé dans votre profil avec un raccourci du menu Démarrer et un désinstallateur.",
+          "Une archive ZIP portable est également produite.",
+          "Pas encore signé : Windows SmartScreen avertira, faute de certificat de signature de code.",
+          "L'installation sur une machine Windows 11 vierge n'est pas encore testée.",
+          "Pas de mise à jour automatique : installez la nouvelle version par-dessus l'ancienne."
+        ]},
+        {"name": "Android", "sub": "arm64 · bêta", "badge": "Bêta, en test", "items": [
+          "Une version de débogage passe les contrôles de connexion, de Fichiers et du sélecteur de stockage dans un émulateur.",
+          "Pas encore testée sur un appareil physique.",
+          "L'APK de version n'est pas encore signé."
+        ]}
+      ],
+      "sections": [
+        {"id": "requirements", "eyebrow": "Prérequis", "title": "Ce dont votre serveur a besoin", "lead": "FORTIQ n'ajoute rien à votre serveur. Voici ce qu'il s'attend à y trouver.", "items": [
+          {"t": "Un hôte Debian ou Ubuntu", "d": "Joignable en SSH avec un mot de passe ou une clé. Un VPS, une machine chez vous ou WSL conviennent."},
+          {"t": "Applications de base", "d": "Fichiers, Terminal, Journaux, MDok et Système s'appuient sur des outils standard qu'un Debian ou Ubuntu typique possède déjà."},
+          {"t": "Outils facultatifs", "d": "Le courrier exige notmuch, mbsync et msmtp configurés. Le navigateur exige curl. Les bases de données exigent sqlite3 ou psql."}
+        ]},
+        {"id": "first-run", "eyebrow": "Premier lancement", "title": "La première minute", "lead": "Dès qu'une version sera disponible.", "items": [
+          {"t": "1 · Ajouter un serveur", "d": "Saisissez l'hôte, l'utilisateur et un mot de passe ou une clé."},
+          {"t": "2 · Vérifier l'empreinte", "d": "Comparez l'empreinte SHA-256 affichée avec celle de votre serveur. FORTIQ l'épingle."},
+          {"t": "3 · Ouvrir votre bureau", "d": "Fichiers, Terminal, Journaux et plus, sur une seule connexion."}
+        ]},
+        {"id": "source", "eyebrow": "Code source", "title": "Logiciel libre, GPL-3.0", "lead": "FORTIQ est un logiciel libre sous GNU GPL v3.0, destiné à être publié intégralement sur GitHub.", "items": [
+          {"t": "Ce que vous recevrez", "d": "Le code source et les scripts de construction de chaque version binaire, le texte de la licence et les mentions des composants tiers."},
+          {"t": "Quand", "d": "Après l'audit de pré-publication des secrets et des droits sur les ressources. D'ici là, le dépôt reste privé."}
+        ]}
+      ]
+    },
+    "faq": {
+      "title": "FAQ et licence — FORTIQ",
+      "description": "Questions fréquentes sur FORTIQ : différence avec le bureau à distance, ce qui tourne sur le serveur, rôle de l'IA, ce qui fonctionne aujourd'hui et licence.",
+      "eyebrow": "FAQ",
+      "h1Html": "Des questions,<br><em>des réponses simples.</em>",
+      "lead": "Des réponses courtes, conformes aux documents du projet.",
+      "items": [
+        {"q": "Est-ce un bureau à distance comme VNC ou RDP ?", "a": "Non. FORTIQ ne diffuse pas d'écran. C'est une application native qui dessine sa propre interface en local et exécute des outils Linux existants sur le serveur par SSH. Le serveur n'a pas besoin de bureau graphique."},
+        {"q": "Que dois-je installer sur mon serveur ?", "a": "Rien de FORTIQ. Il n'y a ni agent ni démon. Certaines applications utilisent des outils comme notmuch, curl ou psql si vous souhaitez ces applications."},
+        {"q": "Sur quels systèmes fonctionne-t-il ?", "a": "Windows x64 est la plateforme principale. Android arm64 est en bêta. Le serveur est Debian ou Ubuntu."},
+        {"q": "Puis-je le télécharger aujourd'hui ?", "a": "Pas encore. FORTIQ est un prototype d'ingénierie, et le dépôt reste privé jusqu'à l'audit de pré-publication."},
+        {"q": "A-t-il besoin d'IA ?", "a": "Non. Chaque outil du quotidien fonctionne sans elle. Un assistant hors ligne facultatif est prévu ; il n'est pas disponible aujourd'hui."},
+        {"q": "Envoie-t-il des données ailleurs ?", "a": "Non. Le client se connecte uniquement au serveur SSH que vous choisissez. Il n'a pas d'analyse d'usage et ne cherche pas seul de mises à jour."},
+        {"q": "Peut-il modifier mon serveur ?", "a": "Fichiers peut créer, renommer et supprimer dans vos propres dossiers, et Terminal est un vrai shell. Système, Bases de données et Journaux sont en lecture seule. FORTIQ n'exécute pas seul de commandes suggérées."},
+        {"q": "Le navigateur exécute-t-il du JavaScript ?", "a": "Non. C'est un lecteur de texte sûr fondé sur curl exécuté sur votre serveur, présenté comme un aperçu."},
+        {"q": "Pourquoi Windows avertit-il pour l'installateur ?", "a": "L'installateur n'est pas encore signé, faute de certificat. Attendez-vous à un avertissement SmartScreen tant que cela ne change pas."},
+        {"q": "Dans quelles langues parle le produit ?", "a": "L'interface du bureau est pour l'instant en français. Ce site est en anglais, français et russe."}
+      ],
+      "license": {"id": "license", "eyebrow": "Licence", "title": "GNU GPL v3.0 uniquement", "lead": "Le code propre de FORTIQ est sous licence GPL-3.0-only.", "items": [
+        {"t": "Logiciel libre", "d": "Vous pouvez utiliser, étudier, partager et modifier FORTIQ selon les termes de la GPL. Les destinataires de binaires ont droit au code source correspondant."},
+        {"t": "Composants tiers", "d": "Qt, libssh2, OpenSSL et d'autres composants gardent leurs propres licences. Ils figurent dans les mentions tierces et ne sont pas automatiquement du code GPL."},
+        {"t": "Publication", "d": "Le dépôt sera ouvert après un audit des secrets et des droits sur les ressources. Sa visibilité n'a pas encore changé."}
+      ]}
+    }
   },
   "ru": {
-    "title": "FORTIQ — Ваш Linux. Новый рабочий стол.",
-    "description": "FORTIQ — локальный рабочий стол для удалённого Debian или Ubuntu. Windows и Android в приоритете. Smart Files и Logs в разработке.",
-    "navWhy": "Концепция",
-    "navApps": "Приложения",
-    "navHow": "Архитектура",
-    "navProgress": "Разработка",
-    "navPlatform": "Windows + Android",
-    "eyebrow": "ЛОКАЛЬНЫЙ ИНТЕРФЕЙС · УДАЛЁННЫЙ LINUX",
-    "heroTitle": "Ваш Linux.<br><em>Собственный рабочий стол.</em>",
-    "heroDescription": "Полноценная desktop-оболочка на вашем устройстве. Файлы, инструменты и данные остаются на Debian или Ubuntu. Одно нативное приложение Qt для Windows и Android.",
-    "heroStatus": "Идёт разработка · Публичной сборки пока нет",
-    "heroPrimary": "Изучить концепцию",
-    "heroSecondary": "Как это работает",
-    "visualTitle": "Направление дизайна · Схематичная иллюстрация",
-    "visualNote": "Концептуальная иллюстрация — не работающее приложение, не подтверждение безопасности и не пиксельная копия утверждённого эскиза.",
-    "heroChip1": "Локальный Qt / QML",
-    "heroChip2": "Linux через SSH",
-    "heroChip3": "Windows и Android",
-    "sect1Eyebrow": "ДВА ГЛАВНЫХ ПРИЛОЖЕНИЯ",
-    "sect1Title": "Полезно каждый день.<br><span>Продумано до деталей.</span>",
-    "sect1Sub": "Сначала два действительно полезных приложения, а не двенадцать декоративных демоверсий.",
-    "filesLabel": "01 / SMART FILES",
-    "filesTitle": "Удалённые файлы. <em>Как свои.</em>",
-    "filesCopy": "Просмотр каталогов Linux, умный поиск, предпросмотр документов и передача файлов с наглядным прогрессом и обработкой конфликтов. Светлая рабочая область, тёмная боковая панель и синие папки — строго заданный визуальный язык FORTIQ.",
-    "filesTags": [
-      "Удалённый SFTP",
-      "Поиск и коллекции",
-      "Безопасные передачи"
-    ],
-    "filesPlanned": "В исходниках есть базовый SFTP только для чтения. Расширенные функции запланированы.",
-    "logsLabel": "02 / LOGS INTELLIGENCE",
-    "logsTitle": "Понимайте, что произошло.",
-    "logsCopy": "Чтение journald и журналов приложений, анализ отдельных служб, группировка повторяющихся ошибок и сводки со ссылками на исходные события. Факты отделены от гипотез; обязательный AI не требуется.",
-    "logsTags": [
-      "journalctl и файлы",
-      "Живая лента",
-      "Проверяемые сводки"
-    ],
-    "logsPlanned": "Приложение Logs спроектировано, но ещё не реализовано.",
-    "howEyebrow": "ОДНА ПОНЯТНАЯ АРХИТЕКТУРА",
-    "howTitle": "Рабочий стол здесь.<br><span>Linux — там.</span>",
-    "howCopy": "FORTIQ рисует интерфейс локально, а сервер остаётся источником файлов и вычислений. Связь через SSH, SFTP и проверенные Linux-инструменты. Не нужны собственные серверные агенты, GNOME на сервере или трансляция экрана.",
-    "client": "ЛОКАЛЬНОЕ УСТРОЙСТВО",
-    "clientSub": "Windows · Android",
-    "transport": "ПРОВЕРЕННЫЙ SSH",
-    "server": "LINUX-СЕРВЕР",
-    "serverSub": "Debian · Ubuntu · WSL · VPS",
-    "howNote": "Нет прямого сетевого fallback для рабочих данных. Браузер появится только после проверки безопасного проксирования.",
-    "statusEyebrow": "СОСТОЯНИЕ РАЗРАБОТКИ",
-    "statusTitle": "Архитектура определена. Продукт создаётся.",
-    "statusCopy": "В исходниках первого Qt/C++ прототипа есть SSH-подключение и просмотр каталогов по SFTP. Сборки Windows/Android, точный UI по утверждённому эскизу, расширенный Smart Files и Logs ещё требуют реализации или проверки.",
-    "statusA": "Qt 6 / C++20",
-    "statusA2": "Исходники прототипа есть",
-    "statusB": "Точность desktop UI",
-    "statusB2": "Пока не подтверждена",
-    "statusC": "Сборки Android и Windows",
-    "statusC2": "Пока не проверены",
-    "statusD": "Smart Files и Logs",
-    "statusD2": "В разработке",
-    "future": "Позже: терминал, редактор, документы и почта. Браузер — только после проверки SSH-маршрута. AI необязателен.",
-    "footerLine": "Ваш Linux — в новом удобном пространстве.",
-    "footerNote": "Концепция и демонстрационный сайт. Визуализация не доказывает готовность функций, если это не указано отдельно.",
-    "filesWindow": "Домашняя папка",
-    "home": "Домой",
-    "projects": "Проекты",
-    "documents": "Документы",
-    "downloads": "Загрузки",
-    "logsWindow": "Журналы",
-    "logsService": "События служб",
-    "logLine1": "ssh.service · Сессия открыта",
-    "logLine2": "nginx.service · Повторяющееся предупреждение",
-    "logLine3": "systemd · Служба перезапущена",
-    "offline": "Демо / примеры данных",
-    "tabFiles": "Файлы",
-    "tabLogs": "Журналы",
-    "tabTerminal": "Терминал",
-    "dock": "Рабочий стол",
-    "referenceAlt": "Оригинальный утверждённый эскиз FORTIQ 1536×1024, не скриншот работающего Qt-приложения.",
-    "visualTitleReference": "Утверждённый оригинальный эскиз",
-    "visualNoteReference": "Оригинал без изменений. Это визуальный эталон, а не подтверждённый снимок работающего Qt-приложения."
+    "ui": {
+      "skip": "К содержимому",
+      "navLabel": "Основная навигация",
+      "nav": {"apps": "Приложения", "security": "Безопасность", "download": "Загрузка", "faq": "FAQ"},
+      "langLabel": "Язык",
+      "theme": "Переключить светлую и тёмную тему",
+      "badge": {"supported": "Поддерживается", "preview": "Предварительно"},
+      "limitLabel": "Ограничения",
+      "footerLine": "Ваш Linux. Собственный рабочий стол.",
+      "footerNote": "Инженерный прототип R0.x. Изображения интерфейса — утверждённый эталон дизайна, а не снимок готового продукта. Сторонние компоненты сохраняют свои лицензии.",
+      "license": "Лицензия: GPL-3.0-only",
+      "status": "Состояние",
+      "backTop": "Наверх"
+    },
+    "index": {
+      "title": "FORTIQ — Ваш Linux. Собственный рабочий стол.",
+      "description": "FORTIQ — нативный рабочий стол для удалённого сервера Debian или Ubuntu. Файлы, терминал, журналы, Markdown, почта и другое по SSH, без установки чего-либо на сервер. Инженерный прототип для Windows и Android.",
+      "eyebrow": "Нативный рабочий стол · Удалённый Linux · Только SSH",
+      "h1Html": "Ваш Linux.<br><em>Собственный рабочий стол.</em>",
+      "lead": "FORTIQ даёт серверу Debian или Ubuntu настоящий рабочий стол на Windows и Android. Файлы, инструменты и работа остаются на сервере. Приложение лишь рисует интерфейс и общается с сервером по SSH.",
+      "ctaPrimary": "Получить FORTIQ",
+      "ctaSecondary": "Как обеспечена безопасность",
+      "heroStatus": "Инженерный прототип · Публичной загрузки пока нет",
+      "heroAlt": "Утверждённый дизайн рабочего стола FORTIQ: окно Files, лаунчер, браузер, центр управления и док на фоне горного озера.",
+      "heroCaption": "Утверждённый эталон дизайна рабочего стола, 1536×1024. Это цель для интерфейса, а не снимок работающего приложения.",
+      "heroOriginal": "Открыть исходный PNG",
+      "pillars": [
+        {"t": "Единственный путь — SSH", "d": "Клиент не открывает никаких соединений, кроме SSH к выбранному вами серверу. Больше ничего не покидает устройство."},
+        {"t": "Ничего не нужно ставить на сервер", "d": "Ни агента, ни демона, ни удалённого стола. FORTIQ управляет уже имеющимися инструментами Linux, например journalctl, notmuch и curl."},
+        {"t": "Каждый инструмент работает без AI", "d": "Повседневные приложения самодостаточны. Необязательный помощник запланирован, но сегодня недоступен."}
+      ],
+      "appsId": "apps",
+      "appsEyebrow": "Приложения",
+      "appsTitleHtml": "Всё, что вы делаете на сервере.<br><span>Теперь с парадным входом.</span>",
+      "appsLead": "Каждое приложение — графический интерфейс к проверенному инструменту Linux, с понятной ошибкой, если источник недоступен.",
+      "apps": [
+        {"id": "files", "name": "Файлы", "status": "supported", "d": "Просмотр, предпросмотр, загрузка и скачивание, переименование, поиск, серверная корзина и встроенный редактор. Папки с десятками тысяч записей показываются постранично.", "limit": "Визуальная приёмка ещё не проведена."},
+        {"id": "terminal", "name": "Терминал", "status": "supported", "d": "Настоящая интерактивная оболочка по SSH с полной эмуляцией терминала, историей команд и Ctrl+C, который работает даже при потоке вывода.", "limit": "Интеграции с tmux пока нет."},
+        {"id": "logs", "name": "Журналы", "status": "supported", "d": "Чтение journald и /var/log, фильтры по периоду и важности, прямой эфир, группировка повторов и разбор инцидента — без AI.", "limit": "Корреляция — первый срез; полный контракт остаётся целью."},
+        {"id": "mdok", "name": "MDok", "status": "supported", "d": "Редактор Markdown с предпросмотром, поиском и заменой и черновиками на сервере. Если файл изменился, экран конфликта покажет различия.", "limit": "Экспорта в PDF пока нет."},
+        {"id": "mail", "name": "Почта", "status": "preview", "d": "Чтение и теги через notmuch на сервере, отправка через msmtp. FORTIQ никогда не обращается к вашему почтовому провайдеру напрямую.", "limit": "На сервере должны быть настроены notmuch, mbsync и msmtp."},
+        {"id": "browser", "name": "Браузер", "status": "preview", "d": "Веб-читалка: страницы загружаются через curl на сервере и показываются безопасным текстом. Сайты видят ваш сервер, а не устройство.", "limit": "Без JavaScript, стилей, форм и cookies."},
+        {"id": "system", "name": "Система", "status": "supported", "d": "Службы, процессы, сетевые интерфейсы и диски одним взглядом. Строго только чтение: ни kill, ни перезапуска, ни изменений.", "limit": "Только обзор — так задумано."},
+        {"id": "databases", "name": "Базы данных", "status": "preview", "d": "Запросы к SQLite и PostgreSQL только на чтение, с лимитами строк и времени и возможностью отмены.", "limit": "Защита от записи — страховка, а не граница безопасности."}
+      ],
+      "appsNote": "«Поддерживается» — входит в контракт 1.0, есть сценарий приёмки и автоматические свидетельства. «Предварительно» — работает в заявленных пределах и помечено как предварительное. Квалификация выпуска ещё продолжается.",
+      "howId": "how",
+      "howEyebrow": "Как это работает",
+      "howTitleHtml": "Рабочий стол здесь.<br><span>Linux — там.</span>",
+      "howLead": "FORTIQ рисует интерфейс локально, а работает удалённо. Сервер остаётся источником ваших файлов и вычислений, поэтому медленное соединение не переносит данные на устройство.",
+      "diagram": {
+        "client": "Ваше устройство", "clientSub": "Windows · Android", "clientTech": "Qt 6 · C++20 · QML",
+        "transport": "SSH", "transportSub": "Отпечаток закреплён",
+        "server": "Ваш Linux-сервер", "serverSub": "Debian · Ubuntu · WSL · VPS", "serverTech": "Готовые инструменты, без агента"
+      },
+      "steps": [
+        {"t": "Добавьте сервер", "d": "Хост, пользователь, пароль или ключ. Профили хранятся на вашем устройстве."},
+        {"t": "Проверьте его один раз", "d": "FORTIQ покажет отпечаток хоста и закрепит его до отправки любых учётных данных."},
+        {"t": "Работайте", "d": "Files, Terminal, Logs и остальное — в одном рабочем столе. Сессии переиспользуются, а не открываются заново."}
+      ],
+      "statusId": "status",
+      "statusEyebrow": "Честное состояние",
+      "statusTitleHtml": "Рано, и мы это говорим прямо.",
+      "statusLead": "FORTIQ — инженерный прототип. Вот что сегодня подтверждено фактами и что ещё нужно доказать до выпуска.",
+      "doneTitle": "Проверено",
+      "done": [
+        "Собирается на Windows с MSVC и Qt 6.12.",
+        "Живой набор из 57 тестов SSH проходит на настоящих хостах Debian, включая два независимых сервера.",
+        "Отладочная сборка Android arm64 прошла вход, Files и выбор хранилища в эмуляторе."
+      ],
+      "todoTitle": "Ещё предстоит доказать",
+      "todo": [
+        "Установка на чистой машине Windows и подписанный установщик (сертификата пока нет).",
+        "Физическое устройство Android и подписанный релизный APK.",
+        "Визуальная приёмка рабочего стола по утверждённому эталону.",
+        "Результаты размещённого CI и аудит перед публикацией, прежде чем откроются исходники."
+      ],
+      "ctaTitleHtml": "Посмотрите, как идут дела.",
+      "ctaText": "Состояние загрузки, требования и чего ждать от первых сборок.",
+      "ctaButton": "Загрузка и установка"
+    },
+    "security": {
+      "title": "Безопасность — FORTIQ",
+      "description": "Как FORTIQ защищает соединения и учётные данные: только SSH, закреплённые отпечатки хостов, секреты в хранилище ОС и отсутствие других прямых подключений клиента.",
+      "eyebrow": "Безопасность",
+      "h1Html": "Одно соединение.<br><em>Проверьте его сами.</em>",
+      "lead": "FORTIQ устроен так, что его безопасность укладывается в одно предложение: клиент говорит по SSH с одним выбранным вами сервером и больше ни с кем.",
+      "sections": [
+        {"id": "network", "eyebrow": "Сеть", "title": "Только SSH — по замыслу", "lead": "Без аналитики, телеметрии и скрытых сервисов.", "items": [
+          {"t": "Единственное соединение — SSH", "d": "У клиента нет прямых подключений к почтовым провайдерам, веб-серверам, базам данных и службам обновления. Приложения запускают инструменты на вашем сервере и получают результат по SSH."},
+          {"t": "Нет проверки обновлений", "d": "Клиент сам не ищет обновления, потому что это было бы вторым соединением. Новые версии вы скачиваете сами."},
+          {"t": "Два сервера никогда не смешиваются", "d": "Каждый результат привязан к серверу и соединению, которые его создали. Запоздавший ответ прежнего хоста отбрасывается."}
+        ]},
+        {"id": "trust", "eyebrow": "Доверие", "title": "Знайте, с кем говорите", "lead": "Доверие устанавливается до отправки любого секрета.", "items": [
+          {"t": "Сначала закрепление отпечатка", "d": "SHA-256 отпечаток ключа сервера показывается и закрепляется до аутентификации. Если ключ позже изменится, вход блокируется до вашего явного решения."},
+          {"t": "Устаревшие алгоритмы отвергаются", "d": "Слабые или устаревшие обмен ключами, шифры и типы ключей хоста отклоняются, а не принимаются молча. Это проверяет тест."},
+          {"t": "Пароль или ключ", "d": "Вход по паролю или закрытому ключу. Сессии переиспользуются, чтобы не спрашивать снова и снова."}
+        ]},
+        {"id": "secrets", "eyebrow": "Секреты", "title": "Обращение с осторожностью", "lead": "Где хранятся ваши данные для входа и куда они не попадают никогда.", "items": [
+          {"t": "Хранилище операционной системы", "d": "Запомненный пароль хранится только в защищённом хранилище системы: Windows Credential Manager или Android Keystore. Если оно недоступно, FORTIQ отказывается сохранять. Запасного варианта с файлом нет."},
+          {"t": "Не в аргументах и не в журналах", "d": "Секреты не передаются в командной строке и не пишутся в журналы. Тесты проверяют, что после использования копий в памяти не остаётся."},
+          {"t": "Известные ограничения", "d": "ssh-agent пока не поддерживается. Путь через Android Keystore проверен только самотестом на эмуляторе."}
+        ]},
+        {"id": "server", "eyebrow": "На сервере", "title": "Осторожно с тем, к чему прикасается", "lead": "Более безопасные значения по умолчанию и честность об их пределах.", "items": [
+          {"t": "Только чтение там, где это важно", "d": "Система и Базы данных только читают. Защита баз многослойная, но это страховка, а не граница безопасности: для чувствительных данных используйте роль только для чтения."},
+          {"t": "Ограждения браузера", "d": "Внутренние адреса сервера открываются только после вашего подтверждения, а адреса метаданных облака не открываются никогда."},
+          {"t": "Почтовые пароли хранятся на сервере", "d": "Почтовые учётные данные лежат в конфигурации самого сервера под защитой прав файла (0600), но в открытом виде."}
+        ]}
+      ],
+      "noteTitle": "Чего мы не утверждаем",
+      "note": "Эти свойства подтверждены собственными автоматическими тестами проекта на сборках для разработки. На упакованных релизных бинарниках их ещё не повторяли, и ни один выпуск пока не прошёл квалификацию по безопасности.",
+      "ctaText": "Остались вопросы о том, как это работает?",
+      "ctaButton": "Читать FAQ"
+    },
+    "download": {
+      "title": "Загрузка — FORTIQ",
+      "description": "Состояние загрузки FORTIQ для Windows и Android, план установки, требования к серверу и лицензия. Публичной сборки пока нет.",
+      "eyebrow": "Загрузка",
+      "h1Html": "Пока не публично.<br><em>Вот план.</em>",
+      "lead": "FORTIQ — инженерный прототип. Публичной загрузки сегодня нет, и мы предпочитаем сказать об этом, а не раздавать непроверенное.",
+      "notice": {"t": "Публичной сборки пока нет", "d": "Репозиторий остаётся закрытым до завершения аудита перед публикацией. Когда появятся первые сборки, на этой странице будут установщики, контрольные суммы и исходный код."},
+      "platforms": [
+        {"name": "Windows", "sub": "x64 · основная платформа", "badge": "В разработке", "items": [
+          "Установщик на пользователя: без прав администратора, ставится в ваш профиль, с ярлыком в меню «Пуск» и программой удаления.",
+          "Также собирается переносимый ZIP.",
+          "Пока не подписан: Windows SmartScreen предупредит, так как сертификата подписи кода нет.",
+          "Установка на чистой Windows 11 ещё не проверена.",
+          "Автоматических обновлений нет: новую версию ставят поверх старой."
+        ]},
+        {"name": "Android", "sub": "arm64 · бета", "badge": "Бета, на проверке", "items": [
+          "Отладочная сборка проходит вход, Files и выбор хранилища в эмуляторе.",
+          "На физическом устройстве ещё не проверялась.",
+          "Релизный APK пока не подписан."
+        ]}
+      ],
+      "sections": [
+        {"id": "requirements", "eyebrow": "Требования", "title": "Что нужно вашему серверу", "lead": "FORTIQ ничего не добавляет на сервер. Вот что он рассчитывает там найти.", "items": [
+          {"t": "Хост Debian или Ubuntu", "d": "Доступный по SSH с паролем или ключом. Подойдут VPS, домашняя машина или WSL."},
+          {"t": "Основные приложения", "d": "Файлы, Терминал, Журналы, MDok и Система опираются на стандартные инструменты, которые обычно уже есть в Debian или Ubuntu."},
+          {"t": "Необязательные инструменты", "d": "Почте нужны настроенные notmuch, mbsync и msmtp. Браузеру — curl. Базам данных — sqlite3 или psql."}
+        ]},
+        {"id": "first-run", "eyebrow": "Первый запуск", "title": "Как выглядит первая минута", "lead": "Когда сборка станет доступна.", "items": [
+          {"t": "1 · Добавьте сервер", "d": "Введите хост, пользователя и пароль или ключ."},
+          {"t": "2 · Проверьте отпечаток", "d": "Сравните показанный SHA-256 отпечаток с отпечатком вашего сервера. FORTIQ закрепит его."},
+          {"t": "3 · Откройте рабочий стол", "d": "Файлы, Терминал, Журналы и другое — в одном соединении."}
+        ]},
+        {"id": "source", "eyebrow": "Исходный код", "title": "Свободное ПО, GPL-3.0", "lead": "FORTIQ — свободное программное обеспечение под GNU GPL v3.0, которое планируется опубликовать полностью на GitHub.", "items": [
+          {"t": "Что вы получите", "d": "Исходный код и сборочные скрипты к каждому бинарному выпуску, текст лицензии и уведомления о сторонних компонентах."},
+          {"t": "Когда", "d": "После аудита перед публикацией: секреты и права на ресурсы. До тех пор репозиторий остаётся закрытым."}
+        ]}
+      ]
+    },
+    "faq": {
+      "title": "FAQ и лицензия — FORTIQ",
+      "description": "Частые вопросы о FORTIQ: чем отличается от удалённого рабочего стола, что запускается на сервере, нужен ли AI, что работает сегодня и какая лицензия.",
+      "eyebrow": "FAQ",
+      "h1Html": "Вопросы —<br><em>простые ответы.</em>",
+      "lead": "Короткие ответы, согласованные с документами проекта.",
+      "items": [
+        {"q": "Это удалённый рабочий стол вроде VNC или RDP?", "a": "Нет. FORTIQ не транслирует экран. Это нативное приложение: оно рисует собственный интерфейс локально и запускает существующие инструменты Linux на сервере по SSH. Графический стол на сервере не нужен."},
+        {"q": "Что нужно установить на сервер?", "a": "Ничего от FORTIQ. Ни агента, ни демона. Некоторые приложения используют такие инструменты, как notmuch, curl или psql, если вам нужны эти приложения."},
+        {"q": "На каких системах работает?", "a": "Основная платформа — Windows x64. Android arm64 — бета. Сервер — Debian или Ubuntu."},
+        {"q": "Можно скачать уже сегодня?", "a": "Пока нет. FORTIQ — инженерный прототип, а репозиторий закрыт до аудита перед публикацией."},
+        {"q": "Нужен ли AI?", "a": "Нет. Каждый повседневный инструмент работает без него. Необязательный офлайн-помощник запланирован, но сегодня недоступен."},
+        {"q": "Отправляет ли он данные куда-то ещё?", "a": "Нет. Клиент подключается только к выбранному вами SSH-серверу. Аналитики нет, обновления сам он не ищет."},
+        {"q": "Может ли он изменить мой сервер?", "a": "Файлы могут создавать, переименовывать и удалять в ваших каталогах, а Терминал — настоящая оболочка. Система, Базы данных и Журналы работают только на чтение. FORTIQ не выполняет предложенные команды сам."},
+        {"q": "Выполняет ли браузер JavaScript?", "a": "Нет. Это безопасная текстовая читалка на основе curl, который запускается на вашем сервере; она помечена как предварительная."},
+        {"q": "Почему Windows предупреждает об установщике?", "a": "Установщик пока не подписан, потому что у проекта нет сертификата. Пока это не изменится, ждите предупреждения SmartScreen."},
+        {"q": "На каких языках говорит продукт?", "a": "Интерфейс рабочего стола пока на французском. Этот сайт — на английском, французском и русском."}
+      ],
+      "license": {"id": "license", "eyebrow": "Лицензия", "title": "Только GNU GPL v3.0", "lead": "Собственный код FORTIQ лицензирован как GPL-3.0-only.", "items": [
+        {"t": "Свободное ПО", "d": "Вы можете использовать, изучать, распространять и изменять FORTIQ на условиях GPL. Получатели бинарников вправе получить соответствующий исходный код."},
+        {"t": "Сторонние части", "d": "Qt, libssh2, OpenSSL и другие компоненты сохраняют свои лицензии. Они перечислены в уведомлениях о сторонних компонентах и не считаются автоматически GPL-кодом."},
+        {"t": "Публикация", "d": "Репозиторий будет открыт после аудита секретов и прав на ресурсы. Его видимость пока не менялась."}
+      ]}
+    }
   }
 }
