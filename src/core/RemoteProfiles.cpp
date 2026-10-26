@@ -156,8 +156,7 @@ QString RemoteController::pinKey() const {
         QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
 }
 void RemoteController::scrubPassword() {
-    m_password.fill(QChar::Null);
-    m_password.clear();
+    m_password.wipeNow();
 }
 
 void RemoteController::connectServer(QString host, int port, QString user, QString password, QString keyPath) {
@@ -167,7 +166,8 @@ void RemoteController::connectServer(QString host, int port, QString user, QStri
     m_host = host.trimmed();
     m_port = port;
     m_user = user.trimmed();
-    m_password = std::move(password);
+    m_password = password;
+    wipe(password);   // this handle only; the buffer is zeroed by the last holder (m_password / the task copies)
     m_keyPath = keyPath.trimmed().isEmpty() ? QString() : localDocumentPath(QUrl::fromUserInput(keyPath.trimmed()));
     if (!keyPath.trimmed().isEmpty() && m_keyPath.isEmpty()) {
         scrubPassword();

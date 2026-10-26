@@ -567,7 +567,7 @@ void MailController::applySetup(const QStringList &keys) {
     for (const MailSetupFile &f : m_previewFiles) if (keys.contains(f.key)) chosen << f;
     if (chosen.isEmpty()) { setActionStatus(QStringLiteral("Cochez au moins un fichier à écrire.")); return; }
     const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMddHHmmss"));
-    const QByteArray script = buildSetupWriteScript(m_previewAccount, chosen, stamp, QStringLiteral("FQW") + randomHex(8) + QStringLiteral("X"));
+    const SecretBytes script = buildSetupWriteScript(m_previewAccount, chosen, stamp, QStringLiteral("FQW") + randomHex(8) + QStringLiteral("X"));
     if (script.isEmpty()) { setActionStatus(QStringLiteral("L'écriture n'a pas pu être préparée.")); return; }
     const QString account = m_previewAccount;
     runAction(QStringLiteral("mailSetup"), QStringLiteral("Compte courrier · ") + account, account, false, script, 64 * 1024, [this, account, chosen](const ActionOutcome &out, int taskId) {

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QByteArray>
+
+#include "../core/SecureWipe.h"
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -42,7 +44,7 @@ struct MailSetupFile {
     QString path;           // shown to the user (home + relPath)
     QString kind;           // "block" (our marked block inside a possibly existing file) | "new" (whole file, only when absent)
     QString beginMarker, endMarker;   // block markers ("" for kind "new")
-    QString content;        // exact text that will be written
+    SecretString content;   // exact text that will be written (holds the password: wiped when the last holder dies)
     QString shown;          // the same text with the password(s) masked
     QString mkdirPath;      // directory created before writing (the account's Maildir root), "" for none
 };
@@ -70,7 +72,7 @@ MailSetupState parseSetupProbe(const QByteArray &output);
 QVariantMap setupStateToVariant(const MailSetupState &state);
 
 // Writes the chosen files (`files` is a subset of buildSetupFiles). Empty script on invalid input.
-QByteArray buildSetupWriteScript(const QString &accountName, const QList<MailSetupFile> &files, const QString &stamp, const QString &delimiterBase);
+SecretBytes buildSetupWriteScript(const QString &accountName, const QList<MailSetupFile> &files, const QString &stamp, const QString &delimiterBase);
 QStringList parseSetupWritten(const QByteArray &output);     // keys written
 
 QByteArray buildSmtpTestScript(const QString &account);

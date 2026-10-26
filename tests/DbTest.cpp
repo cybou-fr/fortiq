@@ -1,3 +1,4 @@
+#include "core/SecureWipe.h"
 #include "db/DbInfo.h"
 
 #include <QElapsedTimer>
@@ -314,6 +315,42 @@ private slots:
         QCOMPARE(r.rows[2][2].toString(), QString("line1\nline2"));
         QVERIFY(r.numeric[0]); QVERIFY(!r.numeric[1]);
         QVERIFY(!r.truncated);
+    }
+
+    // S-6: the wipe helpers never copy a secret and never leave a holder with a half-wiped buffer.
+    void secretsAreWipedWithoutCopies() {
+        char raw[32];
+        memset(raw, 'S', sizeof raw);
+        fortiq::secureWipe(raw, sizeof raw);
+        for (const char c : raw) QCOMPARE(int(static_cast<const volatile char &>(c)), 0);
+
+        QByteArray a(64, 'k');
+        QByteArray b = a;                                    // shared
+        const char *buffer = b.constData();
+        fortiq::wipe(a);                                     // not the last holder: drops its reference, touches nothing
+        QVERIFY(a.isEmpty());
+        QCOMPARE(b.constData(), buffer);                     // no detach: no second copy of the secret was made
+        QCOMPARE(b, QByteArray(64, 'k'));                    // and the other holder still has its data
+        fortiq::wipe(b);
+        QVERIFY(b.isEmpty());
+
+        QString s = QString(40, QLatin1Char('p'));
+        QString t = s;
+        const QChar *chars = t.constData();
+        fortiq::wipe(s);
+        QCOMPARE(t.constData(), chars);
+        QCOMPARE(t, QString(40, QLatin1Char('p')));
+        fortiq::wipe(t);
+        QVERIFY(t.isEmpty());
+
+        fortiq::SecretString secret(QStringLiteral("hunter2"));
+        QVERIFY(secret == QLatin1String("hunter2"));         // behaves like a QString
+        secret.wipeNow();
+        QVERIFY(secret.isEmpty());
+        fortiq::SecretBytes bytes("hunter2");
+        QVERIFY(bytes.contains("hunter"));
+        bytes.wipeNow();
+        QVERIFY(bytes.isEmpty());
     }
 
     // S-7: a 4 MiB answer of tiny rows must not be turned into millions of QVariants: parsing stops right after maxRows + 1 rows.

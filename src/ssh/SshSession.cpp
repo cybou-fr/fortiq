@@ -139,7 +139,7 @@ SshResult SshSession::open(const ConnectionRequest &req)
     }
 
     const QByteArray user = req.user.toUtf8();
-    QByteArray password = req.password.toUtf8();
+    SecretBytes password = req.password.toUtf8();   // wiped by its destructor even on an early return
     int rc = 0;
     if (!req.keyPath.isEmpty()) {
         // QFile understands Android SAF grants; libssh2's native fopen does not.
@@ -147,25 +147,25 @@ SshResult SshSession::open(const ConnectionRequest &req)
         QFile keyFile(req.keyPath);
         constexpr qint64 maxKeyBytes = 1024 * 1024;
         if (!keyFile.open(QIODevice::ReadOnly)) {
-            password.fill(char(0)); d->close();
+            d->close();
             return fail(QStringLiteral("Cannot read the selected private key. Select it again if its document permission expired."));
         }
-        QByteArray key = keyFile.read(maxKeyBytes + 1);
+        SecretBytes key = keyFile.read(maxKeyBytes + 1);
         const bool complete = keyFile.error() == QFileDevice::NoError && keyFile.atEnd();
         keyFile.close();
         if (!complete || key.isEmpty() || key.size() > maxKeyBytes) {
-            key.fill(char(0)); password.fill(char(0)); d->close();
+            d->close();
             return fail(QStringLiteral("Private key is empty, unreadable or larger than 1 MiB."));
         }
         rc = libssh2_userauth_publickey_frommemory(d->handle, user.constData(), static_cast<size_t>(user.size()),
             nullptr, 0, key.constData(), static_cast<size_t>(key.size()), password.isEmpty() ? nullptr : password.constData());
-        key.fill(char(0));
+        key.wipeNow();
     } else {
         rc = libssh2_userauth_password_ex(d->handle, user.constData(),
             static_cast<unsigned int>(user.size()), password.constData(),
             static_cast<unsigned int>(password.size()), nullptr);
     }
-    password.fill(char(0));
+    password.wipeNow();
     if (rc != 0) {
         d->close();
         return fail(req.keyPath.isEmpty()

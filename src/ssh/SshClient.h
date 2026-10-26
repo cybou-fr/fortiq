@@ -4,6 +4,8 @@
 #include <QString>
 #include <QVariantList>
 
+#include "../core/SecureWipe.h"
+
 #include <functional>
 #include <memory>
 
@@ -12,7 +14,7 @@ struct ConnectionRequest {
     QString host;
     int port = 22;
     QString user;
-    QString password; // RAM only, never persisted or logged; key passphrase when keyPath is set
+    SecretString password; // wiped when the last holder dies (S-6); RAM only, never persisted or logged; key passphrase when keyPath is set
     QString keyPath;  // local OpenSSH key path or opaque Android content URI; empty = password auth
     QString expectedHostFingerprint;
     QString directory; // empty = remote SFTP home

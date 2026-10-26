@@ -37,6 +37,12 @@
 #include <QElapsedTimer>
 #include <QtTest>
 
+#ifdef Q_OS_WIN
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 using fortiq::ConnectionRequest;
 using fortiq::SshClient;
 using fortiq::SshResult;
@@ -1261,6 +1267,101 @@ private slots:
     }
 
     // The Courrier app against the test server: a disposable notmuch database built by tool/make_mail_fixture.sh.
+    // S-6: after a (failed) login, a SecretStore round trip and a database script, no copy of the secrets stays in this process'
+    // memory: the committed pages of the whole address space are scanned for the UTF-8 and UTF-16 forms of unique needles.
+    // Windows only (VirtualQuery). A copy inside the scanner's own pattern buffers is not counted.
+    void secretsLeaveNoCopiesInMemory() {
+#ifndef Q_OS_WIN
+        QSKIP("the memory scanner uses VirtualQuery (Windows)");
+#else
+        const QString suffix = QString::number(QRandomGenerator::global()->generate64(), 16);
+        fortiq::SecretString loginNeedle(QStringLiteral("Zq9-LoginNeedle-") + suffix + QStringLiteral("-end"));
+        fortiq::SecretString storeNeedle(QStringLiteral("Zq9-StoreNeedle-") + suffix + QStringLiteral("-end"));
+        fortiq::SecretString dbNeedle(QStringLiteral("Zq9-DbNeedle-") + suffix + QStringLiteral("-end"));
+        // patterns are rebuilt from a prefix + the random suffix, so the literals in the binary never contain a whole needle
+        auto patterns = [&](const QString &prefix) {
+            const fortiq::SecretString full(prefix + suffix + QStringLiteral("-end"));   // the test's own copies are wiped like any other
+            return QList<fortiq::SecretBytes> { fortiq::SecretBytes(full.toUtf8()), fortiq::SecretBytes(QByteArray(reinterpret_cast<const char *>(full.utf16()), full.size() * 2)) };
+        };
+        const QList<fortiq::SecretBytes> loginP = patterns(QStringLiteral("Zq9-LoginNeedle-")), storeP = patterns(QStringLiteral("Zq9-StoreNeedle-")), dbP = patterns(QStringLiteral("Zq9-DbNeedle-"));
+
+        {   // 1. a failed password login through the controller (the password path up to the libssh2 call)
+            fortiq::RemoteController controller;
+            QSettings settings;
+            const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+                (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+            settings.setValue(pin, fingerprint);
+            controller.connectServer(base.host, base.port, base.user, loginNeedle, QString());
+            loginNeedle.wipeNow();
+            QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 20000);
+            QVERIFY(!controller.connected());
+            controller.disconnectServer();
+            settings.remove(pin);
+        }
+        {   // 2. the protected store: save, load, remove
+            QVERIFY(fortiq::SecretStore::save(QStringLiteral("it-needle-") + suffix, storeNeedle).ok);
+            storeNeedle.wipeNow();
+            {
+                const fortiq::SecretStore::Result loaded = fortiq::SecretStore::load(QStringLiteral("it-needle-") + suffix);
+                QVERIFY(loaded.ok);
+                QCOMPARE(loaded.secret.size(), storeP[0].size());
+            }
+            fortiq::SecretStore::remove(QStringLiteral("it-needle-") + suffix);
+        }
+        {   // 3. the script a database run sends carries the password: build it, then let it go
+            fortiq::DbProfile profile;
+            profile.engine = fortiq::DbEngine::Postgres; profile.host = QStringLiteral("127.0.0.1"); profile.port = 5432;
+            profile.user = QStringLiteral("u"); profile.database = QStringLiteral("d");
+            fortiq::SecretBytes script = fortiq::buildPostgresScript(profile, dbNeedle, QStringLiteral("select 1"), fortiq::DbLimits(), QStringLiteral("<<N>>"), QStringLiteral("FQDELIM"));
+            QVERIFY(script.contains("export PGPASSWORD="));
+            dbNeedle.wipeNow();
+        }
+        QCoreApplication::processEvents();
+        QTest::qWait(300);
+
+        auto scan = [&](const QList<fortiq::SecretBytes> &needles) {
+            int hits = 0;
+            QStringList where;
+            SYSTEM_INFO si; GetSystemInfo(&si);
+            const char *addr = static_cast<const char *>(si.lpMinimumApplicationAddress);
+            MEMORY_BASIC_INFORMATION mbi;
+            while (addr < static_cast<const char *>(si.lpMaximumApplicationAddress) && VirtualQuery(addr, &mbi, sizeof(mbi))) {
+                const bool readable = mbi.State == MEM_COMMIT && !(mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) && (mbi.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE));
+                if (readable) {
+                    const char *base0 = static_cast<const char *>(mbi.BaseAddress);
+                    const qsizetype size = static_cast<qsizetype>(mbi.RegionSize);
+                    for (const fortiq::SecretBytes &n : needles) {
+                        qsizetype from = 0;
+                        for (;;) {
+                            const char *hit = nullptr;
+                            // memmem-style search over the region (the regions are read in place, never copied)
+                            const char *end = base0 + size - n.size();
+                            for (const char *p = base0 + from; p <= end; ++p) {
+                                if (*p == n[0] && memcmp(p, n.constData(), static_cast<size_t>(n.size())) == 0) { hit = p; break; }
+                            }
+                            if (!hit) break;
+                            bool own = false;   // inside one of our pattern buffers
+                            for (const QList<fortiq::SecretBytes> *set : { &loginP, &storeP, &dbP })
+                                for (const fortiq::SecretBytes &pb : *set) own |= hit >= pb.constData() && hit < pb.constData() + pb.size();
+                            if (!own) { ++hits; where << QStringLiteral("%1 form=%2 type=0x%3 before=[%4]").arg(quintptr(hit), 0, 16).arg(n.size() == 0 || n[1] == '\0' ? "utf16" : "utf8").arg(mbi.Type, 0, 16)
+                                                           .arg(QString::fromLatin1(QByteArray(hit - qMin<qsizetype>(40, hit - base0), qMin<qsizetype>(40, hit - base0)).toPercentEncoding()) + QStringLiteral(" after=[") + QString::fromLatin1(QByteArray(hit, qMin<qsizetype>(120, base0 + size - hit)).toPercentEncoding()) + QLatin1Char(']')); }
+                            from = hit - base0 + 1;
+                        }
+                    }
+                }
+                addr = static_cast<const char *>(mbi.BaseAddress) + mbi.RegionSize;
+            }
+            return QPair<int, QStringList>(hits, where);
+        };
+        const auto login = scan(loginP), store = scan(storeP), db = scan(dbP);
+        qInfo("secret copies left in memory: login=%d store=%d db=%d  %s | %s | %s", login.first, store.first, db.first,
+              qPrintable(login.second.join(QStringLiteral("; "))), qPrintable(store.second.join(QStringLiteral("; "))), qPrintable(db.second.join(QStringLiteral("; "))));
+        QCOMPARE(login.first, 0);
+        QCOMPARE(store.first, 0);
+        QCOMPARE(db.first, 0);
+#endif
+    }
+
     // S-8: real notmuch/gmime output for 20 hostile messages (tool/make_hostile_mime_fixture.py): deep and wide MIME, header floods,
     // broken encodings, hostile attachment names and HTML, reply loops. The client must stay responsive, show every conversation
     // or say clearly why not, keep memory/UI bounded, and never let a hostile name or markup through. Needs FORTIQ_IT_MAIL=1.
@@ -1285,7 +1386,8 @@ private slots:
 
         fortiq::MailController mail(&controller);
         mail.setWindowActive(true);
-        mail.setMarkReadOnOpen(false);
+        mail.setMarkReadOnOpen(false);   // a persisted setting: restored whatever happens, other tests rely on the default
+        const auto restoreMarkRead = qScopeGuard([&] { mail.setMarkReadOnOpen(true); });
         mail.setConfigPath(root + "/nm.conf");
         QTRY_VERIFY_WITH_TIMEOUT(mail.state() == "ready" && !mail.threads().isEmpty(), 30000);
         mail.search("HOSTILE");

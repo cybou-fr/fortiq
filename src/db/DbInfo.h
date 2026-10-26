@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QByteArray>
+
+#include "../core/SecureWipe.h"
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -63,10 +65,10 @@ constexpr qint64 kMaxDbOutput = 4 * 1024 * 1024;   // stdout cap of one run
 QString randomToken(int bytes = 12);   // hex, for heredoc delimiters and the NULL marker
 // `delimiter` must not occur in the SQL (the builder checks and returns an empty script otherwise).
 QByteArray buildSqliteScript(const DbProfile &p, const QString &sql, const DbLimits &limits, const QString &delimiter);
-QByteArray buildPostgresScript(const DbProfile &p, const QString &password, const QString &sql, const DbLimits &limits,
+SecretBytes buildPostgresScript(const DbProfile &p, const QString &password, const QString &sql, const DbLimits &limits,
                                const QString &nullMarker, const QString &delimiter);
 // Fixed catalogue queries (not user SQL) for the schema tree.
-QByteArray buildSchemaScript(const DbProfile &p, const QString &password, const DbLimits &limits, const QString &nullMarker, const QString &delimiter);
+SecretBytes buildSchemaScript(const DbProfile &p, const QString &password, const DbLimits &limits, const QString &nullMarker, const QString &delimiter);
 
 // ---- what the connected role can do (audit 23.10.2026, R4) ----
 // FORTIQ's read-only mode is a guard against accidents. The real guarantee is a database role that cannot write, so every time a
@@ -78,7 +80,7 @@ struct RoleCheck {
     QStringList findings;        // one line per right found
     QString recommendation;      // what to do (for PostgreSQL: a read-only role recipe, never executed by FORTIQ)
 };
-QByteArray buildRoleCheckScript(const DbProfile &profile, const QString &password, const DbLimits &limits, const QString &nullMarker, const QString &delimiter);
+SecretBytes buildRoleCheckScript(const DbProfile &profile, const QString &password, const DbLimits &limits, const QString &nullMarker, const QString &delimiter);
 RoleCheck assessRoleCheck(const DbProfile &profile, const QByteArray &output, const QString &nullMarker);
 QString readOnlyRoleRecipe(const DbProfile &profile);       // SQL text for an administrator; contains a placeholder password
 QVariantMap roleCheckToVariant(const RoleCheck &check);

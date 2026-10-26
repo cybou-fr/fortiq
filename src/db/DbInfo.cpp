@@ -199,14 +199,29 @@ QByteArray buildSqliteScript(const DbProfile &p, const QString &sql, const DbLim
 }
 
 namespace {
-QByteArray pgPrologue(const DbProfile &p, const QString &password, const DbLimits &limits) {
-    QByteArray s = "export LC_ALL=C.UTF-8 PGCONNECT_TIMEOUT=8\n";
-    if (!password.isEmpty()) s += "export PGPASSWORD=" + shQuote(password) + "\n";
+// Appends `'value'` (single-quote safe) for a SECRET value straight into the destination, byte by byte: no intermediate
+// QByteArray ever holds the password (S-6). The destination must have its capacity reserved so that it never reallocates.
+void appendSecretQuoted(SecretBytes &out, const QString &value) {
+    const SecretBytes bytes = value.toUtf8();
+    out += '\'';
+    for (const char ch : bytes) {
+        if (ch == '\'') out += "'\\''"; else out += ch;
+    }
+    out += '\'';
+}
+// The script is built in ONE buffer reserved up front: a growing buffer would leave its old, password-bearing copies on the heap.
+SecretBytes newScriptBuffer(const QString &password, qsizetype rest) {
+    SecretBytes s;
+    s.reserve(static_cast<qsizetype>(password.size()) * 12 + rest + 8192);   // UTF-8 is at most 3 bytes per UTF-16 unit, and every quote grows to 4 bytes (no temporary copy of the secret to measure it)
+    return s;
+}
+void pgPrologue(SecretBytes &s, const DbProfile &p, const QString &password, const DbLimits &limits) {
+    s += "export LC_ALL=C.UTF-8 PGCONNECT_TIMEOUT=8\n";
+    if (!password.isEmpty()) { s += "export PGPASSWORD="; appendSecretQuoted(s, password); s += "\n"; }
     s += "export PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=" + QByteArray::number(limits.timeoutSec * 1000)
        + " -c lock_timeout=3000 -c idle_in_transaction_session_timeout=" + QByteArray::number(limits.timeoutSec * 1000)
        + " -c application_name=FORTIQ'\n";
     s += "command -v psql >/dev/null 2>&1 || { echo 'FQ-ERR missing-psql' >&2; exit 4; }\n";
-    return s;
 }
 QByteArray pgCommand(const DbProfile &p, const DbLimits &limits, const QString &nullMarker) {
     QByteArray c = "timeout -k 2 " + QByteArray::number(limits.timeoutSec + 5) + " psql -X -q --csv -P null=" + shQuote(nullMarker)
@@ -217,11 +232,12 @@ QByteArray pgCommand(const DbProfile &p, const DbLimits &limits, const QString &
 }
 }  // namespace
 
-QByteArray buildPostgresScript(const DbProfile &p, const QString &password, const QString &sql, const DbLimits &limitsIn,
+SecretBytes buildPostgresScript(const DbProfile &p, const QString &password, const QString &sql, const DbLimits &limitsIn,
                                const QString &nullMarker, const QString &delimiter) {
     if (delimiter.isEmpty() || sql.contains(delimiter)) return {};
     const DbLimits limits = clampLimits(limitsIn);
-    QByteArray s = pgPrologue(p, password, limits);
+    SecretBytes s = newScriptBuffer(password, static_cast<qsizetype>(sql.size()) * 4 + 2048);
+    pgPrologue(s, p, password, limits);
     s += pgCommand(p, limits, nullMarker) + " <<'" + delimiter.toUtf8() + "'\n";
     s += sql.toUtf8();
     if (!sql.endsWith(QLatin1Char('\n'))) s += '\n';
@@ -229,11 +245,11 @@ QByteArray buildPostgresScript(const DbProfile &p, const QString &password, cons
     return s;
 }
 
-QByteArray buildSchemaScript(const DbProfile &p, const QString &password, const DbLimits &limitsIn, const QString &nullMarker, const QString &delimiter) {
+SecretBytes buildSchemaScript(const DbProfile &p, const QString &password, const DbLimits &limitsIn, const QString &nullMarker, const QString &delimiter) {
     const DbLimits limits = clampLimits(limitsIn);
     const QByteArray d = delimiter.toUtf8();
     if (p.engine == DbEngine::Sqlite) {
-        QByteArray s = "export LC_ALL=C.UTF-8\nf=" + shQuote(p.path) + "\n";
+        SecretBytes s = "export LC_ALL=C.UTF-8\nf=" + shQuote(p.path) + "\n";
         s += "command -v sqlite3 >/dev/null 2>&1 || { echo 'FQ-ERR missing-sqlite3' >&2; exit 4; }\n"
              "sqlite3 -safe :memory: 'select 1' >/dev/null 2>&1 || { echo 'FQ-ERR old-sqlite' >&2; exit 11; }\n"
              "[ -r \"$f\" ] || { echo 'FQ-ERR unreadable' >&2; exit 6; }\n";
@@ -242,7 +258,8 @@ QByteArray buildSchemaScript(const DbProfile &p, const QString &password, const 
              "where m.type in ('table','view') and m.name not like 'sqlite_%' order by m.name, p.cid;\n" + d + "\n";
         return s;
     }
-    QByteArray s = pgPrologue(p, password, limits);
+    SecretBytes s = newScriptBuffer(password, 4096);
+    pgPrologue(s, p, password, limits);
     s += pgCommand(p, limits, nullMarker) + " <<'" + d + "'\n"
          "select c.table_schema, c.table_name, t.table_type, c.column_name, c.data_type, c.is_nullable from information_schema.columns c "
          "join information_schema.tables t on t.table_schema = c.table_schema and t.table_name = c.table_name "
@@ -250,12 +267,12 @@ QByteArray buildSchemaScript(const DbProfile &p, const QString &password, const 
     return s;
 }
 
-QByteArray buildRoleCheckScript(const DbProfile &p, const QString &password, const DbLimits &limitsIn, const QString &nullMarker, const QString &delimiter) {
+SecretBytes buildRoleCheckScript(const DbProfile &p, const QString &password, const DbLimits &limitsIn, const QString &nullMarker, const QString &delimiter) {
     const DbLimits limits = clampLimits(limitsIn);
     const QByteArray d = delimiter.toUtf8();
     if (p.engine == DbEngine::Sqlite) {
         // File rights of the SSH user on the database file: key=value lines.
-        QByteArray s = "export LC_ALL=C.UTF-8\nf=" + shQuote(p.path) + "\n";
+        SecretBytes s = "export LC_ALL=C.UTF-8\nf=" + shQuote(p.path) + "\n";
         s += "[ -e \"$f\" ] || { echo 'FQ-ERR no-file' >&2; exit 5; }\n"
              "if [ -w \"$f\" ]; then echo 'file_writable=1'; else echo 'file_writable=0'; fi\n"
              "if [ -w \"$(dirname -- \"$f\")\" ]; then echo 'dir_writable=1'; else echo 'dir_writable=0'; fi\n"
@@ -266,7 +283,8 @@ QByteArray buildRoleCheckScript(const DbProfile &p, const QString &password, con
     }
     const QByteArray tables = " from pg_class c join pg_namespace n on n.oid = c.relnamespace where c.relkind in ('r','p','v','f') "
                               "and n.nspname not in ('pg_catalog','information_schema') and n.nspname not like 'pg_toast%'";
-    QByteArray s = pgPrologue(p, password, limits);
+    SecretBytes s = newScriptBuffer(password, 8192);
+    pgPrologue(s, p, password, limits);
     s += pgCommand(p, limits, nullMarker) + " <<'" + d + "'\n"
          "select r.rolsuper, r.rolcreaterole, r.rolcreatedb, r.rolreplication, r.rolbypassrls, "
          "coalesce((select string_agg(x.rolname, ',' order by x.rolname) from pg_roles x where x.rolname in "

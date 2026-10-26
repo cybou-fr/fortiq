@@ -220,14 +220,14 @@ QString DbController::selectAllFor(const QVariantMap &o) const {
 void DbController::loadSchema() {
     DbProfile p;
     if (m_busy || !findProfile(m_selectedId, &p)) return;
-    QString password;
+    SecretString password;
     if (p.hasPassword) {
         const SecretStore::Result r = SecretStore::load(secretKey(p.id));
         if (!r.ok) { m_schemaStatus = QStringLiteral("Mot de passe introuvable dans le stockage protégé : modifiez le profil."); emit schemaChanged(); return; }
         password = r.secret;
     }
     const QString marker = QStringLiteral("<<FQ-NULL-") + randomToken(8) + QStringLiteral(">>");
-    const QByteArray script = buildSchemaScript(p, password, m_limits, marker, QStringLiteral("FQ") + randomToken(12));
+    const SecretBytes script = buildSchemaScript(p, password, m_limits, marker, QStringLiteral("FQ") + randomToken(12));
     m_schemaStatus = QStringLiteral("Lecture du schéma…");
     emit schemaChanged();
     execute(script, 1, p, marker, 0);
@@ -236,14 +236,14 @@ void DbController::loadSchema() {
 void DbController::checkRole() {
     DbProfile p;
     if (m_busy || !findProfile(m_selectedId, &p)) return;
-    QString password;
+    SecretString password;
     if (p.hasPassword) {
         const SecretStore::Result r = SecretStore::load(secretKey(p.id));
         if (!r.ok) return;   // loadSchema already told the user
         password = r.secret;
     }
     const QString marker = QStringLiteral("<<FQ-NULL-") + randomToken(8) + QStringLiteral(">>");
-    const QByteArray script = buildRoleCheckScript(p, password, m_limits, marker, QStringLiteral("FQ") + randomToken(12));
+    const SecretBytes script = buildRoleCheckScript(p, password, m_limits, marker, QStringLiteral("FQ") + randomToken(12));
     execute(script, 2, p, marker, 0);
 }
 
@@ -253,14 +253,14 @@ void DbController::runQuery(const QString &sql) {
     if (!findProfile(m_selectedId, &p)) { m_error = QStringLiteral("Choisissez un profil."); emit changed(); return; }
     const QString refusal = readOnlyRefusal(sql, p.engine);
     if (!refusal.isEmpty()) { m_error = refusal; emit changed(); return; }
-    QString password;
+    SecretString password;
     if (p.hasPassword) {
         const SecretStore::Result r = SecretStore::load(secretKey(p.id));
         if (!r.ok) { m_error = QStringLiteral("Mot de passe introuvable dans le stockage protégé : modifiez le profil."); emit changed(); return; }
         password = r.secret;
     }
     const QString marker = QStringLiteral("<<FQ-NULL-") + randomToken(8) + QStringLiteral(">>");
-    QByteArray script;
+    SecretBytes script;
     for (int attempt = 0; attempt < 3 && script.isEmpty(); ++attempt) {
         const QString delimiter = QStringLiteral("FQ") + randomToken(12);
         script = p.engine == DbEngine::Sqlite ? buildSqliteScript(p, sql, m_limits, delimiter) : buildPostgresScript(p, password, sql, m_limits, marker, delimiter);

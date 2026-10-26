@@ -29,9 +29,9 @@ QString SecretStore::unavailableReason() { return {}; }
 SecretStore::Result SecretStore::save(const QString &key, const QString &secret) {
     Result r;
     if (key.isEmpty() || secret.isEmpty()) { r.error = QStringLiteral("Nothing to store."); return r; }
-    QByteArray blob = secret.toUtf8();
+    SecretBytes blob = secret.toUtf8();
     if (blob.size() > int(CRED_MAX_CREDENTIAL_BLOB_SIZE)) {
-        blob.fill('\0');
+        blob.wipeNow();
         r.error = QStringLiteral("The secret is too long for the Windows Credential Manager.");
         return r;
     }
@@ -45,7 +45,7 @@ SecretStore::Result SecretStore::save(const QString &key, const QString &secret)
     credential.Persist = CRED_PERSIST_LOCAL_MACHINE; // this user, this PC; never roamed
     const BOOL written = CredWriteW(&credential, 0);
     const DWORD code = written ? 0 : GetLastError();
-    blob.fill('\0');
+    blob.wipeNow();
     if (!written) { r.error = winError(code); return r; }
     r.ok = true;
     return r;
@@ -136,10 +136,10 @@ QString SecretStore::unavailableReason() { return {}; }
 SecretStore::Result SecretStore::save(const QString &key, const QString &secret) {
     Result r;
     if (key.isEmpty() || secret.isEmpty()) { r.error = QStringLiteral("Nothing to store."); return r; }
-    QByteArray plain = secret.toUtf8();
+    SecretBytes plain = secret.toUtf8();
     QByteArray blob;
     const bool ok = vault("encrypt", aadFor(key), plain, blob, r.error);
-    plain.fill('\0');
+    plain.wipeNow();
     if (!ok) return r;
     QSettings settings;
     settings.setValue(settingsKey(key), blob.toBase64());
@@ -154,10 +154,10 @@ SecretStore::Result SecretStore::load(const QString &key) {
     QSettings settings;
     if (!settings.contains(settingsKey(key))) { r.notFound = true; r.error = QStringLiteral("No stored secret for this server."); return r; }
     const QByteArray blob = QByteArray::fromBase64(settings.value(settingsKey(key)).toByteArray());
-    QByteArray plain;
+    SecretBytes plain;
     if (!vault("decrypt", aadFor(key), blob, plain, r.error)) return r;
     r.secret = QString::fromUtf8(plain);
-    plain.fill('\0');
+    plain.wipeNow();
     r.ok = true;
     return r;
 }

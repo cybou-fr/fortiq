@@ -255,10 +255,15 @@ QVariantMap setupStateToVariant(const MailSetupState &s) {
                          { "mbsync", s.mbsyncVersion }, { "msmtp", s.msmtpVersion }, { "notmuch", s.notmuchVersion }, { "mailRoot", s.mailRoot() } };
 }
 
-QByteArray buildSetupWriteScript(const QString &name, const QList<MailSetupFile> &files, const QString &stamp, const QString &delimiterBase) {
+SecretBytes buildSetupWriteScript(const QString &name, const QList<MailSetupFile> &files, const QString &stamp, const QString &delimiterBase) {
     static const QRegularExpression nameRe(QStringLiteral("^[A-Za-z0-9][A-Za-z0-9_.-]{0,30}$")), stampRe(QStringLiteral("^[0-9]{14}$"));
     if (!nameRe.match(name).hasMatch() || !stampRe.match(stamp).hasMatch() || files.isEmpty() || delimiterBase.isEmpty()) return {};
-    QByteArray s = "umask 077\nexport LC_ALL=C.UTF-8\n";
+    // One buffer, capacity reserved for the whole script: a growing buffer would leave password-bearing copies on the heap (S-6).
+    qsizetype contentBytes = 0;
+    for (const MailSetupFile &f : files) contentBytes += f.content.size() * 3 + 4096;
+    SecretBytes s;
+    s.reserve(contentBytes + 4096);
+    s += "umask 077\nexport LC_ALL=C.UTF-8\n";
     int index = 0;
     for (const MailSetupFile &f : files) {
         const QString delimiter = delimiterBase + QString::number(++index);
@@ -282,7 +287,8 @@ QByteArray buildSetupWriteScript(const QString &name, const QList<MailSetupFile>
                  "  if [ -s \"$new\" ]; then echo >> \"$new\"; fi\n"
                  "fi\n";
         }
-        s += "cat >> \"$new\" <<'" + delimiter.toUtf8() + "'\n" + f.content.toUtf8();
+        s += "cat >> \"$new\" <<'" + delimiter.toUtf8() + "'\n";
+        { const SecretBytes body = f.content.toUtf8(); s += body; }
         if (!f.content.endsWith(QLatin1Char('\n'))) s += '\n';
         s += delimiter.toUtf8() + "\n";
         s += "mv -f \"$new\" \"$f\" || { rm -f \"$new\"; echo 'FQ-ERR move' >&2; exit 10; }\n"

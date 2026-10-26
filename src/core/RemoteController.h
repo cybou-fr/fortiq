@@ -1,5 +1,7 @@
 #pragma once
 
+#include "SecureWipe.h"
+
 #include <QHash>
 #include <QObject>
 #include <QString>
@@ -214,7 +216,7 @@ private:
     int m_latencyMs = 0;
     QString m_host;
     QString m_user;
-    QString m_password;
+    SecretString m_password;
     bool m_rememberPending = false;   // store m_password for m_activeServerId after the next successful login
     void setSecretSaved(const QString &id, bool saved);
     QString m_keyPath;
