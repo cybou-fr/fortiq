@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=FORTIQ
+GenericName=Remote Linux Desktop
+Comment=Access a Linux desktop workspace over SSH
+Exec=fortiq
+Icon=fr.cybou.fortiq
+Terminal=false
+Categories=Network;RemoteAccess;FileManager;
+StartupNotify=true
