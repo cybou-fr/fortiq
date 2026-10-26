@@ -93,6 +93,7 @@ private:
     std::shared_ptr<std::unique_ptr<SshSession>> m_session;
     std::shared_ptr<std::atomic_bool> m_cancel;
     int m_seq = 0, m_token = -1, m_taskId = 0;
+    int m_readerGeneration = 0;   // newest reader-mode toggle; older sanitizing results are dropped
     bool m_busy = false, m_active = false, m_reader = true;
     QString m_state = QStringLiteral("disconnected");
     QString m_status = QStringLiteral("Aucun serveur connecté");

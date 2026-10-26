@@ -3046,10 +3046,14 @@ private slots:
         QCOMPARE(browser.refreshUrl(), web + "/page2");                       // reported, not followed
         QVERIFY(browser.notes().join("\n").contains("redirection"));
         QCOMPARE(browser.url(), web + "/page");
-        browser.setReader(false);
-        QVERIFY(browser.contentHtml().contains("Footer text"));
+        browser.setReader(false);                                             // sanitizing runs on a worker: the view follows shortly
+        QTRY_VERIFY_WITH_TIMEOUT(browser.contentHtml().contains("Footer text"), 10000);
         browser.setReader(true);
-        QVERIFY(!browser.contentHtml().contains("Footer text"));
+        QTRY_VERIFY_WITH_TIMEOUT(!browser.contentHtml().contains("Footer text"), 10000);
+        browser.setReader(false);                                             // quick double toggle: the newest choice wins
+        browser.setReader(true);
+        QTest::qWait(500);
+        QVERIFY(browser.reader() && !browser.contentHtml().contains("Footer text"));
         QVERIFY(!browser.headers().isEmpty());
 
         // Redirects are followed by the server and reported.

@@ -29,6 +29,13 @@ struct FetchOutcome {
     // Done: where the page really came from
     QVariantList chain;          // redirects followed: [{status, from, location}]
     QString pinnedIp, finalUrl, addressLabel;
+    // Done, HTML page: decoded and sanitized on the worker thread (a 3 MB page takes ~2.6 s; the window must not freeze meanwhile).
+    // apply() uses it only when the base address and reader mode are still the ones it was made for.
+    bool hasPage = false;
+    DecodedText decoded;
+    SanitizedPage page;
+    QString pageBase;
+    bool pageReader = true;
 };
 
 struct BrowserController::Chain {
@@ -154,12 +161,23 @@ void BrowserController::stop() {
 void BrowserController::setReader(bool on) {
     if (m_reader == on) return;
     m_reader = on;
-    if (m_kind == QLatin1String("html") && !m_rawHtml.isEmpty()) {
-        const SanitizedPage page = sanitizeHtml(m_rawHtml, m_url, m_reader);
-        m_html = page.html;
-        m_title = page.title.isEmpty() ? m_title : page.title;
-    }
     emit changed();
+    if (m_kind == QLatin1String("html") && !m_rawHtml.isEmpty()) {
+        // Sanitizing can take seconds on a big page: do it on a worker; the view switches when it is ready.
+        const int generation = ++m_readerGeneration, seq = m_seq;
+        auto *watcher = new QFutureWatcher<SanitizedPage>(this);
+        connect(watcher, &QFutureWatcher<SanitizedPage>::finished, this, [this, watcher, generation, seq] {
+            const SanitizedPage page = watcher->result();
+            watcher->deleteLater();
+            if (generation != m_readerGeneration || seq != m_seq || m_kind != QLatin1String("html")) return;   // a newer toggle or page won
+            m_html = page.html;
+            m_title = page.title.isEmpty() ? m_title : page.title;
+            emit changed();
+        });
+        const QString raw = m_rawHtml, url = m_url;
+        const bool reader = m_reader;
+        watcher->setFuture(QtConcurrent::run([raw, url, reader] { return sanitizeHtml(raw, url, reader); }));
+    }
 }
 
 void BrowserController::navigate(const QString &url, bool record) {
@@ -206,6 +224,7 @@ void BrowserController::navigate(const QString &url, bool record) {
 // --resolve so that curl cannot connect anywhere else. curl never follows a redirect itself.
 void BrowserController::runChain(const Chain &chain) {
     auto cancel = m_cancel;
+    const bool reader = m_reader;
     const ConnectionRequest request = m_remote->connectionRequest();
     auto slot = m_session;
     auto *watcher = new QFutureWatcher<FetchOutcome>(this);
@@ -218,7 +237,7 @@ void BrowserController::runChain(const Chain &chain) {
         }
         onChain(outcome, chain);
     });
-    watcher->setFuture(QtConcurrent::run(&m_pool, [slot, request, chain, cancel] {
+    watcher->setFuture(QtConcurrent::run(&m_pool, [slot, request, chain, cancel, reader] {
         FetchOutcome out;
         out.chain = chain.chain;
         auto cancelled = [&] { return cancel->load(); };
@@ -272,7 +291,16 @@ void BrowserController::runChain(const Chain &chain) {
             out.curl = parseCurlOutput(run.data);
             if (!out.curl.framed || (out.curl.curlExit != 0 && out.curl.curlExit != 63)) return out;
             const QString location = redirectLocation(out.curl);
-            if (location.isEmpty()) return out;
+            if (location.isEmpty()) {
+                if (!out.curl.body.isEmpty() && kindOf(baseMime(out.curl.contentType)) == QLatin1String("html")) {
+                    out.pageBase = out.finalUrl.isEmpty() ? (out.curl.effectiveUrl.isEmpty() ? chain.requested : out.curl.effectiveUrl) : out.finalUrl;
+                    out.pageReader = reader;
+                    out.decoded = decodeBody(out.curl.body, out.curl.contentType, true);
+                    out.page = sanitizeHtml(out.decoded.text, out.pageBase, reader);
+                    out.hasPage = true;
+                }
+                return out;
+            }
             if (followed.size() >= 10) { out.kind = FetchOutcome::Kind::Error; out.error = describeCurlExit(47); return out; }
             const QString next = resolveLink(check.url, location);
             if (next.isEmpty()) {
@@ -402,11 +430,12 @@ void BrowserController::apply(const FetchOutcome &outcome, int, int, const QStri
     m_kind = r.body.isEmpty() ? QStringLiteral("empty") : kindOf(mime);
     QString charset;
     if (m_kind == QLatin1String("html")) {
-        const DecodedText decoded = decodeBody(r.body, r.contentType, true);
+        const bool prepared = outcome.hasPage && outcome.pageReader == m_reader && outcome.pageBase == m_url;
+        const DecodedText decoded = prepared ? outcome.decoded : decodeBody(r.body, r.contentType, true);
         charset = decoded.charset;
         if (!decoded.note.isEmpty()) m_notes << decoded.note;
         m_rawHtml = decoded.text;
-        const SanitizedPage page = sanitizeHtml(m_rawHtml, m_url, m_reader);
+        const SanitizedPage page = prepared ? outcome.page : sanitizeHtml(m_rawHtml, m_url, m_reader);
         m_html = page.html;
         m_title = page.title;
         m_refreshUrl = page.refreshUrl;
