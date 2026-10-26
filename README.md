@@ -205,3 +205,14 @@ adaptive launcher icon. `QT_ANDROID_APP_ICON` применяется на Qt **6
 Интеграция исходников — **не подтверждение готовых EXE/APK**: иконки ещё необходимо проверить
 после реальной сборки Windows и установки Android APK. Контракт:
 [assets/branding/README.md](assets/branding/README.md).
+
+## Debian 13 (client .deb)
+
+A native CPack .deb target is available for a Debian 13 graphical VM:
+
+```sh
+python3 tool/package_debian.py
+sudo apt install ./build-debian/fortiq_*.deb
+```
+
+Build prerequisites, security caveats and production acceptance gates: [DEBIAN_RELEASE](docs/DEBIAN_RELEASE.md). The `.deb` is built **on Debian**, not committed as a binary. This is an initial packaging path, not yet a production-qualified release.
