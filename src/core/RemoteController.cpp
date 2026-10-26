@@ -63,6 +63,8 @@ void RemoteController::request(Kind kind, const QString &directory, bool record)
 
     const int token = m_generation;
     const QString previous = m_currentDirectory;
+    // A refresh of the same huge folder keeps as many pages visible as the user had loaded.
+    const int keepShown = directory == m_currentDirectory ? static_cast<int>(m_entries.size()) : 0;
     m_pendingDirectory = directory;
     // Show the RAM copy at once; the live listing replaces it when it arrives.
     if (kind == Kind::List && m_cache.contains(directory)) {
@@ -77,7 +79,7 @@ void RemoteController::request(Kind kind, const QString &directory, bool record)
 
     auto slot = m_session;
     auto *watcher = new QFutureWatcher<Outcome>(this);
-    connect(watcher, &QFutureWatcher<Outcome>::finished, this, [this, watcher, token, kind, previous, record] {
+    connect(watcher, &QFutureWatcher<Outcome>::finished, this, [this, watcher, token, kind, previous, record, keepShown] {
         const Outcome outcome = watcher->result();
         watcher->deleteLater();
         if (token != m_generation) return; // old server's async response
@@ -106,6 +108,8 @@ void RemoteController::request(Kind kind, const QString &directory, bool record)
             m_listing = result.listing;
             m_total = result.total;
             m_listingCut = result.truncated;
+            if (m_listing && keepShown > m_entries.size() && previous == result.directory)
+                m_entries.append(listedPage(result.directory, *m_listing, static_cast<int>(m_entries.size()), (std::min)(keepShown, kShownCap) - static_cast<int>(m_entries.size())));
             m_status = result.message;
             if (kind == Kind::Open && m_rememberPending && !m_activeServerId.isEmpty()) {
                 m_rememberPending = false;

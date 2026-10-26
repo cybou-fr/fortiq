@@ -1559,6 +1559,10 @@ private slots:
         QCOMPARE(names.size(), count + 1);                         // no entry lost, none repeated
         controller.loadMore(false);                                // nothing left: harmless
         QCOMPARE(controller.entries().size(), count + 1);
+        controller.refresh();                                      // a refresh keeps the pages the user had loaded
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 60000);
+        QCOMPARE(controller.entries().size(), count + 1);
+        QVERIFY(!controller.hasMore());
 
         // a small folder afterwards has no "more" and shows its real size
         controller.navigate(dir + QStringLiteral("/sub"));
