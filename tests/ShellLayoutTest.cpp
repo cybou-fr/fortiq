@@ -962,6 +962,8 @@ QtObject { property bool connected: true; property bool linkLost: false; propert
                 QVERIFY(panel->isVisible());
                 QVERIFY(panel->x() >= 0 && panel->x() + panel->width() <= shell->width());
                 QVERIFY(panel->y() >= 0 && panel->y() + panel->height() <= shell->height());
+                if (auto *dock = shell->findChild<QQuickItem *>("appPanel"); dock && dock->isVisible())   // the toast must never cover the app panel
+                    QVERIFY2(!QRectF(panel->mapToScene(QPointF(0, 0)), panel->size()).intersects(QRectF(dock->mapToScene(QPointF(0, 0)), dock->size())), "the task panel covers the app panel");
                 auto *cancel = findByName(panel, "taskCancel"); QVERIFY(cancel); QVERIFY(cancel->isVisible());
                 // the click is repeated until it has an effect: the first one can arrive before the panel has taken its place on a busy machine
                 QTRY_V([&] {

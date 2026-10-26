@@ -672,7 +672,9 @@ Item {
         controller: shell.controller
         width: Math.min(420, shell.width - 24)
         x: shell.width - width - 12
-        y: shell.height - height - (shell.adaptive ? 84 : 12)
+        // On a wide screen with the dock at the bottom, the panel sits ABOVE the dock when it would cover its right end.
+        readonly property bool coversDock: !shell.adaptive && appPanel.edge !== "left" && appPanel.x + appPanel.width > x - 8
+        y: coversDock ? appPanel.y - height - 8 : shell.height - height - (shell.adaptive ? 84 : 12)
     }
 
     ServerManager {
