@@ -46,6 +46,35 @@ def icon(name: str, cls: str = "ic") -> str:
             f'stroke-linejoin="round" aria-hidden="true">{ICONS[name]}</svg>')
 
 
+# Application icons: the SAME artwork as the app (qml/shell/AppIcon.qml and FolderGlyph.qml): a rounded tile (radius 24 %) with a vertical
+# gradient and a white glyph. Site id -> app kind and its two gradient colours; the glyphs are drawn as shapes so they do not depend on fonts.
+_W = 'stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" fill="none"'
+APP_ICON = {
+    "terminal": ("#3A4150", "#14181F", f'<path d="m14 17 8 7-8 7M25 32h10" {_W}/>'),
+    "logs": ("#4FD1C5", "#2C7A9B", f'<path d="M13 17h22M13 24h22M13 31h22" {_W}/>'),
+    "mdok": ("#6FB2FF", "#2F7BEA", f'<path d="M14 18h20M14 24h20M14 30h20" {_W}/>'),
+    "mail": ("#6FB7FF", "#2F6FD0", '<text x="24" y="33" text-anchor="middle" font-size="25" font-weight="700" fill="#fff" '
+                                    'font-family="system-ui,Segoe UI,Arial,sans-serif">@</text>'),
+    "browser": ("#FFB347", "#E8432E", f'<circle cx="24" cy="24" r="10" {_W}/><circle cx="24" cy="24" r="3.6" fill="#fff"/>'),
+    "system": ("#8B9DF2", "#4352B8", f'<rect x="13" y="13" width="22" height="22" rx="3" {_W}/><path d="M24 13v22M13 24h22" {_W}/>'),
+    "databases": ("#F2B36B", "#B5651D", '<text x="24" y="30" text-anchor="middle" font-size="17" font-weight="700" fill="#fff" '
+                                         'font-family="system-ui,Segoe UI,Arial,sans-serif">DB</text>'),
+}
+
+
+def app_icon(kind: str) -> str:
+    """Inline SVG of an application icon, identical in design to the one in the app."""
+    if kind == "files":   # FolderGlyph: back tab + body, blue gradient (Theme.folder / folderTab)
+        return ('<svg class="appicon" viewBox="0 0 48 48" width="52" height="52" aria-hidden="true">'
+                '<defs><linearGradient id="ai-files" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5AA6FF"/><stop offset="1" stop-color="#3D8BF2"/></linearGradient></defs>'
+                '<rect x="2" y="9" width="20" height="14" rx="3.5" fill="#2E73DA"/><rect x="2" y="12" width="44" height="31" rx="4.5" fill="#2E73DA"/>'
+                '<rect x="2" y="16" width="44" height="27" rx="4.5" fill="url(#ai-files)"/></svg>')
+    top, bottom, glyph = APP_ICON[kind]
+    return (f'<svg class="appicon" viewBox="0 0 48 48" width="52" height="52" aria-hidden="true">'
+            f'<defs><linearGradient id="ai-{kind}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{top}"/><stop offset="1" stop-color="{bottom}"/></linearGradient></defs>'
+            f'<rect x="0" y="0" width="48" height="48" rx="11.5" fill="url(#ai-{kind})"/>{glyph}</svg>')
+
+
 def e(text: str) -> str:
     return escape(str(text), quote=True)
 
@@ -145,7 +174,7 @@ def build_index(lang: str, ui: dict, c: dict) -> str:
     tiles = ""
     order = ["files", "logs", "terminal", "mdok", "system", "mail", "browser", "databases"]
     for a in sorted(c["apps"], key=lambda a: order.index(a["id"])):
-        tiles += (f'<li class="tile {a["id"]}"><div class="tile-top"><span class="tile-ic">{icon(a["id"])}</span>'
+        tiles += (f'<li class="tile {a["id"]}"><div class="tile-top"><span class="app-ic">{app_icon(a["id"])}</span>'
                   f'<span class="badge {a["status"]}">{e(ui["badge"][a["status"]])}</span></div>'
                   f'<h3>{e(a["name"])}</h3><p>{e(a["d"])}</p>'
                   f'<p class="limit"><b>{e(ui["limitLabel"])}</b> {e(a["limit"])}</p></li>')

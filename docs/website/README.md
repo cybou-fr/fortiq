@@ -26,6 +26,8 @@ python3 docs/website/generate.py
 python3 tool/check_docs_consistency.py
 ```
 
+Brand: the header mark, favicon and the application icons are the **same artwork as the app** (`assets/branding/`, `qml/shell/AppIcon.qml`); see [branding README](../../assets/branding/README.md).
+
 Do not hand-edit generated HTML. Pages carry a strict Content-Security-Policy (`default-src 'none'`, same-origin images/styles/scripts only): no trackers, cookies, external fonts or third-party scripts.
 
 ## Design reference image
