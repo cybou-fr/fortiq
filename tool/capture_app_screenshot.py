@@ -8,7 +8,7 @@ What happens (nothing here is a fixture or a mock-up):
   2. a throw-away key pair is made, authorized for the run and removed afterwards (always, even after a failure);
   3. build-msvc/fortiq_live_capture.exe starts the production QML shell with the production controllers, connects over SSH to that
      server (host key pinned in its own settings scope, not the user's), opens Files and Terminal and grabs the window at 1536x1024, DPR 1;
-  4. the demo folder and the key are removed.
+  4. the demo folder and the key are removed; the user's real ~/.bash_history is set aside during the run (the Terminal window lists it) and restored.
 The picture therefore shows what the application really draws from what a real server really returned. Run it on a Windows machine
 with a build (fortiq_live_capture is built with the tests); never on a real server.
 """
@@ -55,6 +55,9 @@ touch {home}/.ssh/authorized_keys
 sed -i '/{MARK}/d' {home}/.ssh/authorized_keys
 echo '{pub}' >> {home}/.ssh/authorized_keys
 chown {u}:{u} {home}/.ssh/authorized_keys; chmod 600 {home}/.ssh/authorized_keys
+[ -f {home}/.bash_history.capture-bak ] || {{ if [ -f {home}/.bash_history ]; then mv {home}/.bash_history {home}/.bash_history.capture-bak; else touch {home}/.bash_history.capture-none; fi; }}
+printf 'ls -la\ndf -h\nfree -m\nsystemctl status nginx\njournalctl -u nginx -n 50 --no-pager\ntail -f /var/log/syslog\n' > {home}/.bash_history
+chown {u}:{u} {home}/.bash_history; chmod 600 {home}/.bash_history
 rm -rf {demo}
 install -d -o {u} -g {u} {demo}
 cd {demo}
@@ -79,7 +82,9 @@ touch -d '2026-10-18 14:30' presentation.pdf budget-2026.csv; touch -d '2026-10-
             sys.exit(f"capture failed (exit {rc})")
         print("saved", out)
     finally:
-        wsl(d, f"sed -i '/{MARK}/d' {home}/.ssh/authorized_keys 2>/dev/null; rm -rf {demo}; true", check=False)
+        wsl(d, f"""sed -i '/{MARK}/d' {home}/.ssh/authorized_keys 2>/dev/null; rm -rf {demo}
+if [ -f {home}/.bash_history.capture-bak ]; then mv -f {home}/.bash_history.capture-bak {home}/.bash_history; elif [ -f {home}/.bash_history.capture-none ]; then rm -f {home}/.bash_history {home}/.bash_history.capture-none; fi
+true""", check=False)
         shutil.rmtree(work, ignore_errors=True)
         keep.terminate()
 

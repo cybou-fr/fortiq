@@ -6,7 +6,7 @@
 
 | Page | Content |
 |---|---|
-| `index.html` | hero on the approved design reference, three principles, eight apps with status and limits, how it works (SSH diagram), honest status |
+| `index.html` | hero with a REAL screenshot of the running application, three principles, eight apps with status and limits, how it works (SSH diagram), honest status |
 | `security.html` | SSH only, fingerprint pinning, secrets in the OS store, server-side limits, what is not claimed |
 | `download.html` | **no public build yet**; Windows / Android plan and limits, server requirements, GPL source plan |
 | `faq.html` | questions and the GPL-3.0 licence section (`#license`) |
@@ -30,9 +30,11 @@ Brand: the header mark, favicon and the application icons are the **same artwork
 
 Do not hand-edit generated HTML. Pages carry a strict Content-Security-Policy (`default-src 'none'`, same-origin images/styles/scripts only): no trackers, cookies, external fonts or third-party scripts.
 
-## Design reference image
+## Hero screenshot (real) and the design reference
 
-The exact owner-approved 1536×1024 PNG (SHA-256 `852b5944c61ebb8551cc10dadeda47e7924b92baec0fd4b7758ffe2a5c6ffaef`) is kept unchanged in `docs/design/reference/` and `www/assets/` (checked by the generator and the consistency check). The hero uses `fortiq-shell-1536.webp` / `fortiq-shell-768.webp`, plain re-encodings of the same image at the same 3:2 aspect (no crop, no retouch), with a link to the original PNG. The caption always states it is a design target, not a running-app screenshot. Visual fidelity of the Qt shell is judged separately ([SHELL_FIDELITY](../SHELL_FIDELITY.md)).
+- The hero is a **real screenshot** of the running Windows application: `www/assets/fortiq-app-1536.png` (full size), `fortiq-app-1536.webp` and `fortiq-app-768.webp` (plain re-encodings, no crop or retouch). It is produced by [`tool/capture_app_screenshot.py`](../../tool/capture_app_screenshot.py): the production QML shell and controllers (`build-msvc/fortiq_live_capture.exe`, source `tests/LiveCapture.cpp`) connect over SSH to a disposable Debian test server, open Files on a demo folder and Terminal, and grab the window at 1536×1024, DPR 1. The windows show data that server returned; the clock, the weather notice and the wallpaper are what the app draws. The script sets the user's real `~/.bash_history` on the test server aside during the run and restores it, and removes its throw-away key and the demo folder.
+- To refresh it: build, then `python tool/capture_app_screenshot.py` and re-encode the two WebP files (Qt `QImage::save(..., "WEBP")`, width 1536 and 768, quality 88). Review the picture before committing: no host names, paths or file names of private data.
+- The exact owner-approved design reference (SHA-256 `852b5944c61ebb8551cc10dadeda47e7924b92baec0fd4b7758ffe2a5c6ffaef`) stays unchanged in `docs/design/reference/` and `www/assets/fortiq-shell-master.png` (checked by the generator and the consistency check) as the **design target**; it is no longer shown on the site. Visual fidelity of the Qt shell to it is judged separately ([SHELL_FIDELITY](../SHELL_FIDELITY.md)).
 
 ## Release discipline
 

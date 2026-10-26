@@ -2,7 +2,7 @@
 
 Run: python3 docs/website/generate.py
 Python standard library only, no network. Generated files under www/ are committed.
-The hero shows the approved design reference (not a running Qt screenshot); copy follows
+The hero shows a REAL screenshot of the running application (tool/capture_app_screenshot.py); copy follows
 docs/RELEASE_SCOPE_1_0.md and never presents targets as implemented.
 """
 from hashlib import sha256
@@ -155,8 +155,8 @@ def cta(lang: str, text: str, label: str, page: str) -> str:
 
 def build_index(lang: str, ui: dict, c: dict) -> str:
     up = "" if lang == "en" else "../"
-    hero_img = (f'<img class="shot" src="{up}assets/fortiq-shell-1536.webp" '
-                f'srcset="{up}assets/fortiq-shell-768.webp 768w, {up}assets/fortiq-shell-1536.webp 1536w" '
+    hero_img = (f'<img class="shot" src="{up}assets/fortiq-app-1536.webp" '
+                f'srcset="{up}assets/fortiq-app-768.webp 768w, {up}assets/fortiq-app-1536.webp 1536w" '
                 f'sizes="(min-width: 1100px) 1080px, 94vw" width="1536" height="1024" '
                 f'alt="{e(c["heroAlt"])}" fetchpriority="high">')
     hero = (f'<section class="hero"><div class="wrap center">'
@@ -166,7 +166,7 @@ def build_index(lang: str, ui: dict, c: dict) -> str:
             f'<a class="btn ghost" href="{href(lang, "security")}">{e(c["ctaSecondary"])} {icon("arrow", "ic sm")}</a></div>'
             f'<p class="hero-status"><span class="amber"></span>{e(c["heroStatus"])}</p></div>'
             f'<figure class="stage wrap"><div class="glow" aria-hidden="true"></div>{hero_img}'
-            f'<figcaption>{e(c["heroCaption"])} <a href="{up}assets/fortiq-shell-master.png">{e(c["heroOriginal"])}</a></figcaption>'
+            f'<figcaption>{e(c["heroCaption"])} <a href="{up}assets/fortiq-app-1536.png">{e(c["heroOriginal"])}</a></figcaption>'
             f'</figure></section>')
     pillars = "".join(f'<li><span class="num" aria-hidden="true">{n}</span><h3>{e(p["t"])}</h3><p>{e(p["d"])}</p></li>'
                       for n, p in enumerate(c["pillars"], 1))

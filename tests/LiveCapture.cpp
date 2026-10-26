@@ -29,6 +29,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQmlExtensionPlugin>
+#include <QQuickItem>
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QSettings>
@@ -135,7 +136,11 @@ int main(int argc, char *argv[]) {
     shell->setProperty("terminalOpen", true);
     pause(1500);
     waitFor([&] { return terminal.running(); }, 30000, "the terminal session");
-    terminal.send("clear; uname -sr; echo; ls --color=always -F\r");
+    // Composition: Files at the upper left, Terminal at the lower right, the running-terminal task toast hidden.
+    if (auto *files = window->findChild<QQuickItem *>(QStringLiteral("filesWindow"))) { files->setX(310); files->setY(92); files->setHeight(470); }
+    if (auto *term = window->findChild<QQuickItem *>(QStringLiteral("terminalWindow"))) { term->setX(790); term->setY(510); term->setWidth(700); term->setHeight(390); }
+    if (auto *toast = window->findChild<QQuickItem *>(QStringLiteral("taskPanel"))) toast->setOpacity(0);
+    terminal.send(QByteArray("PS1='\\u@debian:\\w\\$ '; cd '") + demo.toUtf8() + "'; clear; uname -sr; echo; ls --color=always -F\r");
     pause(2500);
     shell->setProperty("foregroundApp", "files");
     pause(1500);
