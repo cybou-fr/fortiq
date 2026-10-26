@@ -1,0 +1,21 @@
+{
+  "CredentialsTest::rememberWithoutStoreIsRefused": {
+    "reason": "applies only on a platform WITHOUT a protected secret store; Windows has Credential Manager, so the test cannot run there (the opposite case, remember-with-store, is covered)"
+  },
+  "SshIntegrationTest::initTestCase": {
+    "reason": "the live SSH suite needs the disposable Linux fixture; the offline gate cannot run it (tool/run_live_tests.py does, and fails on any skip there)",
+    "scopes": ["offline"]
+  },
+  "PublicationTest::initTestCase": {
+    "reason": "the publication suite needs the disposable Linux fixture; the offline gate cannot run it (tool/run_live_tests.py does)",
+    "scopes": ["offline"]
+  },
+  "LogsControllerTest::linuxReaderScript": {
+    "reason": "needs a WSL/Linux shell to execute the real reader script (FORTIQ_TEST_WSL); runs in the live run (--wsl-distro)",
+    "scopes": ["offline"]
+  },
+  "SshIntegrationTest::twoHostsNeverMix": {
+    "reason": "needs a second disposable host (tool/setup_second_host_fixture.sh: a copy of the fixture distro); not yet run - blocks the release gate",
+    "scopes": ["offline", "live"]
+  }
+}

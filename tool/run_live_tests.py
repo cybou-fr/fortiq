@@ -12,10 +12,14 @@ Usage (Windows, after a build in build-msvc):
   python tool/run_live_tests.py --host 127.0.0.1 --port 2222 --user fqshell ^
       --fingerprint SHA256:... --key C:/path/to/fixture_key --wsl-distro fortiq-test
 
-Exit status: 0 only if every executed test passed. Skipped tests are listed with their reason; a skip is NOT a pass.
+Exit status: 0 only if every executed test passed AND every skipped test has a waiver valid in scope "live" (tool/gate_waivers.json).
+A skip is NOT a pass: an unwaived skip makes the run fail (exit 1), a waived one is printed as such.
 """
 import argparse, os, re, subprocess, sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from check_test_results import DEFAULT_WAIVERS, load_waivers, skip_key
 
 
 def run(exe: Path, env: dict, args: list[str], report: Path, timeout: int):
@@ -118,10 +122,15 @@ def main():
         for l in r["failed"]:
             print("FAILED:", r["name"], l)
     print("\nSkipped (not passes):")
+    waivers = load_waivers(DEFAULT_WAIVERS)
+    unwaived = 0
     for r in results:
         for l in r["skipped"]:
-            print(" -", r["name"], re.sub(r"^SKIP\s*:\s*", "", l))
-    sys.exit(1 if bad else 0)
+            waiver = waivers.get(skip_key(l))
+            waived = waiver is not None and "live" in waiver.get("scopes", ["offline", "live", "release"])
+            unwaived += 0 if waived else 1
+            print(" -", r["name"], re.sub(r"^SKIP\s*:\s*", "", l), "[waived: " + waiver["reason"] + "]" if waived else "[NO WAIVER: the run fails]")
+    sys.exit(1 if bad or unwaived else 0)
 
 
 if __name__ == "__main__":
