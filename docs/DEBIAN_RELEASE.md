@@ -62,11 +62,7 @@ CMake switches `FORTIQ_DEB` to the **bundled** mode:
 
 Needed in the build environment besides the list above: `file` and `dpkg-dev` (CPack `SHLIBDEPS`).
 `tool/package_debian.py` runs the whole ctest set before packaging. With Qt 6.12 on Debian 13 (WSL)
-25 of 26 pass reliably; `fortiq_gateway` fails on `httpPostBodiesContentLengthAndChunked`
-(a 2 MB request body echoed through the fake tunnel: about 3 runs of 4 stall for ~47 s instead of 1 s;
-it passes on Windows and passed in one full Linux run). The cause is **not found** — it may be a real
-back-pressure stall of the gateway on Linux, so the Linux browser path must not be called verified until
-it is fixed; the package can be built with `--skip-tests` meanwhile (not qualified). Remaining of this
+all 26 pass (checked: `httpPostBodiesContentLengthAndChunked` 25 runs in a row in WSL Debian 13, and the whole `fortiq_gateway` suite). An earlier flaky failure of that test (a 2 MB request echoed through the fake tunnel, ~47 s stall) was a defect of the test fake tunnel, not of the gateway: the fake dropped the unread stream tail when the peer closed while reading was paused. Fixed in `tests/GatewayTest.cpp` (details in BROWSER.md); the real `SshTunnel` reports EOF only after the unread data (libssh2 semantics). Remaining of this
 section's claims that are **not** verified: a clean Debian VM, Wayland,
 GNOME/KDE launcher, upgrade/uninstall, the `libssh2` security gate below. The
 `qtwebengine_devtools_resources.pak` is shipped although DevTools are closed (it can be removed).
