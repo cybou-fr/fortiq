@@ -36,9 +36,12 @@
 #ifdef FORTIQ_HAVE_WEBENGINE
 #include <QtWebEngineQuick/QtWebEngineQuick>
 #endif
+#ifdef FORTIQ_ANDROID_BROWSER_SELFTEST
+#include "browser/engine/android/BrowserSelfTest.h"
+#endif
 
 Q_IMPORT_QML_PLUGIN(Fortiq_ShellPlugin)
-#ifdef FORTIQ_HAVE_WEBENGINE
+#if defined(FORTIQ_HAVE_WEBENGINE) || defined(FORTIQ_HAVE_ANDROID_WEBVIEW)
 Q_IMPORT_QML_PLUGIN(Fortiq_EnginePlugin)
 #endif
 
@@ -113,7 +116,8 @@ int main(int argc, char *argv[])
         "With --reference-fixture: show the file viewer (text, image) or the transfer queue with samples.", "text|image|editor|transfers|trash|trashview|search|logs|incident|service|panelleft");
     QCommandLineOption secretSelfTestOption("secret-store-selftest",
         "Developer diagnostic: test the protected secret store with a throw-away entry, print the result and exit.");
-    parser.addOptions({ fixtureOption, screenshotOption, wallpaperOption, fixturePreviewOption, secretSelfTestOption });
+    QCommandLineOption browserSelfTestOption("browser-selftest", "Developer-only Android Browser self-test (builds with FORTIQ_ANDROID_BROWSER_SELFTEST).");
+    parser.addOptions({ fixtureOption, screenshotOption, wallpaperOption, fixturePreviewOption, secretSelfTestOption, browserSelfTestOption });
     parser.process(app);
 #ifndef FORTIQ_NO_SSH
     if (parser.isSet(secretSelfTestOption)) {
@@ -194,6 +198,15 @@ int main(int argc, char *argv[])
         });
 #endif
     }
+
+#ifdef FORTIQ_ANDROID_BROWSER_SELFTEST
+    if (parser.isSet(browserSelfTestOption)) {
+        if (auto *rootWindow = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst())) {
+            auto *selfTest = new fortiq::engine::BrowserSelfTest(&engine, rootWindow, &app);
+            QTimer::singleShot(1500, selfTest, [selfTest] { selfTest->start(); });
+        }
+    }
+#endif
 
     if (parser.isSet(screenshotOption)) {
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());

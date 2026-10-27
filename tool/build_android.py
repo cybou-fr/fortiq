@@ -18,6 +18,7 @@ def main():
     parser.add_argument("--jobs", type=int, default=4)
     parser.add_argument("--build-type", choices=("Debug", "Release"), default="Debug")
     parser.add_argument("--sdk-version", type=int, default=36)
+    parser.add_argument("--define", action="append", default=[], metavar="NAME=VALUE", help="extra CMake cache entry, e.g. FORTIQ_ANDROID_BROWSER_SELFTEST=ON (developer APK of tool/android_browser_check.py)")
     parser.add_argument("--package", action="store_true", help="Also build an unsigned/debug APK; never installs it")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
@@ -40,7 +41,7 @@ def main():
                  f"-DCMAKE_PREFIX_PATH={args.deps.resolve().as_posix()}",
                  f"-DCMAKE_FIND_ROOT_PATH={args.deps.resolve().as_posix()}",
                  "-DANDROID_ABI=arm64-v8a", "-DANDROID_PLATFORM=android-28", f"-DFORTIQ_ANDROID_SDK={args.sdk_version}",
-                 f"-DCMAKE_BUILD_TYPE={args.build_type}", "-DBUILD_TESTING=OFF"]
+                 f"-DCMAKE_BUILD_TYPE={args.build_type}", "-DBUILD_TESTING=OFF"] + [f"-D{d}" for d in args.define]
     subprocess.run(configure, env=env, check=True)
     subprocess.run([args.cmake, "--build", str(build), "--target", "fortiq", "-j", str(args.jobs)], env=env, check=True)
     if args.package:

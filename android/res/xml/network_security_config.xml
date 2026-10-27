@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Browser's WebView reaches http:// sites through the loopback gateway (cleartext to the page's own server is the page's business: the
+     connection to the gateway on 127.0.0.1 is plain HTTP by design and the WebView applies this policy to page loads too). The app itself
+     opens no other network connection than SSH (raw sockets, not governed by this file). -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

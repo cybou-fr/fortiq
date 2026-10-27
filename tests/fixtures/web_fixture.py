@@ -25,7 +25,7 @@ Paths:
   /to-other-port 302 -> http://127.0.0.1:8098/page             (another internal host:port)
   /echo        200: Host header and the local address the connection arrived on
   /js          HTML whose text exists only after JavaScript ran (title js-done)
-  /canary      HTML + JavaScript that tries every route out of a browser (tests/EngineLiveTest.cpp)
+  /canary      HTML + JavaScript that tries every route out of a browser (tests/EngineLiveTest.cpp); ?t=1 puts the results in the title (Android)
   /webrtc      HTML + JavaScript that makes an RTCPeerConnection through an about:blank iframe (the gap of the user script)
   /_hits       200: JSON {path: number of requests}, to prove that nothing was fetched before a confirmation
 """
@@ -99,7 +99,7 @@ const jobs = [
     setTimeout(() => { pc.close(); ok('candidates=' + JSON.stringify(kinds)); }, 5000);
   })),
 ];
-Promise.all(jobs).then(() => { document.getElementById('out').textContent = JSON.stringify(R); document.title = 'canary-done'; });
+Promise.all(jobs).then(() => { document.getElementById('out').textContent = JSON.stringify(R); document.title = qs.get('t') ? 'canary-done:' + JSON.stringify(R) : 'canary-done'; });
 </script></body></html>
 """
 
@@ -112,9 +112,10 @@ const qs = new URLSearchParams(location.search);
 const udp = qs.get('udp') || '9';
 const ips = (qs.get('ips') || '127.0.0.1').split(',');
 const f = document.createElement('iframe'); document.body.appendChild(f);
-const C = f.contentWindow.RTCPeerConnection;
+const via = qs.get('via') || 'contentWindow';   // 'frames': window.frames[n], the path no script can hook
+const C = (via === 'frames' ? window.frames[window.frames.length - 1] : f.contentWindow).RTCPeerConnection;
 const res = { gap: typeof C, candidates: [], error: '' };
-function finish() { document.getElementById('out').textContent = JSON.stringify(res); document.title = 'webrtc-done'; }
+function finish() { document.getElementById('out').textContent = JSON.stringify(res); document.title = qs.get('t') ? 'webrtc-done:' + JSON.stringify(res) : 'webrtc-done'; }
 if (typeof C !== 'function') { finish(); } else {
   try {
     const servers = ips.map(ip => ({ urls: 'stun:' + ip + ':' + udp })).concat([{ urls: 'stun:203.0.113.30:3478' }, { urls: 'stun:stun.example.invalid:3478' }]);

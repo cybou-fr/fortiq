@@ -55,6 +55,17 @@ else()
     set(FORTIQ_WEBENGINE_DEFAULT ON)
 endif()
 option(FORTIQ_WITH_WEBENGINE "Build the Chromium engine window of the Browser (Qt WebEngine)" ${FORTIQ_WEBENGINE_DEFAULT})
+# Android: the same Browser engine window over the SYSTEM WebView (Chromium), proxied through the SSH gateway (docs/BROWSER.md, "Android").
+if(ANDROID)
+    option(FORTIQ_WITH_ANDROID_WEBVIEW "Build the Browser engine window over the Android system WebView" ON)
+else()
+    set(FORTIQ_WITH_ANDROID_WEBVIEW OFF)
+endif()
+# Developer-only, never shipped: a debug entry (--browser-selftest) that loads pages through the gateway for tool/android_browser_check.py.
+option(FORTIQ_ANDROID_BROWSER_SELFTEST "Build the Android browser self-test entry (developer APK only)" OFF)
+if(FORTIQ_WITH_ANDROID_WEBVIEW AND FORTIQ_SHELL_PREVIEW_ONLY)
+    set(FORTIQ_WITH_ANDROID_WEBVIEW OFF)
+endif()
 if(FORTIQ_WITH_WEBENGINE AND NOT FORTIQ_SHELL_PREVIEW_ONLY)
     find_package(Qt6 6.8 QUIET COMPONENTS WebEngineQuick)
     if(NOT TARGET Qt6::WebEngineQuick)
@@ -297,20 +308,42 @@ target_link_libraries(fortiq PRIVATE
     Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Network
     Qt6::Concurrent fortiq_shellplugin ${FORTIQ_SSH_TARGET})
 
-if(FORTIQ_WITH_WEBENGINE)
-    # The web view lives in a QML module of its own so that builds without WebEngine never import QtWebEngine.
+if(FORTIQ_WITH_WEBENGINE OR FORTIQ_WITH_ANDROID_WEBVIEW)
+    # The web view lives in a QML module of its own so that builds without an engine never import QtWebEngine.
     qt_add_library(fortiq_engine STATIC)
+    if(FORTIQ_WITH_ANDROID_WEBVIEW)
+        # The page is the system WebView: same EngineWindow.qml, a different EngineView.qml (published under the same name).
+        set_source_files_properties(qml/engine/android/EngineView.qml PROPERTIES QT_RESOURCE_ALIAS EngineView.qml)
+        set(FORTIQ_ENGINE_VIEW_QML qml/engine/android/EngineView.qml)
+        set(FORTIQ_ENGINE_VIEW_SOURCES src/browser/engine/android/AndroidWebView.cpp src/browser/engine/android/AndroidWebView.h)
+    else()
+        set(FORTIQ_ENGINE_VIEW_QML qml/engine/EngineView.qml)
+        set(FORTIQ_ENGINE_VIEW_SOURCES)
+    endif()
     qt_add_qml_module(fortiq_engine
         URI Fortiq.Engine
         VERSION 1.0
         RESOURCE_PREFIX /qt/qml
         OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/qml/Fortiq/Engine
         IMPORT_PATH ${CMAKE_CURRENT_BINARY_DIR}/qml
-        QML_FILES qml/engine/EngineView.qml qml/engine/EngineWindow.qml
+        QML_FILES ${FORTIQ_ENGINE_VIEW_QML} qml/engine/EngineWindow.qml
+        SOURCES ${FORTIQ_ENGINE_VIEW_SOURCES}
     )
-    target_link_libraries(fortiq_engine PRIVATE Qt6::Quick Qt6::WebEngineQuick fortiq_shellplugin)
-    target_compile_definitions(fortiq PRIVATE FORTIQ_HAVE_WEBENGINE)
-    target_link_libraries(fortiq PRIVATE Qt6::WebEngineQuick fortiq_engineplugin)
+    target_include_directories(fortiq_engine PRIVATE src src/browser/engine/android)   # the generated type registration includes <AndroidWebView.h>
+    if(FORTIQ_WITH_WEBENGINE)
+        target_link_libraries(fortiq_engine PRIVATE Qt6::Quick Qt6::WebEngineQuick fortiq_shellplugin)
+        target_compile_definitions(fortiq PRIVATE FORTIQ_HAVE_WEBENGINE)
+        target_link_libraries(fortiq PRIVATE Qt6::WebEngineQuick fortiq_engineplugin)
+    else()
+        target_link_libraries(fortiq_engine PRIVATE Qt6::Quick Qt6::Qml fortiq_shellplugin)
+        target_compile_definitions(fortiq PRIVATE FORTIQ_HAVE_ANDROID_WEBVIEW)
+        target_compile_definitions(fortiq_engine PRIVATE FORTIQ_HAVE_ANDROID_WEBVIEW)
+        target_link_libraries(fortiq PRIVATE fortiq_engineplugin)
+        if(FORTIQ_ANDROID_BROWSER_SELFTEST)
+            target_compile_definitions(fortiq PRIVATE FORTIQ_ANDROID_BROWSER_SELFTEST)
+            target_sources(fortiq PRIVATE src/browser/engine/android/BrowserSelfTest.cpp src/browser/engine/android/BrowserSelfTest.h)
+        endif()
+    endif()
 endif()
 
 set_target_properties(fortiq PROPERTIES
@@ -331,6 +364,25 @@ if(ANDROID)
     # Java side of the remembered-secret store (Android Keystore AES-GCM).
     configure_file(android/src/fr/cybou/fortiq/SecretVault.java
         "${FORTIQ_ANDROID_PACKAGE_OUTPUT}/src/fr/cybou/fortiq/SecretVault.java" COPYONLY)
+    configure_file(android/res/xml/network_security_config.xml "${FORTIQ_ANDROID_PACKAGE_OUTPUT}/res/xml/network_security_config.xml" COPYONLY)
+    if(FORTIQ_WITH_ANDROID_WEBVIEW)
+        # Browser engine on the system WebView: its Java bridge, the foreground service that keeps the gateway alive while the app is
+        # minimised, cleartext to the loopback gateway (network security config) and androidx.webkit (ProxyController, document-start script).
+        set(FORTIQ_ANDROIDX_WEBKIT "androidx.webkit:webkit:1.15.0")
+        foreach(f FortiqWeb.java GatewayService.java)
+            configure_file(android/src/fr/cybou/fortiq/${f} "${FORTIQ_ANDROID_PACKAGE_OUTPUT}/src/fr/cybou/fortiq/${f}" COPYONLY)
+        endforeach()
+        # Qt's own Gradle template plus ONE dependency (the template is read from the kit, so a Qt update keeps its other changes).
+        file(READ "${QT6_INSTALL_PREFIX}/src/android/templates/build.gradle" FORTIQ_QT_GRADLE)
+        set(FORTIQ_CORE_DEP "implementation 'androidx.core:core:1.17.0'")
+        string(FIND "${FORTIQ_QT_GRADLE}" "${FORTIQ_CORE_DEP}" FORTIQ_CORE_POS)
+        if(FORTIQ_CORE_POS EQUAL -1)
+            message(FATAL_ERROR "Qt's Android build.gradle template changed: add ${FORTIQ_ANDROIDX_WEBKIT} to the dependencies by hand (CMakeLists.txt)")
+        endif()
+        string(REPLACE "${FORTIQ_CORE_DEP}" "${FORTIQ_CORE_DEP}
+    implementation '${FORTIQ_ANDROIDX_WEBKIT}'" FORTIQ_QT_GRADLE "${FORTIQ_QT_GRADLE}")
+        file(WRITE "${FORTIQ_ANDROID_PACKAGE_OUTPUT}/build.gradle" "${FORTIQ_QT_GRADLE}")
+    endif()
     set_target_properties(fortiq PROPERTIES
         QT_ANDROID_COMPILE_SDK_VERSION "android-${FORTIQ_ANDROID_SDK}"
         QT_ANDROID_TARGET_SDK_VERSION "${FORTIQ_ANDROID_SDK}"
@@ -462,6 +514,7 @@ if(BUILD_TESTING)
     # Engine rules + EngineBrowser lifecycle (no Qt WebEngine, no SSH): switch audit, navigation policy, credentials, gateway lifecycle.
     qt_add_executable(fortiq_engine_tests tests/EngineProfileTest.cpp ${FORTIQ_ENGINE_SOURCES} ${FORTIQ_GATEWAY_PURE_SOURCES})
     target_include_directories(fortiq_engine_tests PRIVATE src)
+    target_compile_definitions(fortiq_engine_tests PRIVATE FORTIQ_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
     target_link_libraries(fortiq_engine_tests PRIVATE Qt6::Core Qt6::Network Qt6::Test)
     add_test(NAME fortiq_engine COMMAND fortiq_engine_tests -o "${CMAKE_CURRENT_BINARY_DIR}/engine-results.txt,txt" -o "-,txt")
     if(FORTIQ_WITH_WEBENGINE)

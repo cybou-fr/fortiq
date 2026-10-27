@@ -228,6 +228,45 @@
     },
     {
       "type": "library",
+      "bom-ref": "androidx.webkit@1.15.0:android-arm64",
+      "name": "androidx.webkit",
+      "version": "1.15.0",
+      "description": "ProxyController / DOCUMENT_START_SCRIPT for the Browser engine on the Android system WebView",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:maven/androidx.webkit/webkit@1.15.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.android.com/jetpack/androidx/releases/webkit"
+        }
+      ],
+      "properties": [
+        {
+          "name": "fortiq:linking",
+          "value": "dex in the APK"
+        },
+        {
+          "name": "fortiq:platform",
+          "value": "android-arm64"
+        },
+        {
+          "name": "fortiq:source",
+          "value": "Google Maven, pinned in CMakeLists.txt (FORTIQ_ANDROIDX_WEBKIT)"
+        },
+        {
+          "name": "fortiq:version-known",
+          "value": "true"
+        }
+      ]
+    },
+    {
+      "type": "library",
       "bom-ref": "libssh2@1.11.1-git6e7b207:android-arm64",
       "name": "libssh2",
       "version": "1.11.1-git6e7b207",
@@ -523,6 +562,7 @@
         "Qt WebEngine (Chromium)@6.12.0:windows-x64",
         "Qt for Android Gradle dependencies@unknown:android-arm64",
         "Qt@6.12.0:windows-x64,android-arm64",
+        "androidx.webkit@1.15.0:android-arm64",
         "libssh2@1.11.1-git6e7b207:android-arm64",
         "libssh2@1.11.1-git6e7b207:windows-x64",
         "libvterm@0.3.3:windows-x64,android-arm64",
@@ -533,5 +573,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:477b88c4-e9b1-be93-c1cc-f9197f3927ae"
+  "serialNumber": "urn:uuid:0dbd8d32-f781-5699-8d9a-0f9bcc579cac"
 }

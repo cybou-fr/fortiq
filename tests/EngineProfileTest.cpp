@@ -4,6 +4,7 @@
 #include "browser/engine/EngineBrowser.h"
 #include "browser/engine/EngineProfile.h"
 
+#include <QFile>
 #include <QProcess>
 #include <QSignalSpy>
 #include <QTcpSocket>
@@ -128,6 +129,92 @@ private slots:
         QVERIFY(!isOurProxy("10.0.0.1", 5000, 5000));
         QVERIFY(!isOurProxy("::1", 5000, 5000));
         QVERIFY(!isOurProxy("127.0.0.1", 5000, 0));        // no gateway running
+    }
+
+    // ---- Android WebView (docs/BROWSER.md, "Android") -------------------------------------------------------------------------
+    void androidProxyPlanHasNoWayAround() {
+        const AndroidProxyPlan plan = androidProxyPlan(4242);
+        QCOMPARE(plan.rule, QString("http://127.0.0.1:4242"));
+        QCOMPARE(plan.bypass, QStringList{ "<-loopback>" });     // not empty: "empty" would keep Chromium's implicit localhost bypass
+        QVERIFY(!plan.reverseBypass);
+        QVERIFY(!plan.allowDirect);
+        QVERIFY2(auditAndroidProxyPlan(plan, 4242).isEmpty(), qPrintable(auditAndroidProxyPlan(plan, 4242).join("; ")));
+        QVERIFY(!auditAndroidProxyPlan(plan, 4243).isEmpty());   // another port than the gateway's
+        QVERIFY(!auditAndroidProxyPlan(androidProxyPlan(0), 0).isEmpty());
+        AndroidProxyPlan bad = plan;
+        bad.bypass = {};
+        QVERIFY(!auditAndroidProxyPlan(bad, 4242).isEmpty());
+        bad = plan; bad.bypass << "*.example.org";
+        QVERIFY(!auditAndroidProxyPlan(bad, 4242).isEmpty());
+        bad = plan; bad.reverseBypass = true;
+        QVERIFY(!auditAndroidProxyPlan(bad, 4242).isEmpty());
+        bad = plan; bad.allowDirect = true;
+        QVERIFY(!auditAndroidProxyPlan(bad, 4242).isEmpty());
+        bad = plan; bad.rule = "direct://";
+        QVERIFY(!auditAndroidProxyPlan(bad, 4242).isEmpty());
+    }
+    void androidWithoutTheFeaturesRefusesInsteadOfGoingDirect() {
+        QVERIFY(androidSupportRefusal(true, true, true).isEmpty());
+        QVERIFY(androidSupportRefusal(false, true, true).contains("WebView"));
+        QVERIFY(androidSupportRefusal(true, false, true).contains("PROXY_OVERRIDE"));
+        QVERIFY(androidSupportRefusal(true, false, true).contains("refuse"));
+        QVERIFY(androidSupportRefusal(true, true, false).contains("DOCUMENT_START_SCRIPT"));
+        QVERIFY(!androidSupportRefusal(true, false, false).isEmpty());
+    }
+    void androidPasswordOnlyForOurRealmOnLoopback() {
+        const QString realm = newGatewayRealm();
+        QVERIFY(realm.startsWith("FORTIQ-") && realm.size() == 7 + 16);
+        QVERIFY(newGatewayRealm() != realm);                      // fresh per session
+        QVERIFY(acceptProxyChallenge("127.0.0.1", realm, realm));
+        QVERIFY(!acceptProxyChallenge("127.0.0.1", "FORTIQ", realm));         // an origin server that guesses the old fixed realm
+        QVERIFY(!acceptProxyChallenge("127.0.0.1", "", ""));                  // no session
+        QVERIFY(!acceptProxyChallenge("example.org", realm, realm));
+        QVERIFY(!acceptProxyChallenge("10.0.0.1", realm, realm));
+        QVERIFY(!acceptProxyChallenge("localhost", realm, realm));
+    }
+    void androidWebRtcScriptClosesTheIframeWindowPath() {
+        const QString base = webRtcRemovalScript(), android = androidWebRtcRemovalScript();
+        QVERIFY(android.startsWith(base));                       // the desktop removal is part of it, unchanged
+        QVERIFY(android.contains("contentWindow") && android.contains("contentDocument"));
+        for (const char *c : { "HTMLIFrameElement", "HTMLObjectElement", "HTMLEmbedElement", "RTCPeerConnection", "WebTransport" })
+            QVERIFY2(android.contains(QLatin1String(c)), c);
+        QVERIFY(!android.contains(QLatin1String("window.frames")));   // not hookable: stays a documented gap, never a promised one
+    }
+    void gatewayAnnouncesTheSecretRealm() {
+        EngineBrowser::Source src;
+        src.connected = [] { return true; };
+        src.label = [] { return QStringLiteral("u@h"); };
+        src.token = [] { return 1; };
+        src.makeTunnel = [](QObject *) -> TunnelBackend * { return new DeadTunnel; };
+        EngineBrowser eb(src);
+        eb.setWindowActive(true);
+        QCOMPARE(eb.state(), QString("ready"));
+        QVERIFY(eb.proxyRealm().startsWith("FORTIQ-"));
+        const QByteArray noAuth = exchange(eb.proxyPort(), "GET http://example.org/ HTTP/1.1\r\nHost: example.org\r\n\r\n");
+        QVERIFY2(noAuth.contains("Proxy-Authenticate: Basic realm=\"" + eb.proxyRealm().toLatin1() + "\""), noAuth.constData());
+    }
+    void androidBridgeSourceKeepsItsPromises() {
+        // The Java side cannot run here: its source is audited for the lines that carry the "never direct" contract.
+        QFile f(QStringLiteral(FORTIQ_REPO_ROOT "/android/src/fr/cybou/fortiq/FortiqWeb.java"));
+        QVERIFY2(f.open(QIODevice::ReadOnly), "FortiqWeb.java not found");
+        const QString java = QString::fromUtf8(f.readAll());
+        for (const char *forbidden : { "addDirect", "setReverseBypassEnabled(true)", "clearProxyOverride", "setSafeBrowsingEnabled(true)", "setAllowFileAccess(true)",
+                                       "setAllowUniversalAccessFromFileURLs(true)", "setJavaScriptCanOpenWindowsAutomatically(true)", "setSupportMultipleWindows(true)",
+                                       "setWebContentsDebuggingEnabled(true)", "proceed()", "SslErrorHandler.proceed", "h.proceed()", "setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW)" })
+            QVERIFY2(!java.contains(QLatin1String(forbidden)), forbidden);
+        for (const char *required : { "setSafeBrowsingEnabled(false)", "setAllowFileAccess(false)", "setAllowContentAccess(false)", "setGeolocationEnabled(false)",
+                                      "MIXED_CONTENT_NEVER_ALLOW", "setProxyOverride", "PROXY_OVERRIDE", "DOCUMENT_START_SCRIPT", "addDocumentStartJavaScript", "h.cancel()",
+                                      "r.deny()", "setDownloadListener", "onShowFileChooser", "if (!proxyConfirmed) throw", "nativeJudge", "nativeCredentials" })
+            QVERIFY2(java.contains(QLatin1String(required)), required);
+        // The proxy override is confirmed BEFORE the view is created (createView is only called from the confirmation callback).
+        QVERIFY(java.indexOf("setProxyOverride") < java.indexOf("createView(activity, script)"));
+        QCOMPARE(java.count("createView(activity, script)"), 1);
+        QFile m(QStringLiteral(FORTIQ_REPO_ROOT "/android/AndroidManifest.xml"));
+        QVERIFY(m.open(QIODevice::ReadOnly));
+        const QString manifest = QString::fromUtf8(m.readAll());
+        QVERIFY(manifest.contains("android.webkit.WebView.EnableSafeBrowsing\" android:value=\"false\""));
+        QVERIFY(manifest.contains("networkSecurityConfig"));
+        QVERIFY(!manifest.contains("READ_EXTERNAL_STORAGE") && !manifest.contains("MANAGE_EXTERNAL_STORAGE"));
     }
 
     // ---- EngineBrowser lifecycle -------------------------------------------------------------------------------------------

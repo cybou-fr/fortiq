@@ -23,6 +23,7 @@ struct GatewayOptions {
     int openTimeoutMs = 30000;       // name resolution + opening the channel
     int idleTimeoutMs = 120000;      // no byte either way (tunnels and transfers)
     quint16 preferredPort = 0;       // 0 = any free port; the engine reuses its first port on a restart (Chromium reads it once)
+    QString realm = QStringLiteral("FORTIQ");   // Proxy-Authenticate realm; the Android WebView hands the password only to this (secret) realm
     int resolveCacheMs = 5000;       // how long a resolution is reused (0 = never; the PIN, not the cache, is the rebinding defence)
 };
 

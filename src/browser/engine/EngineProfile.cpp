@@ -1,6 +1,7 @@
 #include "EngineProfile.h"
 
 #include <QHostAddress>
+#include <QRandomGenerator>
 
 namespace fortiq::engine {
 
@@ -125,6 +126,59 @@ bool isOurProxy(const QString &host, int port, quint16 gatewayPort) {
 
 QString permissionRefusal() {
     return QStringLiteral("Autorisation refusée : FORTIQ ne donne aucun accès (position, caméra, micro, notifications, presse-papiers) aux pages web.");
+}
+
+
+AndroidProxyPlan androidProxyPlan(quint16 gatewayPort) {
+    AndroidProxyPlan plan;
+    plan.rule = QStringLiteral("http://127.0.0.1:%1").arg(gatewayPort);
+    plan.bypass = { QStringLiteral("<-loopback>") };
+    return plan;
+}
+
+QStringList auditAndroidProxyPlan(const AndroidProxyPlan &plan, quint16 gatewayPort) {
+    QStringList problems;
+    if (gatewayPort == 0) problems << QStringLiteral("port de la passerelle inconnu");
+    if (plan.rule != QStringLiteral("http://127.0.0.1:%1").arg(gatewayPort)) problems << QStringLiteral("la règle de proxy n'est pas la passerelle");
+    if (plan.bypass != QStringList{ QStringLiteral("<-loopback>") }) problems << QStringLiteral("la liste d'exceptions doit valoir exactement <-loopback>");
+    if (plan.reverseBypass) problems << QStringLiteral("exceptions inversées interdites");
+    if (plan.allowDirect) problems << QStringLiteral("accès direct interdit");
+    return problems;
+}
+
+QString androidSupportRefusal(bool webViewInstalled, bool proxyOverride, bool documentStartScript) {
+    if (!webViewInstalled) return QStringLiteral("Android System WebView n'est pas disponible sur cet appareil : le navigateur ne démarre pas.");
+    if (!proxyOverride)
+        return QStringLiteral("Ce WebView ne sait pas forcer un proxy (PROXY_OVERRIDE) : le navigateur refuse de démarrer plutôt que d'accéder au réseau directement. Mettez à jour « Android System WebView » ou utilisez le lecteur simple.");
+    if (!documentStartScript)
+        return QStringLiteral("Ce WebView ne sait pas exécuter un script avant la page (DOCUMENT_START_SCRIPT), nécessaire pour retirer WebRTC : le navigateur refuse de démarrer. Mettez à jour « Android System WebView » ou utilisez le lecteur simple.");
+    return {};
+}
+
+bool acceptProxyChallenge(const QString &host, const QString &realm, const QString &expectedRealm) {
+    if (expectedRealm.isEmpty() || realm != expectedRealm) return false;
+    QHostAddress a;
+    return a.setAddress(host) && a == QHostAddress::LocalHost;
+}
+
+QString newGatewayRealm() {
+    static const char hex[] = "0123456789abcdef";
+    QString r = QStringLiteral("FORTIQ-");
+    for (int i = 0; i < 16; ++i) r += QLatin1Char(hex[QRandomGenerator::system()->bounded(16)]);
+    return r;
+}
+
+QString webRtcRemovalScript() {
+    return QStringLiteral("(function(){var n=['RTCPeerConnection','webkitRTCPeerConnection','RTCDataChannel','RTCSessionDescription','RTCIceCandidate','RTCPeerConnectionIceEvent','RTCRtpSender','RTCRtpReceiver','RTCRtpTransceiver','RTCDtlsTransport','RTCIceTransport','RTCSctpTransport','RTCCertificate','RTCDTMFSender','RTCStatsReport','RTCError','RTCErrorEvent','RTCTrackEvent','RTCDataChannelEvent','WebTransport','WebTransportBidirectionalStream','WebTransportDatagramDuplexStream','WebTransportError'];for(var i=0;i<n.length;i++){try{delete window[n[i]];Object.defineProperty(window,n[i],{value:undefined,configurable:false,writable:false});}catch(e){}}})();");
+}
+
+QString androidWebRtcRemovalScript() {
+    return webRtcRemovalScript() + QStringLiteral(
+        "(function(){var n=['RTCPeerConnection','webkitRTCPeerConnection','RTCDataChannel','RTCSessionDescription','RTCIceCandidate','RTCPeerConnectionIceEvent','RTCRtpSender','RTCRtpReceiver','RTCRtpTransceiver','RTCDtlsTransport','RTCIceTransport','RTCSctpTransport','WebTransport'];"
+        "function strip(w){try{if(!w)return w;for(var i=0;i<n.length;i++){try{delete w[n[i]];Object.defineProperty(w,n[i],{value:undefined,configurable:false,writable:false});}catch(e){}}}catch(e){}return w;}"
+        "['HTMLIFrameElement','HTMLFrameElement','HTMLObjectElement','HTMLEmbedElement'].forEach(function(c){var P=window[c]&&window[c].prototype;if(!P)return;"
+        "['contentWindow','contentDocument'].forEach(function(p){var d=Object.getOwnPropertyDescriptor(P,p);if(!d||!d.get)return;"
+        "Object.defineProperty(P,p,{configurable:true,enumerable:d.enumerable,get:function(){var v=d.get.call(this);if(p==='contentWindow')strip(v);else if(v)strip(v.defaultView);return v;}});});});})();");
 }
 
 }  // namespace fortiq::engine

@@ -4,7 +4,7 @@
 
 ## Что есть
 
-- [`docs/sbom/fortiq.cdx.json`](sbom/fortiq.cdx.json) — SBOM в формате CycloneDX 1.5, 14 компонентов (добавлен Qt WebEngine/Chromium: версия основы Chromium и версия, до которой Qt портировал патчи безопасности, SHA-256 `Qt6WebEngineCore.dll` и `QtWebEngineProcess.exe`) для Windows x64 и Android arm64, с PURL, CPE, лицензией и (для DLL Windows) SHA-256. Файл детерминирован (без метки времени), поэтому смена зависимости видна как diff.
+- [`docs/sbom/fortiq.cdx.json`](sbom/fortiq.cdx.json) — SBOM в формате CycloneDX 1.5, 15 компонентов (27.10.2026 добавлена `androidx.webkit` 1.15.0 — Gradle-зависимость Android-браузера, Apache-2.0, транзитивные библиотеки AndroidX не инвентаризированы; добавлен Qt WebEngine/Chromium: версия основы Chromium и версия, до которой Qt портировал патчи безопасности, SHA-256 `Qt6WebEngineCore.dll` и `QtWebEngineProcess.exe`) для Windows x64 и Android arm64, с PURL, CPE, лицензией и (для DLL Windows) SHA-256. Файл детерминирован (без метки времени), поэтому смена зависимости видна как diff.
 - `python tool/make_sbom.py --output docs/sbom/fortiq.cdx.json` — собрать заново; `--check docs/sbom/fortiq.cdx.json` — упасть, если машина (vcpkg, Qt, libvterm) уже не совпадает с закоммиченным файлом; `--self-test` — проверка самого инструмента (входит в `tool/ci_check.py`).
 - Источники данных: `installed/vcpkg/status` обоих деревьев vcpkg (точные версии и ревизии портов), `Qt6ConfigVersion.cmake`, версия IFW, `third_party/libvterm`. Компоненты, версию которых нельзя прочитать с машины (Mesa llvmpipe, d3dcompiler_47, среда выполнения MSVC, Gradle-зависимости Qt for Android), внесены с `fortiq:version-known = false`: отсутствие версии не означает отсутствия уязвимостей.
 

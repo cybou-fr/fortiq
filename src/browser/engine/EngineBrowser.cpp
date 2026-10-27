@@ -10,7 +10,7 @@ constexpr int kLogLimit = 500;
 }  // namespace
 
 bool EngineBrowser::compiledIn() {
-#ifdef FORTIQ_HAVE_WEBENGINE
+#if defined(FORTIQ_HAVE_WEBENGINE) || defined(FORTIQ_HAVE_ANDROID_WEBVIEW)
     return true;
 #else
     return false;
@@ -66,6 +66,8 @@ void EngineBrowser::start() {
     m_gateway = std::make_unique<gateway::ProxyGateway>(m_tunnel.get());
     gateway::GatewayOptions options;
     options.preferredPort = g_enginePort;
+    m_realm = newGatewayRealm();
+    options.realm = m_realm;
     if (!m_gateway->start(options)) {
         stop(QStringLiteral("error"), g_enginePort
             ? QStringLiteral("Le port local %1 de la passerelle est pris : redémarrez FORTIQ pour utiliser le navigateur.").arg(g_enginePort)
@@ -74,7 +76,9 @@ void EngineBrowser::start() {
     }
     if (g_enginePort == 0) g_enginePort = m_gateway->port();
     QString problem;
-    if (compiledIn() && !applyChromiumFlags(g_enginePort, &problem)) { stop(QStringLiteral("error"), problem); return; }
+#ifdef FORTIQ_HAVE_WEBENGINE
+    if (!applyChromiumFlags(g_enginePort, &problem)) { stop(QStringLiteral("error"), problem); return; }
+#endif
     m_log.clear();
     connect(m_gateway.get(), &gateway::ProxyGateway::log, this, [this](const QString &line) {
         m_log << line;

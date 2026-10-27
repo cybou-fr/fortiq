@@ -58,6 +58,7 @@ public:
     Q_INVOKABLE void answerConfirm(bool allow);
     // The proxy credentials, ONLY for our own gateway ({} for any other proxy or origin server).
     Q_INVOKABLE QVariantMap proxyCredentials(const QString &host, int port) const;
+    QString proxyRealm() const { return m_realm; }     // the secret realm of this gateway session (Android WebView: 401/407 challenge check)
     // {allowed, reason}; a refusal is also reported with notice().
     Q_INVOKABLE QVariantMap judge(const QString &url, bool topLevel);
     Q_INVOKABLE QString permissionRefusal() const { return engine::permissionRefusal(); }
@@ -89,6 +90,7 @@ private:
     QString m_label;
     int m_generation = 0;
     int m_token = 0;
+    QString m_realm;
     std::unique_ptr<gateway::TunnelBackend> m_tunnel;
     std::unique_ptr<gateway::ProxyGateway> m_gateway;
     QStringList m_log;

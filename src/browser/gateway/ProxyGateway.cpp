@@ -63,6 +63,16 @@ ProxyGateway::ProxyGateway(TunnelBackend *tunnel, QObject *parent) : QObject(par
 
 ProxyGateway::~ProxyGateway() { stop(); }
 
+namespace {
+// The realm goes into a header line: only token characters survive.
+QByteArray safeRealm(const QString &realm) {
+    QByteArray out;
+    for (const QChar ch : realm)
+        if (ch.isLetterOrNumber() || ch == QLatin1Char('-') || ch == QLatin1Char('_') || ch == QLatin1Char('.')) out += char(ch.unicode());
+    return out.isEmpty() ? QByteArray("FORTIQ") : out;
+}
+}  // namespace
+
 bool ProxyGateway::start(const GatewayOptions &options) {
     if (m_server.isListening()) return true;
     m_options = options;
@@ -160,7 +170,7 @@ void ProxyGateway::handleRequest(Conn *c, RequestHead head) {
     if (!proxyAuthorized(&head, m_expectedAuth)) {
         ++m_stats.authRejected;
         reply(c, 407, QStringLiteral("Authentification de la passerelle FORTIQ requise."),
-              { QByteArray("Proxy-Authenticate: Basic realm=\"FORTIQ\"") });
+              { QByteArray("Proxy-Authenticate: Basic realm=\"") + safeRealm(m_options.realm) + "\"" });
         return;
     }
     c->req = head;

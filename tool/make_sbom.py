@@ -205,6 +205,13 @@ def build_inventory(qt: Path, ifw: Path, vcpkg_windows: Path, vcpkg_android: Pat
                                        "fortiq:upstream-commit": vt["commit"], "fortiq:local-patches": str(vt["patches"]),
                                        "fortiq:linking": "static"},
                                 description="Terminal emulation; carries local security patches (third_party/libvterm/README.fortiq.md)"))
+    cm = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+    m = re.search(r'FORTIQ_ANDROIDX_WEBKIT "androidx\.webkit:webkit:([0-9][^"]*)"', cm)
+    if m:   # the Gradle dependency of the Android Browser (ProxyController, document-start script); its own transitive AndroidX libraries are not inventoried
+        components.append(component("androidx.webkit", m.group(1), license="Apache-2.0", purl=f"pkg:maven/androidx.webkit/webkit@{m.group(1)}",
+                                    url="https://developer.android.com/jetpack/androidx/releases/webkit",
+                                    props={"fortiq:platform": "android-arm64", "fortiq:linking": "dex in the APK", "fortiq:source": "Google Maven, pinned in CMakeLists.txt (FORTIQ_ANDROIDX_WEBKIT)"},
+                                    description="ProxyController / DOCUMENT_START_SCRIPT for the Browser engine on the Android system WebView"))
     ifwv = ifw_version(ifw)
     components.append(component("Qt Installer Framework", ifwv, kind="application", license="GPL-3.0-only WITH exception (to be confirmed, see THIRD_PARTY_LICENSES.md)",
                                 props={"fortiq:platform": "windows-x64", "fortiq:source": "Qt online installer, Tools/QtInstallerFramework", "fortiq:role": "installer builder (installerbase.exe is copied into the installer)"}))
