@@ -18,7 +18,7 @@ sudo apt install -y build-essential cmake ninja-build python3 pkg-config \
   qml6-module-qtquick-layouts qml6-module-qtquick-window
 ```
 
-Qt **>= 6.8** is required by CMake; use `--qt-prefix` with a matching Qt
+Qt **>= 6.9** is required by CMake; use `--qt-prefix` with a matching Qt
 kit if the distribution kit does not satisfy the requirement. The runtime
 QML modules above are intentionally explicitly installed, because ELF
 dependency detection does not detect QML `import` statements.
@@ -40,14 +40,15 @@ sudo apt install ./fortiq_*.deb
 
 The package registers an application launcher, icon and Debian dependencies.
 CPack runs `dpkg-shlibdeps` to derive shared-library dependencies.
-It does **not** bundle Qt, libssh2 or OpenSSL, and therefore depends on the
-Debian shared libraries. Confirm all required QML modules are available via
-APT and on a clean installed VM.
+With a compatible system Qt, the package uses Debian shared libraries and QML
+modules. With a Qt kit outside `/usr`, it bundles Qt as described below;
+libssh2 and OpenSSL remain system dependencies. Debian 13 system Qt 6.8 is
+rejected at configuration: use the Qt 6.12 kit below.
 
 ## Package with its own Qt 6.12 (`--qt-prefix`)
 
-Debian 13 ships Qt 6.8, but the shell uses `RectangularShadow` (Qt 6.9+), so on the
-system Qt it does not load (`fortiq_layout` fails 45 of 47 checks). When the build uses a Qt
+Debian 13 ships Qt 6.8, but the shell uses `RectangularShadow` (Qt 6.9+), so the
+system Qt is rejected by CMake before building. When the build uses a Qt
 that is not under `/usr` (`--qt-prefix /path/to/Qt/6.12.0/gcc_64`, a Qt 6.12 kit with
 `qtwebengine`, `qtwebchannel`, `qtpositioning`, installed for example with `aqtinstall`),
 CMake switches `FORTIQ_DEB` to the **bundled** mode:

@@ -255,7 +255,11 @@ class GatewayTest : public QObject {
     // CONNECT through the gateway; returns the client once the status line is complete.
     std::unique_ptr<Client> connectVia(const QByteArray &target, const QByteArray &authValue = {}) {
         auto c = std::make_unique<Client>();
-        if (!c->connectTo(gateway->port())) return nullptr;
+        if (!c->connectTo(gateway->port())) {
+            const QByteArray error = "Cannot connect to the loopback test gateway: " + c->sock.errorString().toUtf8();
+            QTest::qFail(error.constData(), __FILE__, __LINE__);
+            return c; // Keep callers safe after recording the infrastructure failure.
+        }
         c->send(head("CONNECT", target, authValue.isNull() ? auth : authValue));
         const Client *p = c.get();
         (void)QTest::qWaitFor([p] { return p->got.contains("\r\n\r\n") || p->closed; }, 4000);
@@ -263,7 +267,11 @@ class GatewayTest : public QObject {
     }
     std::unique_ptr<Client> request(const QByteArray &raw, bool wait = true) {
         auto c = std::make_unique<Client>();
-        if (!c->connectTo(gateway->port())) return nullptr;
+        if (!c->connectTo(gateway->port())) {
+            const QByteArray error = "Cannot connect to the loopback test gateway: " + c->sock.errorString().toUtf8();
+            QTest::qFail(error.constData(), __FILE__, __LINE__);
+            return c; // Keep callers safe after recording the infrastructure failure.
+        }
         c->send(raw);
         const Client *p = c.get();
         if (wait) (void)QTest::qWaitFor([p] { return p->closed; }, 4000);

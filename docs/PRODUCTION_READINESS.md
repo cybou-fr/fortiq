@@ -47,3 +47,31 @@
 - `ctest` больше не скрывает пропуски и аварии: `check_test_results.py` читает файлы результатов QtTest; живой запуск возвращает 1 при пропуске без исключения.
 - Документы: [RELEASE_SCOPE_1_0](RELEASE_SCOPE_1_0.md), этот файл; [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES.md) и [RELEASE](RELEASE.md) приведены к GPL-3.0; `package_windows.py` кладёт `FORTIQ-LICENSE.txt` и предложение исходного кода в уведомления.
 - **Не делалось**: Windows/Android квалификация, запуск CI на GitHub, смена видимости репозитория, подпись, новые функции.
+
+## Локальная стабилизация 27.10.2026
+
+Минимум Qt в CMake поднят до 6.9: оболочка использует `RectangularShadow`;
+целевой kit остаётся 6.12. CTest ограничивает каждый офлайн-набор 120 секундами,
+SSH/publication/gateway-live/engine-live — 600 секундами. Превышение — ошибка,
+а не пропуск. Тестовые клиенты GatewayTest при отказе loopback записывают
+явный FAIL с ошибкой сокета и сохраняют объект клиента, чтобы последующие
+проверки не разыменовывали nullptr. Это исправление диагностики теста,
+не свидетельство дефекта рабочего SSH-шлюза.
+
+Предварительный прогон существующих Windows-бинарников в ограниченной среде
+не прошёл: недоступны clipboard, Credential Manager и loopback, engine-live
+завершился с 0xc0000135; layout-прогон прерван. Это не чистая сборка,
+не квалификация Windows и не закрытие G2/G3/G4/G6.
+
+Linux sanitizer CI переведён с системного Qt Ubuntu на kit 6.12,
+без WebEngine; запуск на GitHub в этом срезе не выполнялся.
+
+Проверка этого среза: отдельная чистая MSVC/Qt 6.12 сборка `GatewayTest.cpp`
+с рабочими `HttpWire`/`ProxyGateway`/`UrlPolicy` — **110 passed, 0 failed,
+0 skipped**. В ограниченной среде `missingOrWrongAuthIsRefused` завершился
+обычным FAIL с `Cannot connect to the loopback test gateway: Socket operation
+timed out`, без аварии. Документы (`check_docs_consistency.py`) и
+`git diff --check` проходят. Полная сборка приложения не завершена:
+регенерация старого `build-msvc` застряла в `qmlimportscanner` с сообщениями
+об отсутствующих файлах `QtQuick/NativeStyle`; запуск остановлен. Таймауты
+CTest и обновлённый workflow пока не проверены полным прогоном/на GitHub.

@@ -102,7 +102,7 @@ CI, AI. Ни одно приложение не проверено на устр
 
 ## Стек
 
-C++20, Qt 6 (целевая 6.12, минимум в CMake — 6.8), CMake 3.21+, libssh2. Открытые вопросы — в
+C++20, Qt 6 (целевая 6.12, минимум в CMake — 6.9), CMake 3.21+, libssh2. Открытые вопросы — в
 [ARCHITECTURE](docs/ARCHITECTURE.md#открытые-решения): лицензии Qt при распространении FORTIQ под GPLv3,
 терминальный движок, безопасный веб-движок. Qt Quick/QML и **точный визуальный эталон уже утверждены**.
 
@@ -146,7 +146,7 @@ python tool/package_windows.py --build build-msvc
 Получаются папка приложения, ZIP-архив и установщик Qt Installer Framework (установка для одного
 пользователя в `%LOCALAPPDATA%\Programs\FORTIQ`, без прав администратора, ярлык в «Пуске»,
 деинсталлятор). Подписи кода пока нет: SmartScreen предупредит. Состояние проверок — в
-[QT_MIGRATION](docs/QT_MIGRATION.md). Сборка для Android не делалась.
+[QT_MIGRATION](docs/QT_MIGRATION.md). Android arm64 debug APK собран и проверен в эмуляторе; release-сборка и физическое устройство не квалифицированы.
 
 ## Использование среза R0.1
 

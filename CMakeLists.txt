@@ -5,12 +5,12 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Quick QuickControls2 Network Concurrent)
+find_package(Qt6 6.9 REQUIRED COMPONENTS Core Gui Quick QuickControls2 Network Concurrent)
 file(GLOB FORTIQ_VTERM_SOURCES CONFIGURE_DEPENDS third_party/libvterm/src/*.c)
 add_library(fortiq_vterm STATIC ${FORTIQ_VTERM_SOURCES})
 target_include_directories(fortiq_vterm PUBLIC third_party/libvterm/include)
 set_target_properties(fortiq_vterm PROPERTIES C_STANDARD 11 POSITION_INDEPENDENT_CODE ON)
-qt_standard_project_setup(REQUIRES 6.8)
+qt_standard_project_setup(REQUIRES 6.9)
 
 # One raster brand source -> native icons for both executables and the Android APK.
 # Python stdlib generator is deterministic and does not require Pillow.
@@ -67,7 +67,7 @@ if(FORTIQ_WITH_ANDROID_WEBVIEW AND FORTIQ_SHELL_PREVIEW_ONLY)
     set(FORTIQ_WITH_ANDROID_WEBVIEW OFF)
 endif()
 if(FORTIQ_WITH_WEBENGINE AND NOT FORTIQ_SHELL_PREVIEW_ONLY)
-    find_package(Qt6 6.8 QUIET COMPONENTS WebEngineQuick)
+    find_package(Qt6 6.9 QUIET COMPONENTS WebEngineQuick)
     if(NOT TARGET Qt6::WebEngineQuick)
         message(WARNING "Qt WebEngine is not installed for this Qt kit: building WITHOUT the Browser engine (FORTIQ_WITH_WEBENGINE=OFF). "
                         "Install the 'Qt WebEngine' component with the Qt Maintenance Tool.")
@@ -403,11 +403,12 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    # Bound stalled GUI/network tests; live suites get a larger explicit budget.
     add_test(NAME fortiq_brand_assets
         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tool/check_brand_assets.py"
           --output "${FORTIQ_BRAND_OUTPUT}"
           --android-output "${FORTIQ_ANDROID_PACKAGE_OUTPUT}")
-    find_package(Qt6 6.8 REQUIRED COMPONENTS Test)
+    find_package(Qt6 6.9 REQUIRED COMPONENTS Test)
     qt_add_executable(fortiq_terminal_history_tests tests/TerminalHistoryTest.cpp)
     target_include_directories(fortiq_terminal_history_tests PRIVATE src)
     target_link_libraries(fortiq_terminal_history_tests PRIVATE Qt6::Core Qt6::Test)
@@ -593,6 +594,12 @@ if(BUILD_TESTING)
         FILES "${FORTIQ_BRAND_OUTPUT}/fortiq_mark.png")
     target_link_libraries(fortiq_layout_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Test fortiq_shellplugin)
     add_test(NAME fortiq_layout COMMAND fortiq_layout_tests -o "${CMAKE_CURRENT_BINARY_DIR}/layout-results.txt,txt" -o "-,txt")
+    get_property(FORTIQ_REGISTERED_TESTS DIRECTORY PROPERTY TESTS)
+    set_tests_properties(${FORTIQ_REGISTERED_TESTS} PROPERTIES TIMEOUT 120)
+    set_tests_properties(fortiq_ssh_integration fortiq_publication fortiq_gateway_live PROPERTIES TIMEOUT 600)
+    if(TEST fortiq_engine_live)
+        set_tests_properties(fortiq_engine_live PROPERTIES TIMEOUT 600)
+    endif()
     set(FORTIQ_LAYOUT_ENV "QT_QUICK_CONTROLS_STYLE=Fusion;QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     if(TARGET Qt6::QOffscreenIntegrationPlugin)   # Qt from the online installer; distribution packages find the plugin by themselves
         list(APPEND FORTIQ_LAYOUT_ENV "QT_QPA_PLATFORM_PLUGIN_PATH=$<TARGET_FILE_DIR:Qt6::QOffscreenIntegrationPlugin>")
