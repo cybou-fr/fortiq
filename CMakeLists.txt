@@ -460,7 +460,7 @@ if(BUILD_TESTING)
     get_target_property(FORTIQ_APP_SOURCES fortiq SOURCES)
     list(FILTER FORTIQ_APP_SOURCES EXCLUDE REGEX "src/main\.cpp$")
     list(FILTER FORTIQ_APP_SOURCES EXCLUDE REGEX "\.rc$")
-    list(FILTER FORTIQ_APP_SOURCES EXCLUDE REGEX "(qmltyperegistrations|_qml_Main_qml|qrc_|_autogen|mocs_compilation)")
+    list(FILTER FORTIQ_APP_SOURCES EXCLUDE REGEX "(qmltyperegistrations|_qml_Main_qml|Main_qml\.cpp|qrc_|_autogen|mocs_compilation|\.rcc/)")
     qt_add_executable(fortiq_live_capture tests/LiveCapture.cpp ${FORTIQ_APP_SOURCES})
     target_include_directories(fortiq_live_capture PRIVATE src)
     qt_add_qml_module(fortiq_live_capture URI Fortiq.App VERSION 1.0

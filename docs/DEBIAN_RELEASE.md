@@ -15,8 +15,7 @@ sudo apt install -y build-essential cmake ninja-build python3 pkg-config \
   qt6-base-dev qt6-declarative-dev qt6-declarative-dev-tools \
   qt6-tools-dev libssh2-1-dev libssl-dev zlib1g-dev \
   qml6-module-qtquick qml6-module-qtquick-controls \
-  qml6-module-qtquick-controls-fusion qml6-module-qtquick-layouts \
-  qml6-module-qtquick-window
+  qml6-module-qtquick-layouts qml6-module-qtquick-window
 ```
 
 Qt **>= 6.8** is required by CMake; use `--qt-prefix` with a matching Qt
