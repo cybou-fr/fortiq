@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+if [ "$1" = remove ] || [ "$1" = purge ] || [ "$1" = deconfigure ]; then
+    rm -f /usr/bin/fortiq /usr/share/applications/fr.cybou.fortiq.desktop /usr/share/icons/hicolor/256x256/apps/fr.cybou.fortiq.png
+fi
+exit 0

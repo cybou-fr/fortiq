@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+# The application lives in /opt/fortiq with its own Qt 6.12; make it visible to the system.
+ln -sf /opt/fortiq/bin/fortiq /usr/bin/fortiq
+mkdir -p /usr/share/applications /usr/share/icons/hicolor/256x256/apps
+ln -sf /opt/fortiq/share/applications/fr.cybou.fortiq.desktop /usr/share/applications/fr.cybou.fortiq.desktop
+ln -sf /opt/fortiq/share/icons/hicolor/256x256/apps/fr.cybou.fortiq.png /usr/share/icons/hicolor/256x256/apps/fr.cybou.fortiq.png
+exit 0

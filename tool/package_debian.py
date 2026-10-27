@@ -44,7 +44,7 @@ def main() -> int:
     run("cmake", "--build", args.build, "--parallel", str(min(os.cpu_count() or 2, 8)))
     if not args.skip_tests:
         run("ctest", "--test-dir", args.build, "--output-on-failure", "--no-tests=error")
-    run("cpack", "--config", str(build / "CPackConfig.cmake"), "-G", "DEB")
+    run("cpack", "--config", str(build / "CPackConfig.cmake"), "-G", "DEB", "-B", str(build))
     packages = sorted(build.glob("fortiq_*.deb"))
     if not packages:
         raise RuntimeError(f"CPack produced no .deb in {build}")

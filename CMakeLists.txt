@@ -621,7 +621,24 @@ if(FORTIQ_DEB)
         message(FATAL_ERROR "dpkg is required to build a Debian package")
     endif()
     include(GNUInstallDirs)
-    install(TARGETS fortiq RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    # Debian 13 ships Qt 6.8; the shell needs Qt 6.9+ (RectangularShadow), so the package carries its own Qt 6.12
+    # under /opt/fortiq whenever the build uses a Qt that is not the system one.
+    set(FORTIQ_DEB_BUNDLE_QT OFF)
+    if(NOT Qt6_DIR MATCHES "^/usr/")
+        set(FORTIQ_DEB_BUNDLE_QT ON)
+    endif()
+    if(FORTIQ_DEB_BUNDLE_QT)
+        set(CMAKE_INSTALL_PREFIX "/opt/fortiq" CACHE PATH "" FORCE)
+        set(CPACK_PACKAGING_INSTALL_PREFIX "/opt/fortiq")
+        install(TARGETS fortiq RUNTIME DESTINATION bin)
+        qt_generate_deploy_qml_app_script(TARGET fortiq OUTPUT_SCRIPT FORTIQ_DEPLOY_SCRIPT
+            NO_UNSUPPORTED_PLATFORM_ERROR NO_TRANSLATIONS)
+        install(SCRIPT ${FORTIQ_DEPLOY_SCRIPT})
+        set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${CMAKE_CURRENT_SOURCE_DIR}/packaging/debian/postinst;${CMAKE_CURRENT_SOURCE_DIR}/packaging/debian/prerm")
+        set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS_PRIVATE_DIRS "/opt/fortiq/lib")
+    else()
+        install(TARGETS fortiq RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    endif()
     install(FILES packaging/debian/fr.cybou.fortiq.desktop
         DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
     install(FILES assets/branding/fortiq_mark.png
@@ -639,8 +656,10 @@ if(FORTIQ_DEB)
     set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "${FORTIQ_DEB_ARCH}")
     set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
     # ELF dependency discovery cannot see QML imports.
-    set(CPACK_DEBIAN_PACKAGE_DEPENDS
-        "qml6-module-qtquick, qml6-module-qtquick-controls, qml6-module-qtquick-controls-fusion, qml6-module-qtquick-layouts, qml6-module-qtquick-window")
+    if(NOT FORTIQ_DEB_BUNDLE_QT)
+        set(CPACK_DEBIAN_PACKAGE_DEPENDS
+            "qml6-module-qtquick, qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qtquick-window")
+    endif()
     set(CPACK_DEBIAN_PACKAGE_SECTION "net")
     include(CPack)
 endif()

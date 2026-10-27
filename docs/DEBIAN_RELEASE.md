@@ -44,6 +44,33 @@ It does **not** bundle Qt, libssh2 or OpenSSL, and therefore depends on the
 Debian shared libraries. Confirm all required QML modules are available via
 APT and on a clean installed VM.
 
+## Package with its own Qt 6.12 (`--qt-prefix`)
+
+Debian 13 ships Qt 6.8, but the shell uses `RectangularShadow` (Qt 6.9+), so on the
+system Qt it does not load (`fortiq_layout` fails 45 of 47 checks). When the build uses a Qt
+that is not under `/usr` (`--qt-prefix /path/to/Qt/6.12.0/gcc_64`, a Qt 6.12 kit with
+`qtwebengine`, `qtwebchannel`, `qtpositioning`, installed for example with `aqtinstall`),
+CMake switches `FORTIQ_DEB` to the **bundled** mode:
+
+- the application and its Qt (libraries, plugins, QML modules, Qt WebEngine with
+  `QtWebEngineProcess`, resources and `qt.conf`) are installed into `/opt/fortiq` by
+  `qt_generate_deploy_qml_app_script`; `postinst`/`prerm` link `/usr/bin/fortiq`, the launcher and
+  the icon into `/usr` and remove them on uninstall;
+- Debian dependencies are only the system libraries that `dpkg-shlibdeps` finds for the bundle
+  (libc, X11/xcb, Mesa, NSS, fontconfig, libssh2, OpenSSL …); the `qml6-module-*` packages are not needed;
+- the package is large (Chromium): about 160 MB packed, about 700 MB installed.
+
+Needed in the build environment besides the list above: `file` and `dpkg-dev` (CPack `SHLIBDEPS`).
+`tool/package_debian.py` runs the whole ctest set before packaging. With Qt 6.12 on Debian 13 (WSL)
+25 of 26 pass reliably; `fortiq_gateway` fails on `httpPostBodiesContentLengthAndChunked`
+(a 2 MB request body echoed through the fake tunnel: about 3 runs of 4 stall for ~47 s instead of 1 s;
+it passes on Windows and passed in one full Linux run). The cause is **not found** — it may be a real
+back-pressure stall of the gateway on Linux, so the Linux browser path must not be called verified until
+it is fixed; the package can be built with `--skip-tests` meanwhile (not qualified). Remaining of this
+section's claims that are **not** verified: a clean Debian VM, Wayland,
+GNOME/KDE launcher, upgrade/uninstall, the `libssh2` security gate below. The
+`qtwebengine_devtools_resources.pak` is shipped although DevTools are closed (it can be removed).
+
 ## Release gates — mandatory before public distribution
 
 1. **libssh2 security:** current Windows/Android builds use a pinned, fixed
