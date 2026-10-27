@@ -49,7 +49,7 @@ SYSTEM_DLL = re.compile(
     r"shlwapi|setupapi|cfgmgr32|comdlg32|comctl32|uxtheme|dwmapi|dwrite|d2d1|d3d11|d3d12|dxgi|d3d9|dcomp|"
     r"opengl32|glu32|mpr|wtsapi32|rpcrt4|ntdll|authz|powrprof|propsys|shcore|winspool\.drv|wininet|winhttp|"
     r"msimg32|hid|dbghelp|msvcrt|ucrtbase|normaliz|mscms|wevtapi|dxcore|dsound|mf|mfplat|mfreadwrite|"
-    r"windowscodecs|cryptbase|cryptnet|wintrust|ntdsapi|esent|davclnt|virtdisk|d3dcompiler_47|imagehlp|uiautomationcore|icuuc|icuin|icu)\.dll$",
+    r"windowscodecs|cryptbase|cryptnet|wintrust|ntdsapi|esent|davclnt|virtdisk|d3dcompiler_47|imagehlp|uiautomationcore|icuuc|icuin|icu|dhcpcsvc|fontsub|pdh|urlmon|mmdevapi|winusb)\.dll$",
     re.IGNORECASE)
 
 

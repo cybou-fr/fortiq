@@ -4,7 +4,7 @@
 
 ## Что есть
 
-- [`docs/sbom/fortiq.cdx.json`](sbom/fortiq.cdx.json) — SBOM в формате CycloneDX 1.5, 13 компонентов для Windows x64 и Android arm64, с PURL, CPE, лицензией и (для DLL Windows) SHA-256. Файл детерминирован (без метки времени), поэтому смена зависимости видна как diff.
+- [`docs/sbom/fortiq.cdx.json`](sbom/fortiq.cdx.json) — SBOM в формате CycloneDX 1.5, 14 компонентов (добавлен Qt WebEngine/Chromium: версия основы Chromium и версия, до которой Qt портировал патчи безопасности, SHA-256 `Qt6WebEngineCore.dll` и `QtWebEngineProcess.exe`) для Windows x64 и Android arm64, с PURL, CPE, лицензией и (для DLL Windows) SHA-256. Файл детерминирован (без метки времени), поэтому смена зависимости видна как diff.
 - `python tool/make_sbom.py --output docs/sbom/fortiq.cdx.json` — собрать заново; `--check docs/sbom/fortiq.cdx.json` — упасть, если машина (vcpkg, Qt, libvterm) уже не совпадает с закоммиченным файлом; `--self-test` — проверка самого инструмента (входит в `tool/ci_check.py`).
 - Источники данных: `installed/vcpkg/status` обоих деревьев vcpkg (точные версии и ревизии портов), `Qt6ConfigVersion.cmake`, версия IFW, `third_party/libvterm`. Компоненты, версию которых нельзя прочитать с машины (Mesa llvmpipe, d3dcompiler_47, среда выполнения MSVC, Gradle-зависимости Qt for Android), внесены с `fortiq:version-known = false`: отсутствие версии не означает отсутствия уязвимостей.
 
@@ -33,3 +33,5 @@
 - libssh2: [релизы](https://github.com/libssh2/libssh2/releases), [AhnLab ASEC: CVE-2026-55200](https://asec.ahnlab.com/en/94310/), [oss-sec, 23.06.2026](https://seclists.org/oss-sec/2026/q2/1010), [Gentoo GLSA 202608-17](https://linuxsecurity.com/advisories/gentoo/libssh2-gentoo-glsa-202608-17)
 - zlib: [zlib.net](https://zlib.net/)
 - Qt: [announce, июль 2026](https://lists.qt-project.org/pipermail/announce/2026-July.txt)
+
+**Qt WebEngine (27.10.2026):** CVE-обзор Chromium **не выполнен**. Qt 6.12.0: основа Chromium 140.0.7339.264, патчи безопасности до 152.0.7977.83 (`CHROMIUM_VERSION`); Qt переносит исправления только в свои патч-релизы, поэтому перед выпуском нужно сверять версии с объявлениями Qt и обновлять Qt при серьёзных CVE. Движок — удалённо достижимая поверхность на устройстве: блокирует выпуск при известной критической уязвимости.

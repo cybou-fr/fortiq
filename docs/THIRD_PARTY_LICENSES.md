@@ -58,3 +58,7 @@ Qt 6.12 лицензируется по модулям. Проверка `tool/c
 | Шрифты, обои, значки | авторские права владельца (обои и значки — материалы проекта) | `assets/` | **не проверялись: подтвердить права до публикации репозитория (G7)** |
 
 Не сделано: сборка списка лицензий зависимостей vcpkg/Gradle для Android (Gradle-зависимости Qt for Android не инвентаризированы), юридическая проверка всех уведомлений, полный аудит истории Git.
+
+## Qt WebEngine (Chromium), 27.10.2026
+
+Окно Navigateur на движке (Windows/Linux, `FORTIQ_WITH_WEBENGINE`) тянет `Qt6WebEngine*.dll`, `QtWebEngineProcess.exe`, `icudtl.dat`, `v8_context_snapshot.bin`, `.pak`-ресурсы и переводы. Заголовки модулей Qt предлагают LGPL-3.0 (проверка `check_third_party.py` проходит, самотест покрывает пакет с движком, без текста Chromium и без файлов движка пакет отвергается, APK с WebEngine отвергается). Сам Chromium — BSD-3-Clause (`licenses/Chromium-LICENSE.txt` из `Src/qtwebengine/LICENSE.Chromium`) с множеством вложенных компонентов под своими лицензиями (в т. ч. LGPL-2.1 FFmpeg, MPL-2.0, Apache-2.0, MIT); полный список — страница Qt «Qt WebEngine Licensing» и каталоги `third_party` исходников. Обязательно: тексты и уведомления в пакете (есть в `THIRD_PARTY_NOTICES.txt`), ссылка на исходники Qt WebEngine (`download.qt.io/.../submodules/`), заменяемые отдельные файлы. **Требует юридической проверки** (в частности, объём уведомлений Chromium и условия FFmpeg-кодеков). Размер пакета растёт на ≈ 280 МБ (см. [RELEASE](RELEASE.md)).
