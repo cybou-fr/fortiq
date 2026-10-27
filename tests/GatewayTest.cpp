@@ -30,7 +30,7 @@ public:
     int pauseCalls = 0, resumeCalls = 0, closeCalls = 0;
     bool execFails = false;
 
-    struct Ch { QTcpSocket *sock = nullptr; bool paused = false; QByteArray held; };
+    struct Ch { QTcpSocket *sock = nullptr; bool paused = false; bool peerGone = false; QByteArray held; };
     QHash<quint64, Ch> chs;
     quint64 next = 1;
 
@@ -44,12 +44,13 @@ public:
             chs[id].sock = s;
             connect(s, &QTcpSocket::connected, this, [this, id] { emit channelOpened(id); });
             connect(s, &QTcpSocket::readyRead, this, [this, id] { drain(id); });
+            // Like libssh2 (eof is reported only once the unread data is gone) the end of the stream is held back while reading is
+            // paused: data the peer sent before closing must not be dropped, or a paused transfer looks like a truncated answer.
             connect(s, &QTcpSocket::disconnected, this, [this, id] {
-                if (!chs.contains(id)) return;
+                auto it = chs.find(id);
+                if (it == chs.end()) return;
+                it->peerGone = true;
                 drain(id);
-                chs[id].sock->deleteLater();
-                chs.remove(id);
-                emit channelClosed(id, QString());
             });
             s->connectToHost(QHostAddress::LocalHost, routes.value(key));
         });
@@ -60,6 +61,12 @@ public:
         if (it == chs.end() || it->paused || !it->sock) return;
         const QByteArray data = it->sock->readAll();
         if (!data.isEmpty()) emit channelData(id, data);
+        it = chs.find(id);   // the slot may have closed the channel
+        if (it != chs.end() && it->peerGone && !it->paused) {
+            it->sock->deleteLater();
+            chs.erase(it);
+            emit channelClosed(id, QString());
+        }
     }
     void write(quint64 id, const QByteArray &data) override {
         auto it = chs.find(id);
@@ -912,6 +919,43 @@ private slots:
         auto c = request(head("GET", "http://public.test/big", auth, "Connection: close\r\n"));
         QVERIFY(c->closed);
         QCOMPARE(c->body().size(), qsizetype(3 * 1024 * 1024));
+    }
+    void httpResponseEndingWhileTheClientLagsIsNotTruncated() {
+        // The client does not read for a while: the gateway pauses the channel, and the origin finishes and closes meanwhile.
+        // The end of the stream must wait behind the unread data (the contract of a real SSH channel), never cut the answer.
+        startGateway();
+        QTcpSocket sock;
+        sock.setReadBufferSize(64 * 1024);
+        QVERIFY2(sock.state() == QAbstractSocket::UnconnectedState, "fresh socket");
+        sock.connectToHost(QHostAddress::LocalHost, gateway->port());
+        QVERIFY(sock.waitForConnected(3000));
+        sock.write(head("GET", "http://public.test/big", auth, "Connection: close\r\n"));
+        QTest::qWait(1500);   // nobody reads: kernel buffers fill, the gateway pauses, the web server is done
+        QVERIFY(tunnel->pauseCalls > 0);
+        QByteArray got;
+        QElapsedTimer t;
+        t.start();
+        while (t.elapsed() < 15000) {
+            got += sock.readAll();
+            if (sock.state() != QAbstractSocket::ConnectedState && sock.bytesAvailable() == 0) break;
+            QTest::qWait(5);
+        }
+        got += sock.readAll();
+        const qsizetype bodyAt = got.indexOf("\r\n\r\n");
+        QVERIFY(bodyAt > 0);
+        QCOMPARE(got.size() - bodyAt - 4, qsizetype(3 * 1024 * 1024));
+    }
+    void httpPostRepeatedlyStaysConsistent() {
+        startGateway();
+        const QByteArray big(2 * 1024 * 1024, 'p');
+        for (int round = 0; round < 12; ++round) {
+            Client c;
+            QVERIFY(c.connectTo(gateway->port()));
+            c.send(head("POST", "http://public.test/echo", auth, "Content-Length: " + QByteArray::number(big.size()) + "\r\n"));
+            for (qsizetype i = 0; i < big.size(); i += 100000) c.send(big.mid(i, 100000));
+            QTRY_VERIFY2_WITH_TIMEOUT(c.body().size() >= big.size(), qPrintable(QStringLiteral("round %1: %2 of %3 bytes").arg(round).arg(c.body().size()).arg(big.size())), 15000);
+            QCOMPARE(c.body().size(), big.size());
+        }
     }
     void httpTruncatedResponseIsABrokenConnection() {
         startGateway();
