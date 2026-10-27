@@ -61,5 +61,21 @@
   "EngineLiveTest::closingTheWindowClosesTheGateway": {
     "reason": "the engine live suite needs the real Chromium and the disposable Linux fixture (tool/prepare_live_fixture.py); the offline gate cannot run it, the live run does and fails on any skip there",
     "scopes": ["offline"]
+  },
+  "EngineLiveTest::tabsOpenSwitchLimitAndClose": {
+    "reason": "the engine live suite needs the real Chromium and the disposable Linux fixture (tool/prepare_live_fixture.py); the offline gate cannot run it, the live run does and fails on any skip there",
+    "scopes": ["offline"]
+  },
+  "EngineLiveTest::popupsAndWindowOpenBecomeTabs": {
+    "reason": "the engine live suite needs the real Chromium and the disposable Linux fixture (tool/prepare_live_fixture.py); the offline gate cannot run it, the live run does and fails on any skip there",
+    "scopes": ["offline"]
+  },
+  "EngineLiveTest::noDirectConnectionsWithSeveralTabsAndPopups": {
+    "reason": "the engine live suite needs the real Chromium and the disposable Linux fixture (tool/prepare_live_fixture.py); the offline gate cannot run it, the live run does and fails on any skip there",
+    "scopes": ["offline"]
+  },
+  "EngineLiveTest::tabStripAndTheViaIndicator": {
+    "reason": "the engine live suite needs the real Chromium and the disposable Linux fixture (tool/prepare_live_fixture.py); the offline gate cannot run it, the live run does and fails on any skip there",
+    "scopes": ["offline"]
   }
 }

@@ -11,6 +11,11 @@ add_library(fortiq_vterm STATIC ${FORTIQ_VTERM_SOURCES})
 target_include_directories(fortiq_vterm PUBLIC third_party/libvterm/include)
 set_target_properties(fortiq_vterm PROPERTIES C_STANDARD 11 POSITION_INDEPENDENT_CODE ON)
 qt_standard_project_setup(REQUIRES 6.9)
+# Set this when QML modules are declared, before Qt caches scan/deploy policy.
+set(FORTIQ_QML_SCAN_OPTIONS)
+if(WIN32 AND QT6_IS_SHARED_LIBS_BUILD)
+    list(APPEND FORTIQ_QML_SCAN_OPTIONS NO_IMPORT_SCAN)
+endif()
 
 # One raster brand source -> native icons for both executables and the Android APK.
 # Python stdlib generator is deterministic and does not require Pillow.
@@ -135,7 +140,7 @@ set(FORTIQ_SHELL_QML
 set_source_files_properties(qml/shell/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt_add_library(fortiq_shell STATIC)
-qt_add_qml_module(fortiq_shell
+qt_add_qml_module(fortiq_shell ${FORTIQ_QML_SCAN_OPTIONS}
     URI Fortiq.Shell
     VERSION 1.0
     RESOURCE_PREFIX /qt/qml
@@ -162,7 +167,7 @@ qt_add_resources(fortiq_shell_preview "fortiq_preview_icon"
 if(WIN32)
     target_sources(fortiq_shell_preview PRIVATE "${FORTIQ_BRAND_OUTPUT}/fortiq.rc")
 endif()
-qt_add_qml_module(fortiq_shell_preview
+qt_add_qml_module(fortiq_shell_preview ${FORTIQ_QML_SCAN_OPTIONS}
     URI Fortiq.App
     VERSION 1.0
     OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/preview_qml/Fortiq/App
@@ -297,7 +302,7 @@ if(WIN32)
     set_source_files_properties("${FORTIQ_BRAND_OUTPUT}/fortiq.rc" PROPERTIES OBJECT_DEPENDS "${FORTIQ_BRAND_OUTPUT}/fortiq.ico")
 endif()
 
-qt_add_qml_module(fortiq
+qt_add_qml_module(fortiq ${FORTIQ_QML_SCAN_OPTIONS}
     URI Fortiq.App
     VERSION 1.0
     IMPORT_PATH ${CMAKE_CURRENT_BINARY_DIR}/qml
@@ -321,7 +326,7 @@ if(FORTIQ_WITH_WEBENGINE OR FORTIQ_WITH_ANDROID_WEBVIEW)
         set(FORTIQ_ENGINE_VIEW_QML qml/engine/EngineView.qml qml/engine/PageProfile.qml)
         set(FORTIQ_ENGINE_VIEW_SOURCES)
     endif()
-    qt_add_qml_module(fortiq_engine
+    qt_add_qml_module(fortiq_engine ${FORTIQ_QML_SCAN_OPTIONS}
         URI Fortiq.Engine
         VERSION 1.0
         RESOURCE_PREFIX /qt/qml
@@ -464,7 +469,7 @@ if(BUILD_TESTING)
     list(FILTER FORTIQ_APP_SOURCES EXCLUDE REGEX "(qmltyperegistrations|_qml_Main_qml|Main_qml\.cpp|qrc_|_autogen|mocs_compilation|\.rcc/)")
     qt_add_executable(fortiq_live_capture tests/LiveCapture.cpp ${FORTIQ_APP_SOURCES})
     target_include_directories(fortiq_live_capture PRIVATE src)
-    qt_add_qml_module(fortiq_live_capture URI Fortiq.App VERSION 1.0
+    qt_add_qml_module(fortiq_live_capture ${FORTIQ_QML_SCAN_OPTIONS} URI Fortiq.App VERSION 1.0
         IMPORT_PATH ${CMAKE_CURRENT_BINARY_DIR}/qml
         OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/capture_qml/Fortiq/App QML_FILES qml/Main.qml)
     qt_add_resources(fortiq_live_capture "capture_icon" PREFIX "/branding" BASE "${FORTIQ_BRAND_OUTPUT}"
@@ -587,7 +592,7 @@ if(BUILD_TESTING)
     target_link_libraries(fortiq_highlighter_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml Qt6::Test)
     add_test(NAME fortiq_highlighter COMMAND fortiq_highlighter_tests -o "${CMAKE_CURRENT_BINARY_DIR}/highlighter-results.txt,txt" -o "-,txt")
     qt_add_executable(fortiq_layout_tests tests/ShellLayoutTest.cpp src/core/TaskManager.cpp src/core/TaskManager.h)
-    qt_add_qml_module(fortiq_layout_tests URI Fortiq.App VERSION 1.0
+    qt_add_qml_module(fortiq_layout_tests ${FORTIQ_QML_SCAN_OPTIONS} URI Fortiq.App VERSION 1.0
         IMPORT_PATH ${CMAKE_CURRENT_BINARY_DIR}/qml
         OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/layout_qml/Fortiq/App QML_FILES qml/Main.qml)
     qt_add_resources(fortiq_layout_tests "layout_icon" PREFIX "/branding" BASE "${FORTIQ_BRAND_OUTPUT}"
@@ -609,9 +614,24 @@ if(BUILD_TESTING)
         file(TO_CMAKE_PATH "$ENV{WINDIR}/Fonts" FORTIQ_TEST_FONT_DIR)
         set_property(TEST fortiq_layout APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=${FORTIQ_TEST_FONT_DIR}")
         # Developer tests need the matching Qt Test runtime, absent from the app package.
-        set_tests_properties(fortiq_markdown fortiq_link fortiq_disks fortiq_terminal_history fortiq_terminal_sequences fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_credentials fortiq_tasks fortiq_browser fortiq_gateway fortiq_gateway_live fortiq_engine fortiq_network fortiq_system fortiq_db fortiq_mail fortiq_mailsend fortiq_publication fortiq_documents fortiq_highlighter fortiq_layout PROPERTIES
+        set_tests_properties(${FORTIQ_REGISTERED_TESTS} PROPERTIES
             ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:$<TARGET_FILE_DIR:${FORTIQ_SSH_TARGET}>")
     endif()
+endif()
+
+# Windows uses shared Qt and explicitly linked FORTIQ QML plugins. Packaging
+# already runs windeployqt --qmldir qml (tool/package_windows.py). Automatic
+# per-executable import scans traverse the entire source tree, including old
+# build/package copies of Qt; they are unnecessary for this deployment route.
+# Keep Qt's scanner enabled for Android, static Qt and native Linux packaging.
+if(WIN32 AND QT6_IS_SHARED_LIBS_BUILD)
+    get_property(FORTIQ_DIRECTORY_TARGETS DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(FORTIQ_TARGET IN LISTS FORTIQ_DIRECTORY_TARGETS)
+        get_target_property(FORTIQ_TARGET_TYPE ${FORTIQ_TARGET} TYPE)
+        if(FORTIQ_TARGET_TYPE STREQUAL "EXECUTABLE")
+            set_property(TARGET ${FORTIQ_TARGET} PROPERTY QT_QML_MODULE_NO_IMPORT_SCAN TRUE)
+        endif()
+    endforeach()
 endif()
 
 # Debian graphical-client package. Enabled only on native Linux builds, never

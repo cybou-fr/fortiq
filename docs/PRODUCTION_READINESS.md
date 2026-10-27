@@ -75,3 +75,45 @@ timed out`, без аварии. Документы (`check_docs_consistency.py`
 регенерация старого `build-msvc` застряла в `qmlimportscanner` с сообщениями
 об отсутствующих файлах `QtQuick/NativeStyle`; запуск остановлен. Таймауты
 CTest и обновлённый workflow пока не проверены полным прогоном/на GitHub.
+
+## Воспроизводимость Windows: продолжение 27.10.2026
+
+Причина длительной регенерации: Qt `qmlimportscanner` получает корень проекта
+как `-rootPath` и обходит вложенные `build-*`, включая скопированные QML-модули
+пакетов. Для Windows с shared Qt отключено автоматическое сканирование импортов
+для executable targets (`QT_QML_MODULE_NO_IMPORT_SCAN`): собственные QML plugins
+связаны явно, пакет собирается существующим `windeployqt --qmldir qml`.
+Android, static Qt и Linux packaging сохраняют штатное сканирование.
+`-exclude` Qt не решает обход подкаталогов: сканер исключает имя каталога,
+но продолжает обход его потомков; этот промежуточный вариант не сохранён.
+Windows PATH для CTest теперь задаётся всем зарегистрированным наборам,
+включая `fortiq_engine_live` и `fortiq_fuzz_smoke`: раньше они были пропущены
+в ручном списке и зависели от случайного окружения/скопированных DLL.
+
+Результат: полная сборка с нуля в `build-stabilize` (MSVC/Qt 6.12,
+закреплённые libssh2/OpenSSL) завершена. После окончательной правки повторная
+конфигурация — 7.2 с, генерация — 3.7 с; в графах обычной сборки и
+`FORTIQ_SHELL_PREVIEW_ONLY=ON` отсутствуют автоматические команды
+qmlimportscanner. Все 26 наборов CTest прошли (116 с), включая layout (81 с),
+Terminal/clipboard, Credential Manager и запуск engine-live без DLL-ошибки.
+Итог QtTest: **540 passed, 0 failed, 19 skipped**. Пропуски относятся к
+серверным сценариям и платформенному случаю без защищённого хранилища.
+Четыре новых теста вкладок EngineLiveTest внесены в `gate_waivers.json`
+только для `offline`; это не разрешение пропускать их в `live`/`release`.
+Проверка результатов offline и самотест валидатора проходят. Таймауты и PATH
+проверены по JSON-описанию всех 26 CTest-наборов.
+
+Штатный `windeployqt --release --qmldir qml --no-compiler-runtime` успешно
+развернул Qt Quick/Controls и WebEngine с QtWebEngineProcess в отдельную
+проверочную папку сборки. Это проверка механизма deployment, не готовый
+установщик и не квалификация чистой Windows. GitHub CI, живые SSH-тесты,
+визуальная приёмка и физический Android в этом срезе не выполнялись.
+
+Финальный повтор `python tool/ci_check.py --build build-stabilize --skip-build
+--toolchain C:/Users/cybou/vcpkg/scripts/buildsystems/vcpkg.cmake` завершился
+`ALL STEPS PASSED`: CTest 26/26 за 90.9 с, layout 57.7 с; QtTest 540 passed,
+0 failed, 19 обоснованных skips. Все самотесты, компиляция Python-скриптов,
+проверка закреплённых зависимостей и проверка результатов прошли. На реальном
+отчёте engine-live дополнительно проверено: новые четыре исключения принимаются
+в offline и отклоняются в live и release. Сборка была выполнена перед этим
+повтором; `--skip-build` повторно запускает проверки, а не доказывает сборку сам.
