@@ -217,7 +217,7 @@ set(FORTIQ_GATEWAY_PURE_SOURCES
 )
 set(FORTIQ_GATEWAY_TUNNEL_SOURCES src/browser/gateway/SshTunnel.cpp src/browser/gateway/SshTunnel.h src/ssh/SshAlgorithms.cpp src/ssh/SshAlgorithms.h)
 # The engine's own logic (profile rules, tunnel + gateway lifecycle, credentials, address question): no Qt WebEngine needed to build it.
-set(FORTIQ_ENGINE_PURE_SOURCES src/browser/engine/EngineProfile.cpp src/browser/engine/EngineProfile.h)
+set(FORTIQ_ENGINE_PURE_SOURCES src/browser/engine/EngineProfile.cpp src/browser/engine/EngineProfile.h src/browser/engine/TabModel.cpp src/browser/engine/TabModel.h)
 set(FORTIQ_ENGINE_SOURCES ${FORTIQ_ENGINE_PURE_SOURCES} src/browser/engine/EngineBrowser.cpp src/browser/engine/EngineBrowser.h)
 set(FORTIQ_ENGINE_APP_SOURCES src/browser/engine/EngineRemote.cpp)
 set(FORTIQ_BROWSER_SOURCES ${FORTIQ_BROWSER_PURE_SOURCES} src/browser/BrowserController.cpp src/browser/BrowserController.h
@@ -314,10 +314,11 @@ if(FORTIQ_WITH_WEBENGINE OR FORTIQ_WITH_ANDROID_WEBVIEW)
     if(FORTIQ_WITH_ANDROID_WEBVIEW)
         # The page is the system WebView: same EngineWindow.qml, a different EngineView.qml (published under the same name).
         set_source_files_properties(qml/engine/android/EngineView.qml PROPERTIES QT_RESOURCE_ALIAS EngineView.qml)
-        set(FORTIQ_ENGINE_VIEW_QML qml/engine/android/EngineView.qml)
+        set_source_files_properties(qml/engine/android/PageProfile.qml PROPERTIES QT_RESOURCE_ALIAS PageProfile.qml)
+        set(FORTIQ_ENGINE_VIEW_QML qml/engine/android/EngineView.qml qml/engine/android/PageProfile.qml)
         set(FORTIQ_ENGINE_VIEW_SOURCES src/browser/engine/android/AndroidWebView.cpp src/browser/engine/android/AndroidWebView.h)
     else()
-        set(FORTIQ_ENGINE_VIEW_QML qml/engine/EngineView.qml)
+        set(FORTIQ_ENGINE_VIEW_QML qml/engine/EngineView.qml qml/engine/PageProfile.qml)
         set(FORTIQ_ENGINE_VIEW_SOURCES)
     endif()
     qt_add_qml_module(fortiq_engine
@@ -326,7 +327,7 @@ if(FORTIQ_WITH_WEBENGINE OR FORTIQ_WITH_ANDROID_WEBVIEW)
         RESOURCE_PREFIX /qt/qml
         OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/qml/Fortiq/Engine
         IMPORT_PATH ${CMAKE_CURRENT_BINARY_DIR}/qml
-        QML_FILES ${FORTIQ_ENGINE_VIEW_QML} qml/engine/EngineWindow.qml
+        QML_FILES ${FORTIQ_ENGINE_VIEW_QML} qml/engine/EngineWindow.qml qml/engine/EnginePages.qml
         SOURCES ${FORTIQ_ENGINE_VIEW_SOURCES}
     )
     target_include_directories(fortiq_engine PRIVATE src src/browser/engine/android)   # the generated type registration includes <AndroidWebView.h>

@@ -15,11 +15,15 @@ Window {
     property var lastJs: null
     property int jsCount: 0
     property var notices: []
+    property var newTabs: []
+    PageProfile { id: pp; engine: w.engineObj }
     EngineView {
         id: v
+        sharedProfile: pp.profile
         anchors.fill: parent
         engine: w.engineObj
         url: "about:blank"
+        onNewTabRequested: address => { var n = w.newTabs.slice(); n.push(address); w.newTabs = n }
         onRefused: text => { var n = w.notices.slice(); n.push(text); w.notices = n }
     }
     function open(u) { v.url = u }

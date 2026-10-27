@@ -40,7 +40,7 @@
 4. **Terminal / Services / System Overview:** поддерживающие интеграции Linux/SSH для повседневного desktop и Logs; не DevOps dashboard.
 5. **Editor / Documents:** diff, редактор, Markdown/PDF и серверные документы.
 6. **Mail:** аккаунты и отправка исключительно через серверные консольные программы.
-7. **Browser / Media:** первый срез Browser — GUI к `curl` на сервере ([BROWSER](BROWSER.md), реализован 23.10.2026); движок Chromium (Qt WebEngine) для Windows сделан 27.10.2026 с тестом утечек; Android — системный WebView через тот же шлюз (27.10.2026), проверен только на эмуляторе, остаточный риск WebRTC описан в [BROWSER](BROWSER.md); Media — после квалификации Android на устройстве.
+7. **Browser / Media:** первый срез Browser — GUI к `curl` на сервере ([BROWSER](BROWSER.md), реализован 23.10.2026); движок Chromium (Qt WebEngine) для Windows сделан 27.10.2026 с тестом утечек; Android — системный WebView через тот же шлюз (27.10.2026), проверен только на эмуляторе, остаточный риск WebRTC описан в [BROWSER](BROWSER.md); вкладки в окне Browser (до 12 на настольных, до 6 на Android, живых страниц 4 и 1) сделаны 27.10.2026, закладки и история пока не сохраняются нигде; Media — после квалификации Android на устройстве.
 8. **AI только по желанию:** советник на Linux позднее; Files/Logs работают без него.
 
 Docker/Podman и расширенная DevOps-диагностика не приоритет.

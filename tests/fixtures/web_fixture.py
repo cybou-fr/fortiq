@@ -27,6 +27,9 @@ Paths:
   /js          HTML whose text exists only after JavaScript ran (title js-done)
   /canary      HTML + JavaScript that tries every route out of a browser (tests/EngineLiveTest.cpp); ?t=1 puts the results in the title (Android)
   /webrtc      HTML + JavaScript that makes an RTCPeerConnection through an about:blank iframe (the gap of the user script)
+  /tab?n=X     HTML titled tab-X whose JavaScript runs (body shows tab-X-js); sets the cookie fq=X (tabs share one in-memory profile)
+  /cookie      HTML titled by document.cookie (cookie-<value>)
+  /opener      a link target=_blank, a button calling window.open on click, and a window.open on load (no user gesture: must NOT open a tab)
   /_hits       200: JSON {path: number of requests}, to prove that nothing was fetched before a confirmation
 """
 import json
@@ -48,6 +51,19 @@ JS_PAGE = b"""<!doctype html><html><head><meta charset="utf-8"><title>js-running
 let sum = 0; for (let i = 1; i <= 1000; i++) sum += i;
 fetch('/echo').then(r => r.text()).then(t => { document.getElementById('out').textContent = 'JS-OK sum=' + sum + ' echo=' + t; document.title = 'js-done'; });
 </script></body></html>"""
+TAB_PAGE = b"""<!doctype html><html><head><meta charset="utf-8"><title>tab-N</title></head><body><div id="out">tab-N-nojs</div>
+<script>
+const n = new URLSearchParams(location.search).get('n') || '0';
+document.title = 'tab-' + n;
+document.getElementById('out').textContent = 'tab-' + n + '-js';
+window.__fortiqTab = n;
+</script></body></html>"""
+COOKIE_PAGE = b"""<!doctype html><html><head><meta charset="utf-8"><title>cookie-none</title></head><body>
+<script>document.title = 'cookie-' + (document.cookie || 'none');</script></body></html>"""
+OPENER_PAGE = b"""<!doctype html><html><head><meta charset="utf-8"><title>opener</title></head><body style="margin:0">
+<a id="l" target="_blank" href="/tab?n=link" style="position:absolute;left:20px;top:20px;width:300px;height:80px;background:#06c;display:block">link</a>
+<button id="b" style="position:absolute;left:20px;top:140px;width:300px;height:80px" onclick="window.open('/tab?n=click')">popup</button>
+<script>try { window.open('/tab?n=script'); } catch (e) {}</script></body></html>"""
 CANARY_PAGE = b"""<!doctype html><html><head><meta charset="utf-8"><title>canary-running</title>
 <link rel="dns-prefetch" href="//dnsprefetch.canary.invalid">
 <link rel="preconnect" href="https://preconnect.canary.invalid">
@@ -169,6 +185,14 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(200, ("host=%s local=%s" % (self.headers.get("Host"), self.connection.getsockname()[0])).encode(), "text/plain")
         elif path == "/js":
             self.reply(200, JS_PAGE, "text/html; charset=utf-8")
+        elif path == "/tab":
+            from urllib.parse import parse_qs, urlsplit
+            n = parse_qs(urlsplit(self.path).query).get("n", ["0"])[0][:20]
+            self.reply(200, TAB_PAGE, "text/html; charset=utf-8", [("Set-Cookie", "fq=%s; Path=/" % n)])
+        elif path == "/cookie":
+            self.reply(200, COOKIE_PAGE, "text/html; charset=utf-8")
+        elif path == "/opener":
+            self.reply(200, OPENER_PAGE, "text/html; charset=utf-8")
         elif path == "/webrtc":
             self.reply(200, WEBRTC_PAGE, "text/html; charset=utf-8")
         elif path == "/canary":

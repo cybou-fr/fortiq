@@ -77,12 +77,16 @@ AndroidWebView::AndroidWebView(QQuickItem *parent) : QQuickItem(parent) {
 
 AndroidWebView::~AndroidWebView() {
     m_placeTimer.stop();
+    bool owner = false;
     {
         QMutexLocker l(&g_lock);
-        if (g_current == this) { g_current = nullptr; g_credentials = {}; }
+        owner = g_current == this;
+        if (owner) { g_current = nullptr; g_credentials = {}; }
     }
-    // The view and everything it stored go; the proxy override stays (a later view can only reach the gateway or nothing).
-    if (m_beginCalled) QJniObject::callStaticMethod<void>(kClass, "destroy", "()V");
+    // The view and everything it stored go; the proxy override stays (a later view can only reach the gateway or nothing). There is ONE
+    // native WebView: when a tab switch already started a newer view (QML destroys the old item later than it creates the new one) that
+    // start released this one, and a second destroy() would kill the page of the new view.
+    if (m_beginCalled && owner) QJniObject::callStaticMethod<void>(kClass, "destroy", "()V");
 }
 
 void AndroidWebView::setEngine(QObject *engine) {

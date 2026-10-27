@@ -13,6 +13,7 @@ EngineBrowser::EngineBrowser(RemoteController *remote, QObject *parent) : QObjec
     m_source.makeTunnel = [remote](QObject *parent) -> gateway::TunnelBackend * {
         return new gateway::SshTunnel(remote->connectionRequest(), parent);
     };
+    initTabs();
     connect(remote, &RemoteController::changed, this, &EngineBrowser::refresh);
 }
 

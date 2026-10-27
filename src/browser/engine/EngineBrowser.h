@@ -2,6 +2,7 @@
 
 #include "../gateway/ProxyGateway.h"
 #include "EngineProfile.h"
+#include "TabModel.h"
 
 #include <QList>
 #include <QObject>
@@ -31,6 +32,7 @@ class EngineBrowser : public QObject {
     Q_PROPERTY(QString serverLabel READ serverLabel NOTIFY changed)
     Q_PROPERTY(QVariantMap pendingConfirm READ pendingConfirm NOTIFY changed)   // {host, port, ip, reason, details}; empty when nothing is asked
     Q_PROPERTY(int proxyPort READ proxyPortInt NOTIFY changed)      // the gateway's loopback port (0 when stopped)
+    Q_PROPERTY(QObject *tabs READ tabsObject CONSTANT)           // TabModel: the tabs of the window (reset with every gateway session)
     Q_PROPERTY(int generation READ generation NOTIFY changed)     // grows with every new gateway: views of an older one are dropped
 public:
     // Test hook: a source of tunnels that does not need a RemoteController.
@@ -51,6 +53,8 @@ public:
     QString serverLabel() const { return m_label; }
     QVariantMap pendingConfirm() const;
     int generation() const { return m_generation; }
+    TabModel *tabModel() const { return m_tabs; }
+    QObject *tabsObject() const { return m_tabs; }
 
     // The window asks for the engine (true) or leaves it (false). Starting needs a connected server.
     Q_INVOKABLE void setWindowActive(bool active);
@@ -78,6 +82,7 @@ signals:
     void engineMustStop();                // the gateway went away: the views must be destroyed
 
 private:
+    void initTabs();
     void start();
     void stop(const QString &state, const QString &status);
     void askNext();
@@ -91,6 +96,7 @@ private:
     int m_generation = 0;
     int m_token = 0;
     QString m_realm;
+    TabModel *m_tabs = nullptr;
     std::unique_ptr<gateway::TunnelBackend> m_tunnel;
     std::unique_ptr<gateway::ProxyGateway> m_gateway;
     QStringList m_log;

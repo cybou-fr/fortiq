@@ -3,7 +3,7 @@ import QtWebEngine
 
 // One page of the Browser engine (Qt WebEngine = Chromium). Everything that makes the page safe lives HERE and in
 // src/browser/engine/EngineProfile.cpp: an off-the-record profile (nothing on disk), no downloads, no permission, only http(s)
-// navigations, the proxy password given to our own gateway only. Used by the window (EngineWindow.qml) and by the leak test.
+// navigations, the proxy password given to our own gateway only. One per live tab (EnginePages.qml); also used by the leak test.
 WebEngineView {
     id: view
     // The EngineBrowser (C++): credentials, address policy and messages. Required: a view without it would never authenticate.
@@ -11,20 +11,12 @@ WebEngineView {
     property string failure: ""            // last load error, "" when none
     property bool certificateProblem: false
     signal refused(string text)
+    signal newTabRequested(string url)
 
-    // Off-the-record: no cookie, cache, history or storage file, ever. (Qt 6.9+ prefers WebEngineProfilePrototype.instance(); in 6.12 that
-    // call crashes inside QQuickWebEngineView::setProfile when the profile is assigned from QML, so the plain type is used; it only logs
-    // a deprecation warning. tests/EngineLiveTest.cpp checks the result, a Qt update that changes this is caught there.)
-    profile: WebEngineProfile {
-        offTheRecord: true
-        httpCacheType: WebEngineProfile.MemoryHttpCache
-        persistentCookiesPolicy: WebEngineProfile.NoPersistentCookies
-        spellCheckEnabled: false
-        onDownloadRequested: download => {
-            download.cancel()
-            view.engine.reportDownloadRefused(download.downloadFileName)
-        }
-    }
+    // Off-the-record: the profile is the window's shared one (qml/engine/PageProfile.qml: nothing on disk). Required, never defaulted: a view
+    // without it would fall back to the default (persistent) profile of Qt WebEngine.
+    required property var sharedProfile
+    profile: sharedProfile
 
     // WebRTC needs UDP, which an HTTP proxy cannot carry: the whole API is removed from every frame before any page script runs, so no
     // socket is even bound (with only the proxy-only policy, creating an RTCPeerConnection still bound two UDP sockets: seen by the
@@ -63,10 +55,12 @@ WebEngineView {
         const v = view.engine.judge(request.url.toString(), request.isMainFrame)
         if (!v.allowed) { request.reject(); if (request.isMainFrame) view.refused(v.reason) }
     }
-    // A link that wants a new window opens in this same page (one tab at this stage).
+    // A link or window.open() that wants a NEW window becomes a tab (never an external window): only when the user caused it (a script alone
+    // cannot spawn tabs), only for an allowed address; the window (EnginePages.qml) opens the tab next to this one and enforces the limit.
     onNewWindowRequested: request => {
         const v = view.engine.judge(request.requestedUrl.toString(), true)
-        if (v.allowed) view.url = request.requestedUrl
+        if (!request.userInitiated) { view.refused("Fenêtre non demandée par l'utilisateur : bloquée."); return }
+        if (v.allowed) view.newTabRequested(request.requestedUrl.toString())
         else view.refused(v.reason)
     }
     onPermissionRequested: permission => {

@@ -25,6 +25,7 @@
 #include <QProcess>
 #include <QQmlComponent>
 #include <QQmlEngine>
+#include <QQuickItem>
 #include <QQuickWindow>
 #include <QRegularExpression>
 #include <QSet>
@@ -37,6 +38,7 @@
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -623,6 +625,303 @@ private slots:
         QMetaObject::invokeMethod(child("engineTextMode"), "clicked");
         QCOMPARE(textMode.count(), 1);
         manualAnswers = false;
+    }
+
+    // ---- Tabs (stage 4): the real window, real Chromium views, the real gateway ----------------------------------------------------
+    bool waitFor(const std::function<bool()> &ok, int timeoutMs) {
+        QElapsedTimer t;
+        t.start();
+        while (!ok() && t.elapsed() < timeoutMs) QTest::qWait(25);
+        return ok();
+    }
+    // Delegates made by a Repeater/ListView are children of the VISUAL tree, not of the QObject tree: walk the items.
+    static void collectItems(QQuickItem *root, const QString &name, QList<QQuickItem *> *out) {
+        for (QQuickItem *c : root->childItems()) {
+            if (c->objectName() == name) out->append(c);
+            collectItems(c, name, out);
+        }
+    }
+    static QList<QQuickItem *> itemsNamed(QObject *win, const QString &name) {
+        QList<QQuickItem *> out;
+        if (auto *root = qobject_cast<QQuickItem *>(win)) collectItems(root, name, &out);
+        return out;
+    }
+    static QObject *viewOfTab(QObject *win, int id) {
+        const QList<QQuickItem *> loaders = itemsNamed(win, QStringLiteral("enginePage_%1").arg(id));
+        return loaders.isEmpty() ? nullptr : loaders.first()->property("item").value<QObject *>();
+    }
+    static int liveViews(QObject *win, const TabModel *tabs) {
+        int n = 0;
+        for (int i = 0; i < tabs->count(); ++i) if (viewOfTab(win, tabs->data(tabs->index(i), TabModel::IdRole).toInt())) ++n;
+        return n;
+    }
+    static bool clickInPage(QQuickWindow *quick, QObject *view, QPointF at) {
+        auto *item = qobject_cast<QQuickItem *>(view);
+        if (!item) return false;
+        QTest::mouseClick(quick, Qt::LeftButton, Qt::NoModifier, item->mapToScene(at).toPoint());
+        return true;
+    }
+
+    void tabsOpenSwitchLimitAndClose() {
+        if (!configured) QSKIP("FORTIQ_IT_* / FORTIQ_IT_WEB_BASE not set (tool/run_live_tests.py sets them)");
+        TabModel *tabs = eb->tabModel();
+        tabs->reset();
+        std::unique_ptr<QObject> host(makeWindow(QStringLiteral("WindowHarness.qml")));
+        QVERIFY(host);
+        QObject *win = host->property("win").value<QObject *>();
+        QVERIFY(win);
+        auto current = [&]() -> QObject * { return win->property("view").value<QObject *>(); };
+        auto titleOfCurrent = [&]() { QObject *v = current(); return v ? v->property("title").toString() : QString(); };
+        QVERIFY(waitFor([&] { return win->property("ready").toBool() && current(); }, 20000));
+        QCOMPARE(tabs->count(), 1);
+        QCOMPARE(liveViews(win, tabs), 1);
+
+        // tab 1 and tab 2: JavaScript runs in both
+        const int t1 = tabs->activeId();
+        QMetaObject::invokeMethod(win, "open", Q_ARG(QVariant, webBase + QStringLiteral("/tab?n=1")));
+        QVERIFY2(waitFor([&] { return titleOfCurrent() == QLatin1String("tab-1"); }, 45000), qPrintable(titleOfCurrent()));
+        QMetaObject::invokeMethod(win, "newTab");
+        QCOMPARE(tabs->count(), 2);
+        const int t2 = tabs->activeId();
+        QVERIFY(t2 != t1);
+        QVERIFY(waitFor([&] { return current() == viewOfTab(win, t2) && current(); }, 5000));
+        QCOMPARE(current()->property("url").toString(), QString("about:blank"));      // a new tab shows the start page
+        QMetaObject::invokeMethod(win, "open", Q_ARG(QVariant, webBase + QStringLiteral("/tab?n=2")));
+        QVERIFY2(waitFor([&] { return titleOfCurrent() == QLatin1String("tab-2"); }, 45000), qPrintable(titleOfCurrent()));
+        // the model learns the titles (the strip shows them)
+        QVERIFY(waitFor([&] { return tabs->data(tabs->index(0), TabModel::LabelRole).toString() == QLatin1String("tab-1") && tabs->data(tabs->index(1), TabModel::LabelRole).toString() == QLatin1String("tab-2"); }, 5000));
+        QCOMPARE(itemsNamed(win, QStringLiteral("engineTab")).size(), 2);
+
+        // one in-memory profile for all tabs: the cookie set by tab 2's page is seen by a page opened in tab 3 (and written nowhere)
+        QMetaObject::invokeMethod(win, "newTab");
+        const int t3 = tabs->activeId();
+        QMetaObject::invokeMethod(win, "open", Q_ARG(QVariant, webBase + QStringLiteral("/cookie")));
+        QVERIFY2(waitFor([&] { return titleOfCurrent() == QLatin1String("cookie-fq=2"); }, 45000), qPrintable(titleOfCurrent()));
+        tabs->closeTab(t3);
+        QVERIFY(waitFor([&] { return !viewOfTab(win, t3); }, 5000));
+        QCOMPARE(tabs->activeId(), t2);                                                // the left neighbour (t3 was the last)
+
+        // switching between live tabs keeps the page: no byte comes back from the server
+        tabs->activate(t1);
+        QVERIFY(waitFor([&] { return current() == viewOfTab(win, t1); }, 5000));
+        QCOMPARE(titleOfCurrent(), QString("tab-1"));
+        const quint64 bytesBefore = eb->gatewayStats().value("bytesFromServer").toULongLong();
+        QTest::qWait(700);
+        QCOMPARE(eb->gatewayStats().value("bytesFromServer").toULongLong(), bytesBefore);
+
+        // the live limit: five tabs, four pages. The least recently used background page is released, its view destroyed
+        QVector<int> ids{ t1, t2 };
+        for (int n = 3; n <= 5; ++n) {
+            QMetaObject::invokeMethod(win, "newTab");
+            ids << tabs->activeId();
+            QMetaObject::invokeMethod(win, "open", Q_ARG(QVariant, webBase + QStringLiteral("/tab?n=%1").arg(n)));
+            QVERIFY2(waitFor([&] { return titleOfCurrent() == QStringLiteral("tab-%1").arg(n); }, 45000), qPrintable(titleOfCurrent()));
+        }
+        QCOMPARE(tabs->count(), 5);
+        QCOMPARE(tabs->liveCount(), tabs->liveLimit());
+        QVERIFY(waitFor([&] { return liveViews(win, tabs) == tabs->liveLimit(); }, 8000));   // views exist exactly for the live tabs
+        int victim = 0;
+        for (int id : ids) if (!tabs->isLive(id)) victim = id;
+        QVERIFY(victim != 0);
+        QVERIFY(!viewOfTab(win, victim));
+        const QString victimUrl = tabs->urlOf(victim);
+        QVERIFY2(victimUrl.contains(QLatin1String("/tab?n=")), qPrintable(victimUrl));
+        // showing it again loads the page again, through the gateway
+        const int expectedN = ids.indexOf(victim) + 1;
+        const quint64 bytesBeforeReload = eb->gatewayStats().value("bytesFromServer").toULongLong();
+        tabs->activate(victim);
+        QVERIFY2(waitFor([&] { return current() == viewOfTab(win, victim) && titleOfCurrent() == QStringLiteral("tab-%1").arg(expectedN); }, 45000), qPrintable(titleOfCurrent()));
+        QVERIFY(eb->gatewayStats().value("bytesFromServer").toULongLong() > bytesBeforeReload);
+        QCOMPARE(tabs->liveCount(), tabs->liveLimit());
+        QVERIFY(waitFor([&] { return liveViews(win, tabs) == tabs->liveLimit(); }, 8000));
+
+        // closing a tab destroys its view; closing them all leaves one blank tab
+        QPointer<QObject> doomed = viewOfTab(win, victim);
+        QVERIFY(doomed);
+        tabs->closeTab(victim);
+        QVERIFY2(waitFor([&] { return doomed.isNull(); }, 8000), "the view of a closed tab must be destroyed");
+        for (int id : ids) tabs->closeTab(id);
+        QCOMPARE(tabs->count(), 1);
+        QVERIFY(tabs->urlOf(tabs->activeId()).isEmpty());
+        QVERIFY(waitFor([&] { return liveViews(win, tabs) == 1; }, 8000));
+        QVERIFY(waitFor([&] { return current() && current()->property("url").toString() == QLatin1String("about:blank"); }, 8000));
+    }
+
+    void popupsAndWindowOpenBecomeTabs() {
+        if (!configured) QSKIP("FORTIQ_IT_* / FORTIQ_IT_WEB_BASE not set (tool/run_live_tests.py sets them)");
+        TabModel *tabs = eb->tabModel();
+        tabs->reset();
+        std::unique_ptr<QObject> host(makeWindow(QStringLiteral("WindowHarness.qml")));
+        QVERIFY(host);
+        auto *quick = qobject_cast<QQuickWindow *>(host.get());
+        QObject *win = host->property("win").value<QObject *>();
+        auto current = [&]() -> QObject * { return win->property("view").value<QObject *>(); };
+        auto titleOfCurrent = [&]() { QObject *v = current(); return v ? v->property("title").toString() : QString(); };
+        QVERIFY(waitFor([&] { return win->property("ready").toBool() && current(); }, 20000));
+        const int opener = tabs->activeId();
+        const int windowsBefore = QGuiApplication::topLevelWindows().size();
+        QMetaObject::invokeMethod(win, "open", Q_ARG(QVariant, webBase + QStringLiteral("/opener")));
+        QVERIFY2(waitFor([&] { return titleOfCurrent() == QLatin1String("opener"); }, 45000), qPrintable(titleOfCurrent()));
+        QTest::qWait(2000);
+        QCOMPARE(tabs->count(), 1);                                                    // window.open() on load, without a gesture: nothing opens
+        QCOMPARE(QGuiApplication::topLevelWindows().size(), windowsBefore);
+
+        // a click on a target=_blank link: a tab next to the opener, shown, no external window
+        QVERIFY(clickInPage(quick, current(), QPointF(60, 60)));
+        QVERIFY2(waitFor([&] { return tabs->count() == 2 && titleOfCurrent() == QLatin1String("tab-link"); }, 45000), qPrintable(QString::number(tabs->count()) + " " + titleOfCurrent() + " notice=" + win->property("notice").toString() + " title=" + titleOfCurrent()));
+        const int linkTab = tabs->activeId();
+        QCOMPARE(tabs->indexOfId(linkTab), tabs->indexOfId(opener) + 1);
+        QCOMPARE(QGuiApplication::topLevelWindows().size(), windowsBefore);
+
+        // a click on a button that calls window.open(): another tab, again next to the opener
+        tabs->activate(opener);
+        QVERIFY(waitFor([&] { return current() == viewOfTab(win, opener) && titleOfCurrent() == QLatin1String("opener"); }, 8000));
+        QVERIFY(clickInPage(quick, current(), QPointF(60, 180)));
+        QVERIFY2(waitFor([&] { return tabs->count() == 3 && titleOfCurrent() == QLatin1String("tab-click"); }, 45000), qPrintable(QString::number(tabs->count()) + " " + titleOfCurrent()));
+        QCOMPARE(tabs->indexOfId(tabs->activeId()), tabs->indexOfId(opener) + 1);
+        QCOMPARE(QGuiApplication::topLevelWindows().size(), windowsBefore);
+        QCOMPARE(tabs->urlOf(opener), webBase + QStringLiteral("/opener"));            // the opener stayed where it was
+
+        // at the tab limit a popup is refused with a message, never an extra window
+        while (tabs->count() < tabs->maxTabs()) tabs->newTab(QString(), false);
+        tabs->activate(opener);
+        QVERIFY(waitFor([&] { return current() == viewOfTab(win, opener) && titleOfCurrent() == QLatin1String("opener"); }, 45000));
+        QVERIFY(clickInPage(quick, current(), QPointF(60, 180)));
+        QVERIFY2(waitFor([&] { return win->property("notice").toString().contains(QLatin1String("Limite")); }, 15000), qPrintable(win->property("notice").toString()));
+        QCOMPARE(tabs->count(), tabs->maxTabs());
+        QCOMPARE(QGuiApplication::topLevelWindows().size(), windowsBefore);
+        tabs->reset();
+    }
+
+    // The leak test again, with SEVERAL tabs: the canary page in two tabs (one of them a background tab while the other runs), a popup
+    // tab, tabs switched and closed. The socket tables of the whole process tree may show only the gateway and the SSH server.
+    void noDirectConnectionsWithSeveralTabsAndPopups() {
+        if (!configured) QSKIP("FORTIQ_IT_* / FORTIQ_IT_WEB_BASE not set (tool/run_live_tests.py sets them)");
+#ifndef Q_OS_WIN
+        QSKIP("the socket-table watcher is implemented for Windows only");
+#else
+        TabModel *tabs = eb->tabModel();
+        tabs->reset();
+        std::unique_ptr<QObject> host(makeWindow(QStringLiteral("WindowHarness.qml")));
+        QVERIFY(host);
+        auto *quick = qobject_cast<QQuickWindow *>(host.get());
+        QObject *win = host->property("win").value<QObject *>();
+        auto current = [&]() -> QObject * { return win->property("view").value<QObject *>(); };
+        auto titleOfCurrent = [&]() { QObject *v = current(); return v ? v->property("title").toString() : QString(); };
+        QVERIFY(waitFor([&] { return win->property("ready").toBool() && current(); }, 20000));
+
+        QTcpServer canary;
+        QVERIFY(canary.listen(QHostAddress::Any, 0));
+        int canaryHits = 0;
+        connect(&canary, &QTcpServer::newConnection, this, [&] { ++canaryHits; while (QTcpSocket *s = canary.nextPendingConnection()) { s->abort(); s->deleteLater(); } });
+        const QString canaryUrl = webBase + QStringLiteral("/canary?cp=") + QString::number(canary.serverPort()) + QStringLiteral("&skip=") + env("FORTIQ_ENGINE_CANARY_SKIP");
+
+        SocketWatch::Allowed allowed;
+        allowed.gatewayPort = eb->proxyPort();
+        allowed.sshPort = quint16(req.port);
+        allowed.sshHost = req.host == QLatin1String("localhost") ? QStringLiteral("127.0.0.1") : req.host;
+        SocketWatch watch(allowed);
+        watch.start();
+        const QVariantMap before = eb->gatewayStats();
+        const int logBefore = eb->gatewayLog().size();
+
+        const int tabA = tabs->activeId();
+        QMetaObject::invokeMethod(win, "open", Q_ARG(QVariant, canaryUrl));
+        const bool doneA = waitFor([&] { return titleOfCurrent() == QLatin1String("canary-done"); }, 90000);
+        QMetaObject::invokeMethod(win, "newTab");                                      // tab B while A stays loaded in the background
+        QMetaObject::invokeMethod(win, "open", Q_ARG(QVariant, canaryUrl));
+        const bool doneB = waitFor([&] { return titleOfCurrent() == QLatin1String("canary-done"); }, 90000);
+        const int tabB = tabs->activeId();
+        QMetaObject::invokeMethod(win, "newTab");                                      // tab C: the opener page and its popups
+        const int tabC = tabs->activeId();
+        QStringList stages; stages << QStringLiteral("before opener: ") + watch.udpBound().join('|');
+        QMetaObject::invokeMethod(win, "open", Q_ARG(QVariant, webBase + QStringLiteral("/opener")));
+        const bool openerOk = waitFor([&] { return titleOfCurrent() == QLatin1String("opener"); }, 45000);
+        stages << QStringLiteral("after opener load: ") + watch.udpBound().join('|');
+        if (openerOk) QTest::qWait(2000);                                              // let the page lay out before it is clicked
+        const bool popupOk = openerOk && clickInPage(quick, current(), QPointF(60, 60)) && waitFor([&] { return titleOfCurrent() == QLatin1String("tab-link"); }, 45000);
+        stages << QStringLiteral("after link popup: ") + watch.udpBound().join('|');
+        if (openerOk) { tabs->activate(tabC); QTest::qWait(500); waitFor([&] { return current() == viewOfTab(win, tabC); }, 8000); clickInPage(quick, current(), QPointF(60, 180)); waitFor([&] { return titleOfCurrent() == QLatin1String("tab-click"); }, 45000); }
+        stages << QStringLiteral("after button popup: ") + watch.udpBound().join('|');
+        // tabs switched back and forth and closed while the pages run their speculative work
+        for (int i = 0; i < 6; ++i) { tabs->activateNext(1); QTest::qWait(300); }
+        stages << QStringLiteral("after switching: ") + watch.udpBound().join('|');
+        tabs->closeTab(tabB);
+        QTest::qWait(6000);
+        watch.stop();
+
+        const QVariantMap after = eb->gatewayStats();
+        const QStringList log = eb->gatewayLog().mid(logBefore);
+        const QStringList violations = watch.violations();
+        QStringList report;
+        report << QStringLiteral("FORTIQ engine leak test, several tabs and popups")
+               << QStringLiteral("canary tab A done: %1, canary tab B done: %2, opener page: %3, popup tab: %4, tabs at the end: %5").arg(doneA).arg(doneB).arg(openerOk).arg(popupOk).arg(tabs->count())
+               << QStringLiteral("tab ids: A=%1 B=%2 C=%3").arg(tabA).arg(tabB).arg(tabC)
+               << QStringLiteral("socket polls: %1, most processes seen at once: %2").arg(watch.polls()).arg(watch.maxProcesses())
+               << QStringLiteral("VIOLATIONS: %1").arg(violations.size()) << violations
+               << QStringLiteral("UDP sockets bound by the process tree: %1").arg(watch.udpBound().size()) << watch.udpBound() << stages
+               << QStringLiteral("client canary listener connections: %1").arg(canaryHits)
+               << QStringLiteral("gateway: accepted +%1, blocked +%2, channels +%3").arg(after.value("accepted").toULongLong() - before.value("accepted").toULongLong())
+                      .arg(after.value("blocked").toULongLong() - before.value("blocked").toULongLong()).arg(after.value("channelsOpened").toULongLong() - before.value("channelsOpened").toULongLong())
+               << QStringLiteral("gateway log:") << log;
+        QFile f(evidencePath() + QStringLiteral(".tabs.txt"));
+        if (f.open(QIODevice::WriteOnly | QIODevice::Text)) f.write(report.join(QLatin1Char('\n')).toUtf8());
+        qInfo().noquote() << report.mid(0, 8).join(QLatin1Char('\n'));
+
+        QVERIFY2(doneA && doneB, "a canary page did not finish");
+        QVERIFY2(openerOk && popupOk, "the popup scenario did not run");
+        QVERIFY2(violations.isEmpty(), qPrintable("DIRECT CONNECTIONS:\n" + violations.join('\n')));
+        QCOMPARE(canaryHits, 0);
+        QVERIFY2(watch.udpBound().isEmpty(), qPrintable("UDP sockets exist although the pages need none:\n" + watch.udpBound().join('\n')));
+        QVERIFY(after.value("accepted").toULongLong() > before.value("accepted").toULongLong() + 10);
+        tabs->reset();
+#endif
+    }
+
+    // The strip of the window: tabs listed, "+" opens one, "x" closes one, the "through server X" indicator names the connected server, and the
+    // strip sits between the toolbar and the page (the page never hides under it).
+    void tabStripAndTheViaIndicator() {
+        if (!configured) QSKIP("FORTIQ_IT_* / FORTIQ_IT_WEB_BASE not set (tool/run_live_tests.py sets them)");
+        TabModel *tabs = eb->tabModel();
+        tabs->reset();
+        std::unique_ptr<QObject> host(makeWindow(QStringLiteral("WindowHarness.qml")));
+        QVERIFY(host);
+        auto *quick = qobject_cast<QQuickWindow *>(host.get());
+        QObject *win = host->property("win").value<QObject *>();
+        auto item = [&](const char *name) { return win->findChild<QQuickItem *>(QString::fromLatin1(name)); };
+        auto items = [&](const char *name) { return itemsNamed(win, QString::fromLatin1(name)); };
+        auto click = [&](QQuickItem *it) { QTest::mouseClick(quick, Qt::LeftButton, Qt::NoModifier, it->mapToScene(QPointF(it->width() / 2, it->height() / 2)).toPoint()); };
+        QVERIFY(waitFor([&] { return win->property("ready").toBool() && item("engineTabStrip") && item("engineTabStrip")->isVisible(); }, 20000));
+        QCOMPARE(items("engineTab").size(), 1);
+        // geometry: toolbar < strip < page
+        QQuickItem *strip = item("engineTabStrip"), *page = item("enginePage");
+        QVERIFY(strip && page);
+        const qreal stripTop = strip->mapToScene(QPointF(0, 0)).y(), stripBottom = stripTop + strip->height(), pageTop = page->mapToScene(QPointF(0, 0)).y();
+        QVERIFY2(stripTop >= 30 && pageTop >= stripBottom - 0.5, qPrintable(QStringLiteral("strip %1..%2 page %3").arg(stripTop).arg(stripBottom).arg(pageTop)));
+        // "through the server"
+        QQuickItem *via = item("engineVia");
+        QVERIFY(via && via->isVisible());
+        QVERIFY2(via->property("text").toString().contains(eb->serverLabel()), qPrintable(via->property("text").toString()));
+        // "+" opens a tab and shows it; the strip lists it
+        click(item("engineNewTab"));
+        QVERIFY(waitFor([&] { return tabs->count() == 2 && items("engineTab").size() == 2; }, 5000));
+        QCOMPARE(tabs->activeIndex(), 1);
+        QMetaObject::invokeMethod(win, "open", Q_ARG(QVariant, webBase + QStringLiteral("/tab?n=strip")));
+        QVERIFY(waitFor([&] { return tabs->data(tabs->index(1), TabModel::LabelRole).toString() == QLatin1String("tab-strip"); }, 45000));
+        QTest::qWait(500);
+        quick->grabWindow().save(QDir::current().absoluteFilePath(QStringLiteral("engine-window-tabs.png")));
+        // clicking the first tab shows it; its "x" closes it
+        QList<QQuickItem *> tabItems = items("engineTab");
+        std::sort(tabItems.begin(), tabItems.end(), [](QQuickItem *a, QQuickItem *b) { return a->x() < b->x(); });
+        QVERIFY(tabItems.size() == 2);
+        click(tabItems.first());
+        QVERIFY(waitFor([&] { return tabs->activeIndex() == 0; }, 5000));
+        QList<QQuickItem *> closers = items("engineTabClose");
+        std::sort(closers.begin(), closers.end(), [](QQuickItem *a, QQuickItem *b) { return a->mapToScene(QPointF()).x() < b->mapToScene(QPointF()).x(); });
+        QVERIFY(closers.size() == 2);
+        click(closers.last());
+        QVERIFY(waitFor([&] { return tabs->count() == 1 && items("engineTab").size() == 1; }, 5000));
+        tabs->reset();
     }
 
     void nothingIsWrittenToDisk() {

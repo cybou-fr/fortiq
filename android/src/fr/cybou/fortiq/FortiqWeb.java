@@ -59,6 +59,20 @@ public final class FortiqWeb {
     private static WebView view;
     private static boolean proxyConfirmed;
     private static int epoch;
+    // The foreground service follows the view with a delay: switching tabs destroys one WebView and creates the next within milliseconds,
+    // and stopping the service before it has called startForeground() kills the app (ForegroundServiceDidNotStartInTimeException).
+    private static boolean serviceWanted, serviceStarted;
+    private static final long SERVICE_STOP_DELAY_MS = 4000;
+    private static final Runnable STOP_SERVICE = new Runnable() {
+        public void run() {
+            if (serviceWanted || !serviceStarted) return;
+            serviceStarted = false;
+            Activity activity = activity();
+            if (activity != null) {
+                try { activity.stopService(new Intent(activity, GatewayService.class)); } catch (Throwable ignored) { /* already stopped */ }
+            }
+        }
+    };
 
     private FortiqWeb() {}
 
@@ -212,8 +226,12 @@ public final class FortiqWeb {
         activity.addContentView(web, lp);
         view = web;
         try {
-            Intent service = new Intent(activity, GatewayService.class);
-            activity.startForegroundService(service);
+            serviceWanted = true;
+            UI.removeCallbacks(STOP_SERVICE);
+            if (!serviceStarted) {
+                serviceStarted = true;
+                activity.startForegroundService(new Intent(activity, GatewayService.class));
+            }
         } catch (Throwable t) { /* the page works in the foreground anyway; the service only keeps it alive in the background */ }
         web.loadUrl("about:blank");
     }
@@ -250,10 +268,9 @@ public final class FortiqWeb {
                 web.destroy();
             } catch (Throwable ignored) { /* nothing more to do */ }
         }
-        Activity activity = activity();
-        if (activity != null) {
-            try { activity.stopService(new Intent(activity, GatewayService.class)); } catch (Throwable ignored) { /* already stopped */ }
-        }
+        serviceWanted = false;
+        UI.removeCallbacks(STOP_SERVICE);
+        UI.postDelayed(STOP_SERVICE, SERVICE_STOP_DELAY_MS);
     }
 
     // ── commands from C++ ───────────────────────────────────────────────────────────────────────────────────────────────────────

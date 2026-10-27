@@ -128,3 +128,9 @@ do not consume the drag as scrolling. Layout QtTest **37 passed**, including the
 at five viewports, ANSI/alternate screen/Ctrl+C and Logs drag. Terminal opened in the native
 Windows UI; interactive SSH is separately exercised by [live tests](TERMINAL.md). New APK built
 and installed/launched on FortiqTablet; Android terminal IME/TUI interaction remains pending.
+
+Browser engine window (27.10.2026, stage 4): the tab strip (32 px, 44 px adaptive) and the "via server" indicator in
+the status line are **additions inside the Browser window; the sketch does not define them** and they have not been
+visually accepted by the owner. Shell geometry, colours, glass, dock, rail and control centre are unchanged; the
+window keeps the shared glass body and WindowDragArea. Window screenshot: `engine-window-tabs.png` written next to
+`fortiq_engine_it`; a comparison with the master (`tool/compare_shell_screenshot.py`) was not run for this window.

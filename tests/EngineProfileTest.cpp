@@ -3,8 +3,10 @@
 // tunnel that is never really used. No Qt WebEngine and no SSH server: the live proof is tests/EngineLiveTest.cpp.
 #include "browser/engine/EngineBrowser.h"
 #include "browser/engine/EngineProfile.h"
+#include "browser/engine/TabModel.h"
 
 #include <QFile>
+#include <QPointer>
 #include <QProcess>
 #include <QSignalSpy>
 #include <QTcpSocket>
@@ -209,6 +211,10 @@ private slots:
         // The proxy override is confirmed BEFORE the view is created (createView is only called from the confirmation callback).
         QVERIFY(java.indexOf("setProxyOverride") < java.indexOf("createView(activity, script)"));
         QCOMPARE(java.count("createView(activity, script)"), 1);
+        // Tab switches destroy and create the WebView within milliseconds: the foreground service must not be stopped before it has started
+        // (ForegroundServiceDidNotStartInTimeException killed the app on the emulator): one stopService call, delayed, cancelled by a new view.
+        QCOMPARE(java.count("stopService("), 1);
+        QVERIFY(java.contains("SERVICE_STOP_DELAY_MS") && java.contains("UI.removeCallbacks(STOP_SERVICE)"));
         QFile m(QStringLiteral(FORTIQ_REPO_ROOT "/android/AndroidManifest.xml"));
         QVERIFY(m.open(QIODevice::ReadOnly));
         const QString manifest = QString::fromUtf8(m.readAll());
@@ -355,6 +361,182 @@ private slots:
         eb.setWindowActive(false);
         QVERIFY(eb.pendingConfirm().isEmpty());
     }
+    // ---- Tabs (stage 4): pure logic of TabModel -----------------------------------------------------------------------------------
+    static QList<int> ids(const TabModel &m) { QList<int> out; for (int i = 0; i < m.count(); ++i) out << m.data(m.index(i), TabModel::IdRole).toInt(); return out; }
+    static QList<int> liveIds(const TabModel &m) { QList<int> out; for (int i = 0; i < m.count(); ++i) if (m.data(m.index(i), TabModel::LiveRole).toBool()) out << m.data(m.index(i), TabModel::IdRole).toInt(); return out; }
+
+    void tabsStartWithOneBlankLiveTab() {
+        TabModel m(nullptr, 5, 2);
+        QCOMPARE(m.count(), 1);
+        QVERIFY(m.isLive(m.activeId()));
+        QVERIFY(m.data(m.index(0), TabModel::BlankRole).toBool());
+        QCOMPARE(m.data(m.index(0), TabModel::LabelRole).toString(), QString("Nouvel onglet"));
+    }
+    void newTabIsShownNextToTheActiveOne() {
+        TabModel m(nullptr, 6, 4);
+        const int first = m.activeId();
+        const int a = m.newTab("https://a.example/");
+        const int b = m.newTab("https://b.example/");
+        QCOMPARE(m.activeId(), b);
+        QCOMPARE(ids(m), (QList<int>{ first, a, b }));
+        m.activate(first);
+        const int c = m.newTab("", false);                       // opened in the background: the shown tab does not change
+        QCOMPARE(m.activeId(), first);
+        QCOMPARE(ids(m), (QList<int>{ first, c, a, b }));
+        QVERIFY(!m.isLive(c));                                     // a background tab holds no page until it is shown
+    }
+    void tabLimitRefusesWithAMessage() {
+        TabModel m(nullptr, 3, 3);
+        QSignalSpy refused(&m, &TabModel::refused);
+        QVERIFY(m.newTab() > 0);
+        QVERIFY(m.newTab() > 0);
+        QCOMPARE(m.count(), 3);
+        QCOMPARE(m.newTab(), -1);
+        QCOMPARE(m.openFromOpener(m.activeId(), "https://x.example/"), -1);   // a popup storm cannot exceed the limit either
+        QCOMPARE(refused.count(), 2);
+        QVERIFY(refused.first().first().toString().contains("3"));
+        QCOMPARE(m.count(), 3);
+    }
+    void liveLimitDiscardsTheLeastRecentlyUsedBackgroundTab() {
+        TabModel m(nullptr, 8, 2);
+        const int t1 = m.activeId();
+        const int t2 = m.newTab("https://2.example/");
+        m.report(t1, "https://1.example/", "Un", false);
+        m.report(t2, "https://2.example/", "Deux", true);
+        QCOMPARE(liveIds(m), (QList<int>{ t1, t2 }));
+        const int t3 = m.newTab("https://3.example/");             // third live page: t1 (least recent) goes
+        QCOMPARE(liveIds(m), (QList<int>{ t2, t3 }));
+        QVERIFY(!m.isLive(t1));
+        QCOMPARE(m.urlOf(t1), QString("https://1.example/"));       // the address survives, to be reloaded
+        QCOMPARE(m.data(m.index(m.indexOfId(t1)), TabModel::TitleRole).toString(), QString("Un"));
+        QVERIFY(!m.data(m.index(m.indexOfId(t1)), TabModel::LoadingRole).toBool());
+        m.activate(t2);                                            // t2 becomes the most recent; showing t1 now releases t3
+        m.activate(t1);
+        QVERIFY(m.isLive(t1));
+        QVERIFY(!m.isLive(t3));
+        QCOMPARE(m.liveCount(), 2);
+    }
+    void singleNativeViewReleasesTheOldPageBeforeTheNewOne() {   // Android: liveLimit 1
+        TabModel m(nullptr, 6, 1);
+        const int a = m.activeId();
+        QStringList order;
+        QObject::connect(&m, &QAbstractItemModel::dataChanged, &m, [&](const QModelIndex &i, const QModelIndex &, const QList<int> &roles) {
+            if (!roles.contains(TabModel::LiveRole)) return;
+            order << QString("%1:%2").arg(m.data(i, TabModel::IdRole).toInt()).arg(m.data(i, TabModel::LiveRole).toBool() ? "live" : "gone");
+        });
+        const int b = m.newTab("https://b.example/");
+        QCOMPARE(order, (QStringList{ QString("%1:gone").arg(a), QString("%1:live").arg(b) }));
+        QCOMPARE(m.liveCount(), 1);
+    }
+    void closingTheActiveTabShowsItsRightNeighbourElseTheLeft() {
+        TabModel m(nullptr, 8, 8);
+        const int t1 = m.activeId();
+        const int t2 = m.newTab("https://2.example/");
+        const int t3 = m.newTab("https://3.example/");
+        m.activate(t2);
+        m.closeTab(t2);
+        QCOMPARE(m.activeId(), t3);
+        m.closeTab(t3);
+        QCOMPARE(m.activeId(), t1);
+        QCOMPARE(m.count(), 1);
+        m.closeTab(999);                                           // unknown id: nothing happens
+        QCOMPARE(m.count(), 1);
+    }
+    void closingABackgroundTabKeepsTheShownOne() {
+        TabModel m(nullptr, 8, 8);
+        const int t1 = m.activeId();
+        const int t2 = m.newTab("https://2.example/");
+        m.closeTab(t1);
+        QCOMPARE(m.activeId(), t2);
+        QCOMPARE(m.count(), 1);
+    }
+    void closingTheLastTabLeavesAFreshBlankOne() {
+        TabModel m(nullptr, 4, 2);
+        const int only = m.activeId();
+        m.report(only, "https://x.example/", "X", false);
+        m.closeTab(only);
+        QCOMPARE(m.count(), 1);
+        QVERIFY(m.activeId() != only);
+        QVERIFY(m.urlOf(m.activeId()).isEmpty());                  // the page of the closed tab is gone, nothing is kept
+        QVERIFY(m.isLive(m.activeId()));
+    }
+    void openingFromAnOpenerPutsTheTabNextToItAndShowsIt() {
+        TabModel m(nullptr, 8, 4);
+        const int t1 = m.activeId();
+        const int t2 = m.newTab("https://2.example/");
+        const int p = m.openFromOpener(t1, "https://popup.example/");
+        QCOMPARE(ids(m), (QList<int>{ t1, p, t2 }));
+        QCOMPARE(m.activeId(), p);
+        QCOMPARE(m.urlOf(p), QString("https://popup.example/"));
+    }
+    void reportsUpdateLabelAndIgnoreStrangers() {
+        TabModel m(nullptr, 4, 1);
+        const int a = m.activeId();
+        m.report(a, "https://www.example.org/x", "", false);
+        QCOMPARE(m.data(m.index(0), TabModel::LabelRole).toString(), QString("www.example.org"));   // no title yet: the host
+        m.report(a, "https://www.example.org/x", "  Page \n  d accueil ", true);
+        QCOMPARE(m.data(m.index(0), TabModel::LabelRole).toString(), QString("Page d accueil"));
+        QVERIFY(m.data(m.index(0), TabModel::LoadingRole).toBool());
+        m.report(a, "about:blank", "", false);                     // the view fell back to the blank page: the start page again
+        QVERIFY(m.data(m.index(0), TabModel::BlankRole).toBool());
+        const int b = m.newTab("https://b.example/");              // liveLimit 1: `a` is discarded now
+        m.report(a, "https://evil.example/", "late", false);       // a destroyed view cannot overwrite the kept address
+        QVERIFY(m.urlOf(a).isEmpty());
+        m.report(12345, "https://nobody.example/", "x", false);
+        QCOMPARE(m.count(), 2);
+        m.report(b, QString(5000, 'u'), QString(900, 't'), false); // bounded
+        QVERIFY(m.urlOf(b).size() <= 2048);
+        QVERIFY(m.data(m.index(m.indexOfId(b)), TabModel::TitleRole).toString().size() <= 200);
+    }
+    void nextAndPreviousWrapAround() {
+        TabModel m(nullptr, 6, 6);
+        const int t1 = m.activeId();
+        const int t2 = m.newTab();
+        const int t3 = m.newTab();
+        QCOMPARE(m.activeId(), t3);
+        m.activateNext(1);
+        QCOMPARE(m.activeId(), t1);
+        m.activateNext(-1);
+        QCOMPARE(m.activeId(), t3);
+        m.activateNext(-1);
+        QCOMPARE(m.activeId(), t2);
+    }
+    void engineBrowserOwnsTheTabsAndDropsThemWithTheSession() {
+        EngineBrowser::Source src;
+        int token = 1;
+        src.connected = [] { return true; };
+        src.label = [] { return QStringLiteral("u@srv"); };
+        src.token = [&token] { return token; };
+        src.makeTunnel = [](QObject *) -> TunnelBackend * { return new DeadTunnel; };
+        EngineBrowser eb(src);
+        QPointer<TabModel> tabs = eb.tabModel();
+        QVERIFY(tabs);
+        QCOMPARE(eb.property("tabs").value<QObject *>(), static_cast<QObject *>(tabs.data()));
+        eb.setWindowActive(true);
+        eb.tabModel()->newTab("https://a.example/");
+        eb.tabModel()->newTab("https://b.example/");
+        QCOMPARE(eb.tabModel()->count(), 3);
+        QSignalSpy notice(&eb, &EngineBrowser::notice);
+        while (eb.tabModel()->count() < eb.tabModel()->maxTabs()) eb.tabModel()->newTab();
+        QCOMPARE(eb.tabModel()->newTab(), -1);
+        QCOMPARE(notice.count(), 1);                               // the limit message reaches the window
+        token = 2;
+        eb.refresh();                                              // another connection = another session: no page of the old one stays
+        QCOMPARE(eb.tabModel()->count(), 1);
+        QVERIFY(eb.tabModel()->urlOf(eb.tabModel()->activeId()).isEmpty());
+        eb.tabModel()->newTab("https://c.example/");
+        eb.setWindowActive(false);
+        QCOMPARE(eb.tabModel()->count(), 1);
+    }
+    void platformLimitsAreSane() {
+        QVERIFY(TabModel::defaultMaxTabs() >= 2);
+        QVERIFY(TabModel::defaultLiveLimit() >= 1);
+        QVERIFY(TabModel::defaultLiveLimit() <= TabModel::defaultMaxTabs());
+#ifdef Q_OS_ANDROID
+        QCOMPARE(TabModel::defaultLiveLimit(), 1);                 // one native WebView
+#endif
+    }
+
     void downloadsAreRefusedWithAMessage() {
         EngineBrowser::Source src;
         EngineBrowser eb(src);

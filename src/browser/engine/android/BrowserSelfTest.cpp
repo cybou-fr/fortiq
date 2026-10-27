@@ -1,6 +1,7 @@
 #include "BrowserSelfTest.h"
 
 #include "../EngineBrowser.h"
+#include "../TabModel.h"
 #include "../../gateway/SshTunnel.h"
 #include "../../../ssh/SshClient.h"
 
@@ -37,7 +38,10 @@ struct BrowserSelfTest::Impl {
     QTimer timer;
     bool canaryWired = false;
     qint64 stateSince = 0;
-    enum State { Connecting, Starting, Js, Canary, Idle, Waiting, WaitWebrtc, Done } state = Connecting;
+    enum State { Connecting, Starting, Js, Canary, Idle, Waiting, WaitWebrtc, TabsRun, Done } state = Connecting;
+    QQuickItem *pages = nullptr;   // the real tab pages (EnginePages.qml) during the "tabs" command
+    int tabStep = 0, tabA = 0, tabB = 0;
+    bool restoring = false;        // a plain view is being recreated after the tabs command: back to Idle, no page loaded
     QString waitFor;            // title prefix being waited for in Js/Canary
     QString lastLoaded;
     qint64 cmdOffset = 0;
@@ -94,7 +98,8 @@ struct BrowserSelfTest::Impl {
             else if (age > 40000) { log(QStringLiteral("fail=gateway not ready: %1 %2").arg(browser->state(), browser->status())); enter(Done); }
             break;
         case Starting:
-            if (view->property("started").toBool()) { log(QStringLiteral("webview=started")); load(QStringLiteral("/js")); waitFor = QStringLiteral("js-done"); enter(Js); }
+            if (restoring && view->property("started").toBool()) { restoring = false; log(QStringLiteral("tabs.restored=view")); enter(Idle); }
+            else if (view->property("started").toBool()) { log(QStringLiteral("webview=started")); load(QStringLiteral("/js")); waitFor = QStringLiteral("js-done"); enter(Js); }
             else if (!prop("failure").isEmpty()) { log(QStringLiteral("webview=refused: %1").arg(prop("failure"))); enter(Idle); }
             else if (age > 30000) { log(QStringLiteral("fail=webview did not start")); enter(Done); }
             break;
@@ -140,8 +145,78 @@ struct BrowserSelfTest::Impl {
                 enter(Idle);
             }
             break;
+        case TabsRun: tabsTick(age); break;
         case Idle: pollCommands(); break;
         case Done: pollCommands(); break;
+        }
+    }
+    // The tab flow on the real pages (EnginePages.qml + TabModel): ONE native WebView is shared by all tabs on Android (liveLimit 1), so
+    // showing another tab destroys the view of this one and loads the other again, through the gateway.
+    void tabsStart() {
+        if (view) { view->setParentItem(nullptr); view->deleteLater(); view = nullptr; }
+        QQmlComponent component(qml, "Fortiq.Engine", "EnginePages");
+        if (component.isError()) { log(QStringLiteral("tabs=FAIL component: %1").arg(component.errorString())); enter(Idle); return; }
+        browser->tabModel()->reset();
+        QObject *o = component.createWithInitialProperties({ { "engine", QVariant::fromValue<QObject *>(browser.get()) } });
+        pages = qobject_cast<QQuickItem *>(o);
+        if (!pages) { log(QStringLiteral("tabs=FAIL pages not created")); enter(Idle); return; }
+        pages->setParentItem(window->contentItem());
+        pages->setPosition(QPointF(0, 80));
+        pages->setSize(QSizeF(window->width(), window->height() - 80));
+        tabStep = 0;
+        log(QStringLiteral("tabs.limits=max:%1 live:%2").arg(browser->tabModel()->maxTabs()).arg(browser->tabModel()->liveLimit()));
+        enter(TabsRun);
+    }
+    void tabsFinish(const QString &verdict) {
+        log(QStringLiteral("tabs=%1").arg(verdict));
+        stats(QStringLiteral("tabs"));
+        if (pages) { pages->setParentItem(nullptr); pages->deleteLater(); pages = nullptr; }
+        browser->tabModel()->reset();
+        restoring = true;
+        createView();   // the later steps of the check use the plain view
+    }
+    void tabsTick(qint64 age) {
+        TabModel *tabs = browser->tabModel();
+        QObject *cv = pages ? pages->property("currentView").value<QObject *>() : nullptr;
+        const QString title = cv ? cv->property("title").toString() : QString();
+        const bool started = cv && cv->property("started").toBool();
+        if (age > 90000) { tabsFinish(QStringLiteral("TIMEOUT at step %1 title=%2").arg(tabStep).arg(title)); return; }
+        switch (tabStep) {
+        case 0:
+            if (started) {
+                tabA = tabs->activeId();
+                cv->setProperty("url", QUrl(base + QStringLiteral("/tab?n=1")));
+                tabStep = 1; stateSince = now();
+            } else if (cv && !cv->property("failure").toString().isEmpty()) tabsFinish(QStringLiteral("FAIL view refused: %1").arg(cv->property("failure").toString()));
+            break;
+        case 1:
+            if (title == QLatin1String("tab-1")) {
+                log(QStringLiteral("tabs.page1=ok live=%1").arg(tabs->liveCount()));
+                tabs->newTab(base + QStringLiteral("/tab?n=2"));      // the second tab: the first page must be released BEFORE the second view exists
+                tabB = tabs->activeId();
+                tabStep = 2; stateSince = now();
+            }
+            break;
+        case 2:
+            if (title == QLatin1String("tab-2")) {
+                log(QStringLiteral("tabs.page2=ok count=%1 live=%2 limit=%3 tabA.live=%4").arg(tabs->count()).arg(tabs->liveCount()).arg(tabs->liveLimit()).arg(tabs->isLive(tabA)));
+                tabs->activate(tabA);                                  // back to the first: its page is loaded again (through the gateway)
+                tabStep = 3; stateSince = now();
+            }
+            break;
+        case 3:
+            if (title == QLatin1String("tab-1") && started) {
+                log(QStringLiteral("tabs.reload=ok live=%1 tabB.live=%2 tabB.url=%3").arg(tabs->liveCount()).arg(tabs->isLive(tabB)).arg(tabs->urlOf(tabB)));
+                tabs->closeTab(tabB);
+                tabStep = 4; stateSince = now();
+            }
+            break;
+        case 4:
+            if (tabs->count() == 1) {
+                const bool good = tabs->liveCount() == 1 && tabs->activeId() == tabA && title == QLatin1String("tab-1");
+                tabsFinish(good ? QStringLiteral("OK") : QStringLiteral("FAIL after close count=%1 live=%2 title=%3").arg(tabs->count()).arg(tabs->liveCount()).arg(title));
+            }
+            break;
         }
     }
     void pollCommands() {
@@ -172,6 +247,7 @@ struct BrowserSelfTest::Impl {
                 waitFor = QStringLiteral("webrtc-done");
                 enter(WaitWebrtc);
             }
+            else if (cmd == QLatin1String("tabs") && view) tabsStart();
             else if (cmd == QLatin1String("stats")) stats(QStringLiteral("now"));
             else if (cmd == QLatin1String("quit")) { QCoreApplication::quit(); }
         }

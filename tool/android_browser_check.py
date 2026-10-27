@@ -223,6 +223,19 @@ def main():
         shot = out / "android-browser-canary.png"
         shot.write_bytes(subprocess.run([adb, "exec-out", "screencap", "-p"], capture_output=True).stdout)
 
+        # ── tabs: the real tab pages on the single native WebView (liveLimit 1): the page that goes is released before the next view exists,
+        #    showing a tab again loads it again through the gateway, closing frees it; all of it under the same socket sampling
+        command("tabs")
+        t = wait_for(r"^tabs=(OK|FAIL.*|TIMEOUT.*)$", since="cmd=tabs", timeout=240)
+        text = report()
+        check("tabs: open two tabs, switch back (reload through the gateway), close one - on the single WebView", t and t.group(1) == "OK", t.group(0)[:200] if t else "no answer")
+        check("tabs: one live page at a time (the old WebView page is released first) and the hidden tab keeps its address",
+              re.search(r"^tabs\.limits=max:\d+ live:1$", text, re.M) is not None and re.search(r"^tabs\.page2=ok count=2 live=1 limit=1 tabA\.live=0$", text, re.M) is not None
+              and re.search(r"^tabs\.reload=ok live=1 tabB\.live=0 tabB\.url=\S+/tab\?n=2$", text, re.M) is not None, "")
+        if re.search(r"^tabs\.restored=view$", text, re.M) is None:
+            wait_for(r"^tabs\.restored=view$", since="tabs=", timeout=60)
+        new_udp("tabs")
+
         # ── WebRTC: no forced policy exists in the WebView, so UDP would leave around the proxy. The script closes iframe.contentWindow;
         #    window.frames[n] cannot be hooked (known gap, measured LAST so that its sockets do not mask the verdict above).
         command("webrtc")

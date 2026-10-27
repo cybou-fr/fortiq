@@ -17,7 +17,12 @@ bool EngineBrowser::compiledIn() {
 #endif
 }
 
-EngineBrowser::EngineBrowser(Source source, QObject *parent) : QObject(parent), m_source(std::move(source)) {}
+EngineBrowser::EngineBrowser(Source source, QObject *parent) : QObject(parent), m_source(std::move(source)) { initTabs(); }
+
+void EngineBrowser::initTabs() {
+    m_tabs = new TabModel(this);
+    connect(m_tabs, &TabModel::refused, this, &EngineBrowser::notice);
+}
 
 EngineBrowser::~EngineBrowser() {
     m_gateway.reset();   // the gateway goes first: it uses the tunnel
@@ -92,6 +97,7 @@ void EngineBrowser::start() {
         if (m_asks.size() == 1) emit changed();
     });
     ++m_generation;
+    m_tabs->reset();   // a new session never inherits pages of another server
     m_state = QStringLiteral("ready");
     m_status = QStringLiteral("Pages chargées par %1, à travers le tunnel SSH.").arg(m_label);
     emit changed();
@@ -108,7 +114,7 @@ void EngineBrowser::stop(const QString &state, const QString &status) {
     m_state = state;
     m_status = status;
     ++m_generation;
-    if (wasRunning) emit engineMustStop();
+    if (wasRunning) { emit engineMustStop(); m_tabs->reset(); }
     emit changed();
 }
 

@@ -4,7 +4,8 @@ import Fortiq.Shell
 
 // Navigateur (moteur Chromium): the page runs on this device, JavaScript included, but EVERY network request leaves through the
 // loopback gateway and the SSH tunnel of the selected server (docs/BROWSER.md, "Moteur"). Without a connected server nothing starts.
-// One page at this stage; the structure (a Loader around one EngineView) is what the tabs of stage 4 will multiply.
+// Tabs (stage 4): the TabModel of the EngineBrowser lists them; EnginePages.qml keeps one EngineView per LIVE tab (shared off-the-record
+// profile), the strip below the toolbar opens / closes / switches them. Links and popups that want a new window become tabs.
 Item {
     id: win
     objectName: "engineWindow"
@@ -16,7 +17,9 @@ Item {
     property string notice: ""
     readonly property bool connected: remote !== null && remote.connected
     readonly property bool ready: engine !== null && engine.state === "ready"
-    readonly property var view: pageLoader.item
+    readonly property var view: pageLoader.item ? pageLoader.item.currentView : null
+    readonly property var tabs: engine ? engine.tabs : null
+    readonly property int stripHeight: win.adaptive ? 44 : 32
     readonly property string engineName: {
         if (!legacy) return ""
         for (const e of legacy.searchEngines) if (e.id === legacy.searchEngine) return e.name
@@ -29,10 +32,16 @@ Item {
     function handleBack() {
         if (engine && engine.pendingConfirm.host !== undefined) { engine.answerConfirm(false); return true }
         if (view && view.canGoBack) { view.goBack(); return true }
+        if (tabs && tabs.count > 1) { closeCurrentTab(); return true }   // Back with nothing left to go back to closes the tab
         return false
     }
     function focusAddress() { address.forceActiveFocus(); address.selectAll() }
     function showNotice(text) { notice = text; noticeTimer.restart() }
+    function newTab() {
+        if (!ready || !tabs) return
+        if (tabs.newTab("", true) >= 0) focusAddress()
+    }
+    function closeCurrentTab() { if (tabs) tabs.closeTab(tabs.activeId) }
     function open(text) {
         if (!view || !legacy) return
         const r = legacy.resolveTyped(text)
@@ -53,6 +62,12 @@ Item {
         function onChanged() { if (win.engine.state !== "ready" || !pageLoader.active || pageLoader.generation !== win.engine.generation) win.syncView() }
         function onNotice(text) { win.showNotice(text) }
         function onEngineMustStop() { pageLoader.active = false }
+    }
+    // Showing another tab (or a tab that already has a page) leaves the address field: the bar then shows that tab's address, not a stale typed text.
+    Connections {
+        target: win.tabs
+        ignoreUnknownSignals: true
+        function onActiveChanged() { if (win.tabs.urlOf(win.tabs.activeId).length > 0 && address.activeFocus) win.forceActiveFocus() }
     }
     Timer { id: noticeTimer; interval: 7000; onTriggered: win.notice = "" }
 
@@ -169,12 +184,80 @@ Item {
         }
     }
 
+    // ── tabs ───────────────────────────────────────────────────────────
+    Item {
+        id: strip
+        objectName: "engineTabStrip"
+        y: toolbar.height; width: parent.width; height: win.stripHeight
+        visible: win.ready
+        Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: "#14FFFFFF" }
+        Rectangle {
+            id: plus
+            objectName: "engineNewTab"
+            anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
+            width: win.adaptive ? 36 : 24; height: width; radius: width / 2
+            opacity: win.tabs && win.tabs.count >= win.tabs.maxTabs ? 0.4 : 1
+            color: plusMouse.containsMouse ? "#33FFFFFF" : "#1AFFFFFF"
+            Text { anchors.centerIn: parent; text: "+"; color: Theme.ink; font.pixelSize: win.adaptive ? 20 : 16; font.family: Theme.fontFamily }
+            MouseArea { id: plusMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.newTab() }
+        }
+        ListView {
+            id: tabList
+            objectName: "engineTabs"
+            anchors.left: parent.left; anchors.leftMargin: 8
+            anchors.right: plus.left; anchors.rightMargin: 6
+            height: parent.height - 6; anchors.verticalCenter: parent.verticalCenter
+            orientation: ListView.Horizontal; spacing: 4; clip: true; interactive: contentWidth > width
+            boundsBehavior: Flickable.StopAtBounds
+            model: win.tabs
+            readonly property real slotWidth: Math.max(win.adaptive ? 96 : 84, Math.min(win.adaptive ? 220 : 200, (width - spacing * Math.max(0, count - 1)) / Math.max(1, count)))
+            currentIndex: win.tabs ? win.tabs.activeIndex : -1
+            onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+            delegate: Rectangle {
+                id: tabItem
+                required property int tabId
+                required property string tabLabel
+                required property bool tabCurrent
+                required property bool tabLoading
+                required property bool tabLive
+                required property int index
+                objectName: "engineTab"
+                width: tabList.slotWidth; height: tabList.height; radius: 8
+                color: tabCurrent ? "#33FFFFFF" : (tabMouse.containsMouse ? "#1FFFFFFF" : "#0FFFFFFF")
+                border.width: tabCurrent ? 1 : 0; border.color: "#3DFFFFFF"
+                MouseArea {
+                    id: tabMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                    onClicked: mouse => { if (mouse.button === Qt.MiddleButton) win.tabs.closeTab(tabItem.tabId); else win.tabs.activate(tabItem.tabId) }
+                }
+                Rectangle {   // loading dot / "unloaded" mark (the page was released to free memory)
+                    x: 9; anchors.verticalCenter: parent.verticalCenter; width: 7; height: 7; radius: 4
+                    color: tabItem.tabLoading ? Theme.accent : (tabItem.tabLive ? "#5528C840" : "#33FFFFFF")
+                }
+                Text {
+                    x: 22; width: parent.width - 22 - closeBox.width - 6; anchors.verticalCenter: parent.verticalCenter
+                    elide: Text.ElideRight; textFormat: Text.PlainText
+                    text: tabItem.tabLabel
+                    color: tabItem.tabCurrent ? Theme.ink : Theme.inkMuted; font.pixelSize: win.adaptive ? 13 : 11; font.family: Theme.fontFamily
+                }
+                Item {
+                    id: closeBox
+                    objectName: "engineTabClose"
+                    anchors.right: parent.right; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter
+                    width: win.adaptive ? 32 : 18; height: width
+                    Text { anchors.centerIn: parent; text: "×"; color: closeMouse.containsMouse ? Theme.ink : Theme.inkMuted; font.pixelSize: win.adaptive ? 18 : 14; font.family: Theme.fontFamily }
+                    MouseArea { id: closeMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.tabs.closeTab(tabItem.tabId) }
+                }
+            }
+        }
+    }
+
     // ── notice (refused address, download refused, certificate...) ─────
     Rectangle {
         id: noticeBar
         objectName: "engineNotice"
         visible: win.notice.length > 0
-        y: toolbar.height; width: parent.width; height: visible ? noticeText.implicitHeight + 12 : 0; z: 20
+        y: toolbar.height + win.stripHeight; width: parent.width; height: visible ? noticeText.implicitHeight + 12 : 0; z: 20
         color: "#26FACC15"
         Text {
             id: noticeText
@@ -188,7 +271,7 @@ Item {
     // ── page ───────────────────────────────────────────────────────────
     Item {
         id: page
-        y: toolbar.height + noticeBar.height
+        y: toolbar.height + win.stripHeight + noticeBar.height
         width: parent.width
         height: Math.max(0, parent.height - y - 22)
         clip: true
@@ -199,9 +282,8 @@ Item {
             active: false
             property int generation: -1
             onActiveChanged: if (active) generation = win.engine.generation
-            sourceComponent: EngineView {
+            sourceComponent: EnginePages {
                 engine: win.engine
-                url: "about:blank"
                 onRefused: text => win.showNotice(text)
             }
         }
@@ -264,7 +346,7 @@ Item {
         objectName: "engineConfirm"
         readonly property var ask: win.engine ? win.engine.pendingConfirm : ({})
         visible: ask.host !== undefined
-        x: 0; y: toolbar.height + noticeBar.height; z: 30
+        x: 0; y: toolbar.height + win.stripHeight + noticeBar.height; z: 30
         width: page.width; height: page.height
         color: "#E6101A2E"
         MouseArea { anchors.fill: parent }   // modal for the page area
@@ -313,10 +395,19 @@ Item {
     Rectangle {
         anchors.bottom: parent.bottom; width: parent.width; height: 22; color: "#14FFFFFF"
         Text {
-            x: 14; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 28; elide: Text.ElideRight
+            x: 14; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 28 - (viaText.visible ? viaText.implicitWidth + 12 : 0); elide: Text.ElideRight
             textFormat: Text.PlainText
             text: win.view && win.view.loading ? "Chargement… " + win.view.loadProgress + " %" : (win.view && win.view.title.length > 0 ? win.view.title : (win.engine ? win.engine.status : ""))
             color: Theme.inkMuted; font.pixelSize: 10; font.family: Theme.fontFamily
+        }
+        Text {
+            id: viaText
+            objectName: "engineVia"
+            anchors.right: parent.right; anchors.rightMargin: 14; anchors.verticalCenter: parent.verticalCenter
+            visible: win.ready
+            textFormat: Text.PlainText
+            text: "⇄ via " + (win.engine ? win.engine.serverLabel : "")
+            color: "#86EFAC"; font.pixelSize: 10; font.family: Theme.fontFamily
         }
     }
 }
