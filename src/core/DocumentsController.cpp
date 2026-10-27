@@ -36,6 +36,7 @@ DocumentsController::DocumentsController(RemoteController *remote,QObject *paren
     m_pool.setMaxThreadCount(1);
     m_draftTimer.setSingleShot(true);
     connect(&m_draftTimer,&QTimer::timeout,this,[this]{writeDraftNow();});
+    connect(remote,&RemoteController::linkChanged,this,&DocumentsController::changed);
     connect(remote,&RemoteController::changed,this,[this]{
         const int token=m_remote->connected()?m_remote->connectionToken():-1;
         if(m_busy ? m_operationToken!=token : (m_sourceToken>=0 && m_sourceToken!=token)){
@@ -45,19 +46,26 @@ DocumentsController::DocumentsController(RemoteController *remote,QObject *paren
     });
 }
 DocumentsController::~DocumentsController(){m_pool.waitForDone();}
-bool DocumentsController::canSave()const{return m_hasDocument&&!m_unknown&&m_remote->connected()&&m_sourceToken==m_remote->connectionToken();}
+bool DocumentsController::sourceAvailable()const{return m_hasDocument&&m_remote->connected()&&!m_remote->linkLost()&&m_sourceToken==m_remote->connectionToken()&&m_sourceServerId==m_remote->activeServerId();}
+bool DocumentsController::canSave()const{return sourceAvailable()&&!m_unknown;}
+bool DocumentsController::isCurrentDocument(const QString &path) const {
+    const auto clean=cleanAbsolutePath(path);
+    return clean && m_hasDocument && !m_new && !m_unknown && *clean==m_path && m_remote->connected()
+        && m_sourceToken==m_remote->connectionToken() && m_sourceServerId==m_remote->activeServerId();
+}
 void DocumentsController::setText(const QString &text){if(m_busy || text==m_text)return;m_text=text;emit changed();scheduleDraft();}
 void DocumentsController::setAutosaveDelay(int ms){m_autosaveMs=qBound(0,ms,600000);}
 void DocumentsController::discardDraft(){if(m_busy)return;m_draftTimer.stop();if(dirty()&&hasDocument()&&!m_new)deleteDraft();m_text=m_base;m_conflict=false;m_recovery.clear();emit changed();emit loaded();}
 void DocumentsController::createNew(){
     if(m_busy || !m_remote->connected())return;
     if(dirty()){m_status="Conservez ou abandonnez le brouillon avant de changer de document.";emit changed();return;}
-    ++m_seq;m_sourceToken=m_remote->connectionToken();m_sourceLabel=m_remote->serverLabel();
+    ++m_seq;m_sourceToken=m_remote->connectionToken();m_sourceLabel=m_remote->serverLabel();m_sourceServerId=m_remote->activeServerId();
     m_recovery.clear();m_conflict=false;m_draftTimer.stop();m_path.clear();m_base.clear();m_text="# Nouveau document\n";m_hash.clear();m_bom=m_crlf=m_unknown=false;m_new=m_hasDocument=true;
     m_status="Nouveau Markdown — choisissez un chemin absolu .md pour enregistrer.";emit changed();emit loaded();
 }
 void DocumentsController::open(const QString &path){
     if(m_busy || !m_remote->connected())return;
+    if(isCurrentDocument(path))return; // Re-activate without losing edits, selection or Undo.
     if(dirty()){m_status="Conservez ou abandonnez le brouillon avant d'ouvrir un autre document.";emit changed();return;}
     const auto clean=cleanAbsolutePath(path);
     if(!clean || !markdownPath(*clean)){m_status="Chemin absolu .md ou .markdown requis.";emit changed();return;}
@@ -73,7 +81,7 @@ void DocumentsController::open(const QString &path){
         if(result.status!=SshResult::Status::Ok || !decoded.error.isEmpty())m_status=result.status==SshResult::Status::Ok?decoded.error:result.message;
         else {
             m_path=target;m_text=m_base=decoded.text;m_bom=decoded.bom;m_crlf=decoded.crlf;m_hash=QCryptographicHash::hash(result.data,QCryptographicHash::Sha256);
-            m_sourceToken=token;m_sourceLabel=label;m_hasDocument=true;m_new=m_unknown=false;m_status="Markdown chargé · UTF-8 · "+QString(m_crlf?"CRLF":"LF");
+            m_sourceToken=token;m_sourceLabel=label;m_sourceServerId=m_remote->activeServerId();m_hasDocument=true;m_new=m_unknown=false;m_status="Markdown chargé · UTF-8 · "+QString(m_crlf?"CRLF":"LF");
             m_recovery.clear();m_conflict=false;m_draftStatus.clear();m_draftTimer.stop();
             emit changed();emit loaded();checkDraft();return;
         }
@@ -99,6 +107,8 @@ void DocumentsController::write(const QString &path,bool copy){
         m_busy=false;
         if(result.status==SshResult::Status::Ok){endDocTask(m_remote,taskId,"ok",result.directory);m_path=result.directory;m_base=m_text=text;m_hash=result.data;m_new=false;m_status="Enregistré : "+m_path;m_conflict=false;m_recovery.clear();
             if(!oldPath.isEmpty())deleteDraftFor(oldPath);if(m_path!=oldPath)deleteDraftFor(m_path);   // what was saved no longer needs its safety copy
+            // Refresh only the folder still being viewed; never replace a newer navigation.
+            if(m_remote->currentDirectory()==parentPath(m_path) && !m_remote->busy())m_remote->refresh();
             emit changed();emit saved(m_path);}
         else {endDocTask(m_remote,taskId,result.code=="unknown"?"unknown":"fail",result.code=="conflict"?QStringLiteral("Conflit : la version du serveur a changé."):result.message,result.code);m_unknown=result.code=="unknown";m_status=result.code=="conflict"?"Conflit : la version du serveur a changé. Votre texte est conservé (brouillon sur le serveur) ; comparez ou enregistrez une copie.":m_unknown?"Résultat inconnu. Aucun rejeu : vérifiez le fichier serveur. Brouillon conservé.":result.message;emit changed();
             if(result.code=="conflict"&&!copy)beginConflict();}
@@ -134,7 +144,7 @@ void DocumentsController::writeDraftNow(){
     watcher->setFuture(QtConcurrent::run(&m_pool,[request,script]{SshSession session;auto o=session.open(request);if(o.status!=SshResult::Status::Ok)return o;return session.runScript(script,4096);}));
 }
 void DocumentsController::deleteDraftFor(const QString &path){
-    if(path.isEmpty()||!m_remote->connected())return;
+    if(path.isEmpty()||!m_remote->connected()||m_sourceToken!=m_remote->connectionToken())return;
     const auto script=buildDraftDeleteScript(draftId(path));if(script.isEmpty())return;
     const auto request=m_remote->connectionRequest();
     auto *watcher=new QFutureWatcher<SshResult>(this);

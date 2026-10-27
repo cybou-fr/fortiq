@@ -91,12 +91,17 @@ Item {
     // Ends the session like a Linux logout: unsaved MDok drafts are protected,
     // windows close, the SSH connection ends and the login screen returns.
     function logout() {
-        if (!allowDocumentsClose()) return
         confirmSessionEnd("Se déconnecter", function() { endSession() })
     }
     // Every way of ending the session (logout, disconnect link, another server, quitting) asks first when the TaskManager
     // reports tasks that guard it; `proceed` runs at once when there are none.
-    function confirmSessionEnd(label, proceed) { sessionGuard.ask(label, proceed) }
+    function confirmSessionEnd(label, proceed) {
+        const managerWasOpen = serversOpen
+        const guarded = function() { if(managerWasOpen)shell.serversOpen=true;sessionGuard.ask(label, proceed) }
+        if(documentsController && documentsController.dirty && !documentsController.busy){
+            serversOpen=false;documentsOpen=true;raiseApp("docs");documentsWindow.request("continue","",guarded)
+        } else guarded()
+    }
     function endSession() {
         sessionMenuOpen = false; launcherOpen = false; controlOpen = false
         filesOpen = false; logsOpen = false; terminalOpen = false; disksOpen = false; documentsOpen = false; webOpen = false; networkOpen = false; systemOpen = false; dbOpen = false; mailOpen = false
@@ -218,6 +223,9 @@ Item {
         switch (a.type) {
         case "openDocument": documentsOpen = true; raiseApp("docs"); launcherOpen = false; documentsWindow.request("open", a.path); break
         case "revealInFiles": controller.navigate(a.path); filesOpen = true; raiseApp("files"); launcherOpen = false; break
+        case "revealFile":
+            filesOpen = true; raiseApp("files"); launcherOpen = false
+            filesWindow.revealFile(a.path, a.serverId); break
         case "showLogs": logsOpen = true; raiseApp("logs"); launcherOpen = false; logsWindow.showUnit(a.unit); break
         case "showService": systemOpen = true; raiseApp("system"); launcherOpen = false; systemWindow.showService(a.unit); break
         case "terminalHere": terminalOpen = true; raiseApp("terminal"); launcherOpen = false; terminalWindow.proposeCommand("cd -- " + shQuote(a.path)); break
@@ -448,17 +456,14 @@ Item {
         backdrop:wallpaper;documents:shell.documentsController;remote:shell.controller
         onCloseRequested:{shell.documentsOpen=false;if(shell.adaptive){shell.foregroundApp="files";shell.filesOpen=true}}
         onRequestServers:shell.serversOpen=true
-    }
-    function allowDocumentsClose(){
-        if(documentsController && (documentsController.dirty || documentsController.busy)){
-            documentsOpen=true;raiseApp("docs");return documentsWindow.allowAppClose()
-        }
-        return true
+        onRequestFiles:(path, serverId)=>shell.route({ type:"revealFile", path:path, serverId:serverId })
     }
     // Closing the window: unsaved MDok drafts first, then running tasks (asked once, then the app quits).
     function allowAppClose(){
-        if (!allowDocumentsClose()) return false
-        if (taskManager && taskManager.guardingCount() > 0) { sessionGuard.ask("Quitter", function() { Qt.quit() }); return false }
+        if ((documentsController && documentsController.dirty)
+                || (taskManager && taskManager.guardingCount() > 0)) {
+            confirmSessionEnd("Quitter", function() { Qt.quit() }); return false
+        }
         return true
     }
 

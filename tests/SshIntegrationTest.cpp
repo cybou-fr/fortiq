@@ -19,6 +19,7 @@
 #include "core/DocumentDraft.h"
 #include "core/DocumentsController.h"
 #include "core/MarkdownData.h"
+#include "core/RemotePath.h"
 #include "core/DiskInfo.h"
 #include "ssh/SshClient.h"
 
@@ -177,8 +178,21 @@ private slots:
             QTRY_VERIFY_WITH_TIMEOUT(remote.connected(),20000);
             docs.open(original);QTRY_VERIFY_WITH_TIMEOUT(!docs.busy(),20000);QCOMPARE(docs.path(),original);QVERIFY(docs.canSave());
             QCOMPARE(docs.text(),QString::fromUtf8("# Été\nПривет\n"));
-            docs.setText(QString::fromUtf8("# Modifié\nBonjour Привет\n"));QVERIFY(docs.dirty());docs.save();
+            remote.navigate(fortiq::parentPath(original));QTRY_VERIFY_WITH_TIMEOUT(!remote.busy(),20000);
+            QSignalSpy loadedAgain(&docs,&fortiq::DocumentsController::loaded);
+            docs.setText(QString::fromUtf8("# Modifié\nBonjour Привет\n"));QVERIFY(docs.dirty());
+            QVERIFY(docs.isCurrentDocument(original));docs.open(original);
+            QCOMPARE(loadedAgain.count(),0);QVERIFY(!docs.busy());QVERIFY(docs.dirty());
+            QCOMPARE(docs.text(),QString::fromUtf8("# Modifié\nBonjour Привет\n"));
+            QSignalSpy listingUpdates(&remote,&fortiq::RemoteController::entriesChanged);
+            docs.save();
             QTRY_VERIFY_WITH_TIMEOUT(!docs.busy(),20000);QVERIFY2(!docs.dirty(),qPrintable(docs.status()));
+            QTRY_VERIFY_WITH_TIMEOUT(!remote.busy() && listingUpdates.count()>0,20000);
+            bool foundSaved=false;
+            for(const auto &entry:remote.entries())if(entry.toMap().value("path").toString()==original){
+                QCOMPARE(entry.toMap().value("size").toLongLong(),qint64(fortiq::encodeMarkdown(docs.text(),true,true).size()));foundSaved=true;
+            }
+            QVERIFY(foundSaved);
             const auto savedBytes=fortiq::encodeMarkdown(docs.text(),true,true);
             QCOMPARE(session.readFile(original,262144).data,savedBytes);
             const auto external=QByteArray("# External\r\n");
@@ -2411,6 +2425,14 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(!docs.busy() && docs.hasDocument(), 20000);
         QVERIFY(docs.text().contains("# A")); QVERIFY(docs.canSave());
         const QString docLabelA = docs.sourceLabel();
+        const QString docPathA = docs.path();
+        QCOMPARE(docs.sourceServerId(),idA);
+        docs.setText("# A unsaved draft\n");
+        // B has an independent draft with exactly A's path hash. Discarding A must never delete it.
+        fortiq::DraftMeta otherDraft;otherDraft.path=docPathA;otherDraft.baseHashHex=QString(64,'a');otherDraft.savedAtSecs=QDateTime::currentSecsSinceEpoch();
+        const auto otherWrite=run(requestB,fortiq::buildDraftWriteScript(fortiq::draftId(docPathA),fortiq::draftMetaText(otherDraft),"# B independent draft\n","abguard"));
+        QCOMPARE(otherWrite.code,QString("exit:0"));
+        auto clearOtherDraft=qScopeGuard([&]{run(requestB,fortiq::buildDraftDeleteScript(fortiq::draftId(docPathA)));});
         loadJournal();
         QTRY_VERIFY_WITH_TIMEOUT(journalHas("ABLINE-A"), 20000);
         QVERIFY(!journalHas("ABLINE-B"));
@@ -2440,10 +2462,15 @@ private slots:
         // The document of A stays what it is (nothing is lost) but is not B's: it cannot be saved over there.
         QVERIFY(!docs.canSave());
         QCOMPARE(docs.sourceLabel(), docLabelA);
+        QCOMPARE(docs.sourceServerId(),idA);QVERIFY(!docs.isCurrentDocument(docPathA));
+        QCOMPARE(docs.text(),QString("# A unsaved draft\n"));
         docs.discardDraft();
         docs.open(homeB + "/ab-test/who.md");
         QTRY_VERIFY_WITH_TIMEOUT(!docs.busy() && docs.hasDocument() && docs.text().contains("# B"), 20000);
         QVERIFY(!docs.text().contains("# A")); QVERIFY(docs.sourceLabel() != docLabelA);
+        QCOMPARE(docs.sourceServerId(),idB);
+        const auto keptDraft=run(requestB,fortiq::buildDraftReadScript(fortiq::draftId(docPathA)));
+        QCOMPARE(fortiq::parseDraftRead(keptDraft.data).documentBytes,QByteArray("# B independent draft\n"));
         // Logs: A's journal line is gone, B's is read from B.
         // (a frozen display of A may remain after the switch, but it says whose it is and that the source is gone)
         QCOMPARE(logs.state(), QStringLiteral("disconnected"));

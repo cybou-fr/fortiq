@@ -1,4 +1,5 @@
 #include <QtTest>
+#include <QJSValue>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQmlComponent>
@@ -161,6 +162,7 @@ QtObject {
     property bool connected: true
     property string activeServerId: "srvA"
     property string serverLabel: "u@a"
+    property int connectionGeneration:1
     property var navigated: []
     property string trashDirectory: ""
     property var servers: []
@@ -1121,6 +1123,12 @@ QtObject { property bool connected: true; property bool linkLost: false; propert
                 QtObject {
                     property bool connected:true
                     property string currentDirectory:"/home/fixture"
+                    property string activeServerId:"document-fixture"
+                    property int connectionGeneration:1
+                    readonly property bool sourceAvailable:connected && activeServerId===sourceServerId && connectionGeneration===1
+                    property string sourceServerId:"document-fixture"
+                    property int opens:0
+                    property bool saveFails:false
                     property string serverLabel:"fixture"
                     property bool busy:false
                     property bool hasDocument:true
@@ -1135,9 +1143,11 @@ QtObject { property bool connected: true; property bool linkLost: false; propert
                     signal loaded()
                     signal saved(string path)
                     function discardDraft(){text=base;loaded()}
-                    function save(){base=text;saved(path)}
+                    function save(){if(saveFails){status="Échec simulé";changed();return}base=text;status="Enregistré : "+path;saved(path)}
                     function saveAs(p){save()}
-                    function open(p){}
+                    function isCurrentDocument(p){return p===path && sourceServerId===activeServerId}
+                    function open(p){++opens;path=p;status="UTF-8";loaded()}
+                    signal changed()
                     function createNew(){}
                     property var recovery:({})
                     property string draftStatus:""
@@ -1163,12 +1173,48 @@ QtObject { property bool connected: true; property bool linkLost: false; propert
             editor->setProperty("text",QString::fromUtf8("# Modifié\nПривет **texte**\n"));QVERIFY(fixture->property("dirty").toBool());
             editor->forceActiveFocus();QTest::keyClick(window,Qt::Key_S,Qt::ControlModifier);QVERIFY(!fixture->property("dirty").toBool());
             editor->setProperty("text",QString("unsaved"));QVERIFY(fixture->property("dirty").toBool());
-            QVERIFY(QMetaObject::invokeMethod(doc,"request",Q_ARG(QVariant,QVariant("close")),Q_ARG(QVariant,QVariant(""))));
+            QVERIFY(QMetaObject::invokeMethod(doc,"request",Q_ARG(QVariant,QVariant("close")),Q_ARG(QVariant,QVariant("")),Q_ARG(QVariant,QVariant())));
             auto *dialog=doc->findChild<QQuickItem *>("documentsUnsavedDialog");QVERIFY(dialog);QVERIFY(dialog->isVisible());
             QTest::keyClick(window,Qt::Key_Escape);QVERIFY(!dialog->isVisible());QVERIFY(doc->isVisible());
             QCOMPARE(shell->property("foregroundApp").toString(),QString("docs"));
-            QVariant allowed;QVERIFY(QMetaObject::invokeMethod(shell,"allowAppClose",Q_RETURN_ARG(QVariant,allowed)));QVERIFY(!allowed.toBool());QVERIFY(dialog->isVisible());
+            shell->setProperty("serversOpen",true);
+            QVariant allowed;QVERIFY(QMetaObject::invokeMethod(shell,"allowAppClose",Q_RETURN_ARG(QVariant,allowed)));QVERIFY(!allowed.toBool());QVERIFY(dialog->isVisible());QVERIFY(!shell->property("serversOpen").toBool());
             QTest::keyClick(window,Qt::Key_Escape);QVERIFY(!dialog->isVisible());
+            // Re-opening this dirty document activates it without a discard prompt or a read.
+            QVERIFY(QMetaObject::invokeMethod(doc,"request",Q_ARG(QVariant,QVariant("open")),Q_ARG(QVariant,fixture->property("path")),Q_ARG(QVariant,QVariant())));
+            QVERIFY(!dialog->isVisible());QCOMPARE(fixture->property("text").toString(),QString("unsaved"));
+            QCOMPARE(fixture->property("opens").toInt(),0);
+            // A different document offers Save and continue; failed saves keep the current text and target pending.
+            auto requestOther=[&] { return QMetaObject::invokeMethod(doc,"request",Q_ARG(QVariant,QVariant("open")),Q_ARG(QVariant,QVariant(QString("/home/fixture/other-%1.md").arg(fixture->property("opens").toInt()))),Q_ARG(QVariant,QVariant())); };
+            QVERIFY(requestOther());QVERIFY(dialog->isVisible());
+            QCOMPARE(dialog->property("confirmText").toString(),QString("Enregistrer et continuer"));
+            fixture->setProperty("saveFails",true);
+            QVERIFY(QMetaObject::invokeMethod(dialog,"confirm"));QVERIFY(dialog->isVisible());
+            QCOMPARE(fixture->property("opens").toInt(),0);QVERIFY(fixture->property("dirty").toBool());
+            QVERIFY(!doc->property("waitingForSave").toBool());
+            fixture->setProperty("saveFails",false);
+            QVERIFY(QMetaObject::invokeMethod(dialog,"confirm"));QVERIFY(!dialog->isVisible());
+            QCOMPARE(fixture->property("opens").toInt(),1);QVERIFY(!fixture->property("dirty").toBool());
+            // A stale confirmation must neither discard the draft nor open its target on another server.
+            editor->setProperty("text",QString("keep on original server"));QVERIFY(requestOther());
+            fixture->setProperty("activeServerId",QString("different-server"));
+            QVERIFY(QMetaObject::invokeMethod(doc,"continuePending",Q_ARG(QVariant,QVariant(true))));
+            QCOMPARE(fixture->property("opens").toInt(),1);QVERIFY(fixture->property("dirty").toBool());
+            QVERIFY(dialog->isVisible());QVERIFY(!dialog->property("error").toString().isEmpty());
+            QTest::keyClick(window,Qt::Key_Escape);fixture->setProperty("activeServerId",QString("document-fixture"));
+            // Even a reconnect to the same profile invalidates the old confirmation.
+            QVERIFY(requestOther());fixture->setProperty("connectionGeneration",2);
+            QVERIFY(QMetaObject::invokeMethod(doc,"continuePending",Q_ARG(QVariant,QVariant(true))));
+            QVERIFY(dialog->isVisible());QVERIFY(fixture->property("dirty").toBool());
+            QTest::keyClick(window,Qt::Key_Escape);
+            fixture->setProperty("connectionGeneration",1);
+            auto *showFiles=doc->findChild<QQuickItem *>("documentsShowInFiles");QVERIFY(showFiles);
+            QSignalSpy revealRequests(doc,SIGNAL(requestFiles(QString,QString)));QVERIFY(revealRequests.isValid());
+            doc->setProperty("navigationOpen",true);settle(window);QVERIFY(showFiles->isVisible());QVERIFY(showFiles->isEnabled());
+            QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,showFiles->mapToScene(QPointF(showFiles->width()/2,showFiles->height()/2)).toPoint());
+            QCOMPARE(revealRequests.count(),1);QCOMPARE(revealRequests.first().at(1).toString(),QString("document-fixture"));
+            fixture->setProperty("activeServerId",QString("different-server"));QVERIFY(!showFiles->isEnabled());
+            fixture->setProperty("activeServerId",QString("document-fixture"));
             // MDok find / replace and Markdown shortcuts
             editor->setProperty("text",QString("one two one\n"));editor->forceActiveFocus();
             QTest::keyClick(window,Qt::Key_F,Qt::ControlModifier);
@@ -1181,13 +1227,14 @@ QtObject { property bool connected: true; property bool linkLost: false; propert
             QVERIFY(QMetaObject::invokeMethod(doc,"replaceEverything"));
             QCOMPARE(editor->property("text").toString(),QString("1 two 1\n"));
             QCOMPARE(fixture->property("text").toString(),QString("1 two 1\n"));
-            QTest::keyClick(window,Qt::Key_Escape);QTRY_V(!findBar->isVisible());
+            QTest::keyClick(window,Qt::Key_Escape);QTRY_V(!findBar->isVisible());QVERIFY(!dialog->isVisible());QVERIFY(doc->isVisible());
             QVERIFY(QMetaObject::invokeMethod(editor,"select",Q_ARG(int,2),Q_ARG(int,5)));          // "two"
             QVERIFY(QMetaObject::invokeMethod(doc,"wrapSelection",Q_ARG(QVariant,QVariant("**")),Q_ARG(QVariant,QVariant("**")),Q_ARG(QVariant,QVariant(false))));
             QCOMPARE(editor->property("text").toString(),QString("1 **two** 1\n"));
             auto *statsText=doc->findChild<QQuickItem *>("documentsStats");QVERIFY(statsText);
             editor->setProperty("text",QString::fromUtf8("# Projet Été\n\n**Objectif** : Bonjour Привет.\n\n- Document serveur\n- Enregistrement sûr\n\n> Note de travail\n"));
             fixture->setProperty("base",fixture->property("text"));
+            QTRY_V([&] { QString finalPreview; return QMetaObject::invokeMethod(render,"plainText",Q_RETURN_ARG(QString,finalPreview)) && finalPreview.contains(QString::fromUtf8("Projet Été")); }());
             if(adaptive)doc->setProperty("previewMode",true);
             settle(window);
             QVERIFY(window->grabWindow().save(QString("layout-captures/%1-mdok.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
@@ -1505,6 +1552,23 @@ QtObject { property bool connected: true; property bool linkLost: false; propert
             QCOMPARE(router->property("navigated").toStringList(), QStringList{ "/mnt/data" });
             QVERIFY(shell->property("filesOpen").toBool());
 
+            // Reveal selects the routed file after clearing the local filter, in the same server only.
+            auto *routedFiles=shell->findChild<QQuickItem *>("filesWindow");QVERIFY(routedFiles);
+            routedFiles->setProperty("filterText",QString("does-not-match"));
+            QVERIFY(act("revealFile",{{"path","/home/demo/Notes.txt"}}));settle(window);
+            QCOMPARE(routedFiles->property("filterText").toString(),QString());
+            QCOMPARE(routedFiles->property("selected").value<QJSValue>().property("path").toString(),QString("/home/demo/Notes.txt"));
+            const auto navigations=router->property("navigated").toStringList();
+            QVERIFY(!route({{"type","revealFile"},{"path","/home/demo/Budget.xlsx"},{"serverId","srvB"}}));
+            QCOMPARE(router->property("navigated").toStringList(),navigations);
+            router->setProperty("busy",true);QVERIFY(act("revealFile",{{"path","/home/demo/Budget.xlsx"}}));
+            router->setProperty("activeServerId",QString("srvB"));QVERIFY(QMetaObject::invokeMethod(router,"changed"));settle(window);
+            QCOMPARE(routedFiles->property("pendingRevealPath").toString(),QString());
+            router->setProperty("busy",false);router->setProperty("activeServerId",QString("srvA"));
+            // A failed folder navigation must not leave an old selection request armed.
+            QVERIFY(act("revealFile",{{"path","/missing/Notes.txt"}}));settle(window);
+            QCOMPARE(routedFiles->property("pendingRevealPath").toString(),QString());
+            QVERIFY(routedFiles->property("noticeError").toBool());
             shell->setProperty("systemOpen", false); shell->setProperty("logsOpen", false); shell->setProperty("terminalOpen", false); shell->setProperty("filesOpen", false);
             shell->setProperty("systemController", QVariant::fromValue<QObject *>(nullptr));
             shell->setProperty("controller", QVariant::fromValue<QObject *>(nullptr));

@@ -13,7 +13,12 @@ Item {
     property bool syncing:false
     property string pendingAction:""
     property string pendingPath:""
+    property string pendingServerId:""
+    property int pendingGeneration:-1
+    property var pendingContinuation:null
+    property bool waitingForSave:false
     property bool findOpen:false
+    property bool escapeHandled:false
     property bool replaceMode:false
     property var matchStarts:[]
     property int matchIndex:-1
@@ -26,6 +31,7 @@ Item {
     readonly property bool split:!adaptive && width-contentLeft>=680
     signal closeRequested()
     signal requestServers()
+    signal requestFiles(string path, string serverId)
     function syncDocument(){
         if(!editor || !pathInput)return
         syncing=true;editor.text=documents?documents.text:"";syncing=false
@@ -38,10 +44,43 @@ Item {
         else if(action==="quit")Qt.quit()
         else if(documents){if(action==="open")documents.open(path);else if(action==="new")documents.createNew()}
     }
-    function request(action,path){
+    function clearPending(){
+        pendingAction="";pendingPath="";pendingServerId="";pendingGeneration=-1;pendingContinuation=null
+        waitingForSave=false;confirm.busy=false
+    }
+    function pendingStillValid(){
+        return remote && remote.activeServerId===pendingServerId && remote.connectionGeneration===pendingGeneration
+    }
+    function continuePending(discard){
+        if(!pendingStillValid()){
+            confirm.error="Le serveur a changé. Annulez puis recommencez sur le bon serveur."
+            waitingForSave=false;confirm.busy=false;return
+        }
+        const action=pendingAction,path=pendingPath,go=pendingContinuation
+        clearPending();confirm.visible=false
+        if(discard && documents)documents.discardDraft()
+        if(go)go();else perform(action,path)
+    }
+    function saveAndContinue(){
+        if(!documents)return
+        if(!pendingStillValid()){confirm.error="Le serveur a changé. Annulez puis recommencez.";return}
+        if(!documents.canSave){confirm.error="Source indisponible : texte conservé, enregistrement désactivé.";return}
+        waitingForSave=true;confirm.busy=true;confirm.error=""
+        saveDocument()
+    }
+    function request(action,path,continuation){
         if(documents && documents.busy)return
-        if(documents && documents.dirty){pendingAction=action;pendingPath=path||"";confirm.openWith("Modifications non enregistrées","Conservez le brouillon en enregistrant ou en copiant son texte avant de continuer.","Abandonner le brouillon",true,false,"");return}
-        perform(action,path||"")
+        if(action==="open" && documents && documents.isCurrentDocument(path)){
+            editor.forceActiveFocus();return
+        }
+        if(documents && documents.dirty){
+            pendingAction=action;pendingPath=path||"";pendingContinuation=continuation||null
+            pendingServerId=remote?remote.activeServerId:"";pendingGeneration=remote?remote.connectionGeneration:-1
+            confirm.openWith("Modifications non enregistrées","Enregistrez vos modifications avant de continuer, ou abandonnez-les explicitement.",documents.canSave?"Enregistrer et continuer":"Abandonner",!documents.canSave,false,"")
+            confirm.altText=documents.canSave?"Abandonner":""
+            return
+        }
+        if(continuation)continuation();else perform(action,path||"")
     }
     // ---- find / replace (the TextEdit is edited in place, so Undo keeps working) ----
     function openFind(withReplace){
@@ -51,6 +90,7 @@ Item {
         refreshMatches();findField.forceActiveFocus();findField.selectAll()
     }
     function closeFind(){findOpen=false;editor.forceActiveFocus()}
+    function closeFindFromEscape(){escapeHandled=true;closeFind()}
     function refreshMatches(){
         matchStarts=findOpen && findField.text.length>0?finder.matches(editor.text,findField.text,caseButton.checked,wordButton.checked):[]
         matchIndex=-1
@@ -91,10 +131,10 @@ Item {
         if(selectInner)editor.select(b+prefix.length+suffix.indexOf("(")+1,b+prefix.length+suffix.length-1)
         else editor.select(a+prefix.length,b+prefix.length)
     }
-    function allowAppClose(){if(documents && documents.busy)return false;if(documents && documents.dirty){request("quit","");return false}return true}
     function handleBack(){
-        if(confirm.visible){confirm.visible=false;return true}
+        if(confirm.visible){if(!confirm.busy){confirm.visible=false;clearPending()}return true}
         if(navigationOpen){navigationOpen=false;return true}
+        if(findOpen){closeFind();return true}
         if(!split && previewMode){previewMode=false;return true}
         request("close","");return true
     }
@@ -119,6 +159,12 @@ Item {
             Text { text:"DOCUMENT MARKDOWN";color:Theme.inkMuted;font.pixelSize:10 }
             Text { width:parent.width;textFormat:Text.PlainText;wrapMode:Text.WrapAnywhere;text:win.documents && win.documents.hasDocument?(win.documents.path||"Nouveau document"):"Aucun document ouvert";color:Theme.ink;font.pixelSize:12 }
             Text { width:parent.width;textFormat:Text.PlainText;wrapMode:Text.WrapAnywhere;text:win.documents?win.documents.sourceLabel:"";color:Theme.inkMuted;font.pixelSize:11 }
+            Button {
+                objectName:"documentsShowInFiles";width:parent.width;text:"Afficher dans Fichiers"
+                enabled:win.documents!==null && win.documents.hasDocument && !win.documents.isNew
+                    && win.connected && win.documents.sourceAvailable && win.documents.sourceServerId===win.remote.activeServerId
+                onClicked:{win.navigationOpen=false;win.requestFiles(win.documents.path,win.documents.sourceServerId)}
+            }
             Text { width:parent.width;wrapMode:Text.WordWrap;text:"Markdown UTF-8\n256 Kio maximum\n\nLes images et liens externes ne sont pas chargés.\n\nPDF : pas encore disponible.";color:Theme.inkMuted;font.pixelSize:11 }
         }
     }
@@ -174,7 +220,7 @@ Item {
                 onTextChanged:{win.refreshMatches();findCount.text=win.matchStarts.length>0?win.matchStarts.length+" résultat(s)":(text.length>0?"aucun résultat":"")}
                 onAccepted:win.goTo(true)
                 Keys.onPressed:event=>{
-                    if(event.key===Qt.Key_Escape){win.closeFind();event.accepted=true}
+                    if(event.key===Qt.Key_Escape){win.closeFindFromEscape();event.accepted=true}
                     else if((event.key===Qt.Key_Return||event.key===Qt.Key_Enter)&&(event.modifiers&Qt.ShiftModifier)){win.goTo(false);event.accepted=true}
                 }
             }
@@ -189,7 +235,7 @@ Item {
             x:8;y:(win.adaptive?52:36);spacing:6;height:win.adaptive?40:28
             TextField {
                 id:replaceField;objectName:"documentsReplace";width:Math.max(80,findBar.width-(win.adaptive?340:300));height:parent.height;placeholderText:"Remplacer par";selectByMouse:true
-                Keys.onPressed:event=>{if(event.key===Qt.Key_Escape){win.closeFind();event.accepted=true}}
+                Keys.onPressed:event=>{if(event.key===Qt.Key_Escape){win.closeFindFromEscape();event.accepted=true}}
             }
             Button { objectName:"documentsReplaceOne";height:parent.height;text:"Remplacer";onClicked:win.replaceCurrent() }
             Button { objectName:"documentsReplaceAll";height:parent.height;text:"Tout";onClicked:win.replaceEverything() }
@@ -252,7 +298,7 @@ Item {
         Button { objectName:"documentsConnectButton";visible:!win.connected;anchors.horizontalCenter:parent.horizontalCenter;text:"Choisir un serveur…";onClicked:win.requestServers() }
         Text { width:parent.width;horizontalAlignment:Text.AlignHCenter;wrapMode:Text.WordWrap;text:"Ouvrez un .md depuis Fichiers ou saisissez son chemin ci-dessus.";color:Theme.inkMuted;font.pixelSize:12 }
     }
-    Text { x:win.contentLeft+12;anchors.bottom:parent.bottom;anchors.bottomMargin:34;width:win.width-x-12;height:42;wrapMode:Text.WordWrap;maximumLineCount:3;elide:Text.ElideRight;textFormat:Text.PlainText;color:Theme.inkMuted;font.pixelSize:11;text:win.documents?win.documents.status+(win.documents.draftStatus!==""?"  ·  "+win.documents.draftStatus:""):"Choisissez un serveur Linux." }
+    Text { x:win.contentLeft+12;anchors.bottom:parent.bottom;anchors.bottomMargin:34;width:win.width-x-12;height:42;wrapMode:Text.WordWrap;maximumLineCount:3;elide:Text.ElideRight;textFormat:Text.PlainText;color:Theme.inkMuted;font.pixelSize:11;text:win.documents?(win.documents.hasDocument && !win.documents.sourceAvailable?"Source indisponible · texte conservé en mémoire. ":"")+win.documents.status+(win.documents.draftStatus!==""?"  ·  "+win.documents.draftStatus:""):"Choisissez un serveur Linux." }
     ToolButtonGlass { x:win.contentLeft+12;anchors.bottom:parent.bottom;anchors.bottomMargin:4;glyph:"⧉";tip:"Copier le brouillon dans le presse-papiers";enabledState:win.documents!==null && win.documents.hasDocument;onClicked:{const start=editor.selectionStart,end=editor.selectionEnd;editor.selectAll();editor.copy();editor.select(start,end)} }
     Text { x:win.contentLeft+50;anchors.bottom:parent.bottom;anchors.bottomMargin:10;visible:preview.limited;text:"Aperçu limité aux 64 000 premiers caractères";color:Theme.inkMuted;font.pixelSize:10 }
     Keys.onPressed:event=>{
@@ -262,20 +308,31 @@ Item {
         else if(ctrl && event.key===Qt.Key_F){win.openFind(false);event.accepted=true}
         else if(ctrl && event.key===Qt.Key_H){win.openFind(true);event.accepted=true}
         else if(event.key===Qt.Key_F3){win.findOpen=true;win.goTo(!(event.modifiers&Qt.ShiftModifier));event.accepted=true}
-        else if(event.key===Qt.Key_Escape && win.findOpen){win.closeFind();event.accepted=true}
+        else if(event.key===Qt.Key_Escape && win.findOpen){win.closeFindFromEscape();event.accepted=true}
         else if(ctrl && event.key===Qt.Key_B){win.wrapSelection("**","**",false);event.accepted=true}
         else if(ctrl && event.key===Qt.Key_I){win.wrapSelection("*","*",false);event.accepted=true}
         else if(ctrl && event.key===Qt.Key_K){win.wrapSelection("[","](https://)",true);event.accepted=true}
     }
+    // A handled search Escape must not become a second Back action in the shell.
+    Keys.onReleased:event=>{
+        if(event.key===Qt.Key_Escape && win.escapeHandled){win.escapeHandled=false;event.accepted=true}
+    }
     GlassDialog {
         id:confirm;objectName:"documentsUnsavedDialog";anchors.fill:parent;touchMode:win.adaptive
-        onAccepted:{visible=false;if(win.documents)win.documents.discardDraft();win.perform(win.pendingAction,win.pendingPath)}
-        onRejected:win.pendingAction=""
+        onAccepted:if(danger)win.continuePending(true);else win.saveAndContinue()
+        onAlternate:win.continuePending(true)
+        onRejected:win.clearPending()
         Keys.onEscapePressed:event=>{event.accepted=true}
-        Keys.onReleased:event=>{if(event.key===Qt.Key_Escape){event.accepted=true;visible=false;win.pendingAction="";editor.forceActiveFocus()}}
+        Keys.onReleased:event=>{if(event.key===Qt.Key_Escape){event.accepted=true;if(!busy){visible=false;win.clearPending();editor.forceActiveFocus()}}}
     }
     Connections { target:win.documents
+        function onChanged(){
+            if(win.waitingForSave && !win.documents.busy && win.documents.dirty){
+                win.waitingForSave=false;confirm.busy=false;confirm.error=win.documents.status
+            }
+            if(win.documents.conflictActive && confirm.visible){confirm.visible=false;win.clearPending()}
+        }
         function onLoaded(){win.syncDocument()}
-        function onSaved(path){pathInput.text=path}
+        function onSaved(path){pathInput.text=path;if(win.waitingForSave)win.continuePending(false)}
     }
 }

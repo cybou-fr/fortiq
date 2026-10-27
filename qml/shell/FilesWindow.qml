@@ -74,6 +74,35 @@ Item {
     readonly property var selected: view.currentIndex >= 0 && view.currentIndex < shown.length ? shown[view.currentIndex] : null
     readonly property Item view: viewMode === "grid" ? grid : list
 
+    // A routed document keeps its server identity until the folder listing arrives.
+    property string pendingRevealPath:""
+    property string pendingRevealServerId:""
+    property int pendingRevealGeneration:-1
+    function revealFile(path, serverId){
+        if(!connected || serverId!==controller.activeServerId || !path.startsWith("/"))return
+        const slash=path.lastIndexOf("/")
+        if(slash===path.length-1)return
+        pendingRevealPath=path;pendingRevealServerId=serverId;pendingRevealGeneration=controller.connectionGeneration;filterText=""
+        if(path.slice(slash+1).startsWith("."))showHidden=true
+        controller.navigate(slash===0?"/":path.slice(0,slash))
+        Qt.callLater(tryReveal)
+    }
+    function tryReveal(){
+        if(pendingRevealPath.length===0)return
+        if(!connected || controller.activeServerId!==pendingRevealServerId || controller.connectionGeneration!==pendingRevealGeneration){pendingRevealPath="";return}
+        if(busy)return
+        const slash=pendingRevealPath.lastIndexOf("/")
+        if(location!==(slash===0?"/":pendingRevealPath.slice(0,slash))){
+            pendingRevealPath="";showNotice("Impossible d'ouvrir le dossier du document.",true);return
+        }
+        const index=shown.findIndex(e=>e.path===pendingRevealPath)
+        if(index<0 && controller.hasMore===true && entries.length<50000){controller.loadMore(true);Qt.callLater(tryReveal);return}
+        pendingRevealPath=""
+        if(index<0){showNotice("Le fichier n'est pas présent dans les éléments chargés de ce dossier.",true);return}
+        grid.currentIndex=index;list.currentIndex=index
+        view.positionViewAtIndex(index,GridView.Contain);view.forceActiveFocus()
+    }
+    onShownChanged:if(pendingRevealPath.length>0)Qt.callLater(tryReveal)
     function formatSize(bytes) {
         if (bytes === undefined || bytes === null) return ""
         const units = ["o", "Ko", "Mo", "Go", "To"]
@@ -408,6 +437,7 @@ Item {
     Connections {
         target: win.connected ? win.controller : null
         ignoreUnknownSignals: true
+        function onChanged(){if(win.pendingRevealPath.length>0)Qt.callLater(win.tryReveal)}
         function onOperationFinished(ok, message, code, path) {
             if (!ok && code === "conflict" && win.pendingOp === "restore") {
                 win.pendingOp = "restoreKeepBoth"

@@ -10,6 +10,7 @@ class DocumentsController:public QObject {
     Q_OBJECT
     Q_PROPERTY(QString path READ path NOTIFY changed)
     Q_PROPERTY(QString text READ text WRITE setText NOTIFY changed)
+    Q_PROPERTY(QString sourceServerId READ sourceServerId NOTIFY changed)
     Q_PROPERTY(QString sourceLabel READ sourceLabel NOTIFY changed)
     Q_PROPERTY(QString status READ status NOTIFY changed)
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
@@ -17,6 +18,7 @@ class DocumentsController:public QObject {
     Q_PROPERTY(bool hasDocument READ hasDocument NOTIFY changed)
     Q_PROPERTY(bool isNew READ isNew NOTIFY changed)
     Q_PROPERTY(bool canSave READ canSave NOTIFY changed)
+    Q_PROPERTY(bool sourceAvailable READ sourceAvailable NOTIFY changed)
     // Server-side drafts (docs/MDOK.md): a draft of THIS document found on its server after opening (savedAt, baseMatches, lines), and the
     // state of the last autosave. Conflict screen: shown when the server version changed under a save.
     Q_PROPERTY(QVariantMap recovery READ recovery NOTIFY changed)
@@ -29,10 +31,13 @@ public:
     explicit DocumentsController(RemoteController *remote,QObject *parent=nullptr);
     ~DocumentsController() override;
     QString path()const{return m_path;} QString text()const{return m_text;}
+    QString sourceServerId()const{return m_sourceServerId;}
+    Q_INVOKABLE bool isCurrentDocument(const QString &path) const;
     QString sourceLabel()const{return m_sourceLabel;} QString status()const{return m_status;}
     bool busy()const{return m_busy;} bool dirty()const{return m_text!=m_base;}
     bool hasDocument()const{return m_hasDocument;} bool isNew()const{return m_new;}
     bool canSave()const;
+    bool sourceAvailable()const;
     QVariantMap recovery()const{return m_recovery;} QString draftStatus()const{return m_draftStatus;}
     bool conflictActive()const{return m_conflict;} bool conflictBusy()const{return m_conflictBusy;}
     QString conflictDiff()const{return m_conflictDiff;} QString conflictSummary()const{return m_conflictSummary;}
@@ -64,7 +69,7 @@ private:
     QThreadPool m_pool;
     int m_seq=0,m_sourceToken=-1,m_operationToken=-1;
     bool m_busy=false,m_writing=false,m_hasDocument=false,m_new=false,m_bom=false,m_crlf=false,m_unknown=false;
-    QString m_path,m_text,m_base,m_sourceLabel,m_status="Ouvrez un document Markdown du serveur.";
+    QString m_path,m_text,m_base,m_sourceServerId,m_sourceLabel,m_status="Ouvrez un document Markdown du serveur.";
     QByteArray m_hash;
     QTimer m_draftTimer;
     int m_autosaveMs=5000;

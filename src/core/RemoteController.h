@@ -25,6 +25,7 @@ class RemoteController : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
     Q_PROPERTY(bool connected READ connected NOTIFY changed)
+    Q_PROPERTY(int connectionGeneration READ connectionToken NOTIFY changed)
     Q_PROPERTY(QString statusText READ statusText NOTIFY changed)
     Q_PROPERTY(QString currentDirectory READ currentDirectory NOTIFY changed)
     Q_PROPERTY(QString homeDirectory READ homeDirectory NOTIFY changed)
