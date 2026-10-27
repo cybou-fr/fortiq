@@ -3,3 +3,7 @@
 
 # vcpkg overlay ports: patches and the OpenSSL configure script must keep LF (a CRLF checkout breaks patch application)
 third_party/vcpkg-overlay-ports/** text eol=lf
+
+# Debian maintainer scripts run on Linux
+packaging/debian/postinst text eol=lf
+packaging/debian/prerm text eol=lf
