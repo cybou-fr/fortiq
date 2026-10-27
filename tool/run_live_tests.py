@@ -61,6 +61,7 @@ def main():
     ap.add_argument("--qt-bin", default="C:/Qt/6.12.0/msvc2022_64/bin")
     ap.add_argument("--vcpkg-bin", default="C:/Users/cybou/vcpkg/installed/x64-windows/bin")
     ap.add_argument("--timeout", type=int, default=900)
+    ap.add_argument("--only", default="", help="comma-separated suite names (for example fortiq_engine_it): run just these, for development; a release run uses none")
     opts = ap.parse_args()
 
     build = Path(opts.build).resolve()
@@ -105,7 +106,9 @@ def main():
     results = []
     # Offline suites first (they also run under ctest), then the live ones.
     for name in ["fortiq_task_tests", "fortiq_db_tests", "fortiq_mail_tests", "fortiq_mailsend_tests", "fortiq_browser_tests", "fortiq_network_tests",
-                 "fortiq_system_tests", "fortiq_credentials_tests", "fortiq_document_tests", "fortiq_logs_tests", "fortiq_publication_tests", "fortiq_gateway_tests", "fortiq_gateway_it", "fortiq_ssh_it"]:
+                 "fortiq_system_tests", "fortiq_credentials_tests", "fortiq_document_tests", "fortiq_logs_tests", "fortiq_publication_tests", "fortiq_gateway_tests", "fortiq_gateway_it", "fortiq_engine_tests", "fortiq_engine_it", "fortiq_ssh_it"]:
+        if opts.only and name not in opts.only.split(","):
+            continue
         exe = build / f"{name}.exe"
         if not exe.exists():
             results.append({"name": name, "rc": -1, "totals": "NOT BUILT", "failed": ["missing executable"], "skipped": []})

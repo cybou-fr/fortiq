@@ -21,6 +21,31 @@ Item {
     property var disksController: null
     property var browserController: null
     property bool webOpen: false
+    // Browser engine (Chromium, docs/BROWSER.md): the default Browser when this build has it; the text reader (curl on the server) is
+    // the fallback the user can pick ("Lecteur simple") and the only Browser of builds without Qt WebEngine.
+    property var engineBrowser: null
+    property bool webText: false
+    readonly property bool engineOn: engineBrowser !== null && engineBrowser.available && !webText
+    property var engineWindowItem: null
+    onWebOpenChanged: if (webOpen) ensureEngineWindow()
+    onEngineOnChanged: if (engineOn && webOpen) ensureEngineWindow()
+    function ensureEngineWindow() {
+        if (!engineOn || engineWindowItem) return
+        const comp = Qt.createComponent("Fortiq.Engine", "EngineWindow")
+        if (comp.status !== Component.Ready) { console.warn("Browser engine window unavailable: " + comp.errorString()); webText = true; return }
+        const w = comp.createObject(shell, { backdrop: wallpaper, engine: shell.engineBrowser, legacy: shell.browserController, remote: shell.controller })
+        w.x = Qt.binding(() => shell.adaptive ? 8 : 320)
+        w.y = Qt.binding(() => shell.adaptive ? shell.appTop : 86)
+        w.width = Qt.binding(() => shell.adaptive ? shell.width - 16 : 940)
+        w.height = Qt.binding(() => shell.adaptive ? shell.appHeight : 660)
+        w.z = Qt.binding(() => shell.windowOrder.indexOf("web") + 1)
+        w.adaptive = Qt.binding(() => shell.adaptive)
+        w.visible = Qt.binding(() => shell.webOpen && shell.engineOn && (!shell.adaptive || shell.foregroundApp === "web"))
+        w.closeRequested.connect(() => { shell.webOpen = false; if (shell.adaptive) { shell.foregroundApp = "files"; shell.filesOpen = true } })
+        w.requestServers.connect(() => { shell.serversOpen = true })
+        w.requestTextMode.connect(() => { shell.webText = true })
+        engineWindowItem = w
+    }
     property var networkController: null
     property bool networkOpen: false
     property var systemController: null
@@ -320,7 +345,9 @@ Item {
 
     WebWindow {
         id: webWindow
-        visible: shell.webOpen && (!shell.adaptive || shell.foregroundApp === "web")
+        visible: shell.webOpen && !shell.engineOn && (!shell.adaptive || shell.foregroundApp === "web")
+        engineAvailable: shell.engineBrowser !== null && shell.engineBrowser.available
+        onRequestEngineMode: shell.webText = false
         adaptive: shell.adaptive
         x: shell.adaptive ? 8 : 320; y: shell.adaptive ? shell.appTop : 86
         width: shell.adaptive ? shell.width - 16 : 940; height: shell.adaptive ? shell.appHeight : 660
@@ -442,7 +469,7 @@ Item {
         z: 9
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         onPressed: mouse => {
-            const windows = [{key: "files", item: filesWindow}, {key: "browser", item: browserWindow}, {key: "logs", item: logsWindow}, {key: "terminal", item: terminalWindow}, {key:"disks",item:disksWindow}, {key:"docs",item:documentsWindow}, {key:"web",item:webWindow}, {key:"network",item:networkWindow}, {key:"system",item:systemWindow}, {key:"db",item:dbWindow}, {key:"mail",item:mailWindow}, {key:"settings",item:settingsWindow}]
+            const windows = [{key: "files", item: filesWindow}, {key: "browser", item: browserWindow}, {key: "logs", item: logsWindow}, {key: "terminal", item: terminalWindow}, {key:"disks",item:disksWindow}, {key:"docs",item:documentsWindow}, {key:"web",item:(shell.engineOn && shell.engineWindowItem) ? shell.engineWindowItem : webWindow}, {key:"network",item:networkWindow}, {key:"system",item:systemWindow}, {key:"db",item:dbWindow}, {key:"mail",item:mailWindow}, {key:"settings",item:settingsWindow}]
             windows.sort((a, b) => b.item.z - a.item.z)
             for (const entry of windows) {
                 const p = entry.item.mapFromItem(shell, mouse.x, mouse.y)
@@ -729,7 +756,7 @@ Item {
             foregroundApp = "files"; filesOpen = true; return true
         }
         if (foregroundApp === "web") {
-            if (webWindow.handleBack()) return true
+            if ((shell.engineOn && shell.engineWindowItem) ? shell.engineWindowItem.handleBack() : webWindow.handleBack()) return true
             foregroundApp = "files"; filesOpen = true; return true
         }
         if (foregroundApp === "terminal") {

@@ -7,6 +7,7 @@
 #include "core/SecretStore.h"
 #include "core/TaskManager.h"
 #include "browser/BrowserController.h"
+#include "browser/engine/EngineBrowser.h"
 #include "network/NetworkController.h"
 #include "system/SystemController.h"
 #include "db/DbController.h"
@@ -32,7 +33,14 @@
 
 #include <cstdio>
 
+#ifdef FORTIQ_HAVE_WEBENGINE
+#include <QtWebEngineQuick/QtWebEngineQuick>
+#endif
+
 Q_IMPORT_QML_PLUGIN(Fortiq_ShellPlugin)
+#ifdef FORTIQ_HAVE_WEBENGINE
+Q_IMPORT_QML_PLUGIN(Fortiq_EnginePlugin)
+#endif
 
 #ifndef FORTIQ_NO_SSH
 // Developer diagnostic (`--secret-store-selftest`): exercises the protected
@@ -79,6 +87,9 @@ int main(int argc, char *argv[])
     for (int i = 1; i < argc; ++i)
         if (qstrcmp(argv[i], "--screenshot") == 0) capture = true;
     if (capture) qputenv("QT_ENABLE_HIGHDPI_SCALING", "0");
+#ifdef FORTIQ_HAVE_WEBENGINE
+    QtWebEngineQuick::initialize();   // must come before the application object (shared GL contexts)
+#endif
 
     QGuiApplication app(argc, argv);
     QCoreApplication::setOrganizationName("CYBOU");
@@ -144,6 +155,8 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("disks", &disks);
     fortiq::BrowserController browser(&controller);
     engine.rootContext()->setContextProperty("browser", &browser);
+    fortiq::engine::EngineBrowser engineBrowser(&controller);
+    engine.rootContext()->setContextProperty("engineBrowser", &engineBrowser);
     fortiq::NetworkController network(&controller);
     engine.rootContext()->setContextProperty("network", &network);
     fortiq::SystemController systemInfo(&controller);
@@ -163,6 +176,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("terminal", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("disks", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("browser", QVariant::fromValue<QObject *>(nullptr));
+    engine.rootContext()->setContextProperty("engineBrowser", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("network", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("systemInfo", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("documents", QVariant::fromValue<QObject *>(nullptr));

@@ -5,6 +5,9 @@ Sources of truth, read from the build machine (nothing is downloaded):
   * vcpkg `installed/vcpkg/status` of the Windows (x64-windows) and Android (arm64-android) dependency trees: libssh2, OpenSSL, zlib
     with their exact versions and port revisions; SHA-256 of the Windows DLLs that exist on disk;
   * the Qt kit version (Qt6ConfigVersion.cmake) and the Qt Installer Framework version;
+  * Qt WebEngine (the Chromium engine of the Browser, Windows/Linux only): the Chromium version it is based on and the version up to which Qt
+    ported security patches (`CHROMIUM_VERSION` in the Qt sources next to the kit, else the version string inside Qt6WebEngineCore.dll),
+    with the SHA-256 of Qt6WebEngineCore.dll and QtWebEngineProcess.exe;
   * the vendored libvterm (`third_party/libvterm/README.fortiq.md`: upstream commit and local patches);
   * the project version from CMakeLists.txt.
 Components that cannot be versioned from the machine (Mesa llvmpipe and d3dcompiler_47 inside the Windows package, the Gradle
@@ -84,6 +87,24 @@ def ifw_version(ifw: Path) -> str | None:
     return None
 
 
+def chromium_info(qt: Path) -> dict | None:
+    """Qt WebEngine of the kit: {base, patched, qt_source} or None when the kit has no WebEngine."""
+    core = qt / "bin" / "Qt6WebEngineCore.dll"
+    if not core.is_file():
+        return None
+    base = patched = None
+    source = qt.parent / "Src" / "qtwebengine" / "CHROMIUM_VERSION"
+    if source.is_file():
+        text = source.read_text(encoding="utf-8", errors="replace")
+        m1 = re.search(r"Based on Chromium version:\s+(\S+)", text)
+        m2 = re.search(r"Patched with security patches up to Chromium version:\s+(\S+)", text)
+        base, patched = (m1.group(1) if m1 else None), (m2.group(1) if m2 else None)
+    if not base:
+        m = re.search(rb"Chrome/(\d+\.\d+\.\d+\.\d+)", core.read_bytes())
+        base = m.group(1).decode() if m else None
+    return dict(base=base, patched=patched or base)
+
+
 def project_version() -> str:
     match = re.search(r"project\(Fortiq VERSION ([0-9.]+)", (ROOT / "CMakeLists.txt").read_text(encoding="utf-8"))
     return match.group(1) if match else "0"
@@ -138,6 +159,17 @@ def build_inventory(qt: Path, ifw: Path, vcpkg_windows: Path, vcpkg_android: Pat
                                 cpe=f"cpe:2.3:a:qt:qt:{qtv}:*:*:*:*:*:*:*" if qtv else None, url="https://www.qt.io/",
                                 props={"fortiq:platform": "windows-x64,android-arm64", "fortiq:linking": "dynamic (LGPLv3)"},
                                 description="Qt Base, Declarative, Quick Controls 2 (LGPL modules only; see tool/check_third_party.py)"))
+    web = chromium_info(qt)
+    if web and qtv:
+        hashes = {n: d for n in ("Qt6WebEngineCore.dll", "QtWebEngineProcess.exe") if (d := sha256_of(qt / "bin" / n))}
+        components.append(component("Qt WebEngine (Chromium)", qtv, license="LGPL-3.0-only AND BSD-3-Clause AND others (Chromium third-party components; legal review pending)",
+                                    purl=f"pkg:generic/qtwebengine@{qtv}", cpe=f"cpe:2.3:a:qt:qtwebengine:{qtv}:*:*:*:*:*:*:*",
+                                    url="https://doc.qt.io/qt-6/qtwebengine-licensing.html", hashes=hashes,
+                                    props={"fortiq:platform": "windows-x64", "fortiq:linking": "dynamic (LGPLv3), separate files",
+                                           "fortiq:chromium-base-version": web["base"] or "unknown",
+                                           "fortiq:chromium-security-patched-to": web["patched"] or "unknown",
+                                           "fortiq:note": "match CVEs against the patched-to Chromium version AND the Qt release notes; Qt ports Chromium fixes only in Qt patch releases"},
+                                    description="Chromium web engine of the Browser window; all its traffic goes through the SSH gateway (docs/BROWSER.md)"))
     for platform, installed, triplet in (("windows-x64", vcpkg_windows, "x64-windows"), ("android-arm64", vcpkg_android, "arm64-android")):
         ports = read_vcpkg_status(installed, triplet)
         for name, meta in PORTS.items():

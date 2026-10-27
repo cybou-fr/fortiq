@@ -22,6 +22,7 @@ struct GatewayOptions {
     int keepAliveIdleMs = 30000;     // an idle HTTP connection between two requests
     int openTimeoutMs = 30000;       // name resolution + opening the channel
     int idleTimeoutMs = 120000;      // no byte either way (tunnels and transfers)
+    quint16 preferredPort = 0;       // 0 = any free port; the engine reuses its first port on a restart (Chromium reads it once)
     int resolveCacheMs = 5000;       // how long a resolution is reused (0 = never; the PIN, not the cache, is the rebinding defence)
 };
 

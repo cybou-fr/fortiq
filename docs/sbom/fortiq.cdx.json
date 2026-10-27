@@ -151,6 +151,64 @@
     },
     {
       "type": "library",
+      "bom-ref": "Qt WebEngine (Chromium)@6.12.0:windows-x64",
+      "name": "Qt WebEngine (Chromium)",
+      "version": "6.12.0",
+      "description": "Chromium web engine of the Browser window; all its traffic goes through the SSH gateway (docs/BROWSER.md)",
+      "licenses": [
+        {
+          "license": {
+            "name": "LGPL-3.0-only AND BSD-3-Clause AND others (Chromium third-party components; legal review pending)"
+          }
+        }
+      ],
+      "purl": "pkg:generic/qtwebengine@6.12.0",
+      "cpe": "cpe:2.3:a:qt:qtwebengine:6.12.0:*:*:*:*:*:*:*",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://doc.qt.io/qt-6/qtwebengine-licensing.html"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "475a605d6a2a2a089f3c6aad4b072bd0f14265d1974b47c5068c98be655979ad"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5ece6950892c6c4632bc3d7a7b062e9342acfc9238c816b3e2d94196f1659d55"
+        }
+      ],
+      "properties": [
+        {
+          "name": "fortiq:chromium-base-version",
+          "value": "140.0.7339.264"
+        },
+        {
+          "name": "fortiq:chromium-security-patched-to",
+          "value": "152.0.7977.83"
+        },
+        {
+          "name": "fortiq:linking",
+          "value": "dynamic (LGPLv3), separate files"
+        },
+        {
+          "name": "fortiq:note",
+          "value": "match CVEs against the patched-to Chromium version AND the Qt release notes; Qt ports Chromium fixes only in Qt patch releases"
+        },
+        {
+          "name": "fortiq:platform",
+          "value": "windows-x64"
+        },
+        {
+          "name": "fortiq:version-known",
+          "value": "true"
+        }
+      ]
+    },
+    {
+      "type": "library",
       "bom-ref": "Qt for Android Gradle dependencies@unknown:android-arm64",
       "name": "Qt for Android Gradle dependencies",
       "properties": [
@@ -462,6 +520,7 @@
         "Mesa llvmpipe (opengl32sw.dll)@unknown:windows-x64",
         "Microsoft Visual C++ runtime@unknown:windows-x64",
         "Qt Installer Framework@4.11:windows-x64",
+        "Qt WebEngine (Chromium)@6.12.0:windows-x64",
         "Qt for Android Gradle dependencies@unknown:android-arm64",
         "Qt@6.12.0:windows-x64,android-arm64",
         "libssh2@1.11.1-git6e7b207:android-arm64",
@@ -474,5 +533,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:fe3ccdcd-fe76-d3aa-3be4-5235b3ee26c9"
+  "serialNumber": "urn:uuid:477b88c4-e9b1-be93-c1cc-f9197f3927ae"
 }

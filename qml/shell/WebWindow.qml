@@ -21,6 +21,8 @@ Item {
     }
     signal closeRequested()
     signal requestServers()
+    signal requestEngineMode()
+    property bool engineAvailable: false
 
     function sync() { if (browser) browser.setWindowActive(visible) }
     onVisibleChanged: sync()
@@ -139,6 +141,12 @@ Item {
                         }
                     }
                 }
+            }
+            ToolButtonGlass {
+                objectName: "webEngineMode"
+                visible: win.engineAvailable
+                touch: win.adaptive; glyph: "◉"; tip: "Revenir au navigateur complet (moteur Chromium, JavaScript)"
+                onClicked: win.requestEngineMode()
             }
             ToolButtonGlass {
                 objectName: "webReader"

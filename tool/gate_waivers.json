@@ -21,5 +21,45 @@
   "SshIntegrationTest::twoHostsNeverMix": {
     "reason": "needs a second disposable host (WSL distro fortiq-test-b, tool/setup_second_host_fixture.sh); the live run provides it (tool/prepare_live_fixture.py), so a skip there is a failure",
     "scopes": ["offline"]
+  },
+  "EngineLiveTest::profileAndSettingsAreTheClosedOnes": {
+    "reason": "the engine live suite needs the real Chromium and the disposable Linux fixture (tool/prepare_live_fixture.py); the offline gate cannot run it, the live run does and fails on any skip there",
+    "scopes": ["offline"]
+  },
+  "EngineLiveTest::effectiveChromiumCommandLine": {
+    "reason": "the engine live suite needs the real Chromium and the disposable Linux fixture (tool/prepare_live_fixture.py); the offline gate cannot run it, the live run does and fails on any skip there",
+    "scopes": ["offline"]
+  },
+  "EngineLiveTest::javascriptRunsThroughTheGateway": {
+    "reason": "the engine live suite needs the real Chromium and the disposable Linux fixture (tool/prepare_live_fixture.py); the offline gate cannot run it, the live run does and fails on any skip there",
+    "scopes": ["offline"]
+  },
+  "EngineLiveTest::aRefusedInternalAddressIsNeverOpened": {
+    "reason": "the engine live suite needs the real Chromium and the disposable Linux fixture (tool/prepare_live_fixture.py); the offline gate cannot run it, the live run does and fails on any skip there",
+    "scopes": ["offline"]
+  },
+  "EngineLiveTest::refusedSchemesAndDownloads": {
+    "reason": "the engine live suite needs the real Chromium and the disposable Linux fixture (tool/prepare_live_fixture.py); the offline gate cannot run it, the live run does and fails on any skip there",
+    "scopes": ["offline"]
+  },
+  "EngineLiveTest::noDirectConnectionsWhateverThePageTries": {
+    "reason": "the engine live suite needs the real Chromium and the disposable Linux fixture (tool/prepare_live_fixture.py); the offline gate cannot run it, the live run does and fails on any skip there",
+    "scopes": ["offline"]
+  },
+  "EngineLiveTest::theWebRtcGapStillSendsNothing": {
+    "reason": "the engine live suite needs the real Chromium and the disposable Linux fixture (tool/prepare_live_fixture.py); the offline gate cannot run it, the live run does and fails on any skip there",
+    "scopes": ["offline"]
+  },
+  "EngineLiveTest::theWindowOfTheShellWorks": {
+    "reason": "the engine live suite needs the real Chromium and the disposable Linux fixture (tool/prepare_live_fixture.py); the offline gate cannot run it, the live run does and fails on any skip there",
+    "scopes": ["offline"]
+  },
+  "EngineLiveTest::nothingIsWrittenToDisk": {
+    "reason": "the engine live suite needs the real Chromium and the disposable Linux fixture (tool/prepare_live_fixture.py); the offline gate cannot run it, the live run does and fails on any skip there",
+    "scopes": ["offline"]
+  },
+  "EngineLiveTest::closingTheWindowClosesTheGateway": {
+    "reason": "the engine live suite needs the real Chromium and the disposable Linux fixture (tool/prepare_live_fixture.py); the offline gate cannot run it, the live run does and fails on any skip there",
+    "scopes": ["offline"]
   }
 }

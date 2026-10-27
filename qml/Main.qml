@@ -46,6 +46,7 @@ ApplicationWindow {
         terminalController: typeof terminal !== "undefined" ? terminal : null
         disksController: typeof disks !== "undefined" ? disks : null
         browserController: typeof browser !== "undefined" ? browser : null
+        engineBrowser: typeof engineBrowser !== "undefined" ? engineBrowser : null
         networkController: typeof network !== "undefined" ? network : null
         systemController: typeof systemInfo !== "undefined" ? systemInfo : null
         dbController: typeof databases !== "undefined" ? databases : null

@@ -16,7 +16,10 @@ FORTIQ's own code is published under the GNU GPL v3 (LICENSE) and links Qt dynam
 Checked in the package: every Qt library (Qt6X.dll, libQt6X_<abi>.so), every Qt plugin whose file name contains the name of a refused
 module, every QML module directory of a refused module, QML debugging plugins (qmltooling / qmldbg: never distributable, reported only with
 --allow-debug-tooling for debug builds) and, for Windows, every non-Qt DLL against a list of known components (each of which must have its
-licence text in <stage>/licenses). Exit status 1 on any violation or unknown component.
+licence text in <stage>/licenses). Qt WebEngine (the Chromium engine of the Browser, desktop only) needs its own files and notice: a package with
+Qt6WebEngineCore must also carry QtWebEngineProcess.exe, the Chromium resources (icudtl.dat, v8_context_snapshot.bin, the .pak files) and
+licenses/Chromium-LICENSE.txt; an Android package must NOT contain Qt WebEngine (Android uses the system WebView). Exit status 1 on any
+violation or unknown component.
 This is a technical check of file names against header licences; it is not legal advice and does not replace reading the notices.
 """
 from __future__ import annotations
@@ -90,6 +93,7 @@ def make_fake_kit(root: Path) -> Path:
         "QtCharts": "LicenseRef-Qt-Commercial OR GPL-3.0-only",
         "QtSecretSauce": "LicenseRef-Qt-Commercial",
         "QtOldGpl": "LicenseRef-Qt-Commercial OR GPL-2.0-only",
+        "QtWebEngineCore": "LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only",
     }
     for name, spdx in modules.items():
         (kit / "include" / name).mkdir(parents=True)
@@ -116,7 +120,7 @@ def self_test(_qt: Path) -> int:
         kit = make_fake_kit(tmp_path)
         clean = tmp_path / "clean"
         (clean / "licenses").mkdir(parents=True)
-        for name in ("THIRD_PARTY_NOTICES.txt", "Qt-COPYING.txt", "FORTIQ-LICENSE.txt", "libssh2.txt", "openssl.txt"):
+        for name in ("THIRD_PARTY_NOTICES.txt", "Qt-COPYING.txt", "FORTIQ-LICENSE.txt", "libssh2.txt", "openssl.txt", "Chromium-LICENSE.txt"):
             (clean / "licenses" / name).write_text("x", encoding="utf-8")
         for name in ("fortiq.exe", "Qt6Core.dll", "Qt6Quick.dll", "libssh2.dll", "libcrypto-3-x64.dll", "vcruntime140.dll"):
             (clean / name).write_bytes(b"MZ")
@@ -168,6 +172,23 @@ def self_test(_qt: Path) -> int:
         expect("missing licence text of a shipped component", code, out, False, "libssh2.txt")
         code, out = run("--stage", str(stage_with("nonotice", drop="licenses/THIRD_PARTY_NOTICES.txt")), *base)
         expect("missing THIRD_PARTY_NOTICES", code, out, False, "THIRD_PARTY_NOTICES")
+        # Qt WebEngine (Chromium): complete package passes, each missing piece fails
+        engine_files = ("Qt6WebEngineCore.dll", "QtWebEngineProcess.exe", "icudtl.dat", "v8_context_snapshot.bin", "resources/qtwebengine_resources.pak")
+        full = stage_with("webengine", engine_files[0])
+        for f in engine_files[1:]:
+            (full / f).parent.mkdir(parents=True, exist_ok=True)
+            (full / f).write_bytes(b"x")
+        code, out = run("--stage", str(full), *base)
+        expect("complete Qt WebEngine package", code, out, True, "Chromium")
+        for f in engine_files[1:]:
+            (full / f).rename(full / (f + ".off"))
+            code, out = run("--stage", str(full), *base)
+            expect("Qt WebEngine package without " + f, code, out, False, f.rsplit("/", 1)[-1])
+            (full / (f + ".off")).rename(full / f)
+        (full / "licenses" / "Chromium-LICENSE.txt").unlink()
+        code, out = run("--stage", str(full), *base)
+        expect("Qt WebEngine package without the Chromium licence", code, out, False, "Chromium-LICENSE")
+
         code, out = run("--stage", str(stage_with("noqtcopy", drop="licenses/Qt-COPYING.txt")), *base)
         expect("missing Qt licence text", code, out, False, "Qt-COPYING")
         code, out = run("--stage", str(stage_with("nogpl", drop="licenses/FORTIQ-LICENSE.txt")), *base)
@@ -185,6 +206,8 @@ def self_test(_qt: Path) -> int:
         expect("clean APK", code, out, True)
         code, out = run("--apk", str(apk("bad.apk", "lib/arm64-v8a/libQt6Core_arm64-v8a.so", "lib/arm64-v8a/libQt6SecretSauce_arm64-v8a.so")), *base)
         expect("APK with a refused Qt module", code, out, False, "QtSecretSauce")
+        code, out = run("--apk", str(apk("web.apk", "lib/arm64-v8a/libQt6Core_arm64-v8a.so", "lib/arm64-v8a/libQt6WebEngineCore_arm64-v8a.so")), *base)
+        expect("APK with Qt WebEngine", code, out, False, "WebEngine")
         code, out = run("--apk", str(apk("dbg.apk", "lib/arm64-v8a/libQt6Core_arm64-v8a.so", "lib/arm64-v8a/libplugins_qmltooling_qmldbg_tcp_arm64-v8a.so")), *base)
         expect("debug APK", code, out, False, "debug")
         # no arguments at all must not pass silently
@@ -256,6 +279,17 @@ def main() -> int:
                 problems.append(f"{rel}: unknown third-party library (add it to KNOWN_COMPONENTS with its licence file)")
             elif known[0] and not (stage / "licenses" / known[0]).is_file():
                 problems.append(f"{rel}: licence text licenses/{known[0]} is missing from the package")
+    if "QtWebEngineCore" in qt_libs:
+        if opts.apk:
+            problems.append("Qt WebEngine must not be in an Android package (the Android Browser uses the system WebView)")
+        else:
+            for need in ("licenses/Chromium-LICENSE.txt", "QtWebEngineProcess.exe", "icudtl.dat", "v8_context_snapshot.bin"):
+                if not any(rel == need or rel.endswith("/" + need.rsplit("/", 1)[-1]) for _, rel in names):
+                    problems.append(f"Qt WebEngine is shipped but {need} is missing (the engine would not start, or the Chromium notice is missing)")
+            if not any(rel.endswith("qtwebengine_resources.pak") for _, rel in names):
+                problems.append("Qt WebEngine is shipped but qtwebengine_resources.pak is missing")
+            notes.append("Qt WebEngine (Chromium): offered by Qt under LGPL-3.0/GPL-3.0; Chromium and its bundled components keep their own licences "
+                         "(BSD-3-Clause and many others, some LGPL/MPL): see licenses/Chromium-LICENSE.txt and THIRD_PARTY_NOTICES.txt; legal review still required")
     for lib in sorted(qt_libs & gpl_only):
         notes.append(f"{lib}: offered by Qt under GPL-3.0 only; allowed because FORTIQ is GPL-3.0 (its source and the Qt source must be offered with the binaries)")
     if opts.stage:

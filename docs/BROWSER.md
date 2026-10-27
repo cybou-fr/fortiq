@@ -4,7 +4,7 @@
 выполняется на выбранном Linux-сервере**. Это не WebView и не Chromium: страница загружается сервером,
 клиент получает байты по SSH и показывает их как безопасный текст. Полноценный движок (JavaScript, CSS,
 медиа) допустим только через серверный SSH-маршрут ([SSH_FRONTEND_CONTRACT](SSH_FRONTEND_CONTRACT.md)); этот срез его не заменяет и не обещает.
-Подготовка маршрута — шлюз и SSH-туннель (раздел «Полноценный движок через SSH-шлюз»): компонент сделан и проверен, сам движок ещё нет.
+Подготовка маршрута — шлюз и SSH-туннель (раздел «Полноценный движок через SSH-шлюз»): компонент сделан и проверен, движок этапа 2 (Qt WebEngine, Windows) см. раздел «Движок Qt WebEngine».
 
 ## Что делает
 
@@ -148,7 +148,7 @@ UTF-8/16, ISO-8859-1, windows-1252), `HtmlSanitizer`, `BrowserController` (од�
 Шлюз видит только TCP, который движок отправил в прокси. Всё, что идёт мимо прокси, — утечка, поэтому для движка нужно:
 
 - **Принудительный прокси без исключений:** `--proxy-server=http://127.0.0.1:<порт>` (Qt WebEngine: `QTWEBENGINE_CHROMIUM_FLAGS` или `QNetworkProxy::setApplicationProxy`; Android: `androidx.webkit.ProxyController` с `addProxyRule` и **пустым** списком обхода). Chromium по умолчанию **не** проксирует `localhost`/`127.0.0.1`: обход нужно отключить (`--proxy-bypass-list=<-loopback>`), иначе страница достучится до устройства. Запретить `--no-proxy-server`, PAC и автообнаружение (WPAD), системные прокси игнорировать.
-- **QUIC/HTTP3 и вообще UDP:** `--disable-quic` (QUIC идёт по UDP мимо HTTP-прокси); WebRTC — `--webrtc-ip-handling-policy=disable_non_proxied_udp` и `--force-webrtc-ip-handling-policy`, лучше выключить WebRTC совсем (STUN/TURN иначе раскроют IP устройства).
+- **QUIC/HTTP3 и вообще UDP:** `--disable-quic` (QUIC идёт по UDP мимо HTTP-прокси); WebRTC — `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` (без `force` в Qt 6.12 не действует), лучше выключить WebRTC совсем (STUN/TURN иначе раскроют IP устройства).
 - **DNS:** никакого разрешения имён на устройстве. Через HTTP-прокси имя уходит прокси (CONNECT host:port); отключить DoH (`--disable-features=DnsOverHttps`), упреждающий DNS и предсоединение (`--dns-prefetch-disable`, `NetworkPrediction`, `Preconnect`), запросы HTTPS-RR/ECH, пока DNS не проходит через прокси.
 - **Фоновые службы Chromium:** обновление компонентов, Safe Browsing (запросы к Google), синхронизация, переводчик, живые CRL/OCSP вне прокси: `--disable-background-networking`, `--disable-component-update`, `--no-pings`, `--disable-sync`, `--disable-default-apps`, `--disable-domain-reliability`, отчёты о сбоях выключить.
 - **Android WebView:** Safe Browsing выключить (`<meta-data android:name="android.webkit.WebView.EnableSafeBrowsing" android:value="false"/>` и `WebSettings.setSafeBrowsingEnabled(false)`) — это отдельный путь запросов к сервисам Google. `ProxyController` глобален для процесса: проверить, что **каждый** WebView приложения идёт через него. Учётных данных в `ProxyConfig` нет, поэтому токен отдаётся ответом на 407 (`onReceivedHttpAuthRequest`). Открытый HTTP к `127.0.0.1` шлюза должен быть разрешён network security config.
@@ -169,6 +169,74 @@ UTF-8/16, ISO-8859-1, windows-1252), `HtmlSanitizer`, `BrowserController` (од�
 
 - `fortiq_gateway` (офлайн, без SSH: подставной туннель и локальные серверы): разбор запросов/ответов и обрамления тел, авторизация, пределы, CONNECT и HTTP (keep-alive, chunked, до закрытия, HEAD/204, 100-continue, POST), обратное давление (6 Мио), 100 параллельных соединений, таблица политики (28 целей), разрыв транспорта.
 - `fortiq_gateway_it` (`fortiq_gateway_live` в ctest; стенд `fortiq-test` через `tool/prepare_live_fixture.py`, HTTPS-стенд `tool/setup_gateway_fixture.sh` на порту 8443; `curl.exe` как «движок»): страница и keep-alive через настоящий SSH-туннель, HTTPS насквозь (сертификат стенда получен exec-каналом; самоподписанный без доверия отвергается самим клиентом), внутренние адреса с подтверждением и без, метаданные, DNS rebinding, 100 параллельных туннелей, 6 Мио, обрыв SSH во время передачи с переподключением, неверный/пустой отпечаток, второй сервер `fortiq-test-b`, отсутствие прямых соединений.
+
+## Движок Qt WebEngine (этап 2, 27.10.2026)
+
+**Статус.** Окно «Navigateur» на движке **Chromium (Qt WebEngine 6.12.0; основа Chromium 140.0.7339.264, патчи безопасности Qt портирует до 152.0.7977.83 (CHROMIUM_VERSION в исходниках Qt; user-agent сообщает 140.0.7339.225))** работает на **Windows** (MSVC, Qt 6.12): страницы исполняют JavaScript на устройстве, а **каждое** сетевое обращение движка уходит в шлюз этапа 1 и дальше SSH-туннелем через выбранный сервер. Проверено автоматически на одноразовом Debian (`fortiq_engine_it`, 13 проверок, [результаты ниже](#тест-отсутствия-утечек)). **Не сделано / не проверено:** Linux-сборка клиента с WebEngine (CMake её включает по умолчанию, но ни собрана, ни запущена), Android (этап 3: системный WebView), вкладки (этап 4: сейчас одна страница, структура готова), реальные сайты (Google и т. п.: только вручную, не автоматизировано, в этой сессии не проверялось), чистая Windows-машина, установщик с движком на машине без Qt. Целевой контракт «preview только после теста утечек» выполнен для Windows-стенда; публичный preview остаётся за владельцем и за юридической проверкой лицензий (см. [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES.md)).
+
+```
+ qml/engine/EngineWindow.qml  ── окно в стиле оболочки (адрес/поиск, ‹ › ↻, замок, подтверждение внутреннего адреса, «Lecteur simple»)
+        │ Loader → EngineView.qml  ── WebEngineView + профиль off-the-record + запреты (загрузки, разрешения, схемы, диалоги)
+        ▼
+ Chromium (QtWebEngineProcess)  ── ТОЛЬКО --proxy-server=http://127.0.0.1:<порт шлюза>   (EngineProfile.cpp: все переключатели)
+        ▼
+ ProxyGateway ── UrlPolicy ── SshTunnel ── сервер    (этап 1, без изменений; добавлен только GatewayOptions::preferredPort)
+        ▲
+ EngineBrowser (C++) ── владеет туннелем и шлюзом, подтверждение «Ouvrir une fois / Annuler», пароль прокси ТОЛЬКО нашему шлюзу,
+                        суждение о навигации; без подключённого сервера ничего не запускается («Aucun serveur connecté»)
+```
+
+Файлы: `src/browser/engine/EngineProfile.*` (чистая логика без WebEngine: переключатели Chromium, их аудит, политика адресов навигации, проверка «пароль только нашему прокси»), `EngineBrowser.*` + `EngineRemote.cpp` (жизненный цикл шлюза; единственная часть, знающая `RemoteController`), `qml/engine/` (QML-модуль `Fortiq.Engine`, существует только при `FORTIQ_WITH_WEBENGINE`). Старая текстовая читалка (`BrowserController`, `WebWindow.qml`) **остаётся** запасным режимом: кнопка «☰ Lecteur simple» в окне движка и «◉» в читалке переключают режимы; сборка без WebEngine (Android, `FORTIQ_SHELL_PREVIEW_ONLY`, `-DFORTIQ_WITH_WEBENGINE=OFF`) показывает только читалку.
+
+### Сборка
+
+- CMake: `FORTIQ_WITH_WEBENGINE` — **ON** по умолчанию на Windows/Linux, **OFF** на Android/iOS; если модуль `WebEngineQuick` не установлен в Qt-ките, конфигурация предупреждает и собирается без движка. Тесты `fortiq_engine` (правила и жизненный цикл, без WebEngine и без SSH) собираются всегда; `fortiq_engine_it` (настоящий Chromium) — только с движком.
+- `QtWebEngineQuick::initialize()` вызывается в `main()` до `QGuiApplication`. Переключатели ставятся **до создания первого профиля** переменной `QTWEBENGINE_CHROMIUM_FLAGS` (`applyChromiumFlags`): если переменная уже содержит чужие опции, движок **отказывается** стартовать (чужие опции могли бы открыть прямой маршрут).
+- **Порт шлюза неизменен в процессе.** Chromium читает `--proxy-server` один раз, поэтому первый порт шлюза запоминается, а после смены сервера/переподключения шлюз поднимается на **том же** порту с новым токеном; если порт занят — состояние «error» («redémarrez FORTIQ»). Пока шлюза нет, движок направлен на закрытый порт: сбой «прокси недоступен», **никогда** прямой выход.
+- Запуск из каталога сборки: `qt.conf` дерева сборки (нужен тесту layout) сдвигает «префикс» Qt, и Chromium не находит `QtWebEngineProcess.exe`/ресурсы: `fortiq_engine_it` задаёт `QTWEBENGINEPROCESS_PATH`, `QTWEBENGINE_RESOURCES_PATH`, `QTWEBENGINE_LOCALES_PATH` и каталог QML Qt сам; в установленном пакете (windeployqt) эти файлы лежат рядом с `fortiq.exe`.
+
+### Принудительный прокси без обходов и что отключено (EngineProfile.cpp)
+
+| Переключатель | Зачем |
+|---|---|
+| `--proxy-server=http://127.0.0.1:<порт>` | единственный выход |
+| `--proxy-bypass-list=<-loopback>` | убирает неявное «localhost не проксировать»: страница, обратившаяся к `127.0.0.1`/`localhost`/`[::1]`, попадает на loopback **сервера** (и в политику адресов), а не на службу этого компьютера |
+| `--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1` | подстраховка: любое локальное разрешение имени (минуя прокси) даёт «не найдено»; через прокси имя уходит как `CONNECT host:port` и разрешается **сервером**. Проверено: попытка WebRTC разрешить `stun.l.google.com` получила `-105` (нет имени) |
+| `--disable-quic` | QUIC идёт по UDP мимо HTTP-прокси |
+| `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` | WebRTC не создаёт кандидатов и не шлёт UDP (см. «Известный пробел WebRTC») |
+| `--disable-features=…` | `DnsOverHttps`, `AsyncDns`, `UseDnsHttpsSvcb`, `NetworkPrediction`, `NetworkQualityEstimator`, `PrefetchProxy`, `NoStatePrefetch`, `Prerender2`, `SpeculationRulesPrefetchFuture`, `LinkPreview`, `SafeBrowsing`, `SafeBrowsingEnhancedProtection`, `OptimizationHints`, `OptimizationGuideModelDownloading`, `Translate`, `MediaRouter`, `NetworkTimeServiceQuerying`, `AutofillServerCommunication`, `CertificateTransparencyComponentUpdater`, `InterestFeedContentSuggestions`, `WebRtcHideLocalIpsWithMdns` (иначе открывается multicast-сокет mDNS), `EncryptedClientHello` |
+| `--disable-background-networking`, `--disable-component-update`, `--disable-sync`, `--disable-domain-reliability`, `--disable-client-side-phishing-detection`, `--disable-default-apps`, `--disable-breakpad`, `--disable-reporting-api`, `--no-pings`, `--no-first-run`, `--no-default-browser-check`, `--metrics-recording-only`, `--password-store=basic` | фоновые обращения к службам Google, отчёты, хранилище паролей ОС |
+
+`auditSwitches()` проверяет этот набор (и запрещает `--no-proxy-server`, PAC/WPAD, `--enable-quic`, `--disable-web-security`, `--no-sandbox`, исключения в bypass-list): юнит-тест `fortiq_engine` ловит переименование переключателя, а живой тест читает **действующую** командную строку Chromium со страницы `chrome://gpu` и проверяет её тем же аудитом (защита от «Qt обновили, переключатель молча перестал действовать»). Заметка о Qt 6.12: `--webrtc-ip-handling-policy` (без `force`) **не** применяется — без `--force-…=значение` кандидаты WebRTC появлялись (поймано живым тестом).
+
+Настройки профиля и страницы (`EngineView.qml`, проверены живым тестом): профиль **off-the-record** (`storageName` пуст: ни cookies, ни кэша, ни истории, ни хранилищ на диске), кэш HTTP в памяти, постоянные cookies выключены, проверка орфографии выключена; `dnsPrefetchEnabled`, `hyperlinkAuditingEnabled` (атрибут `ping`), плагины, PDF-просмотрщик, доступ к буферу обмена, всплывающие окна JavaScript, захват экрана, геолокация на небезопасных источниках, `localContentCanAccess*`, `allowRunningInsecureContent`, полноэкранный режим — выключены; JavaScript — включён (смысл движка). **Загрузки файлов запрещены:** скачивание отменяется, окно пишет «Téléchargement refusé…». **Разрешения** (геолокация, камера, микрофон, уведомления, буфер обмена, …) всегда отклоняются (`permission.deny()`), диалоги JS/файлов/цвета отклоняются, сертификатные ошибки — отказ (`rejectCertificate`). **Навигация:** только `http(s)` и `about:blank` (`judgeUrl`); `file:`, `ftp:`, `chrome:`, `devtools:`, `javascript:`, `qrc:`, `data:`/`blob:` как адрес страницы и адреса с `user:pass@` отклоняются с причиной; новые окна открываются в той же странице; `view-source:` Chromium допускает (он идёт через тот же прокси; запрет не требовался).
+
+**Пароль прокси** (`Proxy-Authorization` с токеном сессии) выдаётся только в ответ на запрос аутентификации **типа «прокси»** от `127.0.0.1:<порт шлюза>` (`isOurProxy`); запрос логина от сайта (HTTP Basic) и любой другой прокси получают отказ. Токен не попадает ни в переключатели, ни в окружение, ни в журнал.
+
+### Известный пробел WebRTC
+
+Политика `disable_non_proxied_udp` даёт **ноль кандидатов и ноль датаграмм**, но не гарантирует отсутствия самого API: `RTCPeerConnection`, созданный в странице, открывал два **связанных (bound) UDP-сокета** без трафика. Поэтому API WebRTC и WebTransport **удаляются** пользовательским скриптом `DocumentCreation` во всех кадрах (тест: сокетов нет). Пробел: **пустой `about:blank` iframe, созданный скриптом страницы**, скриптом не охватывается (движок не запускает его там) — `RTCPeerConnection` в нём существует. Тест `theWebRtcGapStillSendsNothing` использует этот пробел со STUN-серверами на **этом** компьютере (loopback и все локальные IPv4-адреса) и `203.0.113.30`: кандидатов нет, на UDP-слушатель клиента не пришло **ни одной** датаграммы, прямых TCP-соединений нет; связанные сокеты есть, но без трафика. Остаточный риск: сокет без трафика — не соединение, но полного «нет сокета» для враждебной страницы нет; закрытие пробела (флаг Blink/патч Qt или перехват создания iframe) — в бэклоге. Следствие для пользователя: видеозвонки в браузере **не работают** (UDP через HTTP-прокси невозможен).
+
+### Тест отсутствия утечек
+
+Файл `tests/EngineLiveTest.cpp`, запускается как `fortiq_engine_it` из `tool/run_live_tests.py` (стенд — `tool/prepare_live_fixture.py`; для разработки `python tool/prepare_live_fixture.py --only fortiq_engine_tests,fortiq_engine_it`). Используются **настоящие** `EngineView.qml`, шлюз и SSH-туннель (libssh2, закреплённый ключ); страницы — `tests/fixtures/web_fixture.py`:
+
+- `/canary` — страница-канарейка пробует: `fetch` (http/https/no-cors) и `XMLHttpRequest`, `WebSocket`, `EventSource`, `WebTransport`, `sendBeacon`, `<img>`, `<script>`, `<iframe>`, `<link rel=stylesheet|prefetch|prerender|preconnect|dns-prefetch>`, CSS `url()`, атрибут `ping`, `file:///C:/Windows/win.ini`, **`RTCPeerConnection` со STUN** (в том числе `stun.l.google.com`), геолокацию, уведомления и — главное — адреса **этого компьютера**: `127.0.0.1:<порт>`, `localhost:<порт>`, `[::1]:<порт>` (на порту слушает «канарейка» на `0.0.0.0`) и публичный IP-литерал;
+- **наблюдатель сокетов** (`SocketWatch`, Windows): каждые 15 мс читает `GetExtendedTcpTable` (v4/v6) и `GetExtendedUdpTable` (v4/v6) **всего дерева процессов** (приложение + `QtWebEngineProcess`, перечисление потомков через ToolHelp). Допускаются только: loopback → порт шлюза, принятые шлюзом сокеты и SSH главного процесса к выбранному серверу; всё остальное — нарушение (в том числе соединение дочернего процесса с SSH-сервером и любой UDP-сокет). Подтверждение того, что наблюдатель что-то видит: тест `theWatcherCatchesADeliberateDirectConnection` намеренно открывает прямое TCP-соединение и UDP-сокет и требует, чтобы они были обнаружены.
+
+Критерии прохождения: ни одного нарушения; на «канарейке» этого компьютера **0** соединений; запросы страницы **видны шлюзу** (`GET/CONNECT canary-fetch.invalid, img.canary.invalid, script.canary.invalid, iframe…, xhr…, beacon…, canary-ws.invalid`), то есть дошли именно через него и были закрыты сервером («indisponible» — имя не найдено сервером) или отклонены политикой (`127.0.0.1:<порт>`, `[::1]`, `localhost`, `203.0.113.9` — «refusé»: вопрос о внутреннем адресе задан и отклонён); WebSocket и WebTransport не открылись; геолокация и уведомления отклонены; `dns-prefetch`/`ping` запросов не породили; профиль не записал ни одного файла на диск (кроме кэша QML самого теста).
+
+Результат последнего прогона 27.10.2026 (Windows 11, Qt 6.12.0, Chromium 140.0.7339.225, фикстура WSL `fortiq-test`): **13 из 13**, в т. ч. `noDirectConnectionsWhateverThePageTries` — 0 нарушений, 0 UDP-сокетов, канарейка клиента 0 соединений, шлюз: принято +17, заблокировано +4, внутренних отказов +4, каналов +2 (страница и `/echo`); `theWebRtcGapStillSendsNothing` — кандидатов 0, датаграмм 0; `javascriptRunsThroughTheGateway` — страница, чей текст создаёт только JavaScript, получена через туннель (счётчики шлюза растут), вопрос о `127.0.0.1:8099` задан до открытия; `aRefusedInternalAddressIsNeverOpened` — после «Annuler» канал не открыт; `theWindowOfTheShellWorks` — настоящее окно (кнопки «Ouvrir une fois»/«Annuler» нажимаются, отказ схем, переключатель читалки); `fortiq_engine` (офлайн, 13). Живой отчёт (`engine-leak-report.txt`, `.cmdline.txt`, `.webrtc.txt`, `.disk.txt`) пишется рядом с исполняемым файлом. Реальные сайты (Google, поиск) **вручную не проверялись**: у сессии нет сервера владельца, а доступ к стенду для ручной проверки приложения не запрашивался.
+
+### Остаточные риски и что делать
+
+- **Версия Chromium отстаёт от Chrome.** Qt WebEngine 6.12.0 содержит Chromium 140.0.7339.225; Qt обновляет Chromium только в своих патч-релизах. Нужен процесс: следить за CVE Chromium/Qt WebEngine, обновлять Qt (и пакет) при серьёзных уязвимостях, фиксировать версию Chromium в `docs/SBOM.md` (`tool/make_sbom.py` читает её из `Qt6WebEngineCore.dll`). Песочница Chromium включена (`--no-sandbox` запрещён аудитом), но уязвимость движка — всё равно удалённое исполнение кода на **устройстве**, а не только на сервере.
+- **Память и размер.** Chromium добавляет порядка сотен МБ ОЗУ на страницу и ≈ 200 МБ к пакету (точные числа — [RELEASE](RELEASE.md)); слабым устройствам остаётся читалка.
+- **Данные только в памяти.** Профиль off-the-record: закладок, истории, cookies между запусками нет; это сознательно (правило «рабочие данные не хранятся на устройстве»). Вход в аккаунты живёт только пока открыто окно.
+- Сайт видит IP и DNS **сервера**; но отпечаток браузера (Chromium) — устройства.
+- `WebEngineProfile` из QML в Qt 6.12 помечен устаревшим (предупреждение при создании); замена `WebEngineProfilePrototype.instance()` в 6.12.0 приводила к падению в `QQuickWebEngineView::setProfile`, поэтому оставлен прежний тип. Живой тест проверяет итог (off-the-record, память, без cookies), так что смена API в Qt будет поймана.
+- Нет HTTP/2 к шлюзу, SOCKS, `Upgrade` вне CONNECT, прокси-цепочек (как на этапе 1).
+- Одна страница; вкладки и закладки — этап 4.
 
 ## Следующие шаги (не сделано)
 

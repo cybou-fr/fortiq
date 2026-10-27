@@ -24,6 +24,9 @@ Paths:
   /to-flip     302 -> http://flip-fixture.test:<port>/echo      (a name whose address flips: tool/setup_dns_rebind_fixture.sh)
   /to-other-port 302 -> http://127.0.0.1:8098/page             (another internal host:port)
   /echo        200: Host header and the local address the connection arrived on
+  /js          HTML whose text exists only after JavaScript ran (title js-done)
+  /canary      HTML + JavaScript that tries every route out of a browser (tests/EngineLiveTest.cpp)
+  /webrtc      HTML + JavaScript that makes an RTCPeerConnection through an about:blank iframe (the gap of the user script)
   /_hits       200: JSON {path: number of requests}, to prove that nothing was fetched before a confirmation
 """
 import json
@@ -38,6 +41,91 @@ PAGE = b"""<!doctype html><html><head><title>Fixture page</title><meta charset="
 <img src="http://127.0.0.1:1/track.gif" alt="Tracking pixel"><iframe src="/page2">frame text</iframe>
 <script>document.write('executed')</script></main><footer>Footer text</footer></body></html>"""
 
+
+# Browser engine pages (tests/EngineLiveTest.cpp): a page that needs JavaScript to produce its text, and the leak canary.
+JS_PAGE = b"""<!doctype html><html><head><meta charset="utf-8"><title>js-running</title></head><body><div id="out">js-not-run</div>
+<script>
+let sum = 0; for (let i = 1; i <= 1000; i++) sum += i;
+fetch('/echo').then(r => r.text()).then(t => { document.getElementById('out').textContent = 'JS-OK sum=' + sum + ' echo=' + t; document.title = 'js-done'; });
+</script></body></html>"""
+CANARY_PAGE = b"""<!doctype html><html><head><meta charset="utf-8"><title>canary-running</title>
+<link rel="dns-prefetch" href="//dnsprefetch.canary.invalid">
+<link rel="preconnect" href="https://preconnect.canary.invalid">
+<link rel="prefetch" href="http://prefetch.canary.invalid/x">
+<link rel="prerender" href="http://prerender.canary.invalid/x">
+<link rel="stylesheet" href="http://css.canary.invalid/x.css">
+<style>body{background:url(http://cssimg.canary.invalid/b.png)}</style>
+</head><body><div id="out">running</div>
+<a id="ping" href="/echo" ping="http://ping.canary.invalid/p">ping link</a>
+<iframe src="http://iframe.canary.invalid/f" style="width:1px;height:1px"></iframe>
+<img src="http://img.canary.invalid/i.png" width="1" height="1">
+<img src="file:///C:/Windows/win.ini" width="1" height="1">
+<script src="http://script.canary.invalid/x.js"></script>
+<script>
+const qs = new URLSearchParams(location.search);
+const cp = qs.get('cp') || '9';
+const skip = (qs.get('skip') || '').split(',');   // diagnostics: skip=rtc,webtransport
+const R = {};
+const lim = (p, ms) => Promise.race([p, new Promise(r => setTimeout(() => r('timeout'), ms))]);
+const attempt = (name, fn) => lim((async () => { try { return String(await fn()); } catch (e) { return 'err:' + (e && e.name); } })(), 9000).then(v => { R[name] = v; });
+const jobs = [
+  attempt('fetch-http', () => fetch('http://canary-fetch.invalid/x', { mode: 'no-cors' }).then(r => r.type)),
+  attempt('fetch-https', () => fetch('https://canary-https.invalid/x', { mode: 'no-cors' }).then(r => r.type)),
+  attempt('fetch-client-127', () => fetch('http://127.0.0.1:' + cp + '/c', { mode: 'no-cors' }).then(r => r.type)),
+  attempt('fetch-client-localhost', () => fetch('http://localhost:' + cp + '/c', { mode: 'no-cors' }).then(r => r.type)),
+  attempt('fetch-client-ipv6', () => fetch('http://[::1]:' + cp + '/c', { mode: 'no-cors' }).then(r => r.type)),
+  attempt('fetch-public-ip', () => fetch('http://203.0.113.9/x', { mode: 'no-cors' }).then(r => r.type)),
+  attempt('xhr', () => new Promise((ok, ko) => { const x = new XMLHttpRequest(); x.open('GET', 'http://xhr.canary.invalid/x'); x.onerror = () => ko({ name: 'xhr-error' }); x.onload = () => ok('loaded'); x.send(); })),
+  attempt('websocket', () => new Promise((ok, ko) => { const w = new WebSocket('ws://canary-ws.invalid/s'); w.onerror = () => ko({ name: 'ws-error' }); w.onopen = () => ok('open'); })),
+  attempt('eventsource', () => new Promise((ok, ko) => { const e = new EventSource('http://es.canary.invalid/e'); e.onerror = () => { e.close(); ko({ name: 'es-error' }); }; })),
+  skip.includes('webtransport') ? Promise.resolve() : attempt('webtransport', () => typeof WebTransport === 'undefined' ? 'absent' : new WebTransport('https://wt.canary.invalid/').ready.then(() => 'ready')),
+  attempt('beacon', () => navigator.sendBeacon('http://beacon.canary.invalid/b', 'x')),
+  attempt('geolocation', () => new Promise(ok => navigator.geolocation ? navigator.geolocation.getCurrentPosition(() => ok('granted'), e => ok('denied-' + e.code)) : ok('absent'))),
+  attempt('notification', () => typeof Notification === 'undefined' ? 'absent' : Notification.requestPermission()),
+  attempt('rtc-frames', () => new Promise(ok => {
+    const out = { main: typeof RTCPeerConnection, webkit: typeof webkitRTCPeerConnection };
+    const b = document.createElement('iframe'); document.body.appendChild(b);
+    out.blank = typeof b.contentWindow.RTCPeerConnection;
+    const s = document.createElement('iframe'); s.srcdoc = '<p>x</p>';
+    s.onload = () => { out.srcdoc = typeof s.contentWindow.RTCPeerConnection; ok(JSON.stringify(out)); };
+    document.body.appendChild(s);
+  })),
+  skip.includes('rtc') ? Promise.resolve() : attempt('rtc', () => new Promise(ok => {
+    const kinds = [];
+    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:203.0.113.20:3478' }, { urls: 'stun:stun.l.google.com:19302' }] });
+    pc.createDataChannel('c');
+    pc.onicecandidate = e => { if (e.candidate) kinds.push(e.candidate.type + ':' + e.candidate.protocol); };
+    pc.createOffer().then(o => pc.setLocalDescription(o));
+    setTimeout(() => { pc.close(); ok('candidates=' + JSON.stringify(kinds)); }, 5000);
+  })),
+];
+Promise.all(jobs).then(() => { document.getElementById('out').textContent = JSON.stringify(R); document.title = 'canary-done'; });
+</script></body></html>
+"""
+
+# The known gap of the injected WebRTC removal: an about:blank iframe made by a script is not scripted by the engine's user script, so its
+# RTCPeerConnection exists. The engine's forced policy (disable_non_proxied_udp) must still stop every packet: this page uses the gap with
+# STUN servers on the client machine (?udp=<port>&ip=<address of this computer as the SERVER sees... any>), tests/EngineLiveTest.cpp listens there.
+WEBRTC_PAGE = b"""<!doctype html><html><head><meta charset="utf-8"><title>webrtc-running</title></head><body><div id="out">running</div>
+<script>
+const qs = new URLSearchParams(location.search);
+const udp = qs.get('udp') || '9';
+const ips = (qs.get('ips') || '127.0.0.1').split(',');
+const f = document.createElement('iframe'); document.body.appendChild(f);
+const C = f.contentWindow.RTCPeerConnection;
+const res = { gap: typeof C, candidates: [], error: '' };
+function finish() { document.getElementById('out').textContent = JSON.stringify(res); document.title = 'webrtc-done'; }
+if (typeof C !== 'function') { finish(); } else {
+  try {
+    const servers = ips.map(ip => ({ urls: 'stun:' + ip + ':' + udp })).concat([{ urls: 'stun:203.0.113.30:3478' }, { urls: 'stun:stun.example.invalid:3478' }]);
+    const pc = new C({ iceServers: servers });
+    pc.createDataChannel('c');
+    pc.onicecandidate = e => { if (e.candidate) res.candidates.push(e.candidate.type + ':' + e.candidate.protocol); };
+    pc.createOffer().then(o => pc.setLocalDescription(o)).catch(e => { res.error = String(e); });
+    setTimeout(() => { res.state = pc.iceGatheringState; pc.close(); finish(); }, 7000);
+  } catch (e) { res.error = String(e); finish(); }
+}
+</script></body></html>"""
 
 HITS = {}
 
@@ -78,6 +166,12 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(302, b"", "text/plain", [("Location", "http://127.0.0.1:8098/page")])
         elif path == "/echo":
             self.reply(200, ("host=%s local=%s" % (self.headers.get("Host"), self.connection.getsockname()[0])).encode(), "text/plain")
+        elif path == "/js":
+            self.reply(200, JS_PAGE, "text/html; charset=utf-8")
+        elif path == "/webrtc":
+            self.reply(200, WEBRTC_PAGE, "text/html; charset=utf-8")
+        elif path == "/canary":
+            self.reply(200, CANARY_PAGE, "text/html; charset=utf-8")
         elif path == "/page":
             self.reply(200, PAGE, "text/html; charset=utf-8")
         elif path == "/searchform":

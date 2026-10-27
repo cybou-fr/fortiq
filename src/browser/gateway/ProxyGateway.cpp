@@ -75,7 +75,7 @@ bool ProxyGateway::start(const GatewayOptions &options) {
     wipe(raw);
     m_expectedAuth = basicAuthValue("fortiq", m_token.toLatin1());
     m_server.setMaxPendingConnections(128);
-    if (!m_server.listen(QHostAddress::LocalHost, 0)) return false;   // 127.0.0.1 only, never another interface
+    if (!m_server.listen(QHostAddress::LocalHost, options.preferredPort)) return false;   // 127.0.0.1 only, never another interface
     m_sweep.start();
     return true;
 }

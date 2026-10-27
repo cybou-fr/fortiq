@@ -75,6 +75,8 @@ public:
 
     // What the user typed in the address bar.
     Q_INVOKABLE void open(const QString &text);
+    // What the typed text means (an address or a search with the chosen engine) WITHOUT fetching anything: {url, error}. The engine window uses it.
+    Q_INVOKABLE QVariantMap resolveTyped(const QString &text) const;
     // Submits GET form `index` of the shown page with the user's text for each "text" field (values: {fieldName: text}).
     Q_INVOKABLE void submitForm(int index, const QVariantMap &values);
     // A link clicked in the page (resolved against the current address; unsafe targets are ignored).

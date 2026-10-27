@@ -200,6 +200,14 @@ def main() -> int:
         src = Path("C:/Qt/Licenses") / name
         if src.exists():
             shutil.copy2(src, lic / f"Qt-{name}")
+    has_engine = (stage / "Qt6WebEngineCore.dll").is_file()
+    if has_engine:
+        # Chromium: Qt's own copy of the Chromium licence (BSD-3-Clause) from the Qt sources of the same version, when installed.
+        chromium = QT.parent / "Src" / "qtwebengine" / "LICENSE.Chromium"
+        if chromium.exists():
+            shutil.copy2(chromium, lic / "Chromium-LICENSE.txt")
+        else:
+            print(f"WARNING: {chromium} not found: install the Qt sources (Qt Maintenance Tool) so that the Chromium licence can be shipped")
     redist = Path(crt[-1]).parents[2] / "redist.txt"
     contact = os.environ.get("FORTIQ_NOTICE_CONTACT", "l'éditeur (CYBOU), par le site du produit")
     qt_version = QT.parent.name
@@ -213,6 +221,17 @@ def main() -> int:
         "  you may replace them with your own build of the same Qt version. The corresponding Qt source code is available from\n"
         f"  https://download.qt.io/official_releases/qt/{qt_version.rsplit('.', 1)[0]}/{qt_version}/ and, on request, from {contact}.\n"
         "  FORTIQ ships no Qt module that is only available under a commercial licence or GPL-2.0-only (checked by tool/check_third_party.py).\n"
+        + (
+        "- Qt WebEngine (QtWebEngine*.dll, QtWebEngineProcess.exe, the resources folder and translations/qtwebengine_locales) = the Chromium web engine, version\n"
+        f"  {qt_version} (Chromium 140 base with security patches taken from later Chromium versions, see CHROMIUM_VERSION in the Qt WebEngine sources). It is used under the LGPLv3\n"
+        "  (see Qt-COPYING.txt); Chromium itself is BSD-3-Clause (Chromium-LICENSE.txt) and bundles third-party components under their own licences\n"
+        "  (including BSD, MIT, Apache-2.0, MPL-2.0, LGPL-2.1 FFmpeg, ICU, V8, Skia, ANGLE, WebRTC, Brotli, zlib, and others). The authoritative list is the\n"
+        "  Qt WebEngine licensing page and the third_party folders of the source: https://doc.qt.io/qt-6/qtwebengine-licensing.html .\n"
+        "  The complete corresponding source code of Qt WebEngine and of the Chromium it contains is available from\n"
+        f"  https://download.qt.io/official_releases/qt/{qt_version.rsplit('.', 1)[0]}/{qt_version}/submodules/ and, on request, from {contact}.\n"
+        "  The engine files are separate, unmodified files in this folder: you may replace them with your own build of the same Qt version.\n"
+        "  FORTIQ starts Chromium with its network stack bound to the SSH gateway only (docs/BROWSER.md). Legal review of this notice is still pending.\n"
+        if has_engine else "") +
         "- libvterm 0.3.3 (MIT), statically linked, unmodified sources: see libvterm.txt.\n"
         "- libssh2 (BSD-3-Clause), OpenSSL 3 (Apache-2.0), zlib (zlib license): see the matching files.\n"
         "- Mesa llvmpipe software renderer (opengl32sw.dll, MIT and others) and Microsoft d3dcompiler_47.dll, both shipped with Qt for Windows.\n"

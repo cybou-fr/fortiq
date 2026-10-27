@@ -95,6 +95,7 @@ def main():
     ap.add_argument("--build", default="build-msvc")
     ap.add_argument("--second-host", default="fortiq-test-b", help="WSL distro of the independent second server (empty = none: twoHostsNeverMix stays skipped)")
     ap.add_argument("--user-b", default="fqother")
+    ap.add_argument("--only", default="", help="pass --only to tool/run_live_tests.py (comma-separated suite names, development only)")
     ap.add_argument("--no-run", action="store_true", help="only prepare and print the run_live_tests.py command line")
     ap.add_argument("--teardown-only", action="store_true", help="only remove the key and stop the helpers (cleanup after a crash)")
     opts = ap.parse_args()
@@ -190,6 +191,8 @@ echo 'second sshd is not listening on {port_b}' >&2; exit 1""")
                "--web-base", "http://127.0.0.1:8099", "--gateway-tls"]
         for k, v in args.items():
             cmd += [k, v]
+        if opts.only:
+            cmd += ["--only", opts.only]
         # every port the tests rely on must be reachable FROM WINDOWS too (a WSL-side listener is not enough: see free_weak_base)
         import socket
         for port in [int(opts.ssh_port), 1143, 1993, 8099, 8443] + [weak_base + i for i in range(5)]:

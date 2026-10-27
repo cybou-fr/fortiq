@@ -167,6 +167,17 @@ void BrowserController::clearPage(const QString &state, const QString &status) {
     emit changed();
 }
 
+QVariantMap BrowserController::resolveTyped(const QString &text) const {
+    if (looksLikeSearch(text)) {
+        const SearchEngine *engine = engineById(m_engine);
+        const QString url = engine ? searchUrl(QString::fromLatin1(engine->url), text) : QString();
+        if (url.isEmpty()) return { { "url", QString() }, { "error", QStringLiteral("Recherche trop longue (limite 2048 caractères).") } };
+        return { { "url", url }, { "error", QString() } };
+    }
+    const UrlCheck check = normalizeUrl(text);
+    return { { "url", check.ok ? check.url : QString() }, { "error", check.ok ? QString() : check.error } };
+}
+
 void BrowserController::open(const QString &text) {
     if (looksLikeSearch(text)) {
         const SearchEngine *engine = engineById(m_engine);

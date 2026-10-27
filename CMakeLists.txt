@@ -47,6 +47,22 @@ endif()
 option(FORTIQ_FUZZ "Build the libFuzzer target (clang, with ASan/UBSan)" OFF)
 option(FORTIQ_SANITIZE "Build everything with AddressSanitizer + UndefinedBehaviorSanitizer (clang/gcc)" OFF)
 option(FORTIQ_SHELL_PREVIEW_ONLY "Build only the shell preview (no SSH)" OFF)
+# Browser engine (Qt WebEngine = Chromium; docs/BROWSER.md, "Moteur"). Desktop only: Android uses the system WebView (later stage).
+# OFF keeps the text reader only (curl on the server) and builds without the ~200 MB of Chromium.
+if(ANDROID OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(FORTIQ_WEBENGINE_DEFAULT OFF)
+else()
+    set(FORTIQ_WEBENGINE_DEFAULT ON)
+endif()
+option(FORTIQ_WITH_WEBENGINE "Build the Chromium engine window of the Browser (Qt WebEngine)" ${FORTIQ_WEBENGINE_DEFAULT})
+if(FORTIQ_WITH_WEBENGINE AND NOT FORTIQ_SHELL_PREVIEW_ONLY)
+    find_package(Qt6 6.8 QUIET COMPONENTS WebEngineQuick)
+    if(NOT TARGET Qt6::WebEngineQuick)
+        message(WARNING "Qt WebEngine is not installed for this Qt kit: building WITHOUT the Browser engine (FORTIQ_WITH_WEBENGINE=OFF). "
+                        "Install the 'Qt WebEngine' component with the Qt Maintenance Tool.")
+        set(FORTIQ_WITH_WEBENGINE OFF)
+    endif()
+endif()
 if(FORTIQ_SANITIZE)
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined -g)
     add_link_options(-fsanitize=address,undefined)
@@ -189,8 +205,12 @@ set(FORTIQ_GATEWAY_PURE_SOURCES
     src/browser/UrlPolicy.cpp src/browser/UrlPolicy.h
 )
 set(FORTIQ_GATEWAY_TUNNEL_SOURCES src/browser/gateway/SshTunnel.cpp src/browser/gateway/SshTunnel.h src/ssh/SshAlgorithms.cpp src/ssh/SshAlgorithms.h)
+# The engine's own logic (profile rules, tunnel + gateway lifecycle, credentials, address question): no Qt WebEngine needed to build it.
+set(FORTIQ_ENGINE_PURE_SOURCES src/browser/engine/EngineProfile.cpp src/browser/engine/EngineProfile.h)
+set(FORTIQ_ENGINE_SOURCES ${FORTIQ_ENGINE_PURE_SOURCES} src/browser/engine/EngineBrowser.cpp src/browser/engine/EngineBrowser.h)
+set(FORTIQ_ENGINE_APP_SOURCES src/browser/engine/EngineRemote.cpp)
 set(FORTIQ_BROWSER_SOURCES ${FORTIQ_BROWSER_PURE_SOURCES} src/browser/BrowserController.cpp src/browser/BrowserController.h
-    ${FORTIQ_GATEWAY_PURE_SOURCES} ${FORTIQ_GATEWAY_TUNNEL_SOURCES})
+    ${FORTIQ_GATEWAY_PURE_SOURCES} ${FORTIQ_GATEWAY_TUNNEL_SOURCES} ${FORTIQ_ENGINE_SOURCES} ${FORTIQ_ENGINE_APP_SOURCES})
 list(REMOVE_DUPLICATES FORTIQ_BROWSER_SOURCES)
 
 set(FORTIQ_NETWORK_PURE_SOURCES src/network/NetworkInfo.cpp src/network/NetworkInfo.h)
@@ -276,6 +296,22 @@ qt_add_qml_module(fortiq
 target_link_libraries(fortiq PRIVATE
     Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Network
     Qt6::Concurrent fortiq_shellplugin ${FORTIQ_SSH_TARGET})
+
+if(FORTIQ_WITH_WEBENGINE)
+    # The web view lives in a QML module of its own so that builds without WebEngine never import QtWebEngine.
+    qt_add_library(fortiq_engine STATIC)
+    qt_add_qml_module(fortiq_engine
+        URI Fortiq.Engine
+        VERSION 1.0
+        RESOURCE_PREFIX /qt/qml
+        OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/qml/Fortiq/Engine
+        IMPORT_PATH ${CMAKE_CURRENT_BINARY_DIR}/qml
+        QML_FILES qml/engine/EngineView.qml qml/engine/EngineWindow.qml
+    )
+    target_link_libraries(fortiq_engine PRIVATE Qt6::Quick Qt6::WebEngineQuick fortiq_shellplugin)
+    target_compile_definitions(fortiq PRIVATE FORTIQ_HAVE_WEBENGINE)
+    target_link_libraries(fortiq PRIVATE Qt6::WebEngineQuick fortiq_engineplugin)
+endif()
 
 set_target_properties(fortiq PROPERTIES
     WIN32_EXECUTABLE TRUE
@@ -423,6 +459,26 @@ if(BUILD_TESTING)
         target_link_libraries(fortiq_gateway_it PRIVATE iphlpapi ws2_32)
     endif()
     add_test(NAME fortiq_gateway_live COMMAND fortiq_gateway_it -o "${CMAKE_CURRENT_BINARY_DIR}/gateway-live-results.txt,txt" -o "-,txt")
+    # Engine rules + EngineBrowser lifecycle (no Qt WebEngine, no SSH): switch audit, navigation policy, credentials, gateway lifecycle.
+    qt_add_executable(fortiq_engine_tests tests/EngineProfileTest.cpp ${FORTIQ_ENGINE_SOURCES} ${FORTIQ_GATEWAY_PURE_SOURCES})
+    target_include_directories(fortiq_engine_tests PRIVATE src)
+    target_link_libraries(fortiq_engine_tests PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+    add_test(NAME fortiq_engine COMMAND fortiq_engine_tests -o "${CMAKE_CURRENT_BINARY_DIR}/engine-results.txt,txt" -o "-,txt")
+    if(FORTIQ_WITH_WEBENGINE)
+        # The REAL Chromium + gateway + SSH tunnel against the disposable fixture: JavaScript through the gateway, and the leak test
+        # (socket tables of the whole process tree). Skips itself unless FORTIQ_IT_* are set; tool/run_live_tests.py runs it.
+        qt_add_executable(fortiq_engine_it tests/EngineLiveTest.cpp ${FORTIQ_ENGINE_SOURCES} ${FORTIQ_GATEWAY_PURE_SOURCES} ${FORTIQ_GATEWAY_TUNNEL_SOURCES} src/ssh/SshClient.h)
+        target_include_directories(fortiq_engine_it PRIVATE src)
+        target_compile_definitions(fortiq_engine_it PRIVATE FORTIQ_HAVE_WEBENGINE FORTIQ_ENGINE_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/engine"
+            FORTIQ_QT_QML_DIR="$<TARGET_FILE_DIR:Qt6::Core>/../qml"
+            FORTIQ_QT_PREFIX="$<TARGET_FILE_DIR:Qt6::Core>/..")
+        target_link_libraries(fortiq_engine_it PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml Qt6::Network Qt6::Test Qt6::WebEngineQuick
+            fortiq_engineplugin fortiq_shellplugin ${FORTIQ_SSH_TARGET})
+        if(WIN32)
+            target_link_libraries(fortiq_engine_it PRIVATE iphlpapi ws2_32)
+        endif()
+        add_test(NAME fortiq_engine_live COMMAND fortiq_engine_it -o "${CMAKE_CURRENT_BINARY_DIR}/engine-live-results.txt,txt" -o "-,txt")
+    endif()
     qt_add_executable(fortiq_network_tests tests/NetworkTest.cpp ${FORTIQ_NETWORK_PURE_SOURCES})
     target_include_directories(fortiq_network_tests PRIVATE src)
     target_compile_definitions(fortiq_network_tests PRIVATE FORTIQ_NET_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/network")
@@ -492,7 +548,7 @@ if(BUILD_TESTING)
         file(TO_CMAKE_PATH "$ENV{WINDIR}/Fonts" FORTIQ_TEST_FONT_DIR)
         set_property(TEST fortiq_layout APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=${FORTIQ_TEST_FONT_DIR}")
         # Developer tests need the matching Qt Test runtime, absent from the app package.
-        set_tests_properties(fortiq_markdown fortiq_link fortiq_disks fortiq_terminal_history fortiq_terminal_sequences fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_credentials fortiq_tasks fortiq_browser fortiq_gateway fortiq_gateway_live fortiq_network fortiq_system fortiq_db fortiq_mail fortiq_mailsend fortiq_publication fortiq_documents fortiq_highlighter fortiq_layout PROPERTIES
+        set_tests_properties(fortiq_markdown fortiq_link fortiq_disks fortiq_terminal_history fortiq_terminal_sequences fortiq_remote_path fortiq_ssh_integration fortiq_logs fortiq_credentials fortiq_tasks fortiq_browser fortiq_gateway fortiq_gateway_live fortiq_engine fortiq_network fortiq_system fortiq_db fortiq_mail fortiq_mailsend fortiq_publication fortiq_documents fortiq_highlighter fortiq_layout PROPERTIES
             ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:$<TARGET_FILE_DIR:${FORTIQ_SSH_TARGET}>")
     endif()
 endif()
