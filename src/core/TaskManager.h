@@ -64,17 +64,17 @@ public:
 
     // --- owner reports; each returns false when the transition is not allowed ---
     bool start(int id);                                        // Queued (no pending decision) -> Running
-    bool setProgress(int id, qint64 done, qint64 total);       // Running / Cancelling only
+    bool setProgress(int id, qint64 done, qint64 total);       // Running / Cancelling; done >= 0, total >= -1, monotonic
     bool setMessage(int id, const QString &message);           // not terminal
     bool requestDecision(int id, const QString &kind, const QString &message); // Running -> Queued, waiting for the user
     bool resolveDecision(int id);                              // clears the decision; stays Queued, progress reset
     bool succeed(int id, const QString &message, qint64 bytes = -1);  // Running / Cancelling
     bool fail(int id, const QString &message, const QString &code = {}); // Queued / Running / Cancelling
-    bool markUnknown(int id, const QString &message);          // Running / Cancelling
+    bool markUnknown(int id, const QString &message);          // Queued / Running / Cancelling (remote start may race UI)
     bool markCancelled(int id, const QString &message);        // any non-terminal state
 
     // --- user / UI ---
-    // Queued: cancelled at once. Running + cancellable: Cancelling and cancelRequested(id)
+    // Cancellable Queued: cancelled at once. Cancellable Running: Cancelling and cancelRequested(id)
     // is emitted so the owner stops the work. Otherwise refused (false).
     Q_INVOKABLE bool requestCancel(int id);
     // Removes finished (terminal) tasks from the list.
