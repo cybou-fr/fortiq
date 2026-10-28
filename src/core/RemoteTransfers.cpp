@@ -81,7 +81,14 @@ void RemoteController::onTaskCancelRequested(int id) {
 
 void RemoteController::startTransfer(int id, int policyValue) {
     Transfer *t = findTransfer(id);
-    if (!t) return;
+    if (!t || !m_connected) return;
+    const auto state = m_tasks->state(id);
+    if (!state || TaskManager::isTerminal(*state)
+        || *state == TaskManager::State::Cancelling) return;
+    if (policyValue < static_cast<int>(ConflictPolicy::Fail)
+        || policyValue > static_cast<int>(ConflictPolicy::Replace)) return;
+    // Only re-arm cancellation for a live job on the active server.
+    // A late dialog callback after disconnect must not restart a transfer.
     t->cancel->store(false);
     ConnectionRequest req;
     req.host = m_host; req.port = m_port; req.user = m_user;
