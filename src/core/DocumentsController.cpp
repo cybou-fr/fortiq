@@ -175,7 +175,7 @@ void DocumentsController::writeDraftNow(){
         // Only after a confirmed draft acknowledgement, and only in the same
         // document epoch, consume the explicit Save request exactly once.
         // No replay after an unknown/failed draft operation or lost connection.
-        if(runPending && success && !m_unknown && canSave())write(pendingPath,pendingCopy);
+        if(pendingManualSaveMayRun(runPending,success,canSave(),m_unknown))write(pendingPath,pendingCopy);
         else if(runPending){
             m_status="Save en attente annulé : brouillon non confirmé ou source indisponible. Vérifiez puis réessayez.";
             emit changed();
