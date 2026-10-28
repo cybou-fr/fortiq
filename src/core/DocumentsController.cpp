@@ -64,6 +64,23 @@ bool DocumentsController::hasDirtyTabs()const{
     for(const auto &tab:m_tabSessions)if(tab && tab->dirty())return true;
     return false;
 }
+QVariantList DocumentsController::dirtyTabSessions()const{
+    QVariantList result;
+    if(dirty())result.append(QVariant::fromValue(static_cast<QObject *>(const_cast<DocumentsController *>(this))));
+    for(const auto &tab:m_tabSessions)
+        if(tab && tab->dirty())result.append(QVariant::fromValue(static_cast<QObject *>(tab.data())));
+    return result;
+}
+bool DocumentsController::releaseTabSession(DocumentsController *session){
+    if(!session||session==this||session->parent()!=this||session->dirty()||session->busy())return false;
+    for(auto &tab:m_tabSessions)if(tab==session){
+        tab->deleteLater();
+        tab=nullptr;
+        emit changed();
+        return true;
+    }
+    return false;
+}
 bool DocumentsController::hasBusyTabs()const{
     if(busy())return true;
     for(const auto &tab:m_tabSessions)if(tab && tab->busy())return true;
