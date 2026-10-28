@@ -351,11 +351,13 @@ Item {
             visible: !win.busy && win.shown.length === 0
             anchors.centerIn: parent
             spacing: 6
-            Text {
+            AppStateMessage {
                 anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.max(0, Math.min(440, win.width - win.contentLeft - 40))
+                state: "empty"; touch: win.adaptive
+                horizontalAlignment: Text.AlignHCenter
                 text: win.entries.length === 0 ? (win.inTrash ? "La corbeille est vide" : "Dossier vide")
                                                : "Aucun élément ne correspond à « " + win.filterText + " »"
-                color: Theme.ink; font.pixelSize: 14; font.family: Theme.fontFamily
             }
             Text {
                 visible: win.entries.length > 0 && !win.showHidden && win.filterText.length === 0
