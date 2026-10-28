@@ -61,6 +61,8 @@ public:
     Q_INVOKABLE DocumentsController *createTabSession();
     Q_INVOKABLE bool hasDirtyTabs()const;
     Q_INVOKABLE bool hasBusyTabs()const;
+    Q_INVOKABLE QVariantList dirtyTabSessions()const;
+    Q_INVOKABLE bool releaseTabSession(DocumentsController *session);
     Q_INVOKABLE void discardDraft();
     Q_INVOKABLE void save();
     Q_INVOKABLE void saveAs(const QString &path);
