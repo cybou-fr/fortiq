@@ -41,7 +41,7 @@ Item {
         w.z = Qt.binding(() => shell.windowOrder.indexOf("web") + 1)
         w.adaptive = Qt.binding(() => shell.adaptive)
         w.visible = Qt.binding(() => shell.webOpen && shell.engineOn && (!shell.adaptive || shell.foregroundApp === "web"))
-        w.closeRequested.connect(() => { shell.webOpen = false; if (shell.adaptive) { shell.foregroundApp = "files"; shell.filesOpen = true } })
+        w.closeRequested.connect(() => { shell.webOpen = false; shell.focusAfterClose("web"); if (shell.adaptive && shell.foregroundApp === "files") shell.filesOpen = true })
         w.requestServers.connect(() => { shell.serversOpen = true })
         w.requestTextMode.connect(() => { shell.webText = true })
         engineWindowItem = w
