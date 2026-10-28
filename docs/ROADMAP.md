@@ -109,3 +109,7 @@ Found an event-loop pressure bug in Files' cross-app `revealFile` flow: when a f
 ### Desktop Shell session-end window cleanup — 2026-10-28
 
 Static inspection of `DesktopShell.qml` found `endSession()` closed most app windows but omitted `settingsOpen` (and fixture `browserOpen`). This could leave a stale settings panel visible when returning to server login. Session end now closes both, resets the foreground app to Files, and closes the notifications overlay. The existing guarded-logout checks for MDok dirty/busy tabs and TaskManager operations are unchanged. Verify logout with Settings foreground on desktop and narrow/adaptive layouts; no build, tests or CI were run.
+
+### Desktop window focus after close — 2026-10-28
+
+`DesktopShell.qml` now chooses the topmost remaining open application from `windowOrder` when the foreground window closes, instead of leaving the foreground key pointed at the closed app or unconditionally switching to Files. The same `focusAfterClose()` policy is applied to standard app windows and the dynamically created Chromium browser window. On adaptive layouts, Files is reopened only when it is the chosen fallback. When no windows remain on the desktop, the foreground key resets to `files` without opening a window. This is a source-level lifecycle change; actual keyboard focus and window transitions still require Qt runtime/visual verification. CI, builds and tests remain disabled.
