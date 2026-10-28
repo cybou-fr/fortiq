@@ -434,11 +434,12 @@ Item {
         Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: "Aucun serveur connecté"; color: Theme.ink; font.pixelSize: 16 }
         Button { objectName: "mailConnectButton"; anchors.horizontalCenter: parent.horizontalCenter; text: "Choisir un serveur…"; onClicked: win.requestServers() }
     }
-    Text {
+    AppStateMessage {
         objectName: "mailProblem"
         visible: win.connected && win.mailer !== null && win.mailer.state === "error" && win.mailer.folders.length === 0
-        x: win.contentLeft + 20; y: 110; width: parent.width - x - 20; wrapMode: Text.WordWrap; textFormat: Text.PlainText
-        text: win.mailer ? win.mailer.status : ""; color: "#FCA5A5"; font.pixelSize: 13
+        state: "error"; touch: win.adaptive
+        x: win.contentLeft + 20; y: 110; width: Math.max(0, parent.width - x - 20)
+        text: win.mailer ? win.mailer.status : ""
     }
 
     FileDialog {
