@@ -68,3 +68,7 @@ Windows CTest: **9/9**; DiskInfo: **5 passed** с init/cleanup; layout: **42 pas
 карточки, PlainText-метка и переход Unicode-пути в Files. Адаптивный снимок просмотрен.
 Windows MSVC/Qt 6.12 и Android arm64 APK собраны.
 Android APK установлен и запущен в FortiqTablet (emulator-5554); SSH/UI на физическом Android не квалифицированы.
+
+## Cancelled SSH scans (2026-10-28)
+
+Disks remains a **read-only** inventory of remote disks and mountpoints (`lsblk` / `findmnt`); it does not format, mount or modify filesystems. A cancelled inventory request now exits the completion callback before accepting partial results: it explicitly clears stale disk/mount rows, reports `cancelled` and updates TaskManager, instead of potentially displaying an empty or partially populated inventory as `ready`. Epoch and SSH connection-token checks still reject obsolete responses. Change committed without running CI, builds or tests, as requested.
