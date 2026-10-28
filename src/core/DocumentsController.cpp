@@ -10,6 +10,7 @@
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QUuid>
+#include <algorithm>
 namespace fortiq {
 namespace {
 // Opening is a read (transient, nothing to verify after a session change); saving is a write that guards the session and may end "unknown".
@@ -46,6 +47,29 @@ DocumentsController::DocumentsController(RemoteController *remote,QObject *paren
     });
 }
 DocumentsController::~DocumentsController(){m_pool.waitForDone();}
+DocumentsController *DocumentsController::createTabSession(){
+    auto *tab=new DocumentsController(m_remote,this);
+    m_tabSessions.append(tab);
+    connect(tab,&DocumentsController::changed,this,&DocumentsController::changed);
+    connect(tab,&QObject::destroyed,this,[this]{
+        m_tabSessions.erase(std::remove_if(m_tabSessions.begin(),m_tabSessions.end(),
+            [](const QPointer<DocumentsController> &p){return p.isNull();}),m_tabSessions.end());
+        emit changed();
+    });
+    emit changed();
+    return tab;
+}
+bool DocumentsController::hasDirtyTabs()const{
+    if(dirty())return true;
+    for(const auto &tab:m_tabSessions)if(tab && tab->dirty())return true;
+    return false;
+}
+bool DocumentsController::hasBusyTabs()const{
+    if(busy())return true;
+    for(const auto &tab:m_tabSessions)if(tab && tab->busy())return true;
+    return false;
+}
+
 bool DocumentsController::sourceAvailable()const{return m_hasDocument&&m_remote->connected()&&!m_remote->linkLost()&&m_sourceToken==m_remote->connectionToken()&&m_sourceServerId==m_remote->activeServerId();}
 bool DocumentsController::canSave()const{return sourceAvailable()&&!m_unknown;}
 bool DocumentsController::isCurrentDocument(const QString &path) const {
