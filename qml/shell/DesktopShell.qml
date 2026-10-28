@@ -231,6 +231,11 @@ Item {
     // the hidden window. Return keyboard focus to the remaining window's
     // focus scope rather than routing keystrokes to an invisible control.
     function restoreWindowFocus() {
+        // Never steal input from a server/login screen, a session guard,
+        // or a global overlay activated during the deferred handoff.
+        if (serversOpen || sessionGuard.visible || launcherOpen
+            || controlOpen || sessionMenuOpen || notificationsOpen
+            || (!adaptive && topBar.searchText.length > 0)) return
         const items = {
             files: filesWindow, browser: browserWindow, logs: logsWindow,
             terminal: terminalWindow, disks: disksWindow, docs: documentsWindow,
