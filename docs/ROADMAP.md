@@ -125,3 +125,7 @@ The deferred `DesktopShell.restoreWindowFocus()` handoff now defers to the serve
 ### Compact Shell overlay geometry — 2026-10-28
 
 Static review found the notifications overlay used `height: min(shell.height - 120, contentHeight)`, which can become negative on a very short shell and leaves unnecessarily large bottom clearance. It now bounds height to non-negative available space below its 52px top origin (`shell.height - 60`). The session menu x-position also has an 8px left bound on narrow shells. These are defensive geometry changes, not a guarantee that all overlays are usable at arbitrary viewport sizes; manual Qt checks on compact and resized layouts remain necessary. CI, builds and tests were not run.
+
+### Compact task-panel positioning — 2026-10-28
+
+Static Shell review found the task panel (`TaskCenter`) could calculate a negative top position when its desired position above the dock exceeded the available height. Its horizontal width is now nonnegative and its x/y origins bounded with minimum margins, while preserving dock-aware placement on normal desktop windows. This is a defensive layout correction, not a validated responsive design: the panel may still exceed the viewport if the host becomes smaller than its content, and that case needs visual/runtime testing. No CI, builds, or tests were run.
