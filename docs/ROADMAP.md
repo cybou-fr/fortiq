@@ -151,3 +151,7 @@ Reviewed the shared `LinkBanner` used by Disks, Network and System (and other ap
 ### Shared application state presentation — 2026-10-28
 
 Introduced `qml/shell/AppStateMessage.qml` registered in CMake, with `state` (`loading`, `empty`, `error`) and `touch` presentation options. First migrations: Disks and Network now use this shared plain-text component for empty/error messages, while each controller retains authority over its own state transitions and explanatory text. Disks also distinguishes a section-specific tool error from a legitimate empty result. Future migration to System/Logs/DB should check the actual state contracts before replacing their existing controls; no speculative shared backend state machine has been added. No CI, build or tests were run.
+
+### Shared state messages: System, Logs, Database — 2026-10-28
+
+Extended `AppStateMessage` migration to System (loading/error), Logs (filtered empty state), and Database (query errors). State decisions remain owned by app/controllers. In System, the loading/error visibility check is now section-specific instead of using an empty processes list when Services is active. Database retains the `dbError` object name and truncation; Logs retains its distinction between no journal events and no filter matches. This change standardizes presentation only; actual state machines and stale-on-disconnect handling still need end-to-end validation. CI disabled; no builds or tests executed.
