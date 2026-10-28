@@ -56,6 +56,10 @@ bool TaskManager::start(int id) {
 bool TaskManager::setProgress(int id, qint64 done, qint64 total) {
     Task *t = find(id);
     if (!t || (t->state != State::Running && t->state != State::Cancelling)) return false;
+    // Reject impossible or regressive progress reports from delayed worker
+    // callbacks. An unknown total is represented by -1.
+    if (done < 0 || total < -1 || (total >= 0 && done > total)
+        || done < t->done) return false;
     if (t->done == done && t->total == total) return true;
     t->done = done;
     t->total = total;
