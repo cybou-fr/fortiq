@@ -98,8 +98,18 @@ Item {
     function confirmSessionEnd(label, proceed) {
         const managerWasOpen = serversOpen
         const guarded = function() { if(managerWasOpen)shell.serversOpen=true;sessionGuard.ask(label, proceed) }
-        if(documentsController && documentsController.hasDirtyTabs() && !documentsController.hasBusyTabs()){
-            serversOpen=false;documentsOpen=true;raiseApp("docs");documentsWindow.requestAllDocumentsReady(guarded)
+        if(documentsController && documentsController.hasBusyTabs()){
+            // Never disconnect while an MDok tab has an in-flight SSH write.
+            serversOpen=false;documentsOpen=true;raiseApp("docs")
+            pushNotification("warning", "MDok", "Un document est en cours de traitement. Réessayez après la fin de l'opération.")
+            return
+        }
+        if(documentsController && documentsController.hasDirtyTabs()){
+            serversOpen=false;documentsOpen=true;raiseApp("docs");documentsWindow.requestAllDocumentsReady(function(){
+                // Re-check: a different tab may have started writing during confirmation.
+                if(documentsController.hasBusyTabs() || documentsController.hasDirtyTabs())return
+                guarded()
+            })
         } else guarded()
     }
     function endSession() {
