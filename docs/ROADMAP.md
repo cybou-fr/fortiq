@@ -121,3 +121,7 @@ Static inspection of `DesktopShell.qml` found `endSession()` closed most app win
 ### Modal and search focus protection — 2026-10-28
 
 The deferred `DesktopShell.restoreWindowFocus()` handoff now defers to the server/login screen, the session-end guard, active global overlays, and a nonempty top-bar search query. Without this guard, raising an app while an overlay is in use could steal keyboard input from the overlay or confirmation dialog. Per-app modal dialogs require additional visual/runtime review. This source-level guard was committed without running CI, builds or tests.
+
+### Compact Shell overlay geometry — 2026-10-28
+
+Static review found the notifications overlay used `height: min(shell.height - 120, contentHeight)`, which can become negative on a very short shell and leaves unnecessarily large bottom clearance. It now bounds height to non-negative available space below its 52px top origin (`shell.height - 60`). The session menu x-position also has an 8px left bound on narrow shells. These are defensive geometry changes, not a guarantee that all overlays are usable at arbitrary viewport sizes; manual Qt checks on compact and resized layouts remain necessary. CI, builds and tests were not run.
