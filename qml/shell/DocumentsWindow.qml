@@ -31,6 +31,7 @@ Item {
     property var pinnedTabs:[]
     property var tabRoot:null
     property var tabSessions:({})
+    property int tabGeneration:-1
     DocumentSearch { id:finder }
     MarkdownHighlighter { document:editor.textDocument }
     readonly property bool drawer:adaptive && width<900
@@ -51,9 +52,18 @@ Item {
             if(!loadedImages[path]){loadedImages[path]=true;documents.requestMarkdownImage(path);count++}
         }
     }
+    function checkTabSession(){
+        if(!remote || !remote.connected)return
+        if(tabGeneration!==remote.connectionGeneration || recentServerId!==remote.activeServerId){
+            tabSessions=({});pinnedTabs=[];recentDocuments=[]
+            tabGeneration=remote.connectionGeneration;recentServerId=remote.activeServerId
+        }
+    }
     function trackDocument(){
         if(!tabRoot && documents)tabRoot=documents
         if(!documents || !documents.hasDocument || documents.isNew || !documents.path || !remote)return
+        if(!documents.sourceAvailable)return
+        checkTabSession()
         const server=documents.sourceServerId
         if(!server)return
         if(recentServerId!==server){recentDocuments=[];pinnedTabs=[];recentServerId=server}
@@ -115,6 +125,7 @@ Item {
     }
     function openRecent(path){
         if(!remote || !remote.connected || remote.activeServerId!==recentServerId)return
+        checkTabSession()
         const key=recentServerId+"|"+path
         const tab=tabSessions[key]
         if(tab){
@@ -134,10 +145,11 @@ Item {
     }
     function perform(action,path){
         if(action==="open" && path && tabRoot && remote && remote.connected){
+            checkTabSession()
             const key=remote.activeServerId+"|"+path
             if(tabSessions[key]){documents=tabSessions[key];syncDocument();return}
             if(documents && documents.hasDocument && documents.path!==path){
-                if(documents.path && !documents.isNew)tabSessions[remote.activeServerId+"|"+documents.path]=documents
+                if(documents.path && !documents.isNew && documents.sourceAvailable)tabSessions[remote.activeServerId+"|"+documents.path]=documents
                 const newSession=tabRoot.createTabSession()
                 tabSessions[key]=newSession
                 documents=newSession
@@ -177,7 +189,7 @@ Item {
             editor.forceActiveFocus();return
         }
         // Untitled drafts have no stable tab identity: never switch away from them silently.
-        const isTabSwitch=action==="open" && tabRoot && remote && remote.connected && path && documents && !documents.isNew
+        const isTabSwitch=action==="open" && tabRoot && remote && remote.connected && path && documents && !documents.isNew && documents.sourceAvailable
         if(documents && documents.dirty && !isTabSwitch){
             pendingAction=action;pendingPath=path||"";pendingContinuation=continuation||null
             pendingServerId=remote?remote.activeServerId:"";pendingGeneration=remote?remote.connectionGeneration:-1
