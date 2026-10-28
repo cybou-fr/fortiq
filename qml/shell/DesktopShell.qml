@@ -98,7 +98,7 @@ Item {
     function confirmSessionEnd(label, proceed) {
         const managerWasOpen = serversOpen
         const guarded = function() { if(managerWasOpen)shell.serversOpen=true;sessionGuard.ask(label, proceed) }
-        if(documentsController && documentsController.dirty && !documentsController.busy){
+        if(documentsController && documentsController.hasDirtyTabs() && !documentsController.hasBusyTabs()){
             serversOpen=false;documentsOpen=true;raiseApp("docs");documentsWindow.request("continue","",guarded)
         } else guarded()
     }
@@ -473,7 +473,7 @@ Item {
             serversOpen=false;mailOpen=true;raiseApp("mail")
             mailWindow.requestQuit(function(){if(shell.allowAppClose())Qt.quit()});return false
         }
-        if ((documentsController && documentsController.dirty)
+        if ((documentsController && documentsController.hasDirtyTabs())
                 || (taskManager && taskManager.guardingCount() > 0)) {
             confirmSessionEnd("Quitter", function() { Qt.quit() }); return false
         }
