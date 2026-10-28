@@ -97,16 +97,26 @@ Rectangle {
                         height: dialog.touchMode ? 44 : 30; radius: 8
                         width: label.implicitWidth + 24
                         opacity: dialog.busy ? 0.5 : 1
+                        activeFocusOnTab: dialog.visible && !dialog.busy
+                        border.width: activeFocus ? 2 : 0
+                        border.color: Theme.accent
                         color: modelData.k === "ok" ? (dialog.danger ? "#C2410C" : Theme.selection)
                                                    : (btn.containsMouse ? "#33FFFFFF" : "#1FFFFFFF")
+                        function activate() {
+                            if (dialog.busy) return
+                            if (modelData.k === "ok") dialog.confirm()
+                            else if (modelData.k === "alt") dialog.alternate()
+                            else { dialog.visible = false; dialog.rejected() }
+                        }
+                        Keys.onSpacePressed: event => { activate(); event.accepted = true }
+                        Keys.onReturnPressed: event => { activate(); event.accepted = true }
+                        Keys.onEnterPressed: event => { activate(); event.accepted = true }
                         Text { id: label; anchors.centerIn: parent; text: modelData.t; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
                         MouseArea {
                             id: btn
                             anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                             enabled: !dialog.busy
-                            onClicked: modelData.k === "ok" ? dialog.confirm()
-                                     : modelData.k === "alt" ? dialog.alternate()
-                                     : (dialog.visible = false, dialog.rejected())
+                            onClicked: parent.activate()
                         }
                     }
                 }
