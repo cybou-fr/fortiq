@@ -45,7 +45,7 @@ void TerminalController::endTask(const QString &how, const QString &message) {
     else tasks->succeed(id, message);
 }
 void TerminalController::stop() {
-    endTask(m_endHow.isEmpty() ? QStringLiteral("succeeded") : m_endHow, m_endMessage.isEmpty() ? QStringLiteral("Terminal fermé.") : m_endMessage);
+    endTask(m_endHow.isEmpty() ? QStringLiteral("cancelled") : m_endHow, m_endMessage.isEmpty() ? QStringLiteral("Terminal fermé localement ; état du processus distant non confirmé.") : m_endMessage);
     m_endHow.clear(); m_endMessage.clear();
     ++m_seq; m_timer.stop(); m_input.clear(); m_backpressure = false; m_running = m_busy = m_pollBusy = false; m_serverToken = -1;
     auto slot = m_session;
