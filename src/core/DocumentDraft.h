@@ -24,8 +24,8 @@ inline bool draftCompletionBelongsToDocument(const QString &submittedPath,
                                              int submittedToken, int currentToken,
                                              const QString &submittedServer,
                                              const QString &currentServer,
-                                             bool connected) {
-    return connected && submittedToken == currentToken &&
+                                             bool connected, int submittedEpoch, int currentEpoch) {
+    return connected && submittedEpoch == currentEpoch && submittedToken == currentToken &&
            submittedServer == currentServer && submittedPath == currentPath;
 }
 
