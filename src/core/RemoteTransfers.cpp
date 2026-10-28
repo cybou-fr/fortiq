@@ -57,12 +57,18 @@ void RemoteController::upload(const QVariantList &localFiles, const QString &rem
 
 void RemoteController::resolveConflict(int id, const QString &policy) {
     if (!findTransfer(id) || m_tasks->task(id).value("decision").toString() != QLatin1String("conflict")) return;
-    if (policy == "skip") {
+    // Never turn an unknown or malformed UI decision into an implicit
+    // KeepBoth upload. Only the three documented choices are accepted.
+    if (policy != QLatin1String("skip") && policy != QLatin1String("replace")
+        && policy != QLatin1String("keepBoth")) return;
+    if (policy == QLatin1String("skip")) {
         m_tasks->markCancelled(id, QStringLiteral("Ignoré ; le fichier existant est conservé."));
         return;
     }
+    if (!m_connected || m_tasks->task(id).value("generation").toInt() != m_generation) return;
     m_tasks->resolveDecision(id);
-    startTransfer(id, static_cast<int>(policy == "replace" ? ConflictPolicy::Replace : ConflictPolicy::KeepBoth));
+    startTransfer(id, static_cast<int>(policy == QLatin1String("replace")
+        ? ConflictPolicy::Replace : ConflictPolicy::KeepBoth));
 }
 
 void RemoteController::cancelTransfer(int id) { m_tasks->requestCancel(id); }
