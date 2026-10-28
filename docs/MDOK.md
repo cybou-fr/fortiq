@@ -574,3 +574,7 @@ MDok теперь централизованно поддерживает вид
 ## Untitled tab callback ownership — 2026-10-28
 
 The UI now checks that an untitled document session is still present in `untitledTabs` before activating or closing it. This guards against stale UI/deferred callbacks targeting a session that was released after a tab was closed or restructured. The check intentionally stays within DocumentsWindow (UI tab ownership) rather than introducing a speculative shared service. This is a static source-level hardening change; no Qt build, runtime tests, or CI were run.
+
+## Tab close guard during draft uploads — 2026-10-28
+
+`DocumentsController::releaseTabSession()` refuses to release a tab while its draft upload is pending, even if `busy()` is false. The UI close actions for untitled and pinned tabs now check the root controller's `hasBusyTabs()` before removing tab entries from QML, preventing an orphaned controller/session when an asynchronous draft write is still active. This conservatively defers tab closing while any MDok tab has outstanding work. It must be verified with live SSH draft uploads and disconnects before release. CI, builds and tests were not run.
