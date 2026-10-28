@@ -299,14 +299,16 @@ Item {
         Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: "Aucun serveur connecté"; color: Theme.ink; font.pixelSize: 16 }
         Button { objectName: "networkConnectButton"; anchors.horizontalCenter: parent.horizontalCenter; text: "Choisir un serveur…"; onClicked: win.requestServers() }
     }
-    Text {
+    AppStateMessage {
         visible: win.connected && win.network !== null && win.network.state === "error" && (win.section === "interfaces" || win.section === "ports" || win.section === "routes" || win.section === "dns")
-        x: win.contentLeft + 20; y: 165; width: parent.width - x - 20; wrapMode: Text.WordWrap; textFormat: Text.PlainText
-        text: win.network ? win.network.status : ""; color: "#FCA5A5"; font.pixelSize: 13
+        state: "error"; touch: win.adaptive
+        x: win.contentLeft + 20; y: 165; width: Math.max(0, parent.width - x - 20)
+        text: win.network ? win.network.status : ""
     }
-    Text {
+    AppStateMessage {
         visible: win.connected && win.network !== null && win.network.state === "ready" && win.section !== "diag" && win.section !== "dns" && list.count === 0
-        x: win.contentLeft + 20; y: 165; width: parent.width - x - 20; wrapMode: Text.WordWrap; color: Theme.inkMuted; font.pixelSize: 13
+        state: "empty"; touch: win.adaptive
+        x: win.contentLeft + 20; y: 165; width: Math.max(0, parent.width - x - 20)
         text: win.section === "ports" ? "Aucun port en écoute signalé par ss." : "Aucune entrée."
     }
     Text {
