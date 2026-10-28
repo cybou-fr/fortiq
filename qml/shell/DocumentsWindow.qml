@@ -64,6 +64,16 @@ Item {
         if(pinnedTabs.indexOf(path)<0)pinnedTabs=pinnedTabs.concat([path]).slice(-8)
         if(!tabSessions[server+"|"+path])tabSessions[server+"|"+path]=documents
     }
+    function requestAllDocumentsReady(proceed){
+        if(!tabRoot){proceed();return}
+        if(tabRoot.hasBusyTabs())return
+        const dirty=tabRoot.dirtyTabSessions()
+        if(dirty.length===0){proceed();return}
+        const tab=dirty[0]
+        if(documents!==tab){documents=tab;syncDocument()}
+        const next=function(){Qt.callLater(function(){win.requestAllDocumentsReady(proceed)})}
+        request("continue","",next)
+    }
     function closePinnedTab(path){
         const tab=tabSessions[recentServerId+"|"+path]
         if(tab && (tab.dirty || tab.busy)){
@@ -81,7 +91,9 @@ Item {
             return
         }
         pinnedTabs=pinnedTabs.filter(p=>p!==path)
+        delete tabSessions[recentServerId+"|"+path]
         if(documents && documents.path===path && pinnedTabs.length>0)openRecent(pinnedTabs[pinnedTabs.length-1])
+        if(tab && tab!==tabRoot && documents!==tab && tabRoot)tabRoot.releaseTabSession(tab)
     }
     function openRecent(path){
         if(!remote || !remote.connected || remote.activeServerId!==recentServerId)return
