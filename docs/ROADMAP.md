@@ -117,3 +117,7 @@ Static inspection of `DesktopShell.qml` found `endSession()` closed most app win
 ### Keyboard focus on Desktop Shell foreground transitions — 2026-10-28
 
 `DesktopShell` now schedules a focus handoff after `foregroundApp` changes: when the selected app window is visible it receives `forceActiveFocus()`, otherwise the shell takes focus. This addresses keyboard focus left on hidden controls after a close or application switch. This is a focus-scope fallback, not a guarantee that a particular child editor regains its previous caret; modal dialog and per-app focus restoration require runtime verification. No Qt build or tests run; CI remains disabled.
+
+### Modal and search focus protection — 2026-10-28
+
+The deferred `DesktopShell.restoreWindowFocus()` handoff now defers to the server/login screen, the session-end guard, active global overlays, and a nonempty top-bar search query. Without this guard, raising an app while an overlay is in use could steal keyboard input from the overlay or confirmation dialog. Per-app modal dialogs require additional visual/runtime review. This source-level guard was committed without running CI, builds or tests.
