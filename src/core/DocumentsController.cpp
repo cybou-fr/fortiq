@@ -418,7 +418,17 @@ void DocumentsController::writeDraftNow(){
         m_pendingSavePath.clear();m_pendingSaveEpoch=-1;
         if(!draftCompletionBelongsToDocument(path,m_path,token,m_remote->connectionToken(),
                                               serverId,m_remote->activeServerId(),m_remote->connected()&&!m_remote->linkLost(),
-                                              documentEpoch,m_seq))return;
+                                              documentEpoch,m_seq)){
+            // A draft may have reached the server before SSH was lost.
+            // Never requeue an unacknowledged write or continue a pending Save.
+            if(documentEpoch==m_seq && path==m_path && serverId==m_sourceServerId){
+                m_draftTimer.stop();
+                m_draftStatus="Résultat du brouillon inconnu après changement SSH ; texte local conservé. Vérifiez le serveur avant de réessayer.";
+                if(runPending)m_status="Save différé annulé : session SSH changée ; résultat du brouillon inconnu.";
+                emit changed();
+            }
+            return;
+        }
         const bool success=r.status==SshResult::Status::Ok&&r.code=="exit:0";
         // A completed SSH write only protects the snapshot sent, not edits made
         // while the remote operation was in flight. Never claim those edits are saved.
