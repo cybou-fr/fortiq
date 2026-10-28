@@ -227,6 +227,21 @@ Item {
         // Keep a valid foreground identity when the desktop has no windows.
         foregroundApp = "files"
     }
+    // On a close, focus may still refer to an editor or button belonging to
+    // the hidden window. Return keyboard focus to the remaining window's
+    // focus scope rather than routing keystrokes to an invisible control.
+    function restoreWindowFocus() {
+        const items = {
+            files: filesWindow, browser: browserWindow, logs: logsWindow,
+            terminal: terminalWindow, disks: disksWindow, docs: documentsWindow,
+            web: engineOn && engineWindowItem ? engineWindowItem : webWindow,
+            network: networkWindow, system: systemWindow, db: dbWindow,
+            mail: mailWindow, settings: settingsWindow
+        }
+        const item = items[foregroundApp]
+        if (item && item.visible) item.forceActiveFocus()
+        else shell.forceActiveFocus()
+    }
 
     width: Theme.canvasWidth
     height: Theme.canvasHeight
@@ -778,6 +793,7 @@ Item {
 
     SessionGuard { id: sessionGuard; anchors.fill: parent; manager: shell.taskManager }
     focus: true
+    onForegroundAppChanged: Qt.callLater(shell.restoreWindowFocus)
     function handleBack() {
         if (sessionGuard.visible) { sessionGuard.stay(); return true }
         if (Qt.inputMethod.visible) { Qt.inputMethod.hide(); return true }
