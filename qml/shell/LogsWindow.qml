@@ -82,12 +82,11 @@ Item {
     property bool initialLoadScheduled: false
     function scheduleInitialLoad() {
         if (initialLoadScheduled || !visible || !connected || fixture || !logs
-            || logs.busy || logs.events.length > 0) return
+            || logs.busy) return
         initialLoadScheduled = true
         Qt.callLater(function() {
             initialLoadScheduled = false
-            if (!visible || !connected || fixture || !logs || logs.busy
-                || logs.events.length > 0) return
+            if (!visible || !connected || fixture || !logs || logs.busy) return
             logs.loadSources()
             logs.reload()
         })
@@ -95,7 +94,7 @@ Item {
     onConnectedChanged: scheduleInitialLoad()
     onLogsChanged: scheduleInitialLoad()
     Component.onCompleted: scheduleInitialLoad()
-    onVisibleChanged: if (visible) scheduleInitialLoad()
+    onVisibleChanged: if (visible && logs && logs.events.length === 0) scheduleInitialLoad()
     onXChanged: body.syncOrigin()
     onYChanged: body.syncOrigin()
 
