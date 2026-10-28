@@ -82,8 +82,11 @@ bool DocumentsController::releaseTabSession(DocumentsController *session){
     return false;
 }
 bool DocumentsController::hasBusyTabs()const{
-    if(busy())return true;
-    for(const auto &tab:m_tabSessions)if(tab && tab->busy())return true;
+    // Draft uploads are SSH writes too. They do not set m_busy, but must
+    // block disconnect/exit exactly like a manual Save.
+    if(busy() || m_draftUploadPending)return true;
+    for(const auto &tab:m_tabSessions)
+        if(tab && (tab->busy() || tab->m_draftUploadPending))return true;
     return false;
 }
 
