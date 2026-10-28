@@ -104,6 +104,26 @@ void DocumentsController::createNew(){
     m_recovery.clear();m_conflict=false;m_draftTimer.stop();m_path.clear();m_base.clear();m_text="# Nouveau document\n";m_hash.clear();m_bom=m_crlf=m_unknown=false;m_new=m_hasDocument=true;
     m_status="Nouveau Markdown — choisissez un chemin absolu .md pour enregistrer.";emit changed();emit loaded();
 }
+bool DocumentsController::recoverAsNew(DocumentsController *source){
+    if(!source||source==this||source->m_remote!=m_remote||source->m_pdfMode||
+       !source->m_hasDocument||source->m_busy||m_busy||dirty()||
+       !m_remote->connected()||m_remote->linkLost())return false;
+    const QString snapshot=source->m_text;
+    const QByteArray encoded=encodeMarkdown(snapshot,false,false);
+    if(encoded.size()>MarkdownLimit||snapshot.contains(QChar::Null))return false;
+    ++m_seq;
+    m_draftTimer.stop();
+    m_pdfMode=false;m_pdfImage.clear();m_pdfPage=m_pdfPages=0;
+    m_sourceToken=m_remote->connectionToken();m_sourceServerId=m_remote->activeServerId();
+    m_sourceLabel=m_remote->serverLabel();
+    m_path.clear();m_hash.clear();m_base.clear();
+    m_text=snapshot;m_hasDocument=true;m_new=true;
+    m_bom=false;m_crlf=false;m_unknown=false;
+    m_recovery.clear();m_conflict=false;
+    m_status="Copie de récupération en mémoire : choisissez un nouveau chemin .md et enregistrez.";
+    emit changed();emit loaded();
+    return true;
+}
 void DocumentsController::open(const QString &path){
     if(m_busy || !m_remote->connected())return;
     if(isCurrentDocument(path))return; // Re-activate without losing edits, selection or Undo.
