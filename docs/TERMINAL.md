@@ -143,3 +143,7 @@ Ctrl+Shift+F, ввод запроса без SSH-байтов, возврат ф
 ## Terminal lifecycle hardening — 2026-10-28
 
 Opening the Terminal window no longer resets the per-connection autostart guard. A terminal that was explicitly closed, completed, or lost its SSH link must not spawn a new remote shell merely because the user switched away and back to the window; a manual Start remains possible. The polling path also marks a disconnected SSH terminal task as failed with an unknown remote process state, instead of reporting success. This is distinct from an intentionally exited shell. Changes were committed to `main` without building or running tests, per the owner's instruction; CI remains disabled.
+
+## Input queue and local shutdown semantics — 2026-10-28
+
+A local `stop()` without a confirmed shell exit is now recorded as **cancelled**, not **succeeded**; a normal remote `exit` observed by the polling callback still counts as success. This keeps task history from claiming successful remote process termination when only the local SSH channel was closed. Also, a paste that would exceed the 32 KiB controller input queue is rejected atomically with a visible status instead of killing the active terminal and clearing previously buffered keystrokes. Nothing is automatically replayed. The SSH transport continues to enforce its own 64 KiB queue bound. These source changes are not build- or runtime-tested; CI remains disabled.
