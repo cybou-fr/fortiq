@@ -71,13 +71,47 @@ private slots:
         QCOMPARE(m.task(id).value("message").toString(), QString("Cannot create a file"));
         QCOMPARE(m.task(id).value("code").toString(), QString("conflict"));
     }
-    void queuedCannotSucceedOrBeUnknown() {
+    void queuedCannotSucceedButCanBeUnknown() {
         TaskManager m;
-        const int id = m.create(spec());
+        const int id = m.create(spec("save", false));
         QVERIFY(!m.succeed(id, "no"));
-        QVERIFY(!m.markUnknown(id, "no"));
         QVERIFY(!m.setProgress(id, 1, 2));
         QCOMPARE(m.state(id).value(), S::Queued);
+        QVERIFY(m.markUnknown(id, "SSH outcome not confirmed"));
+        QCOMPARE(m.state(id).value(), S::Unknown);
+        QVERIFY(!m.start(id));
+        QVERIFY(!m.markCancelled(id, "late"));
+    }
+    void queuedNonCancellableMutationCannotBeCancelled() {
+        TaskManager m;
+        QSignalSpy requested(&m, &TaskManager::cancelRequested);
+        const int id = m.create(spec("rename", false));
+        QVERIFY(!m.requestCancel(id));
+        QCOMPARE(m.state(id).value(), S::Queued);
+        QCOMPARE(requested.size(), 0);
+        QVERIFY(m.markUnknown(id, "connection lost"));
+    }
+    void cancellationHandlerMayFinishSynchronously() {
+        TaskManager m;
+        const int id = m.create(spec());
+        QObject::connect(&m, &TaskManager::cancelRequested, &m, [&](int task) {
+            if (task == id) QVERIFY(m.markUnknown(id, "SSH uncertain"));
+        });
+        QVERIFY(m.requestCancel(id));
+        QCOMPARE(m.state(id).value(), S::Unknown);
+    }
+    void progressRejectsRegressionsAndInvalidTotals() {
+        TaskManager m;
+        const int id = m.begin(spec());
+        QVERIFY(m.setProgress(id, 10, 100));
+        QVERIFY(!m.setProgress(id, 9, 100));
+        QVERIFY(!m.setProgress(id, 11, -1));
+        QVERIFY(!m.setProgress(id, 11, 99));
+        QVERIFY(!m.setProgress(id, 110, 100));
+        QVERIFY(!m.setProgress(id, -1, 100));
+        QCOMPARE(m.task(id).value("done").toDouble(), 10.0);
+        QCOMPARE(m.task(id).value("total").toDouble(), 100.0);
+        QVERIFY(m.setProgress(id, 20, 100));
     }
     void cancelQueuedIsImmediate() {
         TaskManager m;
