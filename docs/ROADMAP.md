@@ -147,3 +147,7 @@ A source-level review across Files, MDok, Logs, Mail, DB, System, Network and Di
 ### Cross-app lost-SSH state recovery — 2026-10-28
 
 Reviewed the shared `LinkBanner` used by Disks, Network and System (and other apps). A lost-link warning existed, but its `Réessayer` action was mouse-only, unlike the recently improved shared dialogs. The retry control is now keyboard-focusable via Tab, exposes an active-focus border, and accepts Enter/Space as well as mouse clicks. The warning text width is clamped to avoid negative geometry on narrow screens. This preserves each app's own retry callback. Empty/loading/error states are still implemented differently between apps and need unified UX acceptance criteria; no Qt runtime, build, tests or CI were run.
+
+### Shared application state presentation — 2026-10-28
+
+Introduced `qml/shell/AppStateMessage.qml` registered in CMake, with `state` (`loading`, `empty`, `error`) and `touch` presentation options. First migrations: Disks and Network now use this shared plain-text component for empty/error messages, while each controller retains authority over its own state transitions and explanatory text. Disks also distinguishes a section-specific tool error from a legitimate empty result. Future migration to System/Logs/DB should check the actual state contracts before replacing their existing controls; no speculative shared backend state machine has been added. No CI, build or tests were run.
