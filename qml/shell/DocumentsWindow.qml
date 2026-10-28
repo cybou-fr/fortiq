@@ -232,6 +232,7 @@ Item {
             ToolButtonGlass { objectName:"documentsOpenButton";glyph:"↗";touch:win.adaptive;tip:"Ouvrir le chemin saisi";enabledState:win.connected && win.documents!==null && !win.documents.busy;onClicked:win.request("open",pathInput.text) }
             ToolButtonGlass { objectName:"documentsSaveButton";glyph:"✓";touch:win.adaptive;tip:"Enregistrer (Ctrl+S)";enabledState:win.documents!==null && win.documents.canSave && !win.documents.busy && !win.documents.pdfMode && (win.documents.dirty||win.documents.isNew);onClicked:win.saveDocument() }
             ToolButtonGlass { glyph:"⧉";touch:win.adaptive;tip:"Enregistrer une copie au chemin saisi";enabledState:win.documents!==null && win.documents.canSave && !win.documents.busy && !win.documents.pdfMode;onClicked:win.documents.saveAs(pathInput.text) }
+            ToolButtonGlass { glyph:"PDF";touch:win.adaptive;tip:"Exporter Markdown en PDF sur le serveur";enabledState:win.documents!==null && win.documents.canSave && !win.documents.busy && !win.documents.pdfMode;onClicked:{const path=win.documents.path || pathInput.text;const output=path.replace(/\.(md|markdown)$/i,".pdf");if(output.toLowerCase().endsWith(".pdf"))win.documents.exportPdf(output);else win.documents.exportPdf(output+".pdf")} }
             ToolButtonGlass { glyph:"eye";touch:win.adaptive;tip:"Édition / aperçu";checked:win.previewMode;onClicked:win.previewMode=!win.previewMode }
             ToolButtonGlass { glyph:"×";touch:win.adaptive;tip:"Fermer";onClicked:win.request("close","") }
         }
