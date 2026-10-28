@@ -95,7 +95,12 @@ void DocumentsController::write(const QString &path,bool copy){
     if(!canSave())return;
     if(!fileSaveCanStart(m_busy,m_draftUploadPending)){
         if(m_draftUploadPending && !m_busy){
-            m_status="Enregistrement du brouillon en cours. Réessayez après sa fin.";
+            // This is a user-requested Save, not an automatic retry of an unknown write.
+            // Replace an earlier pending intent with the latest explicit choice.
+            m_pendingSavePath=path;
+            m_pendingSaveCopy=copy;
+            m_pendingSaveEpoch=m_seq;
+            m_status="Enregistrement du brouillon en cours ; Save sera lancé ensuite.";
             emit changed();
         }
         return;
@@ -148,6 +153,11 @@ void DocumentsController::writeDraftNow(){
     connect(watcher,&QFutureWatcher<SshResult>::finished,this,[this,watcher,token,path,serverId,documentEpoch,snapshot]{
         const auto r=watcher->result();watcher->deleteLater();
         m_draftUploadPending=false;
+        // Take the user's intent before the old completion can touch a new document.
+        const bool runPending=m_pendingSaveEpoch==m_seq && !m_pendingSavePath.isEmpty();
+        const QString pendingPath=m_pendingSavePath;
+        const bool pendingCopy=m_pendingSaveCopy;
+        m_pendingSavePath.clear();m_pendingSaveEpoch=-1;
         if(!draftCompletionBelongsToDocument(path,m_path,token,m_remote->connectionToken(),
                                               serverId,m_remote->activeServerId(),m_remote->connected()&&!m_remote->linkLost(),
                                               documentEpoch,m_seq))return;
@@ -162,6 +172,14 @@ void DocumentsController::writeDraftNow(){
                                  :"Brouillon serveur non enregistré ("+(r.message.isEmpty()?r.code:r.message.left(80))+") : le texte n'est que dans la mémoire du client.";
         }
         emit changed();
+        // Only after a confirmed draft acknowledgement, and only in the same
+        // document epoch, consume the explicit Save request exactly once.
+        // No replay after an unknown/failed draft operation or lost connection.
+        if(runPending && success && !m_unknown && canSave())write(pendingPath,pendingCopy);
+        else if(runPending){
+            m_status="Save en attente annulé : brouillon non confirmé ou source indisponible. Vérifiez puis réessayez.";
+            emit changed();
+        }
     });
     watcher->setFuture(QtConcurrent::run(&m_pool,[request,script]{SshSession session;auto o=session.open(request);if(o.status!=SshResult::Status::Ok)return o;return session.runScript(script,4096);}));
 }
