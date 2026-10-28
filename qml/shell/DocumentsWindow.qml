@@ -52,6 +52,7 @@ Item {
         }
     }
     function trackDocument(){
+        if(!tabRoot && documents)tabRoot=documents
         if(!documents || !documents.hasDocument || documents.isNew || !documents.path || !remote)return
         const server=documents.sourceServerId
         if(!server)return
@@ -61,8 +62,14 @@ Item {
         entries.unshift(path)
         recentDocuments=entries.slice(0,10)
         if(pinnedTabs.indexOf(path)<0)pinnedTabs=pinnedTabs.concat([path]).slice(-8)
+        if(!tabSessions[server+"|"+path])tabSessions[server+"|"+path]=documents
     }
     function closePinnedTab(path){
+        const tab=tabSessions[recentServerId+"|"+path]
+        if(tab && (tab.dirty || tab.busy)){
+            if(documents!==tab){documents=tab;syncDocument()}
+            return
+        }
         if(documents && documents.path===path && documents.dirty){
             // Closing a visible dirty tab must go through the existing Save /
             // Discard / Cancel confirmation, never drop the live editor.
@@ -139,8 +146,7 @@ Item {
         if(action==="open" && documents && documents.isCurrentDocument(path)){
             editor.forceActiveFocus();return
         }
-        const isTabSwitch=action==="open" && tabRoot && remote && remote.connected &&
-                          tabSessions[remote.activeServerId+"|"+(path||"")]
+        const isTabSwitch=action==="open" && tabRoot && remote && remote.connected && path
         if(documents && documents.dirty && !isTabSwitch){
             pendingAction=action;pendingPath=path||"";pendingContinuation=continuation||null
             pendingServerId=remote?remote.activeServerId:"";pendingGeneration=remote?remote.connectionGeneration:-1
