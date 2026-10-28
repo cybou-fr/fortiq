@@ -75,25 +75,43 @@ Item {
         request("continue","",next)
     }
     function closePinnedTab(path){
-        const tab=tabSessions[recentServerId+"|"+path]
-        if(tab && (tab.dirty || tab.busy)){
-            if(documents!==tab){documents=tab;syncDocument()}
+        const key=recentServerId+"|"+path
+        const tab=tabSessions[key]
+        if(!tab)return
+        if(tab.busy){documents=tab;syncDocument();return}
+        if(tab.dirty){
+            documents=tab;syncDocument()
+            request("close","",function(){win.closePinnedTab(path)})
             return
         }
-        if(documents && documents.path===path && documents.dirty){
-            // Closing a visible dirty tab must go through the existing Save /
-            // Discard / Cancel confirmation, never drop the live editor.
-            request("close","",function(){
-                pinnedTabs=pinnedTabs.filter(p=>p!==path)
-                if(pinnedTabs.length>0)openRecent(pinnedTabs[pinnedTabs.length-1])
-                else win.closeRequested()
-            })
-            return
+        const remaining=pinnedTabs.filter(p=>p!==path)
+        pinnedTabs=remaining
+        delete tabSessions[key]
+        if(documents===tab){
+            if(remaining.length>0){
+                const next=tabSessions[recentServerId+"|"+remaining[remaining.length-1]]
+                if(next){documents=next;syncDocument()}
+                else {documents=tabRoot;syncDocument()}
+            }else if(tab!==tabRoot){documents=tabRoot;syncDocument()}
+            else win.closeRequested()
         }
-        pinnedTabs=pinnedTabs.filter(p=>p!==path)
-        delete tabSessions[recentServerId+"|"+path]
-        if(documents && documents.path===path && pinnedTabs.length>0)openRecent(pinnedTabs[pinnedTabs.length-1])
-        if(tab && tab!==tabRoot && documents!==tab && tabRoot)tabRoot.releaseTabSession(tab)
+        if(tab!==tabRoot && documents!==tab && tabRoot)tabRoot.releaseTabSession(tab)
+    }
+    function rekeySavedTab(path){
+        if(!documents || !path || !remote)return
+        const prefix=remote.activeServerId+"|"
+        const keys=Object.keys(tabSessions)
+        for(let i=0;i<keys.length;i++){
+            if(tabSessions[keys[i]]===documents && keys[i]!==prefix+path){
+                const oldPath=keys[i].substring(prefix.length)
+                if(keys[i].startsWith(prefix)){
+                    delete tabSessions[keys[i]]
+                    pinnedTabs=pinnedTabs.filter(p=>p!==oldPath)
+                }
+            }
+        }
+        tabSessions[prefix+path]=documents
+        trackDocument()
     }
     function openRecent(path){
         if(!remote || !remote.connected || remote.activeServerId!==recentServerId)return
@@ -598,6 +616,6 @@ Item {
             if(win.documents.conflictActive && confirm.visible){confirm.visible=false;win.clearPending()}
         }
         function onLoaded(){win.syncDocument()}
-        function onSaved(path){pathInput.text=path;if(win.waitingForSave)win.continuePending(false)}
+        function onSaved(path){pathInput.text=path;win.rekeySavedTab(path);if(win.waitingForSave)win.continuePending(false)}
     }
 }
