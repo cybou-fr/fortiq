@@ -39,6 +39,13 @@ private slots:
         QVERIFY(draftCompletionBelongsToDocument("/home/u/a.md","/home/u/a.md",3,3,
                                                  "server-1","server-1",true,13,13));
     }
+    void manualSaveWaitsForDraftUpload(){
+        using fortiq::fileSaveCanStart;
+        QVERIFY(fileSaveCanStart(false,false));
+        QVERIFY(!fileSaveCanStart(true,false));
+        QVERIFY(!fileSaveCanStart(false,true));
+        QVERIFY(!fileSaveCanStart(true,true));
+    }
     void inFlightDraftMustNotMaskNewEdits(){
         using fortiq::draftNeedsAnotherSave;
         QVERIFY(!draftNeedsAnotherSave("a","a",true,false));
