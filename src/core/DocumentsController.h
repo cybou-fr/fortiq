@@ -73,6 +73,7 @@ private:
     QByteArray m_hash;
     QTimer m_draftTimer;
     int m_autosaveMs=5000;
+    bool m_draftUploadPending=false; // keep at most one in-flight draft upload
     QVariantMap m_recovery;QString m_recoveryText,m_recoveryBase,m_draftStatus;
     bool m_conflict=false,m_conflictBusy=false;QString m_conflictDiff,m_conflictSummary,m_conflictServerText;QByteArray m_conflictServerHash;bool m_conflictBom=false,m_conflictCrlf=false;
 };
