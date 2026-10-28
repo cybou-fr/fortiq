@@ -129,3 +129,7 @@ Static review found the notifications overlay used `height: min(shell.height - 1
 ### Compact task-panel positioning — 2026-10-28
 
 Static Shell review found the task panel (`TaskCenter`) could calculate a negative top position when its desired position above the dock exceeded the available height. Its horizontal width is now nonnegative and its x/y origins bounded with minimum margins, while preserving dock-aware placement on normal desktop windows. This is a defensive layout correction, not a validated responsive design: the panel may still exceed the viewport if the host becomes smaller than its content, and that case needs visual/runtime testing. No CI, builds, or tests were run.
+
+### TaskPanel scrollable viewport height — 2026-10-28
+
+`TaskPanel.qml` now accepts `availableHeight` and caps its expanded height to that viewport allowance (while preserving the header). `DesktopShell` supplies its current height minus small margins. Because TaskPanel already uses a bounded/clipped ListView with a vertical scrollbar, task rows remain scrollable instead of requiring the whole panel to extend beyond a short viewport. This specifically improves access to task action buttons when the host becomes short; conflict-action row width and on-screen keyboard interactions still need real-device inspection. No build or tests run; CI remains disabled.
