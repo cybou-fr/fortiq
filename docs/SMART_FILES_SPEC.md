@@ -84,3 +84,7 @@ coverage remain pending. [Implementation and Android evidence](ANDROID_FOUNDATIO
 ### Transfer lifecycle hardening (2026-10-28)
 
 The Files transfer engine rejects attempts to start a transfer when there is no active SSH connection, the TaskManager job is terminal or cancelling, or the conflict policy is out of range. A late conflict dialog action cannot rearm a cancelled job after disconnect. The allowed policies are `Fail`, `Replace`, and `KeepBoth`; the UI only submits `skip`, `replace`, or `keepBoth` at conflict resolution. Transfer completion already treats a lost SSH connection during remote publication as an *unknown* outcome, requiring user verification before retrying. These changes were committed without running a build or tests, as requested; CI remains disabled.
+
+### Last cancellation gate before remote publish (2026-10-28)
+
+Uploads now re-check the shared cancel signal immediately before the irreversible SFTP rename, after destination metadata validation. If cancelled at this gate, only the owned staging file is removed and the final destination is not modified. A cancellation arriving *during* rename cannot safely establish whether publication occurred; SSH publication errors continue to use `unknown` when the connection is lost. This change was not compiled or tested; CI remains disabled.
