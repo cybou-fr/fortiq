@@ -90,7 +90,14 @@ void TerminalView::feed(const QByteArray &data) {
 }
 void TerminalView::feedLater(const QByteArray &data) {
     if (data.isEmpty()) return;
-    if (m_queueOffset > 0 && m_queueOffset == m_queue.size()) { m_queue.clear(); m_queueOffset = 0; }
+    // Compact consumed bytes before appending: backlog() measures only unread
+    // bytes, but otherwise the QByteArray can retain a large consumed prefix
+    // during sustained output. Never discard unread terminal bytes.
+    if (m_queueOffset > 0) {
+        if (m_queueOffset == m_queue.size()) m_queue.clear();
+        else if (m_queueOffset >= 65536) m_queue.remove(0, m_queueOffset);
+        if (m_queue.isEmpty() || m_queueOffset >= 65536) m_queueOffset = 0;
+    }
     m_queue += data;
     emit backlogChanged();
     if (!m_drainScheduled) { m_drainScheduled = true; QTimer::singleShot(0, this, &TerminalView::drainQueue); }
