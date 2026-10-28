@@ -50,7 +50,7 @@ bool validMessageId(const QString &id);
 // Exit codes: 0 sent and copy stored; 10 refused/failed before delivery; 11 sent but the copy was not stored;
 // 12 timeout: the delivery state is unknown; 4 msmtp missing.
 QByteArray buildMailSendScript(const QString &account, const QStringList &recipients, const QByteArray &message, const QString &inReplyTo,
-                               const QString &configPath, const QString &delimiter);
+                               const QString &configPath, const QString &delimiter, const QVariantList &attachments = {});
 QByteArray buildMailAccountsScript();   // account / from lines of the msmtp configuration (never the password)
 
 struct MailSendAccount { QString name, from; };

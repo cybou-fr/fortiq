@@ -1,4 +1,5 @@
 #include "MailSend.h"
+#include "OutgoingAttachment.h"
 
 #include <QLocale>
 #include <QRegularExpression>
@@ -170,7 +171,7 @@ BuiltMessage buildMessage(const MailDraft &d, const QDateTime &when, const QStri
 }
 
 QByteArray buildMailSendScript(const QString &account, const QStringList &recipients, const QByteArray &message, const QString &inReplyTo,
-                               const QString &configPath, const QString &delimiter) {
+                               const QString &configPath, const QString &delimiter, const QVariantList &attachments) {
     if (!validMailAccountName(account) || recipients.isEmpty() || delimiter.isEmpty() || message.contains(delimiter.toUtf8())) return {};
     QByteArray rcpt;
     for (const QString &r : recipients) rcpt += " " + shQuote(r);
@@ -180,6 +181,11 @@ QByteArray buildMailSendScript(const QString &account, const QStringList &recipi
          "t=$(umask 077; mktemp) || { echo 'FQ-ERR mktemp' >&2; exit 5; }\n"
          "trap 'rm -f \"$t\"' EXIT\n"
          "cat > \"$t\" <<'" + delimiter.toUtf8() + "'\n" + message + delimiter.toUtf8() + "\n";
+    if (!attachments.isEmpty()) {
+        const auto mime = buildOutgoingMimeScript(attachments);
+        if (mime.isEmpty()) return {};
+        s += mime;
+    }
     s += "timeout -k 5 90 msmtp -a " + shQuote(account) + " --" + rcpt + " < \"$t\"\n"
          "rc=$?\n"
          "if [ $rc -ne 0 ]; then echo \"FQ-SEND-FAILED $rc\" >&2; if [ $rc -eq 124 ] || [ $rc -eq 137 ]; then exit 12; fi; exit 10; fi\n"
@@ -227,6 +233,8 @@ QString describeSendOutcome(int exitCode, const QString &stderrText, bool *deliv
     if (exitCode == 0) { if (delivered) *delivered = true; return QStringLiteral("Message envoyé et copié dans le dossier Sent."); }
     if (exitCode == 11) { if (delivered) *delivered = true; return QStringLiteral("Message envoyé, mais la copie n'a pas pu être enregistrée dans Sent (notmuch)."); }
     if (exitCode == 12) { if (unknown) *unknown = true; return QStringLiteral("Délai dépassé : on ne sait pas si le message est parti. Vérifiez avant de le renvoyer."); }
+    if (exitCode == 14) return QStringLiteral("Python 3 est requis sur le serveur pour joindre des fichiers. Rien n'a été envoyé.");
+    if (exitCode == 15) return QStringLiteral("Pièce jointe indisponible, modifiée ou trop volumineuse. Rien n'a été envoyé ; retirez-la puis sélectionnez-la à nouveau.");
     if (exitCode == 4) return QStringLiteral("msmtp n'est pas installé sur ce serveur (sudo apt install msmtp).");
     const QString low = err.toLower();
     if (low.contains(QLatin1String("authentication failed")) || low.contains(QLatin1String("auth")) && low.contains(QLatin1String("535")))

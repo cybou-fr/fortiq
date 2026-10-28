@@ -4,7 +4,7 @@ import QtCore
 import QtQuick.Dialogs
 
 // Courrier (lecture et étiquettes): interface graphique pour notmuch sur le serveur.
-// Rien n'est envoyé, déplacé ni supprimé; seules les étiquettes changent (docs/MAIL.md).
+// Envoi via msmtp et fichiers joints sur le serveur sélectionné (docs/MAIL.md).
 Item {
     id: win
     objectName: "mailWindow"
@@ -16,6 +16,14 @@ Item {
     property bool showHtml: false
     property string hoveredLink: ""
     property bool composeOpen: false
+    property bool composeActive: false
+    property var pendingQuit:null
+    readonly property bool hasUnsentDraft:composeActive && !composeSending && (toField.text.length>0 || ccField.text.length>0 || bccField.text.length>0 || subjectField.text.length>0 || bodyField.text.length>0 || (mailer!==null && mailer.outgoingAttachments.length>0))
+    property string composeServerId: ""
+    property string composeSourceLabel: ""
+    readonly property bool composeSending:mailer!==null && mailer.sendState==="sending"
+    property int composeGeneration: -1
+    readonly property bool composeSourceAvailable: connected && remote.activeServerId===composeServerId && remote.connectionGeneration===composeGeneration
     property string composeReplyTo: ""
     property string composeError: ""
     property bool wizardOpen: false
@@ -40,12 +48,14 @@ Item {
     }
     signal closeRequested()
     signal requestServers()
+    signal requestAttachmentFiles(string serverId, int generation)
 
     function sync() { if (mailer) mailer.setWindowActive(visible) }
     onVisibleChanged: { sync(); if (!visible && wizardOpen) closeWizard() }
     onMailerChanged: sync()
     Component.onCompleted: sync()
     function handleBack() {
+        if(discardDialog.visible){discardDialog.visible=false;pendingQuit=null;return true}
         if (wizardOpen) { closeWizard(); return true }
         if (composeOpen) { composeOpen = false; return true }
         if (navigationOpen) { navigationOpen = false; return true }
@@ -53,19 +63,44 @@ Item {
         return false
     }
     function openCompose(draft) {
+        if(composeActive){
+            composeOpen=true
+            if(draft)composeError="Un brouillon est déjà ouvert. Fermez-le ou abandonnez-le avant de répondre à un autre message."
+            return
+        }
+        if(!connected || !mailer)return
         const d = draft || {}
         toField.text = d.to || ""; ccField.text = ""; bccField.text = ""
         subjectField.text = d.subject || ""; bodyField.text = d.body || ""
         composeReplyTo = d.inReplyTo || ""; composeError = ""
-        if (mailer) mailer.resetSend()
-        composeOpen = true
+        composeServerId=remote.activeServerId;composeGeneration=remote.connectionGeneration;composeSourceLabel=remote.serverLabel
+        composeActive=true;mailer.clearOutgoingAttachments();if(mailer.sendState!=="unknown")mailer.resetSend()
+        composeViewport.contentY=0;composeOpen = true
         if (composeReplyTo !== "") { bodyField.cursorPosition = 0; bodyField.forceActiveFocus() } else toField.forceActiveFocus()
     }
+    function attachFile(path){
+        if(!connected || !mailer)return false
+        openCompose(null)
+        if(!composeSourceAvailable){composeError="Ce brouillon appartient à une autre session. Son texte est conservé ; abandonnez-le pour en créer un sur ce serveur.";return false}
+        composeError=mailer.addOutgoingAttachment(path)
+        return composeError.length===0
+    }
     function submitCompose() {
-        if (!mailer) return
+        if (!mailer || !composeSourceAvailable) { composeError="La source du brouillon n'est plus disponible. Le texte est conservé.";return }
         const account = mailer.accounts[accountBox.currentIndex]
         composeError = mailer.send({ account: account ? account.name : "", to: toField.text, cc: ccField.text, bcc: bccField.text,
-                                     subject: subjectField.text, body: bodyField.text, inReplyTo: composeReplyTo })
+            subject: subjectField.text, body: bodyField.text, inReplyTo: composeReplyTo,
+            serverId:composeServerId,connectionGeneration:composeGeneration })
+    }
+    function requestQuit(continuation){
+        pendingQuit=continuation;composeOpen=true
+        discardDialog.openWith("Quitter avec un message non envoyé ?","Ce brouillon n'est conservé qu'en mémoire. Vous pouvez revenir au message ou l'abandonner pour quitter.","Abandonner et continuer",true,false,"")
+    }
+    function discardCompose(){
+        if(mailer && mailer.actionBusy)return
+        if(mailer)mailer.clearOutgoingAttachments()
+        toField.text="";ccField.text="";bccField.text="";subjectField.text="";bodyField.text=""
+        composeReplyTo="";composeError="";composeActive=false;composeOpen=false
     }
     function replyToLast() {
         if (!mailer || mailer.messages.length === 0) return
@@ -157,7 +192,7 @@ Item {
         }
         Text {
             x: 18; y: parent.height - 96; width: parent.width - 36; wrapMode: Text.WordWrap
-            text: "Les messages sont lus par notmuch sur le serveur. Ici, seules les étiquettes changent : rien n'est envoyé ni supprimé."
+            text: "Lecture par notmuch, envoi par msmtp sur le serveur. Les fichiers joints restent sur ce serveur."
             color: Theme.inkMuted; font.pixelSize: 10
         }
     }
@@ -438,7 +473,7 @@ Item {
         radius: 14; color: "#F0121C30"; border.width: 1; border.color: "#40DCEBFF"
         MouseArea { anchors.fill: parent }
         Flickable {
-            anchors.fill: parent; anchors.margins: 14; clip: true; contentWidth: width; contentHeight: composeColumn.implicitHeight; boundsBehavior: Flickable.StopAtBounds
+            id:composeViewport;objectName:"mailComposeScroll";anchors.fill: parent; anchors.margins: 14; clip: true; contentWidth: width; contentHeight: composeColumn.implicitHeight; boundsBehavior: Flickable.StopAtBounds
             Column {
                 id: composeColumn
                 width: parent.width; spacing: 8
@@ -450,23 +485,48 @@ Item {
                 ComboBox {
                     id: accountBox
                     objectName: "mailComposeAccount"
+                    enabled:win.composeSourceAvailable && !win.composeSending
                     width: parent.width
                     model: win.mailer ? win.mailer.accounts : []
                     textRole: "name"
                     displayText: currentIndex >= 0 && win.mailer && currentIndex < win.mailer.accounts.length ? "De : " + win.mailer.accounts[currentIndex].name + "  <" + win.mailer.accounts[currentIndex].from + ">" : "De : —"
                 }
-                TextField { id: toField; objectName: "mailComposeTo"; width: parent.width; placeholderText: "À (adresses séparées par des virgules)"; selectByMouse: true }
+                TextField { id: toField;readOnly:win.composeSending; objectName: "mailComposeTo"; width: parent.width; placeholderText: "À (adresses séparées par des virgules)"; selectByMouse: true }
                 Row {
                     width: parent.width; spacing: 6
-                    TextField { id: ccField; objectName: "mailComposeCc"; width: (parent.width - 6) / 2; placeholderText: "Cc"; selectByMouse: true }
-                    TextField { id: bccField; objectName: "mailComposeBcc"; width: (parent.width - 6) / 2; placeholderText: "Cci (invisible pour les autres)"; selectByMouse: true }
+                    TextField { id: ccField;readOnly:win.composeSending; objectName: "mailComposeCc"; width: (parent.width - 6) / 2; placeholderText: "Cc"; selectByMouse: true }
+                    TextField { id: bccField;readOnly:win.composeSending; objectName: "mailComposeBcc"; width: (parent.width - 6) / 2; placeholderText: "Cci (invisible pour les autres)"; selectByMouse: true }
                 }
-                TextField { id: subjectField; objectName: "mailComposeSubject"; width: parent.width; placeholderText: "Objet"; selectByMouse: true }
+                TextField { id: subjectField;readOnly:win.composeSending; objectName: "mailComposeSubject"; width: parent.width; placeholderText: "Objet"; selectByMouse: true }
+                Text {
+                    width:parent.width;wrapMode:Text.Wrap;textFormat:Text.PlainText;color:"#FCD34D";font.pixelSize:11
+                    visible:win.composeActive && !win.composeSourceAvailable
+                    text:"Brouillon de "+win.composeSourceLabel+" : source déconnectée ou changée. Texte conservé ; envoi désactivé."
+                }
+                Button {
+                    objectName:"mailComposeChooseFiles";text:"Choisir une pièce jointe dans Fichiers…"
+                    enabled:win.composeSourceAvailable && win.mailer!==null && !win.mailer.actionBusy
+                    onClicked:win.requestAttachmentFiles(win.composeServerId,win.composeGeneration)
+                }
+                Repeater {
+                    model:win.mailer?win.mailer.outgoingAttachments:[]
+                    Row {
+                        required property var modelData
+                        required property int index
+                        width:composeColumn.width;spacing:6
+                        Text { width:parent.width-48;height:32;verticalAlignment:Text.AlignVCenter;elide:Text.ElideMiddle;textFormat:Text.PlainText;color:Theme.ink;font.pixelSize:11;text:parent.modelData.name+" · "+parent.modelData.size+" o" }
+                        Button { width:40;height:32;text:"×";enabled:win.mailer!==null && !win.mailer.actionBusy;onClicked:win.mailer.removeOutgoingAttachment(parent.index) }
+                    }
+                }
+                Text {
+                    objectName:"mailComposeAttachmentStatus";width:parent.width;wrapMode:Text.Wrap;textFormat:Text.PlainText;color:Theme.inkMuted;font.pixelSize:10
+                    text:(win.mailer?win.mailer.outgoingStatus:"")+"  ·  10 fichiers / 10 Mio au total. Les fichiers restent sur le serveur."
+                }
                 Rectangle {
                     width: parent.width; height: 200; radius: 8; color: "#30182740"; border.width: 1; border.color: bodyField.activeFocus ? Theme.accent : "#25DCEBFF"
                     ScrollView {
                         anchors.fill: parent; anchors.margins: 4; clip: true
-                        TextArea { id: bodyField; objectName: "mailComposeBody"; color: Theme.ink; font.pixelSize: 12; wrapMode: TextEdit.Wrap; selectByMouse: true; background: null }
+                        TextArea { id: bodyField;readOnly:win.composeSending; objectName: "mailComposeBody"; color: Theme.ink; font.pixelSize: 12; wrapMode: TextEdit.Wrap; selectByMouse: true; background: null }
                     }
                 }
                 Text {
@@ -479,20 +539,33 @@ Item {
                     width: parent.width; wrapMode: Text.Wrap; color: Theme.inkMuted; font.pixelSize: 10
                     text: "Le message est construit ici puis envoyé par msmtp depuis le serveur Linux ; une copie est enregistrée dans le dossier Sent."
                 }
-                Row {
-                    spacing: 8
+                Button {
+                    objectName:"mailComposeAcknowledgeUnknown";visible:win.mailer!==null && win.mailer.sendState==="unknown"
+                    text:"J'ai vérifié l'envoi précédent";enabled:win.composeSourceAvailable
+                    onClicked:{win.mailer.resetSend();win.composeError=""}
+                }
+                Flow {
+                    width:parent.width;spacing:8
                     Button {
                         objectName: "mailComposeSend"
                         text: win.mailer && win.mailer.sendState === "sending" ? "Envoi…" : "Envoyer"
-                        enabled: win.mailer !== null && win.mailer.sendState !== "sending" && !win.mailer.actionBusy && win.mailer.accounts.length > 0
+                        enabled: win.composeSourceAvailable && win.mailer !== null && win.mailer.sendState !== "sending" && win.mailer.sendState !== "unknown" && !win.mailer.actionBusy && win.mailer.accounts.length > 0
                         onClicked: win.submitCompose()
                     }
-                    Button { text: "Annuler"; enabled: !win.mailer || win.mailer.sendState !== "sending"; onClicked: win.composeOpen = false }
+                    Button { objectName:"mailComposeClose";text:"Fermer";enabled:!win.mailer || win.mailer.sendState!=="sending";onClicked:win.composeOpen=false }
+                    Button { objectName:"mailComposeDiscard";text:"Abandonner…";enabled:!win.mailer || !win.mailer.actionBusy;onClicked:{win.pendingQuit=null;discardDialog.openWith("Abandonner le brouillon ?","Le texte et la sélection des fichiers seront oubliés. Aucun fichier serveur ne sera supprimé.","Abandonner",true,false,"")} }
                 }
             }
         }
     }
 
+    GlassDialog {
+        id:discardDialog;objectName:"mailComposeDiscardDialog";anchors.fill:parent;touchMode:win.adaptive;z:90
+        busy:win.mailer!==null && win.mailer.actionBusy
+        onAccepted:{const go=win.pendingQuit;win.pendingQuit=null;visible=false;win.discardCompose();if(go)go()}
+        onRejected:win.pendingQuit=null
+        Keys.onReleased:event=>{if(event.key===Qt.Key_Escape)event.accepted=true}
+    }
     // ── account wizard ─────────────────────────────────────────────────
     Rectangle {
         id: wizardPanel
@@ -652,7 +725,7 @@ Item {
     Connections {
         target: win.mailer
         ignoreUnknownSignals: true
-        function onSendChanged() { if (win.mailer && win.composeOpen && (win.mailer.sendState === "sent" || win.mailer.sendState === "warning")) win.composeOpen = false }
+        function onSendChanged() { if (win.mailer && (win.mailer.sendState === "sent" || win.mailer.sendState === "warning")) { win.composeOpen=false;win.composeActive=false } }
         function onActionChanged() {
             if (win.mailer && !win.mailer.actionBusy && win.previewPending) { win.previewPending = false; win.finishPreview() }
         }

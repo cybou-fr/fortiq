@@ -1899,6 +1899,35 @@ private slots:
         QCOMPARE(controller.tasks()->count(), tasksBefore);
         QCOMPARE(text("ls ~/sinkout 2>/dev/null | grep -c eml\n"), QStringLiteral("0"));
 
+        // Files stay on the server; preflight pins content as well as stat metadata.
+        const QString outgoing=home+QString::fromUtf8("/outgoing été ' ;$(touch FQ_OUTGOING_INJECTED).bin");
+        const QString emptyOutgoing=home+"/outgoing-empty.txt";
+        const QString specialOutgoing=home+"/outgoing-special";
+        const QByteArray binary=QByteArray::fromHex("00ff102003040a0d7f8081");
+        QByteArray changedBinary=binary;changedBinary[0]='X';
+        auto quote=[](const QString &path){return fortiq::SshSession::shellQuote(path);};
+        auto cleanupOutgoing=qScopeGuard([&]{shell("rm -f -- "+quote(outgoing)+" "+quote(emptyOutgoing)+" "+quote(specialOutgoing)+" "+quote(home+"/FQ_OUTGOING_INJECTED")+"\n");});
+        QVERIFY(shell("base64 -d > "+quote(outgoing)+" <<'FQOUTDATA'\n"+binary.toBase64()+"\nFQOUTDATA\n: > "+quote(emptyOutgoing)+"\n").code=="exit:0");
+        QVERIFY(mail.addOutgoingAttachment(outgoing).isEmpty());waitIdle();QCOMPARE(mail.outgoingAttachments().size(),1);
+        QCOMPARE(mail.outgoingAttachments().first().toMap().value("sha256").toString(),QString::fromLatin1(QCryptographicHash::hash(binary,QCryptographicHash::Sha256).toHex()));
+        QVERIFY(!mail.addOutgoingAttachment(outgoing).isEmpty());
+        QVERIFY(mail.addOutgoingAttachment(home).isEmpty());waitIdle();QCOMPARE(mail.outgoingAttachments().size(),1); // directories are refused
+        // A FIFO must be refused immediately, not block waiting for a writer.
+        QVERIFY(shell("rm -f -- "+quote(specialOutgoing)+"; mkfifo -- "+quote(specialOutgoing)+"\n").code=="exit:0");
+        QVERIFY(mail.addOutgoingAttachment(specialOutgoing).isEmpty());waitIdle();QCOMPARE(mail.outgoingAttachments().size(),1);
+        // Same size, same mtime, different bytes: a stat-only test would miss this.
+        const auto changeScript="python3 - <<'FQCHANGE'\nimport os,base64\np=os.fsdecode(base64.b64decode('"+outgoing.toUtf8().toBase64()+"'))\ns=os.stat(p)\nwith open(p,'wb') as f:f.write(base64.b64decode('"+changedBinary.toBase64()+"'))\nos.utime(p,ns=(s.st_atime_ns,s.st_mtime_ns))\nFQCHANGE\n";
+        QVERIFY(shell(changeScript).code=="exit:0");
+        QVERIFY(mail.send({{"account","live"},{"to","you@example.org"},{"subject","changed attachment"},{"body","must not send"}}).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(mail.sendState()!="sending",60000);QCOMPARE(mail.sendState(),QString("failed"));
+        QVERIFY(mail.sendStatus().contains("Rien n'a été envoyé"));
+        QCOMPARE(text("ls ~/sinkout | grep -c eml\n"),QString("0"));
+        QCOMPARE(mail.outgoingAttachments().size(),1);
+        mail.removeOutgoingAttachment(0);
+        QVERIFY(mail.addOutgoingAttachment(outgoing).isEmpty());waitIdle();
+        QVERIFY(mail.addOutgoingAttachment(emptyOutgoing).isEmpty());waitIdle();QCOMPARE(mail.outgoingAttachments().size(),2);
+        QVERIFY(!mail.send({{"account","live"},{"to","you@example.org"},{"serverId","another-server"},{"connectionGeneration",controller.connectionToken()}}).isEmpty());
+
         // ---- a real send through msmtp to the sink ----
         QVERIFY2(mail.send({ { "account", "live" }, { "to", "you@example.org, o'brien@example.org" }, { "cc", "cc@example.org" }, { "bcc", "hidden@example.org" },
                              { "subject", QString::fromUtf8("R\xC3\xA9sum\xC3\xA9 \xE2\x9C\x93") }, { "body", QString::fromUtf8("Bonjour\nligne 2 \xC3\xA9") },
@@ -1915,7 +1944,7 @@ private slots:
         QVERIFY(eml.contains("From: =?UTF-8?B?") || eml.contains("From: "));
         QVERIFY(!eml.contains("hidden@example.org"));                                                                 // Bcc stays in the envelope
         QVERIFY(eml.contains("In-Reply-To: <imap1@example.org>"));
-        QVERIFY(eml.contains("Subject: =?UTF-8?B?"));
+        QVERIFY(eml.toLower().contains("subject: =?utf-8?"));
         // The stored copy and the replied tag, checked with notmuch on the server.
         const QString nm = "export NOTMUCH_CONFIG=" + home + "/.notmuch-config\n";
         QCOMPARE(text(nm.toUtf8() + "notmuch count -- 'tag:sent'\n"), QStringLiteral("1"));
@@ -1924,6 +1953,13 @@ private slots:
         const QString subjectLine = text(nm.toUtf8() + "notmuch search --output=summary --format=text -- tag:sent | head -1\n");
         QVERIFY2(subjectLine.contains(QString::fromUtf8("R\xC3\xA9sum\xC3\xA9 \xE2\x9C\x93")), qPrintable(subjectLine));       // headers and body decode correctly
         QCOMPARE(text(nm.toUtf8() + "notmuch show --format=text --body=true -- tag:sent | grep -c 'ligne 2 é'\n"), QStringLiteral("1"));
+
+        // Independently parse the delivered MIME and the Sent copy with the server's stdlib email parser.
+        const QJsonObject expectedAttachment{{"name",fortiq::sanitizeAttachmentName(QFileInfo(outgoing).fileName())},
+            {"hash",QString::fromLatin1(QCryptographicHash::hash(changedBinary,QCryptographicHash::Sha256).toHex())}};
+        const auto auditMime=nm.toUtf8()+"python3 - <<'FQAUDIT'\nimport os,glob,json,base64,hashlib,subprocess\nfrom email import policy\nfrom email.parser import BytesParser\ne=json.loads(base64.b64decode('"+QJsonDocument(expectedAttachment).toJson(QJsonDocument::Compact).toBase64()+"'))\nfiles=glob.glob(os.path.expanduser('~/sinkout/*.eml'))\nfiles+=subprocess.check_output(['notmuch','search','--output=files','--','tag:sent']).decode().splitlines()\nassert len(files)==2\nfor path in files:\n with open(path,'rb') as f:m=BytesParser(policy=policy.default).parse(f)\n parts=list(m.iter_attachments())\n assert len(parts)==2 and m['Bcc'] is None\n assert parts[0].get_filename()==e['name']\n assert hashlib.sha256(parts[0].get_payload(decode=True)).hexdigest()==e['hash']\n assert parts[1].get_filename()=='outgoing-empty.txt' and parts[1].get_payload(decode=True)==b''\n assert m.get_body(preferencelist=('plain',)).get_content().replace('\\r\\n','\\n').startswith('Bonjour')\nassert not os.path.exists(os.path.expanduser('~/FQ_OUTGOING_INJECTED'))\nprint('mime-ok')\nFQAUDIT\n";
+        QCOMPARE(text(auditMime),QString("mime-ok"));
+        QVERIFY(mail.outgoingAttachments().isEmpty());
 
         // ---- wrong password: a clear error and no claim of delivery ----
         QVariantMap bad = spec;
@@ -2244,6 +2280,7 @@ private slots:
             connectTo(serverA);
             QTest::qWait(6500);
             QCOMPARE(mail.sendState(), QStringLiteral("unknown"));         // a later reply or a reconnection does not rewrite history
+            QVERIFY(!mail.send({{"account","live"},{"to","you@example.org"},{"subject","must not replay"},{"body","x"}}).isEmpty());
             QCOMPARE(lastTaskState(), QStringLiteral("unknown"));
             const QString delivered = text("ls ~/sinkout | grep -c eml\n");
             qInfo() << "interrupted send: the sink received" << delivered << "message(s); the client reported unknown";

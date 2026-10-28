@@ -223,6 +223,13 @@ Item {
         switch (a.type) {
         case "openDocument": documentsOpen = true; raiseApp("docs"); launcherOpen = false; documentsWindow.request("open", a.path); break
         case "revealInFiles": controller.navigate(a.path); filesOpen = true; raiseApp("files"); launcherOpen = false; break
+        case "pickMailAttachment":
+            if(a.generation!==controller.connectionGeneration){notify("La session du brouillon a changé.");return false}
+            filesOpen=true;raiseApp("files");launcherOpen=false;break
+        case "attachToMail":
+            mailOpen=true;raiseApp("mail");launcherOpen=false
+            if(!mailWindow.attachFile(a.path))return false
+            break
         case "revealFile":
             filesOpen = true; raiseApp("files"); launcherOpen = false
             filesWindow.revealFile(a.path, a.serverId); break
@@ -304,6 +311,7 @@ Item {
         onRequestServers: shell.serversOpen = true
         onRequestDisconnect: shell.confirmSessionEnd("Se déconnecter", function() { shell.controller.disconnectServer() })
         onRequestDocuments:path=>shell.act("openDocument", { path: path })
+        onRequestMail:path=>shell.act("attachToMail", { path:path })
         onRequestTerminal: path => shell.act("terminalHere", { path: path })
     }
 
@@ -375,6 +383,7 @@ Item {
         backdrop: wallpaper; mailer: shell.mailController; remote: shell.controller
         onCloseRequested: { shell.mailOpen = false; if (shell.adaptive) { shell.foregroundApp = "files"; shell.filesOpen = true } }
         onRequestServers: shell.serversOpen = true
+        onRequestAttachmentFiles:(serverId,generation)=>shell.route({type:"pickMailAttachment",serverId:serverId,generation:generation})
     }
 
     DbWindow {
@@ -460,6 +469,10 @@ Item {
     }
     // Closing the window: unsaved MDok drafts first, then running tasks (asked once, then the app quits).
     function allowAppClose(){
+        if(mailWindow.hasUnsentDraft){
+            serversOpen=false;mailOpen=true;raiseApp("mail")
+            mailWindow.requestQuit(function(){if(shell.allowAppClose())Qt.quit()});return false
+        }
         if ((documentsController && documentsController.dirty)
                 || (taskManager && taskManager.guardingCount() > 0)) {
             confirmSessionEnd("Quitter", function() { Qt.quit() }); return false

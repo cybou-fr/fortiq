@@ -1,6 +1,9 @@
 #include "mail/MailAccount.h"
 #include "mail/MailAttachment.h"
 #include "mail/MailSend.h"
+#include "mail/OutgoingAttachment.h"
+#include <QJsonDocument>
+#include <QJsonObject>
 
 #include <QTimeZone>
 #include <QtTest>
@@ -137,6 +140,50 @@ private slots:
         QVERIFY(buildMailSendScript("perso", {}, m.data, QString(), QString(), "FQDX").isEmpty());
         QVERIFY(buildMailSendScript("perso", m.recipients, m.data, QString(), QString(), "tok").isEmpty());   // delimiter occurs in the message
         QVERIFY(buildMailSendScript("perso", m.recipients, m.data, QString(), QString(), QString()).isEmpty());
+    }
+
+    void outgoingMetadataIsBoundedAndTiedToTheSelectedFile() {
+        QVariantMap a{{"path",QString::fromUtf8("/home/u/rapport été.bin")},{"name",QString::fromUtf8("rapport été.bin")},
+            {"size",3},{"mtimeNs","1790000000000000000"},{"device","2049"},{"inode","1234"},{"sha256",QString(64,'a')}};
+        auto json=[&](const QVariantMap &v){return QJsonDocument(QJsonObject::fromVariantMap(v)).toJson();};
+        QCOMPARE(parseOutgoingProbe(json(a),a["path"].toString(),a["name"].toString()),a);
+        QVERIFY(parseOutgoingProbe(json(a),"/other/file.bin",a["name"].toString()).isEmpty());
+        QVERIFY(parseOutgoingProbe(json(a),a["path"].toString(),"other.bin").isEmpty());
+        for(const auto &field:QStringList{"mtimeNs","device","inode","sha256"}){
+            auto bad=a;bad[field]="not-metadata";QVERIFY(parseOutgoingProbe(json(bad),a["path"].toString(),a["name"].toString()).isEmpty());
+        }
+        for(double size:{-1.0,1.5,double(OutgoingAttachmentLimit)+1}){
+            auto bad=a;bad["size"]=size;QVERIFY(parseOutgoingProbe(json(bad),a["path"].toString(),a["name"].toString()).isEmpty());
+        }
+        QVERIFY(parseOutgoingProbe(QByteArray(20000,'x'),"/a","a").isEmpty());
+    }
+    void outgoingLimitsAndScriptInputs() {
+        const QString path=QString::fromUtf8("/home/u/été ' ;$(touch injected).bin");
+        const auto probe=buildOutgoingProbeScript(path,"safe.bin",OutgoingAttachmentLimit);
+        QVERIFY(!probe.isEmpty());QVERIFY(!probe.contains(path.toUtf8()));
+        QVERIFY(buildOutgoingProbeScript("relative","a",1).isEmpty());
+        QVERIFY(buildOutgoingProbeScript("/a","bad\nname",1).isEmpty());
+        QVERIFY(buildOutgoingProbeScript("/a","a",-1).isEmpty());
+        QVariantMap a{{"path","/a"},{"name","a"},{"size",1},{"mtimeNs","1"},{"device","2"},{"inode","3"},{"sha256",QString(64,'b')}};
+        QVERIFY(!buildOutgoingMimeScript({a}).isEmpty());
+        QVERIFY(buildOutgoingMimeScript({a,a}).isEmpty());
+        QVariantList many;for(int i=0;i<11;++i){auto n=a;n["path"]=QString("/file%1").arg(i);many<<n;}
+        QVERIFY(buildOutgoingMimeScript(many).isEmpty());
+        auto large=a;large["size"]=OutgoingAttachmentLimit;auto extra=a;extra["path"]="/b";
+        QVERIFY(buildOutgoingMimeScript({large,extra}).isEmpty());
+        auto bad=a;bad.remove("sha256");QVERIFY(buildOutgoingMimeScript({bad}).isEmpty());
+    }
+    void outgoingPreparationPrecedesDelivery() {
+        MailDraft d;d.account="live";d.fromAddress="me@example.net";d.to="you@example.org";d.body="Bonjour";
+        const auto msg=buildMessage(d,QDateTime::currentDateTime(),"outgoing-test");QVERIFY(msg.ok);
+        QVariantMap a{{"path","/a"},{"name","a"},{"size",0},{"mtimeNs","1"},{"device","2"},{"inode","3"},{"sha256",QString(64,'c')}};
+        const auto script=buildMailSendScript(d.account,msg.recipients,msg.data,{}, {},"FQMAILTEST",{a});
+        QVERIFY(!script.isEmpty());
+        QVERIFY(script.indexOf("python3 -")<script.indexOf("90 msmtp -a"));
+        QVERIFY(script.indexOf("|| exit 15")<script.indexOf("90 msmtp -a"));
+        bool delivered=true,unknown=true;
+        QVERIFY(describeSendOutcome(15,{},&delivered,&unknown).contains("Rien n'a été envoyé"));QVERIFY(!delivered && !unknown);
+        QVERIFY(describeSendOutcome(14,{},&delivered,&unknown).contains("Python 3"));
     }
 
     void accountsParsing() {

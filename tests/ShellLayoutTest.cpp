@@ -239,6 +239,12 @@ QtObject {
     property string displayName: ''
     property string sendState: 'idle'
     property string sendStatus: ''
+    property var outgoingAttachments:[]
+    property string outgoingStatus:''
+    property var lastSentDraft:({})
+    function addOutgoingAttachment(path){outgoingAttachments=outgoingAttachments.concat([{path:path,name:'Rapport été.pdf',size:24}]);calls=calls.concat(['outgoing:'+path]);return ''}
+    function removeOutgoingAttachment(i){outgoingAttachments=outgoingAttachments.filter((a,n)=>n!==i)}
+    function clearOutgoingAttachments(){outgoingAttachments=[];outgoingStatus=''}
     property bool actionBusy: false
     property string actionStatus: ''
     property string actionOutput: ''
@@ -246,7 +252,7 @@ QtObject {
     property var setupFiles: []
     function replyDraft(m) { return { to: m.from, subject: 'Re: ' + m.subject, body: '\n\n> ' + m.text, inReplyTo: m.id } }
     function resetSend() { sendState = 'idle'; sendStatus = '' }
-    function send(d) { calls = calls.concat(['send:' + d.account + ':' + d.to + ':' + d.subject + ':' + d.inReplyTo]); sendState = 'sent'; sendStatus = 'Message envoyé'; sendChanged(); return '' }
+    function send(d) { lastSentDraft=d;outgoingAttachments=[]; calls = calls.concat(['send:' + d.account + ':' + d.to + ':' + d.subject + ':' + d.inReplyTo]); sendState = 'sent'; sendStatus = 'Message envoyé'; sendChanged(); return '' }
     function probeSetup(n) { calls = calls.concat(['probe:' + n]); setupState = { ok: true, home: '/home/u', mbsync: 'mbsync 1.5.1', msmtp: 'msmtp 1.8', notmuch: 'notmuch 0.39', mailRoot: '/home/u/Mail' }; actionChanged() }
     function previewSetup(spec) { calls = calls.concat(['preview:' + spec.name + ':' + spec.imapSecurity + ':' + spec.smtpSecurity + ':' + spec.imapPort + ':' + spec.smtpPort])
         setupFiles = [ { key: 'mbsyncrc', path: '/home/u/.mbsyncrc', kind: 'block', shown: 'Pass \"********\"', content: 'Pass \"secret\"' },
@@ -265,7 +271,15 @@ QtObject {
     function downloadAttachment(id, part, name, url) { calls = calls.concat(['attach-pc:' + id + ':' + part + ':' + name]) }
 })";
 static const char kFakeRemote[] = R"(import QtQml
-QtObject { property bool connected: true; property string serverLabel: "fixture@server"; property string activeServerId: "srvA"; property bool linkLost: false; property string linkText: "Connexion perdue à 12:00 — les données affichées datent d’avant la coupure." })";
+QtObject {
+    property var servers:[];property var entries:[];property string currentDirectory:"/home/u";property string homeDirectory:"/home/u";property string trashDirectory:""
+    property bool busy:false;property bool operationBusy:false;property bool hasMore:false;property int totalEntries:0;property bool listingCut:false
+    property bool canGoBack:false;property bool canGoForward:false;property int lastLatencyMs:0
+    property bool secretStoreAvailable:false;property string statusText:"";property string pendingFingerprint:""
+    property string rememberedHost:"";property string rememberedUser:"";property int rememberedPort:22;property string rememberedKeyPath:""
+    property bool searchActive:false;property bool searchBusy:false;property string searchQuery:"";property string searchMode:"";property string searchScope:"";property string searchInfo:"";property var searchResults:[]
+    property bool previewOpen:false;property string previewPath:"";property string previewKind:"";property string previewText:"";property string previewImage:"";property string previewInfo:"";property bool previewEditable:false;property bool saving:false
+    property bool connected: true; property string serverLabel: "fixture@server"; property string activeServerId: "srvA"; property int connectionGeneration:1; property bool linkLost: false; property string linkText: "Connexion perdue à 12:00 — les données affichées datent d’avant la coupure." })";
 #endif
 
 class ShellLayoutTest : public QObject {
@@ -517,6 +531,15 @@ private slots:
                 settle(window);
                 auto click = [&](QQuickItem *item) {
                     QVERIFY(item);
+                    auto *composeViewport=findByName(mailWin,"mailComposeScroll");
+                    for(auto *ancestor=item->parentItem();ancestor;ancestor=ancestor->parentItem())if(ancestor==composeViewport){
+                        const qreal y=item->mapToItem(composeViewport,QPointF(0,0)).y();
+                        qreal offset=composeViewport->property("contentY").toReal();
+                        if(y<0)offset+=y-4;
+                        else if(y+item->height()>composeViewport->height())offset+=y+item->height()-composeViewport->height()+4;
+                        composeViewport->setProperty("contentY",qBound<qreal>(0.0,offset,qMax<qreal>(0.0,composeViewport->property("contentHeight").toReal()-composeViewport->height())));
+                        settle(window);break;
+                    }
                     QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
                     settle(window);
                 };
@@ -555,8 +578,38 @@ private slots:
                 QCOMPARE(findByName(mailWin, "mailComposeTo")->property("text").toString(), QString("Alice <alice@example.org>"));
                 QVERIFY(window->grabWindow().save(QString("layout-captures/%1-mail-compose.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
                 findByName(mailWin, "mailComposeTo")->setProperty("text", "bob@example.org");
+                // Files adds to the existing reply without replacing recipient, subject or body.
+                const auto originalController=shell->property("controller");shell->setProperty("controller",QVariant::fromValue(mailRemote));
+                click(findByName(mailWin,"mailComposeChooseFiles"));QCOMPARE(shell->property("foregroundApp").toString(),QString("files"));
+                const QVariantMap attachmentRoute{{"type","attachToMail"},{"serverId","srvA"},{"path",QString::fromUtf8("/home/u/Rapport été.pdf")}};
+                QVariant routeAccepted;
+                QVERIFY(QMetaObject::invokeMethod(shell,"route",Q_RETURN_ARG(QVariant,routeAccepted),Q_ARG(QVariant,QVariant(attachmentRoute))));
+                QVERIFY(routeAccepted.toBool());shell->setProperty("controller",originalController);mailWin->setProperty("remote",QVariant::fromValue(mailRemote));
+                QVERIFY(mailWin->property("composeSourceAvailable").toBool());
+                QCOMPARE(fakeMail->property("outgoingAttachments").value<QJSValue>().property("length").toInt(),1);
+                QCOMPARE(findByName(mailWin,"mailComposeTo")->property("text").toString(),QString("bob@example.org"));
+                const auto preservedBody=findByName(mailWin,"mailComposeBody")->property("text");
+                findByName(mailWin,"mailComposeScroll")->setProperty("contentY",0);settle(window);
+                QVERIFY(window->grabWindow().save(QString("layout-captures/%1-mail-outgoing.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+                QVariant mayQuit;QVERIFY(QMetaObject::invokeMethod(shell,"allowAppClose",Q_RETURN_ARG(QVariant,mayQuit)));QVERIFY(!mayQuit.toBool());
+                auto *unsentWarning=findByName(mailWin,"mailComposeDiscardDialog");QVERIFY(unsentWarning);QVERIFY(unsentWarning->isVisible());
+                QTest::keyClick(window,Qt::Key_Escape);QVERIFY(!unsentWarning->isVisible());QVERIFY(compose->isVisible());
+                QCOMPARE(findByName(mailWin,"mailComposeBody")->property("text"),preservedBody);
+                // Hiding the composer and reopening keeps the in-memory draft.
+                QVERIFY(QMetaObject::invokeMethod(mailWin,"handleBack"));QVERIFY(!compose->isVisible());
+                QVERIFY(QMetaObject::invokeMethod(mailWin,"openCompose",Q_ARG(QVariant,QVariant())));QVERIFY(compose->isVisible());
+                QCOMPARE(findByName(mailWin,"mailComposeBody")->property("text"),preservedBody);
+                mailRemote->setProperty("connectionGeneration",2);QVERIFY(!findByName(mailWin,"mailComposeSend")->isEnabled());
+                const auto beforeSend=fakeMail->property("calls").toStringList();
+                QVERIFY(QMetaObject::invokeMethod(mailWin,"submitCompose"));QCOMPARE(fakeMail->property("calls").toStringList(),beforeSend);
+                mailRemote->setProperty("connectionGeneration",1);
+                fakeMail->setProperty("sendState",QString("sending"));QVERIFY(findByName(mailWin,"mailComposeBody")->property("readOnly").toBool());
+                fakeMail->setProperty("sendState",QString("unknown"));QVERIFY(!findByName(mailWin,"mailComposeSend")->isEnabled());
+                click(findByName(mailWin,"mailComposeAcknowledgeUnknown"));QCOMPARE(fakeMail->property("sendState").toString(),QString("idle"));
                 click(findByName(mailWin, "mailComposeSend"));
                 QVERIFY(fakeMail->property("calls").toStringList().contains("send:perso:bob@example.org:Re: Rapport:a"));
+                QCOMPARE(fakeMail->property("lastSentDraft").value<QJSValue>().property("serverId").toString(),QString("srvA"));
+                QCOMPARE(fakeMail->property("lastSentDraft").value<QJSValue>().property("connectionGeneration").toInt(),1);
                 QTRY_V(!compose->isVisible());
                 QVERIFY(findByName(mailWin, "mailSendBanner")->isVisible());
                 // The account wizard: nothing is written before the exact text is shown and the consent box is ticked.

@@ -1,4 +1,6 @@
 #include "MailController.h"
+#include "OutgoingAttachment.h"
+#include "../core/RemotePath.h"
 
 #include "../core/RemoteController.h"
 #include "../core/TaskManager.h"
@@ -406,7 +408,7 @@ void MailController::runAction(const QString &kind, const QString &title, const 
         spec.source = m_remote->serverLabel();
         spec.destination = destination;
         spec.cancellable = cancellable;
-        const bool readOnly = kind == QLatin1String("mailProbe") || kind == QLatin1String("mailTest");   // reads and connection tests
+        const bool readOnly = kind == QLatin1String("mailProbe") || kind == QLatin1String("mailTest") || kind == QLatin1String("mailAttach");   // reads and connection tests
         spec.guards = !readOnly; spec.session = readOnly;
         spec.generation = token;
         taskId = m_actionTask = tasks->create(spec);
@@ -458,9 +460,66 @@ void MailController::resetSend() {
     emit sendChanged();
 }
 
+QString MailController::addOutgoingAttachment(const QString &path) {
+    if (!connected()) return QStringLiteral("Aucun serveur connecté.");
+    if (m_actionBusy) return QStringLiteral("Une autre action est en cours.");
+    if (!m_outgoingAttachments.isEmpty() && m_outgoingToken != m_remote->connectionToken())
+        return QStringLiteral("Les pièces jointes appartiennent à une autre session. Abandonnez d'abord ce brouillon.");
+    const auto clean = cleanAbsolutePath(path);
+    if (!clean) return QStringLiteral("Choisissez un fichier absolu du serveur.");
+    if (m_outgoingAttachments.size() >= OutgoingAttachmentCount) return QStringLiteral("10 pièces jointes au maximum.");
+    qint64 total = 0;
+    for (const auto &value : m_outgoingAttachments) {
+        const auto a = value.toMap();
+        if (a.value("path").toString() == *clean) return QStringLiteral("Ce fichier est déjà joint.");
+        total += a.value("size").toLongLong();
+    }
+    const QString name = sanitizeAttachmentName(clean->section('/', -1));
+    const auto script = buildOutgoingProbeScript(*clean, name, OutgoingAttachmentLimit - total);
+    if (script.isEmpty()) return QStringLiteral("Fichier ou limite de pièces jointes invalide.");
+    m_outgoingStatus = QStringLiteral("Vérification du fichier sur le serveur…"); emit outgoingChanged();
+    runAction(QStringLiteral("mailAttach"), QStringLiteral("Joindre · ") + name, *clean, true, script, 16384,
+        [this, path=*clean, name](const ActionOutcome &out, int taskId) {
+        const auto info = out.openError.isEmpty() && out.run.status == SshResult::Status::Ok && out.run.code == "exit:0" && !out.run.truncated
+            ? parseOutgoingProbe(out.run.data, path, name) : QVariantMap();
+        auto *tasks = m_remote->tasks();
+        if (!info.isEmpty()) {
+            m_outgoingAttachments << info; m_outgoingToken = m_remote->connectionToken();
+            m_outgoingStatus = QStringLiteral("Fichier joint ; sa version sera vérifiée avant l'envoi.");
+            if (tasks && taskId) tasks->succeed(taskId, m_outgoingStatus);
+        } else {
+            const bool cancelled = out.cancelled || out.run.code == "cancelled";
+            m_outgoingStatus = cancelled ? QStringLiteral("Sélection annulée.")
+                : !out.openError.isEmpty() ? out.openError
+                : out.run.status != SshResult::Status::Ok ? QStringLiteral("Lecture SSH interrompue ; aucun fichier joint.")
+                : out.run.code == "exit:14" ? QStringLiteral("Python 3 est requis sur ce serveur pour joindre des fichiers.")
+                : QStringLiteral("Fichier illisible, modifié ou trop volumineux ; seuls les fichiers ordinaires sont acceptés (10 Mio au total).");
+            if (tasks && taskId) { if (cancelled) tasks->markCancelled(taskId, m_outgoingStatus); else tasks->fail(taskId, m_outgoingStatus); }
+        }
+        emit outgoingChanged();
+    });
+    return {};
+}
+void MailController::removeOutgoingAttachment(int index) {
+    if (m_actionBusy || index < 0 || index >= m_outgoingAttachments.size()) return;
+    m_outgoingAttachments.removeAt(index); m_outgoingStatus.clear();
+    if (m_outgoingAttachments.isEmpty()) m_outgoingToken = -1;
+    emit outgoingChanged();
+}
+void MailController::clearOutgoingAttachments() {
+    if (m_actionBusy) return;
+    m_outgoingAttachments.clear(); m_outgoingStatus.clear(); m_outgoingToken = -1; emit outgoingChanged();
+}
+
 QString MailController::send(const QVariantMap &draftMap) {
     if (!m_remote->connected()) return QStringLiteral("Aucun serveur connecté.");
     if (m_actionBusy) return QStringLiteral("Une autre action est en cours sur le serveur.");
+    if (m_sendState == "unknown") return QStringLiteral("Vérifiez d'abord l'envoi précédent avant d'autoriser un nouvel envoi.");
+    if (draftMap.contains("serverId") && (draftMap.value("serverId").toString() != m_remote->activeServerId()
+            || draftMap.value("connectionGeneration").toInt() != m_remote->connectionToken()))
+        return QStringLiteral("Ce brouillon appartient à une autre session du serveur.");
+    if (!m_outgoingAttachments.isEmpty() && m_outgoingToken != m_remote->connectionToken())
+        return QStringLiteral("Les pièces jointes appartiennent à une autre session du serveur.");
     MailDraft d;
     d.account = draftMap.value("account").toString();
     for (const MailSendAccount &a : m_accounts) if (a.name == d.account) d.fromAddress = a.from;
@@ -476,7 +535,7 @@ QString MailController::send(const QVariantMap &draftMap) {
     if (!message.ok) return message.error;
     QByteArray script;
     for (int attempt = 0; attempt < 3 && script.isEmpty(); ++attempt)
-        script = buildMailSendScript(d.account, message.recipients, message.data, d.inReplyTo, m_configPath, QStringLiteral("FQMSG") + randomHex(10));
+        script = buildMailSendScript(d.account, message.recipients, message.data, d.inReplyTo, m_configPath, QStringLiteral("FQMSG") + randomHex(10), m_outgoingAttachments);
     if (script.isEmpty()) return QStringLiteral("Le message n'a pas pu être préparé.");
     m_sendState = QStringLiteral("sending");
     m_sendStatus = QStringLiteral("Envoi en cours…");
@@ -501,6 +560,7 @@ QString MailController::send(const QVariantMap &draftMap) {
         if (delivered) {
             m_sendState = exitCode == 0 ? QStringLiteral("sent") : QStringLiteral("warning");
             if (tasks && taskId) tasks->succeed(taskId, text);
+            clearOutgoingAttachments();
             refresh();   // the copy appears in Sent
         } else if (unknown) {
             m_sendState = QStringLiteral("unknown");

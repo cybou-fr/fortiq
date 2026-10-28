@@ -233,7 +233,7 @@ set(FORTIQ_NETWORK_PURE_SOURCES src/network/NetworkInfo.cpp src/network/NetworkI
 set(FORTIQ_NETWORK_SOURCES ${FORTIQ_NETWORK_PURE_SOURCES} src/network/NetworkController.cpp src/network/NetworkController.h)
 set(FORTIQ_SYSTEM_PURE_SOURCES src/system/SystemInfo.cpp src/system/SystemInfo.h)
 set(FORTIQ_SYSTEM_SOURCES ${FORTIQ_SYSTEM_PURE_SOURCES} src/system/SystemController.cpp src/system/SystemController.h)
-set(FORTIQ_MAIL_PURE_SOURCES src/mail/MailInfo.cpp src/mail/MailInfo.h src/mail/MailSend.cpp src/mail/MailSend.h src/mail/MailAccount.cpp src/mail/MailAccount.h src/mail/MailAttachment.cpp src/mail/MailAttachment.h)
+set(FORTIQ_MAIL_PURE_SOURCES src/mail/MailInfo.cpp src/mail/MailInfo.h src/mail/MailSend.cpp src/mail/MailSend.h src/mail/OutgoingAttachment.cpp src/mail/OutgoingAttachment.h src/mail/MailAccount.cpp src/mail/MailAccount.h src/mail/MailAttachment.cpp src/mail/MailAttachment.h)
 set(FORTIQ_MAIL_SOURCES ${FORTIQ_MAIL_PURE_SOURCES} src/mail/MailController.cpp src/mail/MailController.h)
 set(FORTIQ_DB_PURE_SOURCES src/db/DbInfo.cpp src/db/DbInfo.h)
 set(FORTIQ_DB_SOURCES ${FORTIQ_DB_PURE_SOURCES} src/db/DbController.cpp src/db/DbController.h)
@@ -605,6 +605,8 @@ if(BUILD_TESTING)
     if(TEST fortiq_engine_live)
         set_tests_properties(fortiq_engine_live PROPERTIES TIMEOUT 600)
     endif()
+    # Interactive desktop workflows render many scenes; keep a bounded budget on slower CI hosts.
+    set_tests_properties(fortiq_layout PROPERTIES TIMEOUT 240)
     set(FORTIQ_LAYOUT_ENV "QT_QUICK_CONTROLS_STYLE=Fusion;QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     if(TARGET Qt6::QOffscreenIntegrationPlugin)   # Qt from the online installer; distribution packages find the plugin by themselves
         list(APPEND FORTIQ_LAYOUT_ENV "QT_QPA_PLATFORM_PLUGIN_PATH=$<TARGET_FILE_DIR:Qt6::QOffscreenIntegrationPlugin>")

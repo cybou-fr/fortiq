@@ -21,8 +21,10 @@ chown "$U:$U" "$DIR/app.log"
 [ -e /var/log/fail2ban.log ] || { install -m 640 -o root -g adm /dev/null /var/log/fail2ban.log; echo "2026-10-24 fail2ban fixture line" >> /var/log/fail2ban.log; }
 for ms in 5 12 31; do runuser -u "$U" -- logger -p user.err -t fqfixture "$TAG failed after $ms ms"; done
 runuser -u "$U" -- env XDG_RUNTIME_DIR="/run/user/$UID_" systemd-run --user --quiet --unit="${UNIT%.service}" \
-  -p Restart=on-failure -p RestartSec=1 -p StartLimitIntervalSec=120 -p StartLimitBurst=3 \
+  -p SyslogIdentifier="$UNIT" -p Restart=on-failure -p RestartSec=1 -p StartLimitIntervalSec=120 -p StartLimitBurst=3 \
   sh -c "echo '<3>$TAG boom'; exit 1"
+# A very short-lived writer may lose _SYSTEMD_USER_UNIT before journald resolves its PID.
+# Keep the stream identifier explicit so every crash line still names this real unit.
 # restarts every second: wait until the start limit is reached (three restarts, then "failed" for good)
 for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
   state="$(runuser -u "$U" -- env XDG_RUNTIME_DIR="/run/user/$UID_" systemctl --user is-failed "$UNIT" 2>/dev/null || true)"

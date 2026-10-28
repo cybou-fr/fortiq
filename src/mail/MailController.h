@@ -48,6 +48,8 @@ class MailController : public QObject {
     Q_PROPERTY(QString displayName READ displayName WRITE setDisplayName NOTIFY accountsChanged)
     Q_PROPERTY(QString sendState READ sendState NOTIFY sendChanged)                   // idle | sending | sent | warning | failed | unknown
     Q_PROPERTY(QString sendStatus READ sendStatus NOTIFY sendChanged)
+    Q_PROPERTY(QVariantList outgoingAttachments READ outgoingAttachments NOTIFY outgoingChanged)
+    Q_PROPERTY(QString outgoingStatus READ outgoingStatus NOTIFY outgoingChanged)
     // account wizard and tests
     Q_PROPERTY(QString attachStatus READ attachStatus NOTIFY attachChanged)
     Q_PROPERTY(bool actionBusy READ actionBusy NOTIFY actionChanged)
@@ -121,6 +123,11 @@ public:
     Q_INVOKABLE void syncNow(const QString &account);               // mbsync (pull only) then notmuch new
     Q_INVOKABLE void cancelAction();
 
+    QVariantList outgoingAttachments() const { return m_outgoingAttachments; }
+    QString outgoingStatus() const { return m_outgoingStatus; }
+    Q_INVOKABLE QString addOutgoingAttachment(const QString &path);
+    Q_INVOKABLE void removeOutgoingAttachment(int index);
+    Q_INVOKABLE void clearOutgoingAttachments();
     // ---- attachments (they stay on the server) ----
     // Writes the decoded part into ~/Downloads on the server (never overwrites: "name (1).ext").
     Q_INVOKABLE void saveAttachmentToServer(const QString &messageId, int part, const QString &name);
@@ -129,6 +136,7 @@ public:
     Q_INVOKABLE QString attachmentFileName(const QString &name) const;
 
 signals:
+    void outgoingChanged();
     void changed();
     void threadsChanged();
     void threadChanged();
@@ -184,6 +192,9 @@ private:
     bool m_actionBusy = false;
     QHash<int, QString> m_tempCopies;   // download task id -> temporary directory on the server
     QString m_attachStatus;
+    QVariantList m_outgoingAttachments;
+    QString m_outgoingStatus;
+    int m_outgoingToken = -1;
     QString m_displayName, m_sendState = QStringLiteral("idle"), m_sendStatus, m_actionStatus, m_actionOutput;
     QVariantList m_accountsVariant;
     QList<MailSendAccount> m_accounts;
