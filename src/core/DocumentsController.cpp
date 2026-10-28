@@ -360,7 +360,20 @@ void DocumentsController::write(const QString &path,bool copy){
     const int taskId=beginDocTask(m_remote,copy?QStringLiteral("docSaveCopy"):QStringLiteral("docSave"),clean->section('/',-1),*clean,false);
     auto *watcher=new QFutureWatcher<SshResult>(this);
     connect(watcher,&QFutureWatcher<SshResult>::finished,this,[this,watcher,seq,token,text,taskId,copy,oldPath]{
-        const auto result=watcher->result();watcher->deleteLater();if(seq!=m_seq || !m_remote->connected() || token!=m_remote->connectionToken()){endDocTask(m_remote,taskId,"unknown",QStringLiteral("Session changée pendant l'enregistrement : résultat inconnu."));return;}
+        const auto result=watcher->result();watcher->deleteLater();if(seq!=m_seq || !m_remote->connected() || m_remote->linkLost() || token!=m_remote->connectionToken()){
+            endDocTask(m_remote,taskId,"unknown",QStringLiteral("Session changée pendant l'enregistrement : résultat inconnu."));
+            if(seq==m_seq){
+                // The server may have committed the write before SSH disappeared.
+                // Preserve the local buffer, do not advance the base hash, and
+                // never retry this operation without explicit user recovery.
+                m_busy=false;m_writing=false;m_unknown=true;
+                m_draftTimer.stop();
+                m_pendingSavePath.clear();m_pendingSaveEpoch=-1;
+                m_status="Résultat de l'enregistrement inconnu après perte SSH. Texte conservé en mémoire ; vérifiez le fichier serveur avant toute nouvelle écriture.";
+                emit changed();
+            }
+            return;
+        }
         m_busy=false;
         if(result.status==SshResult::Status::Ok){endDocTask(m_remote,taskId,"ok",result.directory);m_path=result.directory;m_base=m_text=text;m_hash=result.data;m_new=false;m_status="Enregistré : "+m_path;m_conflict=false;m_recovery.clear();
             if(!oldPath.isEmpty())deleteDraftFor(oldPath);if(m_path!=oldPath)deleteDraftFor(m_path);   // what was saved no longer needs its safety copy
