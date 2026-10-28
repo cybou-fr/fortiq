@@ -16,6 +16,19 @@ inline constexpr int kDraftDiffMaxLines = 3000;
 
 // A successful draft upload covers exactly the immutable editor snapshot it sent.
 // If editing continued meanwhile, a new autosave is required before saying saved.
+// Distinguish a current-server acknowledgement from an obsolete completion.
+// In particular, a delayed upload from a previous document must never update
+// the currently displayed draft status or trigger another write.
+inline bool draftCompletionBelongsToDocument(const QString &submittedPath,
+                                             const QString &currentPath,
+                                             int submittedToken, int currentToken,
+                                             const QString &submittedServer,
+                                             const QString &currentServer,
+                                             bool connected) {
+    return connected && submittedToken == currentToken &&
+           submittedServer == currentServer && submittedPath == currentPath;
+}
+
 inline bool draftNeedsAnotherSave(const QString &submittedText, const QString &currentText,
                                  bool dirty, bool resultUnknown) {
     return dirty && !resultUnknown && submittedText != currentText;
