@@ -322,6 +322,26 @@ Item {
             Text { text:win.documents && win.documents.pdfMode?"DOCUMENT PDF":"DOCUMENT MARKDOWN";color:Theme.inkMuted;font.pixelSize:10 }
             Text { width:parent.width;textFormat:Text.PlainText;wrapMode:Text.WrapAnywhere;text:win.documents && win.documents.hasDocument?(win.documents.path||"Nouveau document"):"Aucun document ouvert";color:Theme.ink;font.pixelSize:12 }
             Text { width:parent.width;textFormat:Text.PlainText;wrapMode:Text.WrapAnywhere;text:win.documents?win.documents.sourceLabel:"";color:Theme.inkMuted;font.pixelSize:11 }
+            Text {
+                visible:win.tabRoot && win.tabRoot.hasDirtyTabs()
+                width:parent.width;wrapMode:Text.WordWrap
+                text:"BROUILLONS EN MÉMOIRE"
+                color:Theme.ink;font.pixelSize:10
+            }
+            Repeater {
+                model:win.tabRoot ? win.tabRoot.dirtyTabSessions() : []
+                delegate:Button {
+                    required property var modelData
+                    width:176;height:36
+                    text:(modelData.path ? modelData.path.split("/").pop() : "Sans titre")+
+                         (modelData.sourceAvailable ? " ●" : " ⚠")
+                    font.pixelSize:11
+                    ToolTip.visible:hovered
+                    ToolTip.text:modelData.sourceAvailable ? "Brouillon non enregistré" :
+                        "Session SSH ancienne : copier votre texte ou enregistrer dans un nouveau document"
+                    onClicked:{if(win.documents && win.documents.busy)return;win.documents=modelData;win.syncDocument();win.navigationOpen=false}
+                }
+            }
             Text { text:"DOCUMENTS RÉCENTS";color:Theme.inkMuted;font.pixelSize:10 }
             ListView {
                 objectName:"documentsRecentFiles"
