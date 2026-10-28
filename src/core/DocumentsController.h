@@ -49,6 +49,7 @@ public:
     Q_INVOKABLE void openPdf(const QString &path);
     Q_INVOKABLE void showPdfPage(int page);
     Q_INVOKABLE void exportPdf(const QString &destination);
+    Q_INVOKABLE void requestMarkdownImage(const QString &relativePath);
     QVariantMap recovery()const{return m_recovery;} QString draftStatus()const{return m_draftStatus;}
     bool conflictActive()const{return m_conflict;} bool conflictBusy()const{return m_conflictBusy;}
     QString conflictDiff()const{return m_conflictDiff;} QString conflictSummary()const{return m_conflictSummary;}
@@ -68,6 +69,7 @@ signals:
     void changed();
     void loaded();
     void saved(const QString &path);
+    void markdownImageReady(const QString &relativePath,const QString &base64);
 private:
     void write(const QString &path,bool copy);
     void scheduleDraft();
