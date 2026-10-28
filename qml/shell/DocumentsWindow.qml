@@ -601,22 +601,28 @@ Item {
         color:Theme.inkMuted;font.pixelSize:11;elide:Text.ElideRight
         text:win.tabNotice
     }
-    Flow {
+    Flickable {
         id:formatBar;objectName:"documentsFormatToolbar"
         visible:win.documents!==null && win.documents.hasDocument && !win.documents.pdfMode && !win.documents.busy && (!win.previewMode || win.split)
         x:win.contentLeft+12;y:tabWarning.y+tabWarning.height+4
-        width:win.width-x-12;spacing:4
-        Button { text:"H1";onClicked:win.insertBlock("# ") }
-        Button { text:"H2";onClicked:win.insertBlock("## ") }
-        Button { text:"B";font.bold:true;onClicked:win.wrapSelection("**","**",false) }
-        Button { text:"I";font.italic:true;onClicked:win.wrapSelection("*","*",false) }
-        Button { text:"• Liste";onClicked:win.insertBlock("- ") }
-        Button { text:"1. Liste";onClicked:win.insertBlock("1. ") }
-        Button { text:"❝";onClicked:win.insertBlock("> ") }
-        Button { text:"Code";onClicked:win.wrapSelection("`","`",false) }
-        Button { text:"Lien";onClicked:win.wrapSelection("[","](https://)",true) }
-        Button { text:"Image";onClicked:win.imageInsertOpen=!win.imageInsertOpen }
-        Button { text:"Rechercher";onClicked:win.openFind(false) }
+        width:win.width-x-12;height:visible?(win.adaptive?48:38):0
+        contentWidth:formatActions.implicitWidth;contentHeight:height
+        clip:true;flickableDirection:Flickable.HorizontalFlick
+        boundsBehavior:Flickable.StopAtBounds
+        Row {
+            id:formatActions;spacing:5
+            Button { text:"H1";height:formatBar.height;onClicked:win.insertBlock("# ") }
+            Button { text:"H2";height:formatBar.height;onClicked:win.insertBlock("## ") }
+            Button { text:"B";font.bold:true;height:formatBar.height;onClicked:win.wrapSelection("**","**",false) }
+            Button { text:"I";font.italic:true;height:formatBar.height;onClicked:win.wrapSelection("*","*",false) }
+            Button { text:"• Liste";height:formatBar.height;onClicked:win.insertBlock("- ") }
+            Button { text:"1. Liste";height:formatBar.height;onClicked:win.insertBlock("1. ") }
+            Button { text:"❝";height:formatBar.height;onClicked:win.insertBlock("> ") }
+            Button { text:"Code";height:formatBar.height;onClicked:win.wrapSelection("`","`",false) }
+            Button { text:"Lien";height:formatBar.height;onClicked:win.wrapSelection("[","](https://)",true) }
+            Button { text:"Image";height:formatBar.height;onClicked:win.imageInsertOpen=!win.imageInsertOpen }
+            Button { text:"Rechercher";height:formatBar.height;onClicked:win.openFind(false) }
+        }
     }
     Row {
         id:imageInsertRow;objectName:"documentsImageInsert"
@@ -652,7 +658,7 @@ Item {
             TextEdit {
                 id:editor;objectName:"documentsEditor"
                 x:10;y:8;width:parent.width-24;textFormat:TextEdit.PlainText;wrapMode:TextEdit.Wrap
-                color:Theme.ink;selectionColor:Theme.accent;font.pixelSize:14;selectByMouse:true;persistentSelection:true
+                color:Theme.ink;selectionColor:Theme.accent;font.pixelSize:win.adaptive?16:14;selectByMouse:true;persistentSelection:true
                 readOnly:win.documents!==null && win.documents.busy
                 onTextChanged:{if(!win.syncing && win.documents)win.documents.text=text;previewTimer.restart()}
                 onCursorRectangleChanged:{if(cursorRectangle.y<editScroll.contentY)editScroll.contentY=Math.max(0,cursorRectangle.y);else if(cursorRectangle.y+cursorRectangle.height>editScroll.contentY+editScroll.height)editScroll.contentY=cursorRectangle.y+cursorRectangle.height-editScroll.height+16}
