@@ -12,7 +12,15 @@
 
 namespace fortiq {
 
-inline constexpr int kDraftDiffMaxLines = 3000;   // longer documents get a summary, not a line diff
+inline constexpr int kDraftDiffMaxLines = 3000;
+
+// A successful draft upload covers exactly the immutable editor snapshot it sent.
+// If editing continued meanwhile, a new autosave is required before saying saved.
+inline bool draftNeedsAnotherSave(const QString &submittedText, const QString &currentText,
+                                 bool dirty, bool resultUnknown) {
+    return dirty && !resultUnknown && submittedText != currentText;
+}
+   // longer documents get a summary, not a line diff
 
 // Draft id: a hash of the absolute document path (the file name on the server never contains the path itself).
 inline QString draftId(const QString &documentPath) {
