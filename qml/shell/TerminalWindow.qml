@@ -209,7 +209,7 @@ Item {
         title:"Envoyer ce texte au shell ?";contentHeight:Math.min(220,Math.max(84,win.pasteText.length/2+90))
         standardButtons:Dialog.Ok|Dialog.Cancel
         contentItem:Text { objectName:"pastePreview";text:win.pasteText.length>16000?"Texte trop volumineux (limite 16 Ko).":"Le texte suivant sera envoyé au serveur. Les retours à la ligne peuvent exécuter des commandes.\n\n"+win.pasteText.slice(0,300)+(win.pasteText.length>300?"…":"");wrapMode:Text.WrapAnywhere;font.family:Theme.monoFamily;font.pixelSize:12 }
-        onAccepted:{surface.paste(win.pasteText);win.pasteText="";surface.forceActiveFocus()}
+        onAccepted:{if(win.pasteText.length<=16000)surface.paste(win.pasteText);win.pasteText="";surface.forceActiveFocus()}
         onRejected:win.pasteText=""
     }
 }
