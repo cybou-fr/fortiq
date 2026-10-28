@@ -74,6 +74,20 @@ Item {
         if(pinnedTabs.indexOf(path)<0)pinnedTabs=pinnedTabs.concat([path]).slice(-8)
         if(!tabSessions[server+"|"+path])tabSessions[server+"|"+path]=documents
     }
+    function recoverDraftAsNew(source){
+        if(!source || !tabRoot || !remote || !remote.connected || remote.linkLost || source.busy)return
+        const fresh=tabRoot.createTabSession()
+        if(!fresh.recoverAsNew(source)){
+            tabRoot.releaseTabSession(fresh)
+            return
+        }
+        documents=fresh
+        syncDocument()
+        imageInsertOpen=false
+        navigationOpen=false
+        pathInput.forceActiveFocus()
+        pathInput.selectAll()
+    }
     function requestAllDocumentsReady(proceed){
         if(!tabRoot){proceed();return}
         if(tabRoot.hasBusyTabs())return
@@ -341,6 +355,13 @@ Item {
                         "Session SSH ancienne : copier votre texte ou enregistrer dans un nouveau document"
                     onClicked:{if(win.documents && win.documents.busy)return;win.documents=modelData;win.syncDocument();win.navigationOpen=false}
                 }
+            }
+            Button {
+                objectName:"documentsRecoverAsNew"
+                width:parent.width
+                visible:win.documents && win.documents.hasDocument && !win.documents.pdfMode && !win.documents.sourceAvailable && win.connected
+                text:"Récupérer comme nouveau…"
+                onClicked:win.recoverDraftAsNew(win.documents)
             }
             Text { text:"DOCUMENTS RÉCENTS";color:Theme.inkMuted;font.pixelSize:10 }
             ListView {
