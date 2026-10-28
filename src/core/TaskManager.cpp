@@ -124,7 +124,9 @@ bool TaskManager::fail(int id, const QString &message, const QString &code) {
 
 bool TaskManager::markUnknown(int id, const QString &message) {
     Task *t = find(id);
-    if (!t || (t->state != State::Running && t->state != State::Cancelling)) return false;
+    // A queued task may already be executing remotely before its asynchronous
+    // start notification reaches the GUI. Unknown must remain representable.
+    if (!t || isTerminal(t->state)) return false;
     return finish(*t, State::Unknown, message, QStringLiteral("unknown"));
 }
 
