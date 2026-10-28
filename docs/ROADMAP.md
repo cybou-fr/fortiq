@@ -82,3 +82,20 @@ Android arm64, установщик Windows.
 вести параллельно, не затрагивая код. Срез считается завершённым по правилам приёмки
 [DEVELOPMENT_MATRIX](DEVELOPMENT_MATRIX.md) §4: тест на реальном Debian, включая отказы, документация
 и честное указание непроверенного. Работа ведётся в `main` без веток.
+
+## Product / architecture completion pass — 2026-10-28
+
+This is an **audit finding, not a release approval**. The repository contains dedicated shared core services (RemoteController, TaskManager, SSH transfer/terminal plumbing), but feature-complete/refactor-complete/Desktop-Experience-complete status has **not** been demonstrated.
+
+Concrete inventory of QML window size (approximate source lines, default branch at review): Documents 847, Logs 676, Files 558, DB 457, System 416, Network 319. The large windows still own substantial coordination (tabs/drafts and pending actions in Documents, filtering/selection and list state in Files, selection/follow/inspection in Logs). That is a **review target**, not proof that each function should become a shared service. Before extraction, identify actual repeated policies with equal semantics; keep app-specific behavior local.
+
+Immediate lifecycle fix: LogsWindow previously invoked `loadSources()` and `reload()` from connection, component completion and window visibility callbacks, potentially scheduling duplicate remote reads. These triggers are now coalesced into one deferred initialization call while the window is visible; a connection/server change still requests fresh data even if frozen events from the previous server remain. This is an implementation change, **not a measured optimization**.
+
+**Remaining product gates:**
+
+- P0: Qt desktop build, TaskManager/SSH tests, source-switch isolation and safe file-operation outcome checks; CI intentionally stays off until owner changes policy.
+- P1: inspect Files/Documents/Logs QML lifecycle and ownership before extracting reusable controllers/components; do not create speculative frameworks.
+- P1: desktop UX walkthrough covering keyboard focus, resizing, multiwindow/session transitions, dialogs, errors, empty/busy states and visual comparison with the approved screenshot. The golden screenshot is not yet checked into the repository per UI spec.
+- P1: performance profiling for large directory lists, logs, document tabs, large shell output and QML binding churn; avoid claims without runtime measurements.
+
+No build or tests were performed in this pass.
