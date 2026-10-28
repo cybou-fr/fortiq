@@ -151,3 +151,7 @@ A local `stop()` without a confirmed shell exit is now recorded as **cancelled**
 ## Streaming output memory and paste limit — 2026-10-28
 
 `TerminalView::feedLater()` now compacts already-consumed queue bytes before appending new SSH output once its consumed prefix reaches 64 KiB; it preserves all unread data and the existing hysteretic backpressure at 256/64 KiB. The paste confirmation's existing 16,000-character warning is also enforced at acceptance, rather than forwarding the oversized text to the controller. These are source-level hardening changes; no build or tests were run, and CI remains disabled.
+
+## Cross-app SSH disconnect classification — 2026-10-28
+
+`RemoteController::disconnectServer()` now distinguishes running interactive Terminal tasks from read-only session tasks. A running remote shell is recorded as **unknown** when the SSH connection is closed, because ending the client-side channel does not prove the remote process stopped. Read-only session tasks remain cancelled. This aligns TaskManager's disconnect path with TerminalController's explicit SSH-loss handling and prevents a misleading `cancelled` result from winning the signal-order race. Source change committed directly to `main`; CI, builds and tests were not run.
