@@ -129,7 +129,7 @@ Item {
         documents=session;syncDocument()
     }
     function closeUntitled(session){
-        if(!ownsUntitled(session) || session.busy)return
+        if(!ownsUntitled(session) || session.busy || (tabRoot && tabRoot.hasBusyTabs()))return
         documents=session;syncDocument()
         if(session.dirty){
             request("continue","",function(){win.closeUntitled(session)})
@@ -147,7 +147,7 @@ Item {
         const key=recentServerId+"|"+path
         const tab=tabSessions[key]
         if(!tab)return
-        if(tab.busy){documents=tab;syncDocument();return}
+        if(tab.busy || (tabRoot && tabRoot.hasBusyTabs())){documents=tab;syncDocument();return}
         if(tab.dirty){
             documents=tab;syncDocument()
             request("close","",function(){win.closePinnedTab(path)})
