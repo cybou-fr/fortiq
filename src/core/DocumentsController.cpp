@@ -252,9 +252,22 @@ void DocumentsController::requestMarkdownImage(const QString &relativePath){
            result.data.isEmpty()||result.data.size()>2097152)return;
         emit markdownImageReady(relativePath,QString::fromLatin1(result.data.toBase64()));
     });
-    watcher->setFuture(QtConcurrent::run(&m_pool,[request,target=*target]{
+    watcher->setFuture(QtConcurrent::run(&m_pool,[request,target=*target,relativePath,base=parentPath(m_path)]{
         SshSession session;auto r=session.open(request);
-        return r.status==SshResult::Status::Ok?session.readFile(target,2097152):r;
+        if(r.status!=SshResult::Status::Ok)return r;
+        // Reject symlinks in every relative component. Non-atomic with SFTP
+        // read: this is a mitigation, not a sandbox against concurrent renames.
+        QString item=base;
+        QByteArray guard="test -d "+SshSession::shellQuote(base).toUtf8()+" || exit 11\n";
+        for(const QString &part:relativePath.split('/')){
+            item+="/"+part;
+            guard+="test ! -L "+SshSession::shellQuote(item).toUtf8()+" || exit 12\n";
+        }
+        guard+="echo checked\n";
+        const auto check=session.runScript(guard,128,{},10000);
+        if(check.status!=SshResult::Status::Ok||check.code!="exit:0"||!check.data.contains("checked"))
+            return SshResult{};
+        return session.readFile(target,2097152);
     }));
 }
 void DocumentsController::save(){if(!m_pdfMode && !m_new)write(m_path,false);}
