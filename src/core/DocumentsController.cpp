@@ -160,6 +160,75 @@ void DocumentsController::renderPdfPage(const QString &path,int page,int pages){
     });
     watcher->setFuture(QtConcurrent::run(&m_pool,[request,script]{SshSession session;auto r=session.open(request);return r.status==SshResult::Status::Ok?session.runScript(script,4100000,{},30000):r;}));
 }
+
+void DocumentsController::exportPdf(const QString &destination){
+    if(m_pdfMode||!m_hasDocument||m_busy||!canSave())return;
+    const auto clean=cleanAbsolutePath(destination);
+    if(!clean||!clean->endsWith(".pdf",Qt::CaseInsensitive)){
+        m_status="Destination PDF absolue requise.";emit changed();return;
+    }
+    const QByteArray markdown=encodeMarkdown(m_text,m_bom,m_crlf);
+    if(markdown.size()>MarkdownLimit||markdown.contains('\0')){
+        m_status="Document Markdown trop grand ou invalide.";emit changed();return;
+    }
+    const QString parent=parentPath(*clean);
+    const QByteArray folder=SshSession::shellQuote(parent).toUtf8();
+    const QByteArray output=SshSession::shellQuote(*clean).toUtf8();
+    // The Markdown travels only as base64 in a quoted here-document. Pandoc is
+    // invoked without shell interpolation of document contents or destination.
+    const QByteArray delimiter="FQMD"+QUuid::createUuid().toString(QUuid::Id128).toLatin1();
+    const QByteArray script=
+        "umask 077\n"
+        "command -v pandoc >/dev/null 2>&1 || { echo 'pandoc missing' >&2; exit 12; }\n"
+        "command -v weasyprint >/dev/null 2>&1 || { echo 'weasyprint missing' >&2; exit 12; }\n"
+        "dir="+folder+"\n"
+        "test -d \"$dir\" || exit 13\n"
+        "test ! -e "+output+" && test ! -L "+output+" || exit 17\n"
+        "tmp=$(mktemp -d \"$dir/.fortiq-pdf.XXXXXXXX\") || exit 14\n"
+        "trap 'rm -rf \"$tmp\"' EXIT HUP INT TERM\n"
+        "base64 -d > \"$tmp/input.md\" <<'"+delimiter+"'\n"+
+        markdown.toBase64()+"\n"+delimiter+"\n"+
+        "pandoc --from=gfm --standalone --pdf-engine=weasyprint "
+        "--resource-path=\"$tmp\" \"$tmp/input.md\" -o \"$tmp/output.pdf\" >/dev/null 2>&1 || exit 15\n"
+        "test -s \"$tmp/output.pdf\" || exit 16\n"
+        "test \"$(head -c 5 \"$tmp/output.pdf\")\" = '%PDF-' || exit 16\n"
+        "ln \"$tmp/output.pdf\" "+output+" || exit 17\n"
+        "echo '#exported'\n";
+    const auto request=m_remote->connectionRequest();
+    const int token=m_remote->connectionToken(),seq=++m_seq;
+    const QString server=m_sourceServerId;
+    m_operationToken=token;m_busy=true;m_writing=true;
+    m_status="Export PDF sur le serveur…";emit changed();
+    const int taskId=beginDocTask(m_remote,QStringLiteral("docExportPdf"),
+                                 clean->section('/',-1),*clean,false);
+    auto *watcher=new QFutureWatcher<SshResult>(this);
+    connect(watcher,&QFutureWatcher<SshResult>::finished,this,[this,watcher,seq,token,server,target=*clean,taskId]{
+        const auto result=watcher->result();watcher->deleteLater();
+        if(seq!=m_seq||!m_remote->connected()||m_remote->linkLost()||
+           token!=m_remote->connectionToken()||server!=m_remote->activeServerId()){
+            endDocTask(m_remote,taskId,"unknown",QStringLiteral("Session changée pendant l'export PDF."));
+            return;
+        }
+        m_busy=false;
+        if(result.status==SshResult::Status::Ok&&result.code=="exit:0"&&
+           !result.truncated&&result.data.contains("#exported")){
+            endDocTask(m_remote,taskId,"ok",target);
+            m_status="PDF exporté : "+target;
+            if(m_remote->currentDirectory()==parentPath(target)&&!m_remote->busy())m_remote->refresh();
+        }else{
+            const bool unknown=result.code=="unknown"||result.code=="timeout";
+            endDocTask(m_remote,taskId,unknown?"unknown":"fail",
+                       result.message.isEmpty()?QStringLiteral("Export PDF non confirmé."):result.message,result.code);
+            m_status=unknown?"Export PDF incertain : vérifiez le serveur avant de réessayer."
+                            :"Export PDF impossible : installez pandoc et weasyprint et vérifiez le chemin.";
+        }
+        emit changed();
+    });
+    watcher->setFuture(QtConcurrent::run(&m_pool,[request,script]{
+        SshSession session;auto result=session.open(request);
+        return result.status==SshResult::Status::Ok?session.runScript(script,4096,{},120000):result;
+    }));
+}
 void DocumentsController::save(){if(!m_pdfMode && !m_new)write(m_path,false);}
 void DocumentsController::saveAs(const QString &path){if(!m_pdfMode)write(path,true);}
 void DocumentsController::write(const QString &path,bool copy){
