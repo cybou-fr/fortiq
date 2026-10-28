@@ -244,8 +244,14 @@ void RemoteController::disconnectServer() {
         } else if (m_tasks->task(id).value("session").toBool()) {
             // Read-only views and other session-scoped reads can be cancelled.
             m_tasks->markCancelled(id, QStringLiteral("Déconnecté du serveur."));
-        } else if (running) {
-            m_tasks->markUnknown(id, QStringLiteral("Déconnecté du serveur pendant l'opération ; vérifiez le résultat sur le serveur."));
+        } else if (running || (state == QLatin1String("queued")
+                   && !m_tasks->task(id).value("kind").toString().isEmpty()
+                   && !m_tasks->task(id).value("session").toBool()
+                   && !m_tasks->task(id).value("cancellable").toBool())) {
+            // The worker may already have sent a mutation even when its queued
+            // TaskManager::start notification has not reached the GUI thread.
+            // Never claim cancellation before remote non-replayable work is settled.
+            m_tasks->markUnknown(id, QStringLiteral("Déconnecté pendant une opération distante : résultat inconnu, vérifiez le serveur."));
         } else {
             m_tasks->markCancelled(id, QStringLiteral("Déconnecté du serveur."));
         }
