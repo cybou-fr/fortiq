@@ -100,6 +100,7 @@ Item {
             const key=remote.activeServerId+"|"+path
             if(tabSessions[key]){documents=tabSessions[key];syncDocument();return}
             if(documents && documents.hasDocument && documents.path!==path){
+                if(documents.path && !documents.isNew)tabSessions[remote.activeServerId+"|"+documents.path]=documents
                 const newSession=tabRoot.createTabSession()
                 tabSessions[key]=newSession
                 documents=newSession
