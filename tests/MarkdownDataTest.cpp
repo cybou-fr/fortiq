@@ -30,6 +30,15 @@ private slots:
         QVERIFY(!draftCompletionBelongsToDocument("/home/u/a.md","/home/u/a.md",7,7,"server-a","server-a",false,4,4));
         QVERIFY(!draftCompletionBelongsToDocument("/home/u/a.md","/home/u/a.md",7,7,"server-a","server-a",true,4,5));
     }
+    void delayedRecoveryCannotCrossDocumentEpoch(){
+        using fortiq::draftCompletionBelongsToDocument;
+        // The second open has the same path and server, but is a different
+        // document operation; its recovery UI must not see the old response.
+        QVERIFY(!draftCompletionBelongsToDocument("/home/u/a.md","/home/u/a.md",3,3,
+                                                  "server-1","server-1",true,12,13));
+        QVERIFY(draftCompletionBelongsToDocument("/home/u/a.md","/home/u/a.md",3,3,
+                                                 "server-1","server-1",true,13,13));
+    }
     void inFlightDraftMustNotMaskNewEdits(){
         using fortiq::draftNeedsAnotherSave;
         QVERIFY(!draftNeedsAnotherSave("a","a",true,false));
