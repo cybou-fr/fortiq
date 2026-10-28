@@ -74,6 +74,9 @@ private:
     QTimer m_draftTimer;
     int m_autosaveMs=5000;
     bool m_draftUploadPending=false; // keep at most one in-flight draft upload
+    QString m_pendingSavePath; // one explicit user intent, consumed after draft upload
+    bool m_pendingSaveCopy=false;
+    int m_pendingSaveEpoch=-1;
     QVariantMap m_recovery;QString m_recoveryText,m_recoveryBase,m_draftStatus;
     bool m_conflict=false,m_conflictBusy=false;QString m_conflictDiff,m_conflictSummary,m_conflictServerText;QByteArray m_conflictServerHash;bool m_conflictBom=false,m_conflictCrlf=false;
 };
