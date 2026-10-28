@@ -48,6 +48,7 @@ public:
     QString pdfImage()const{return m_pdfImage;}
     Q_INVOKABLE void openPdf(const QString &path);
     Q_INVOKABLE void showPdfPage(int page);
+    Q_INVOKABLE void exportPdf(const QString &destination);
     QVariantMap recovery()const{return m_recovery;} QString draftStatus()const{return m_draftStatus;}
     bool conflictActive()const{return m_conflict;} bool conflictBusy()const{return m_conflictBusy;}
     QString conflictDiff()const{return m_conflictDiff;} QString conflictSummary()const{return m_conflictSummary;}
