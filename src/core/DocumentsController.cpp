@@ -142,7 +142,7 @@ void DocumentsController::renderPdfPage(const QString &path,int page,int pages){
         "test -f \"$dir/page.png\" || exit 15\n"
         "bytes=$(wc -c < \"$dir/page.png\")\n"
         "test \"$bytes\" -le 3000000 || exit 16\n"
-        "base64 \"$dir/page.png\" | tr -d '\n'\n";
+        "base64 -w0 \"$dir/page.png\"\n";
     auto *watcher=new QFutureWatcher<SshResult>(this);
     connect(watcher,&QFutureWatcher<SshResult>::finished,this,[this,watcher,seq,token,server,path,page,pages]{
         const auto result=watcher->result();watcher->deleteLater();
