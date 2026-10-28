@@ -49,9 +49,18 @@ void DisksController::reload() {
         TaskManager *tasks=m_remote->tasks();
         if(seq!=m_seq || !m_remote->connected() || token!=m_remote->connectionToken()){if(tasks && taskId)tasks->markCancelled(taskId,QStringLiteral("Session changée."));return;}
         m_busy=false;
+        if(cancel->load()){
+            // A cancelled read is not a valid empty disk inventory.
+            // Preserve no partial SSH output or misleading "ready" state.
+            if(tasks && taskId)tasks->markCancelled(taskId,QStringLiteral("Annulé."));
+            m_devices.clear();m_mounts.clear();m_versions.clear();m_updated.clear();
+            m_deviceError.clear();m_mountError.clear();
+            m_state="cancelled";m_status=QStringLiteral("Lecture annulée ; aucune donnée partielle affichée.");
+            emit changed();
+            return;
+        }
         if(tasks && taskId){
-            if(cancel->load())tasks->markCancelled(taskId,QStringLiteral("Annulé."));
-            else if(!result.error.isEmpty() || (!result.devices.error.isEmpty() && !result.mounts.error.isEmpty()))tasks->fail(taskId,!result.error.isEmpty()?result.error:result.devices.error);
+            if(!result.error.isEmpty() || (!result.devices.error.isEmpty() && !result.mounts.error.isEmpty()))tasks->fail(taskId,!result.error.isEmpty()?result.error:result.devices.error);
             else tasks->succeed(taskId,QString());
         }m_devices=result.devices.rows;m_mounts=result.mounts.rows;m_versions=result.versions;
         m_deviceError=result.devices.error;m_mountError=result.mounts.error;
