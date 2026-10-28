@@ -31,6 +31,8 @@ Item {
     property var pinnedTabs:[]
     property var tabRoot:null
     property var tabSessions:({})
+    property var untitledTabs:[]
+    property int untitledSerial:0
     property int tabGeneration:-1
     DocumentSearch { id:finder }
     MarkdownHighlighter { document:editor.textDocument }
@@ -82,6 +84,7 @@ Item {
             return
         }
         documents=fresh
+        untitledSerial++;untitledTabs=untitledTabs.concat([{id:untitledSerial,session:fresh}])
         syncDocument()
         imageInsertOpen=false
         navigationOpen=false
@@ -97,6 +100,24 @@ Item {
         if(documents!==tab){documents=tab;syncDocument()}
         const next=function(){Qt.callLater(function(){win.requestAllDocumentsReady(proceed)})}
         request("continue","",next)
+    }
+    function activateUntitled(session){
+        if(!session || (documents && documents.busy))return
+        documents=session;syncDocument()
+    }
+    function closeUntitled(session){
+        if(!session || session.busy)return
+        documents=session;syncDocument()
+        if(session.dirty){
+            request("continue","",function(){win.closeUntitled(session)})
+            return
+        }
+        untitledTabs=untitledTabs.filter(t=>t.session!==session)
+        if(session!==tabRoot){
+            documents=tabRoot;syncDocument()
+            tabRoot.releaseTabSession(session)
+        }else if(pinnedTabs.length>0)openRecent(pinnedTabs[pinnedTabs.length-1])
+        else win.closeRequested()
     }
     function closePinnedTab(path){
         const key=recentServerId+"|"+path
@@ -122,6 +143,7 @@ Item {
         if(tab!==tabRoot && documents!==tab && tabRoot)tabRoot.releaseTabSession(tab)
     }
     function rekeySavedTab(path){
+        untitledTabs=untitledTabs.filter(t=>t.session!==documents)
         if(!documents || !path || !remote)return
         const prefix=remote.activeServerId+"|"
         const keys=Object.keys(tabSessions)
@@ -169,6 +191,15 @@ Item {
         return "/"+parts.join("/")
     }
     function perform(action,path){
+        if(action==="new" && tabRoot && remote && remote.connected){
+            if(documents && documents.hasDocument){
+                const fresh=tabRoot.createTabSession()
+                documents=fresh
+            }
+            documents.createNew()
+            if(documents.isNew){untitledSerial++;untitledTabs=untitledTabs.concat([{id:untitledSerial,session:documents}]);syncDocument()}
+            return
+        }
         if(action==="open")path=normalizedDocumentPath(path)
         if(action==="open" && path && tabRoot && remote && remote.connected){
             checkTabSession()
@@ -216,7 +247,7 @@ Item {
             editor.forceActiveFocus();return
         }
         // Untitled drafts have no stable tab identity: never switch away from them silently.
-        const isTabSwitch=action==="open" && tabRoot && remote && remote.connected && path && documents && !documents.isNew && documents.sourceAvailable
+        const isTabSwitch=(action==="new" || action==="open") && tabRoot && remote && remote.connected && documents && documents.hasDocument && documents.sourceAvailable
         if(documents && documents.dirty && !isTabSwitch){
             pendingAction=action;pendingPath=path||"";pendingContinuation=continuation||null
             pendingServerId=remote?remote.activeServerId:"";pendingGeneration=remote?remote.connectionGeneration:-1
@@ -484,11 +515,30 @@ Item {
         }
         Button { x:parent.width-(win.adaptive?48:34);y:4;width:win.adaptive?44:30;height:win.adaptive?40:28;text:"×";onClicked:win.closeFind() }
     }
+    Row {
+        id:untitledStrip;objectName:"documentsUntitledTabs"
+        visible:win.untitledTabs.length>0
+        x:win.contentLeft+12
+        y:pathInput.y+pathInput.height+8+(recoveryBanner.visible?recoveryBanner.height+6:0)+(findBar.visible?findBar.height+6:0)
+        spacing:6;height:visible?34:0
+        Repeater {
+            model:win.untitledTabs
+            delegate:Button {
+                required property var modelData
+                text:"Sans titre "+modelData.id+(modelData.session.dirty?" ●":"")+" ×"
+                font.pixelSize:11
+                onClicked:win.activateUntitled(modelData.session)
+                onPressAndHold:win.closeUntitled(modelData.session)
+                ToolTip.visible:hovered
+                ToolTip.text:"Cliquer pour ouvrir; maintenir pour fermer"
+            }
+        }
+    }
     Flickable {
         id:tabStrip;objectName:"documentsTabStrip"
         visible:win.pinnedTabs.length>0 && win.connected && win.remote.activeServerId===win.recentServerId
         x:win.contentLeft+12
-        y:pathInput.y+pathInput.height+8+(recoveryBanner.visible?recoveryBanner.height+6:0)+(findBar.visible?findBar.height+6:0)
+        y:untitledStrip.y+untitledStrip.height+2
         width:win.width-x-12;height:visible?36:0
         contentWidth:tabRow.implicitWidth;contentHeight:height
         clip:true;flickableDirection:Flickable.HorizontalFlick
