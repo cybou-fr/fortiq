@@ -65,7 +65,7 @@ void RemoteController::resolveConflict(int id, const QString &policy) {
         m_tasks->markCancelled(id, QStringLiteral("Ignoré ; le fichier existant est conservé."));
         return;
     }
-    if (!m_connected || m_tasks->task(id).value("generation").toInt() != m_generation) return;
+    if (!m_connected) return;
     m_tasks->resolveDecision(id);
     startTransfer(id, static_cast<int>(policy == QLatin1String("replace")
         ? ConflictPolicy::Replace : ConflictPolicy::KeepBoth));
