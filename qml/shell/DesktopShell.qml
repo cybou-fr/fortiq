@@ -768,11 +768,13 @@ Item {
                                                       : (shell.taskManager !== null && shell.taskManager.count > 0))
         manager: shell.fixture ? fixtureTasks : shell.taskManager
         controller: shell.controller
-        width: Math.min(420, shell.width - 24)
-        x: shell.width - width - 12
-        // On a wide screen with the dock at the bottom, the panel sits ABOVE the dock when it would cover its right end.
+        width: Math.max(0, Math.min(420, shell.width - 24))
+        x: Math.max(12, shell.width - width - 12)
+        // Keep the task panel accessible above the bottom dock and within
+        // the available viewport even when the host is resized very short.
         readonly property bool coversDock: !shell.adaptive && appPanel.edge !== "left" && appPanel.x + appPanel.width > x - 8
-        y: coversDock ? appPanel.y - height - 8 : shell.height - height - (shell.adaptive ? 84 : 12)
+        y: Math.max(8, Math.min(shell.height - height - 8,
+            coversDock ? appPanel.y - height - 8 : shell.height - height - (shell.adaptive ? 84 : 12)))
     }
 
     ServerManager {
