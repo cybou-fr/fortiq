@@ -21,6 +21,14 @@ private slots:
         QVERIFY(fortiq::decodeMarkdown(QByteArray(262144,'x')).error.isEmpty());
     }
     // ---- MDok server drafts and the conflict diff (src/core/DocumentDraft.h) ----
+    void draftCompletionRejectsWrongServerOrSession(){
+        using fortiq::draftCompletionBelongsToDocument;
+        QVERIFY(draftCompletionBelongsToDocument("/home/u/a.md","/home/u/a.md",7,7,"server-a","server-a",true));
+        QVERIFY(!draftCompletionBelongsToDocument("/home/u/a.md","/home/u/b.md",7,7,"server-a","server-a",true));
+        QVERIFY(!draftCompletionBelongsToDocument("/home/u/a.md","/home/u/a.md",7,8,"server-a","server-a",true));
+        QVERIFY(!draftCompletionBelongsToDocument("/home/u/a.md","/home/u/a.md",7,7,"server-a","server-b",true));
+        QVERIFY(!draftCompletionBelongsToDocument("/home/u/a.md","/home/u/a.md",7,7,"server-a","server-a",false));
+    }
     void inFlightDraftMustNotMaskNewEdits(){
         using fortiq::draftNeedsAnotherSave;
         QVERIFY(!draftNeedsAnotherSave("a","a",true,false));
