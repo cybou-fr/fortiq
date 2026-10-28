@@ -131,7 +131,7 @@ void DocumentsController::writeDraftNow(){
         const bool success=r.status==SshResult::Status::Ok&&r.code=="exit:0";
         // A completed SSH write only protects the snapshot sent, not edits made
         // while the remote operation was in flight. Never claim those edits are saved.
-        if(success && snapshot!=m_text && dirty() && !m_unknown){
+        if(success && draftNeedsAnotherSave(snapshot,m_text,dirty(),m_unknown)){
             m_draftStatus="Brouillon précédent enregistré ; nouvelles modifications en attente.";
             scheduleDraft();
         }else{
