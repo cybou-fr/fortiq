@@ -669,7 +669,7 @@ Item {
         objectName: "notificationPanel"
         z: 11
         visible: shell.notificationsOpen && !shell.fixture
-        width: Math.min(380, shell.width - 16); height: Math.min(shell.height - 120, 64 + Math.max(1, Math.min(shell.notifications.length, 6)) * 66)
+        width: Math.max(0, Math.min(380, shell.width - 16)); height: Math.max(0, Math.min(shell.height - 60, 64 + Math.max(1, Math.min(shell.notifications.length, 6)) * 66))
         x: Math.max(8, Math.min(shell.width - width - 8, 1030)); y: 52
         backdrop: wallpaper; radius: 14; tint: "#E6101A2E"
         Text { x: 16; y: 14; text: "Notifications"; color: Theme.ink; font.pixelSize: 13; font.weight: Font.DemiBold; font.family: Theme.fontFamily }
@@ -739,7 +739,7 @@ Item {
         objectName: "sessionMenu"
         z: 11
         visible: shell.sessionMenuOpen && !shell.fixture
-        x: shell.width - width - 12; y: 52
+        x: Math.max(8, shell.width - width - 12); y: 52
         width: Math.min(280, shell.width - 16); height: 96
         backdrop: wallpaper
         radius: 14
