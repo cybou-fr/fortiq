@@ -92,7 +92,14 @@ void DocumentsController::open(const QString &path){
 void DocumentsController::save(){if(!m_new)write(m_path,false);}
 void DocumentsController::saveAs(const QString &path){write(path,true);}
 void DocumentsController::write(const QString &path,bool copy){
-    if(m_busy || !canSave())return;
+    if(!canSave())return;
+    if(!fileSaveCanStart(m_busy,m_draftUploadPending)){
+        if(m_draftUploadPending && !m_busy){
+            m_status="Enregistrement du brouillon en cours. Réessayez après sa fin.";
+            emit changed();
+        }
+        return;
+    }
     const auto clean=cleanAbsolutePath(path);
     if(!clean || !markdownPath(*clean)){m_status="Destination absolue .md ou .markdown requise.";emit changed();return;}
     const auto bytes=encodeMarkdown(m_text,m_bom,m_crlf);
