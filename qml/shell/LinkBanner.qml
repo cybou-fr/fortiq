@@ -25,7 +25,7 @@ Rectangle {
     Text {
         objectName: "linkBannerText"
         x: 30; anchors.verticalCenter: parent.verticalCenter
-        width: parent.width - 30 - retryButton.width - 24
+        width: Math.max(0, parent.width - 30 - retryButton.width - 24)
         text: (banner.remote && banner.remote.linkText) || ""
         wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight
         color: "#FDE68A"; font.pixelSize: banner.touch ? 13 : 11; font.family: Theme.fontFamily
@@ -35,8 +35,15 @@ Rectangle {
         objectName: "linkBannerRetry"
         anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter
         width: retryLabel.implicitWidth + 24; height: banner.touch ? 38 : 26; radius: 13
+        activeFocusOnTab: banner.shown
+        border.width: activeFocus ? 2 : 0
+        border.color: Theme.accent
         color: retryMouse.containsMouse ? "#66F59E0B" : "#33F59E0B"
+        function activate() { if (banner.shown) banner.retry() }
+        Keys.onSpacePressed: event => { activate(); event.accepted = true }
+        Keys.onReturnPressed: event => { activate(); event.accepted = true }
+        Keys.onEnterPressed: event => { activate(); event.accepted = true }
         Text { id: retryLabel; anchors.centerIn: parent; text: "Réessayer"; color: "white"; font.pixelSize: banner.touch ? 13 : 11; font.family: Theme.fontFamily }
-        MouseArea { id: retryMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: banner.retry() }
+        MouseArea { id: retryMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: retryButton.activate() }
     }
 }
