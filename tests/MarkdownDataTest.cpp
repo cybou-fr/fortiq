@@ -39,6 +39,14 @@ private slots:
         QVERIFY(draftCompletionBelongsToDocument("/home/u/a.md","/home/u/a.md",3,3,
                                                  "server-1","server-1",true,13,13));
     }
+    void pendingSaveRequiresConfirmedDraftAndSameSource(){
+        using fortiq::pendingManualSaveMayRun;
+        QVERIFY(pendingManualSaveMayRun(true,true,true,false));
+        QVERIFY(!pendingManualSaveMayRun(false,true,true,false));
+        QVERIFY(!pendingManualSaveMayRun(true,false,true,false));
+        QVERIFY(!pendingManualSaveMayRun(true,true,false,false));
+        QVERIFY(!pendingManualSaveMayRun(true,true,true,true));
+    }
     void manualSaveWaitsForDraftUpload(){
         using fortiq::fileSaveCanStart;
         QVERIFY(fileSaveCanStart(false,false));
