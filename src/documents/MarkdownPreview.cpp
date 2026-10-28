@@ -9,9 +9,20 @@ MarkdownPreview::MarkdownPreview(QQuickItem *parent):QQuickPaintedItem(parent){
     connect(this,&MarkdownPreview::scrollYChanged,this,[this]{update();});
 }
 void MarkdownPreview::setSource(const QString &source){
-    if(source==m_source)return;m_source=source;
-    m_doc.setMarkdown(source.left(64000),QTextDocument::MarkdownFeatures(QTextDocument::MarkdownDialectGitHub)|QTextDocument::MarkdownNoHTML);
-    m_doc.setTextWidth(qMax(40.0,width()));update();emit changed();
+    // The preview intentionally renders only the first 64k characters.
+    // Editing beyond that boundary must not rebuild the QTextDocument.
+    constexpr qsizetype kPreviewLimit = 64000;
+    const bool wasLimited=m_source.size()>kPreviewLimit;
+    const bool nowLimited=source.size()>kPreviewLimit;
+    const QString visibleSource=source.left(kPreviewLimit);
+    if(visibleSource==m_source.left(kPreviewLimit)){
+        if(wasLimited!=nowLimited){m_source=source;emit changed();}
+        return;
+    }
+    m_source=source;
+    m_doc.setMarkdown(visibleSource,QTextDocument::MarkdownFeatures(QTextDocument::MarkdownDialectGitHub)|QTextDocument::MarkdownNoHTML);
+    m_doc.setTextWidth(qMax(40.0,width()));
+    update();emit changed();
 }
 void MarkdownPreview::geometryChange(const QRectF &now,const QRectF &old){
     QQuickPaintedItem::geometryChange(now,old);if(now.width()!=old.width()){m_doc.setTextWidth(qMax(40.0,now.width()));update();emit changed();}
