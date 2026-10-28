@@ -133,13 +133,15 @@ void DocumentsController::writeDraftNow(){
     const auto script=buildDraftWriteScript(draftId(m_path),draftMetaText(meta),bytes,QUuid::createUuid().toString(QUuid::Id128).left(12));
     if(script.isEmpty())return;
     const auto request=m_remote->connectionRequest();const int token=m_remote->connectionToken();const QString path=m_path;
+    const QString serverId=m_sourceServerId;
     const QString snapshot=m_text;
     m_draftUploadPending=true;
     auto *watcher=new QFutureWatcher<SshResult>(this);
-    connect(watcher,&QFutureWatcher<SshResult>::finished,this,[this,watcher,token,path,snapshot]{
+    connect(watcher,&QFutureWatcher<SshResult>::finished,this,[this,watcher,token,path,serverId,snapshot]{
         const auto r=watcher->result();watcher->deleteLater();
         m_draftUploadPending=false;
-        if(path!=m_path||!m_remote->connected()||token!=m_remote->connectionToken())return;
+        if(!draftCompletionBelongsToDocument(path,m_path,token,m_remote->connectionToken(),
+                                              serverId,m_remote->activeServerId(),m_remote->connected()))return;
         const bool success=r.status==SshResult::Status::Ok&&r.code=="exit:0";
         // A completed SSH write only protects the snapshot sent, not edits made
         // while the remote operation was in flight. Never claim those edits are saved.
