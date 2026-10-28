@@ -139,13 +139,15 @@ bool TaskManager::markCancelled(int id, const QString &message) {
 bool TaskManager::requestCancel(int id) {
     Task *t = find(id);
     if (!t || isTerminal(t->state) || t->state == State::Cancelling) return false;
+    // Non-cancellable remote mutations must never be reported as safely
+    // cancelled merely because their queued start signal has not arrived.
+    if (!t->spec.cancellable) return false;
     if (t->state == State::Queued) {
-        // Never ran, or waiting for a decision: nothing on the server to stop.
-        emit cancelRequested(id);   // first: the owner flags its job so it cannot start later
+        // Cancellable queued jobs are stopped through their owning controller.
+        emit cancelRequested(id);
         markCancelled(id, QStringLiteral("Annulé."));
         return true;
     }
-    if (!t->spec.cancellable) return false;
     t->state = State::Cancelling;
     emit tasksChanged();
     emit cancelRequested(id);
