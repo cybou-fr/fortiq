@@ -111,9 +111,12 @@ void TerminalController::resize(int columns, int rows) {
 }
 void TerminalController::send(const QByteArray &data) {
     if (!m_running || data.isEmpty()) return;
-    if (data.size() + m_input.size() > 32768) {
-        m_endHow = QStringLiteral("failed"); m_endMessage = QStringLiteral("Entrée trop volumineuse : terminal fermé sans rejeu.");
-        stop(); m_status = QStringLiteral("Entrée trop volumineuse : terminal fermé sans rejeu."); emit changed(); return;
+    if (data.size() > 32768 - m_input.size()) {
+        // Reject the new chunk atomically: do not drop buffered keystrokes or
+        // tear down an interactive shell simply because of a large paste.
+        m_status = QStringLiteral("Entrée refusée : limite de 32 Kio atteinte. Le terminal reste ouvert.");
+        emit changed();
+        return;
     }
     m_input += data;
 }
