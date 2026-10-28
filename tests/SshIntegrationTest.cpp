@@ -1471,6 +1471,50 @@ private slots:
         }
     }
 
+    // MD-01 regression: burst edits must converge to the last server draft,
+    // and manual Save must publish that version and remove the draft.
+    // Uses the real SSH implementation, not a mocked filesystem.
+    void mdokBurstEditsConvergeBeforeManualSave() {
+        fortiq::RemoteController controller;
+        QSettings settings;
+        const auto pin = QStringLiteral("ssh/hostPins/") + QString::fromLatin1(QCryptographicHash::hash(
+            (base.host.toLower() + ':' + QString::number(base.port)).toUtf8(), QCryptographicHash::Sha256).toHex());
+        settings.setValue(pin, fingerprint);
+        const QString key = base.password.isEmpty() ? qEnvironmentVariable("FORTIQ_IT_KEY") : QString();
+        controller.connectServer(base.host, base.port, base.user, base.password, key);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connected(), 15000);
+        fortiq::SshSession shell;
+        QVERIFY(shell.open(controller.connectionRequest()).status == SshResult::Status::Ok);
+        auto sh = [&](const QString &script) { return QString::fromUtf8(shell.runScript(script.toUtf8(), 65536, {}).data).trimmed(); };
+        const QString tag = QString::number(QRandomGenerator::global()->generate(), 16);
+        const QString home = sh(QStringLiteral("printf %s \"$HOME\"\\n"));
+        const QString doc = home + QStringLiteral("/mdok-burst-") + tag + QStringLiteral(".md");
+        const QString cacheDir = QStringLiteral("${XDG_CACHE_HOME:-$HOME/.cache}/fortiq-mdok");
+        const QString draftFile = cacheDir + QLatin1Char('/') + fortiq::draftId(doc) + QStringLiteral(".md");
+        auto cleanup = qScopeGuard([&] {
+            sh(QStringLiteral("rm -f '%1' %2/%3.*\\n").arg(doc, cacheDir, fortiq::draftId(doc)));
+            settings.remove(pin);
+        });
+        sh(QStringLiteral("printf 'initial\\\\n' > '%1'\\n").arg(doc));
+        fortiq::DocumentsController docs(&controller);
+        docs.setAutosaveDelay(30);
+        docs.open(doc);
+        QTRY_VERIFY_WITH_TIMEOUT(docs.hasDocument() && !docs.busy(), 20000);
+        for (int i=0; i<12; ++i) {
+            docs.setText(QStringLiteral("version %1\\n").arg(i));
+            QTest::qWait(15);
+        }
+        const QString expected = QStringLiteral("version 11\\n");
+        QCOMPARE(docs.text(), expected);
+        QTRY_VERIFY_WITH_TIMEOUT(docs.draftStatus().contains(QStringLiteral("Brouillon gardé")), 30000);
+        QTRY_COMPARE_WITH_TIMEOUT(sh(QStringLiteral("cat ") + draftFile + QStringLiteral("\\n")), expected.trimmed(), 20000);
+        // The asynchronous draft upload has completed: manual Save is now safe.
+        docs.save();
+        QTRY_VERIFY_WITH_TIMEOUT(!docs.busy() && !docs.dirty(), 30000);
+        QCOMPARE(sh(QStringLiteral("cat '%1'\\n").arg(doc)), expected.trimmed());
+        QTRY_VERIFY_WITH_TIMEOUT(sh(QStringLiteral("test ! -f ") + draftFile + QStringLiteral(" && echo absent\\n")) == QStringLiteral("absent"), 15000);
+    }
+
     // Backpressure: while the screen is busy the terminal stops READING from the server (the remote `yes` blocks on the full SSH window), yet typing
     // still goes out, so Ctrl+C ends the flood; reading resumes afterwards.
     void terminalBackpressureStopsReadingNotTyping() {
