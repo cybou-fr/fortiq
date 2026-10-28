@@ -54,8 +54,11 @@ void TerminalController::stop() {
     m_status = QStringLiteral("Terminal fermé. Aucun rejeu automatique."); emit changed();
 }
 void TerminalController::setWindowActive(bool active) {
-    if (active && !m_windowActive && !m_running && !m_busy) m_autoAttemptToken = -1;
-    m_windowActive = active; maybeStart();
+    // Reopening the window is not consent to launch a new remote shell.
+    // Auto-start at most once per SSH connection token; explicit start()
+    // remains available after the user closes or loses a terminal.
+    m_windowActive = active;
+    maybeStart();
 }
 void TerminalController::maybeStart() {
     if (m_windowActive && m_remote->connected() && !m_running && !m_busy
@@ -117,7 +120,11 @@ void TerminalController::send(const QByteArray &data) {
 void TerminalController::poll() {
     if (!m_running || m_pollBusy) return;
     if (m_backpressure && m_input.isEmpty()) return;                 // nothing to send and the screen is still busy: do not read more
-    if (!m_remote->connected() || m_remote->connectionToken() != m_serverToken) { stop(); emit resetScreen(); return; }
+    if (!m_remote->connected() || m_remote->connectionToken() != m_serverToken) {
+        m_endHow=QStringLiteral("failed");
+        m_endMessage=QStringLiteral("Connexion SSH perdue : état du processus distant inconnu.");
+        stop(); emit resetScreen(); return;
+    }
     m_pollBusy = true; const int seq = m_seq; auto slot = m_session;
     const auto input = std::exchange(m_input, {}); const int columns = m_columns, rows = m_rows; const bool readOutput = !m_backpressure;
     auto *watcher = new QFutureWatcher<SshResult>(this);
