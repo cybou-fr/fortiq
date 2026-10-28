@@ -119,7 +119,7 @@ void DocumentsController::openPdf(const QString &path){
         renderPdfPage(target,1,pages);
     });
     const QByteArray script="LC_ALL=C pdfinfo " + SshSession::shellQuote(*clean).toUtf8()
-        + " 2>/dev/null | awk '/^Pages:[[:space:]]+[0-9]+/{print $2; found=1; exit} END{if(!found)exit 2}'\\n";
+        + " 2>/dev/null | awk '/^Pages:[[:space:]]+[0-9]+/{print $2; found=1; exit} END{if(!found)exit 2}'\n";
     watcher->setFuture(QtConcurrent::run(&m_pool,[request,script]{SshSession session;auto r=session.open(request);return r.status==SshResult::Status::Ok?session.runScript(script,128,{},15000):r;}));
 }
 void DocumentsController::showPdfPage(int page){
@@ -134,15 +134,15 @@ void DocumentsController::renderPdfPage(const QString &path,int page,int pages){
     const QByteArray file=SshSession::shellQuote(path).toUtf8();
     const QByteArray number=QByteArray::number(page);
     const QByteArray script=
-        "umask 077\\n"
-        "command -v pdftoppm >/dev/null 2>&1 || exit 12\\n"
-        "dir=$(mktemp -d) || exit 13\\n"
-        "trap 'rm -rf \"$dir\"' EXIT HUP INT TERM\\n"
-        "pdftoppm -f "+number+" -l "+number+" -singlefile -scale-to 1600 -png "+file+" \"$dir/page\" >/dev/null 2>&1 || exit 14\\n"
-        "test -f \"$dir/page.png\" || exit 15\\n"
-        "bytes=$(wc -c < \"$dir/page.png\")\\n"
-        "test \"$bytes\" -le 3000000 || exit 16\\n"
-        "base64 \"$dir/page.png\" | tr -d '\\n'\\n";
+        "umask 077\n"
+        "command -v pdftoppm >/dev/null 2>&1 || exit 12\n"
+        "dir=$(mktemp -d) || exit 13\n"
+        "trap 'rm -rf \"$dir\"' EXIT HUP INT TERM\n"
+        "pdftoppm -f "+number+" -l "+number+" -singlefile -scale-to 1600 -png "+file+" \"$dir/page\" >/dev/null 2>&1 || exit 14\n"
+        "test -f \"$dir/page.png\" || exit 15\n"
+        "bytes=$(wc -c < \"$dir/page.png\")\n"
+        "test \"$bytes\" -le 3000000 || exit 16\n"
+        "base64 \"$dir/page.png\" | tr -d '\n'\n";
     auto *watcher=new QFutureWatcher<SshResult>(this);
     connect(watcher,&QFutureWatcher<SshResult>::finished,this,[this,watcher,seq,token,server,path,page,pages]{
         const auto result=watcher->result();watcher->deleteLater();
@@ -160,10 +160,10 @@ void DocumentsController::renderPdfPage(const QString &path,int page,int pages){
     });
     watcher->setFuture(QtConcurrent::run(&m_pool,[request,script]{SshSession session;auto r=session.open(request);return r.status==SshResult::Status::Ok?session.runScript(script,4100000,{},30000):r;}));
 }
-void DocumentsController::save(){if(!m_new)write(m_path,false);}
-void DocumentsController::saveAs(const QString &path){write(path,true);}
+void DocumentsController::save(){if(!m_pdfMode && !m_new)write(m_path,false);}
+void DocumentsController::saveAs(const QString &path){if(!m_pdfMode)write(path,true);}
 void DocumentsController::write(const QString &path,bool copy){
-    if(!canSave())return;
+    if(m_pdfMode||!canSave())return;
     if(!fileSaveCanStart(m_busy,m_draftUploadPending)){
         if(m_draftUploadPending && !m_busy){
             // This is a user-requested Save, not an automatic retry of an unknown write.
