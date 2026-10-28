@@ -53,13 +53,6 @@ Item {
         else if(bottom>editScroll.contentY+editScroll.height-margin)
             editScroll.contentY=Math.max(0,Math.min(editScroll.contentHeight-editScroll.height,bottom-editScroll.height+margin))
     }
-    onPreviewModeChanged:{
-        if(previewMode && !split && editor.activeFocus){
-            editor.focus=false
-            Qt.inputMethod.hide()
-        }else if(!previewMode && visible)
-            Qt.callLater(ensureEditorCursorVisible)
-    }
     Connections {
         target:Qt.inputMethod
         function onVisibleChanged(){Qt.callLater(win.ensureEditorCursorVisible)}
@@ -202,7 +195,7 @@ Item {
         syncing=true;editor.text=documents?documents.text:"";syncing=false
         loadedImages=({});preview.clearImages()
         pathInput.text=documents?(documents.path || (connected?remote.currentDirectory+"/Nouveau document.md":"")):""
-        previewTimer.restart()
+        previewTimer.restart();analysisTimer.restart()
         trackDocument()
         if(visible && (split || !previewMode))editor.forceActiveFocus()
     }
@@ -331,7 +324,7 @@ Item {
         for(let i=starts.length-1;i>=0;--i){editor.remove(starts[i],starts[i]+n);editor.insert(starts[i],replaceField.text)}
         syncing=false
         if(documents)documents.text=editor.text
-        previewTimer.restart();refreshMatches()
+        previewTimer.restart();analysisTimer.restart();refreshMatches()
         findCount.text=starts.length+" remplacement(s)"
     }
     function wrapSelection(prefix,suffix,selectInner){
@@ -684,7 +677,7 @@ Item {
                 x:10;y:8;width:parent.width-24;textFormat:TextEdit.PlainText;wrapMode:TextEdit.Wrap
                 color:Theme.ink;selectionColor:Theme.accent;font.pixelSize:win.adaptive?16:14;selectByMouse:true;persistentSelection:true
                 readOnly:win.documents!==null && win.documents.busy
-                onTextChanged:{if(!win.syncing && win.documents)win.documents.text=text;previewTimer.restart()}
+                onTextChanged:{if(!win.syncing && win.documents)win.documents.text=text;previewTimer.restart();analysisTimer.restart()}
                 onCursorRectangleChanged:win.ensureEditorCursorVisible()
             }
         }
@@ -749,7 +742,28 @@ Item {
             Button { objectName:"documentsConflictClose";text:"Garder mon texte, décider plus tard";onClicked:win.documents.closeConflict() }
         }
     }
-    Timer { id:previewTimer;interval:180;onTriggered:{preview.source=editor.text;win.stats=finder.stats(editor.text);win.updateOutline();win.refreshImageResources();if(win.findOpen)win.refreshMatches()} }
+    // Keep expensive Markdown parsing off the typing path and skip hidden preview.
+    Timer {
+        id:previewTimer;interval:420;repeat:false
+        onTriggered:{
+            if(!win.documents || !win.documents.hasDocument || win.documents.pdfMode)return
+            if(previewScroll.visible){preview.source=editor.text;win.refreshImageResources()}
+        }
+    }
+    Timer {
+        id:analysisTimer;interval:650;repeat:false
+        onTriggered:{
+            if(!win.documents || !win.documents.hasDocument || win.documents.pdfMode)return
+            win.stats=finder.stats(editor.text)
+            win.updateOutline()
+            if(win.findOpen)win.refreshMatches()
+        }
+    }
+    onPreviewModeChanged: {
+        if(previewMode){previewTimer.restart()}
+        if(previewMode && !split && editor.activeFocus){editor.focus=false;Qt.inputMethod.hide()}
+        else if(!previewMode && visible)Qt.callLater(ensureEditorCursorVisible)
+    }
     Text {
         objectName:"documentsStats";visible:win.documents!==null && win.documents.hasDocument
         anchors.right:parent.right;anchors.rightMargin:12;anchors.bottom:parent.bottom;anchors.bottomMargin:10;color:Theme.inkMuted;font.pixelSize:10
