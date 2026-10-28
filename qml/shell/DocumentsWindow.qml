@@ -42,6 +42,29 @@ Item {
     readonly property real contentLeft:drawer?0:196
     readonly property bool connected:remote!==null && remote.connected
     readonly property bool split:!adaptive && width-contentLeft>=680
+    function ensureEditorCursorVisible(){
+        if(!editor || !editScroll || !editScroll.visible || editScroll.height<=0)return
+        const rect=editor.cursorRectangle
+        const top=editor.y+rect.y
+        const bottom=top+rect.height
+        const margin=win.adaptive?24:12
+        if(top<editScroll.contentY+margin)
+            editScroll.contentY=Math.max(0,top-margin)
+        else if(bottom>editScroll.contentY+editScroll.height-margin)
+            editScroll.contentY=Math.max(0,Math.min(editScroll.contentHeight-editScroll.height,bottom-editScroll.height+margin))
+    }
+    onPreviewModeChanged:{
+        if(previewMode && !split && editor.activeFocus){
+            editor.focus=false
+            Qt.inputMethod.hide()
+        }else if(!previewMode && visible)
+            Qt.callLater(ensureEditorCursorVisible)
+    }
+    Connections {
+        target:Qt.inputMethod
+        function onVisibleChanged(){Qt.callLater(win.ensureEditorCursorVisible)}
+        function onKeyboardRectangleChanged(){Qt.callLater(win.ensureEditorCursorVisible)}
+    }
     signal closeRequested()
     signal requestServers()
     signal requestFiles(string path, string serverId)
@@ -654,6 +677,7 @@ Item {
             id:editScroll;objectName:"documentsEditorScroll";visible:win.split || !win.previewMode
             width:win.split?(parent.width-8)/2:parent.width;height:parent.height
             clip:true;contentWidth:width;contentHeight:editor.contentHeight+24;boundsBehavior:Flickable.StopAtBounds
+            onHeightChanged:Qt.callLater(win.ensureEditorCursorVisible)
             ScrollBar.vertical:ScrollBar { policy:ScrollBar.AsNeeded }
             TextEdit {
                 id:editor;objectName:"documentsEditor"
@@ -661,7 +685,7 @@ Item {
                 color:Theme.ink;selectionColor:Theme.accent;font.pixelSize:win.adaptive?16:14;selectByMouse:true;persistentSelection:true
                 readOnly:win.documents!==null && win.documents.busy
                 onTextChanged:{if(!win.syncing && win.documents)win.documents.text=text;previewTimer.restart()}
-                onCursorRectangleChanged:{if(cursorRectangle.y<editScroll.contentY)editScroll.contentY=Math.max(0,cursorRectangle.y);else if(cursorRectangle.y+cursorRectangle.height>editScroll.contentY+editScroll.height)editScroll.contentY=cursorRectangle.y+cursorRectangle.height-editScroll.height+16}
+                onCursorRectangleChanged:win.ensureEditorCursorVisible()
             }
         }
         Flickable {
