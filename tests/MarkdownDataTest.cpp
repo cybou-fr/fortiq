@@ -23,11 +23,12 @@ private slots:
     // ---- MDok server drafts and the conflict diff (src/core/DocumentDraft.h) ----
     void draftCompletionRejectsWrongServerOrSession(){
         using fortiq::draftCompletionBelongsToDocument;
-        QVERIFY(draftCompletionBelongsToDocument("/home/u/a.md","/home/u/a.md",7,7,"server-a","server-a",true));
-        QVERIFY(!draftCompletionBelongsToDocument("/home/u/a.md","/home/u/b.md",7,7,"server-a","server-a",true));
-        QVERIFY(!draftCompletionBelongsToDocument("/home/u/a.md","/home/u/a.md",7,8,"server-a","server-a",true));
-        QVERIFY(!draftCompletionBelongsToDocument("/home/u/a.md","/home/u/a.md",7,7,"server-a","server-b",true));
-        QVERIFY(!draftCompletionBelongsToDocument("/home/u/a.md","/home/u/a.md",7,7,"server-a","server-a",false));
+        QVERIFY(draftCompletionBelongsToDocument("/home/u/a.md","/home/u/a.md",7,7,"server-a","server-a",true,4,4));
+        QVERIFY(!draftCompletionBelongsToDocument("/home/u/a.md","/home/u/b.md",7,7,"server-a","server-a",true,4,4));
+        QVERIFY(!draftCompletionBelongsToDocument("/home/u/a.md","/home/u/a.md",7,8,"server-a","server-a",true,4,4));
+        QVERIFY(!draftCompletionBelongsToDocument("/home/u/a.md","/home/u/a.md",7,7,"server-a","server-b",true,4,4));
+        QVERIFY(!draftCompletionBelongsToDocument("/home/u/a.md","/home/u/a.md",7,7,"server-a","server-a",false,4,4));
+        QVERIFY(!draftCompletionBelongsToDocument("/home/u/a.md","/home/u/a.md",7,7,"server-a","server-a",true,4,5));
     }
     void inFlightDraftMustNotMaskNewEdits(){
         using fortiq::draftNeedsAnotherSave;
