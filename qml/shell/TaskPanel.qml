@@ -102,7 +102,7 @@ Rectangle {
             readonly property var t: modelData
             property bool confirmReplace: false
             width: list.width
-            height: t.decision === "conflict" ? 64 : 42
+            height: t.decision === "conflict" ? 42 + conflictActions.childrenRect.height + 4 : 42
 
             SymbolGlyph {
                 x: 14; y: 6
@@ -145,9 +145,12 @@ Rectangle {
                     onClicked: panel.manager.requestCancel(row.t.id)
                 }
             }
-            Row {
+            Flow {
+                id: conflictActions
                 visible: row.t.decision === "conflict"
-                x: 38; y: 38; spacing: 6
+                x: 38; y: 38
+                width: Math.max(0, row.width - x - 10)
+                spacing: 6
                 Repeater {
                     model: row.confirmReplace
                         ? [ { k: "replace", t: "Confirmer le remplacement", danger: true }, { k: "back", t: "Retour", danger: false } ]
@@ -157,7 +160,7 @@ Rectangle {
                         height: 22; radius: 6
                         width: label.implicitWidth + 16
                         color: modelData.danger ? "#B91C1C" : (btnMouse.containsMouse ? "#33FFFFFF" : "#1FFFFFFF")
-                        Text { id: label; anchors.centerIn: parent; text: modelData.t; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
+                        Text { id: label; anchors.centerIn: parent; text: modelData.k === "replace" && row.width < 340 ? "Confirmer" : modelData.t; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
                         MouseArea {
                             id: btnMouse
                             anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
