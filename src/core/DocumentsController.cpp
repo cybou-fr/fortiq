@@ -126,7 +126,7 @@ void DocumentsController::scheduleDraft(){
 }
 void DocumentsController::writeDraftNow(){
     if(!m_hasDocument||m_new||m_path.isEmpty()||!dirty()||m_unknown||!canSave())return;
-    if(m_busy){m_draftTimer.start(1000);return;}                                       // a save or an open is running: try again shortly
+    if(m_busy || m_draftUploadPending){m_draftTimer.start(1000);return;} // coalesce writes; a newer snapshot must never be overtaken
     const auto bytes=encodeMarkdown(m_text,m_bom,m_crlf);
     if(bytes.size()>MarkdownLimit||m_text.contains(QChar::Null))return;
     DraftMeta meta;meta.path=m_path;meta.baseHashHex=QString::fromLatin1(m_hash.toHex());meta.savedAtSecs=QDateTime::currentSecsSinceEpoch();meta.bom=m_bom;meta.crlf=m_crlf;
@@ -134,9 +134,11 @@ void DocumentsController::writeDraftNow(){
     if(script.isEmpty())return;
     const auto request=m_remote->connectionRequest();const int token=m_remote->connectionToken();const QString path=m_path;
     const QString snapshot=m_text;
+    m_draftUploadPending=true;
     auto *watcher=new QFutureWatcher<SshResult>(this);
     connect(watcher,&QFutureWatcher<SshResult>::finished,this,[this,watcher,token,path,snapshot]{
         const auto r=watcher->result();watcher->deleteLater();
+        m_draftUploadPending=false;
         if(path!=m_path||!m_remote->connected()||token!=m_remote->connectionToken())return;
         const bool success=r.status==SshResult::Status::Ok&&r.code=="exit:0";
         // A completed SSH write only protects the snapshot sent, not edits made
