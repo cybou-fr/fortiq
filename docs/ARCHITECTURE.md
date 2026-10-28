@@ -222,3 +222,7 @@ An asynchronous non-cancellable remote mutation can begin in a worker before its
 ### TaskManager callback-order hardening — 2026-10-28
 
 Queued-task cancellation emits `cancelRequested` first so the owner can stop queued work. Owners are allowed to settle a task synchronously while handling this signal; `requestCancel()` now inspects the state again before calling `markCancelled`, preserving any terminal result (including `unknown`) reported by that handler. Progress callbacks also cannot erase an established total or reduce its value; conflict resolution still explicitly resets progress for a new transfer attempt. This is source-level hardening; CI, builds and tests were not run.
+
+### Verification gate: TaskManager tests (2026-10-28)
+
+Static verification found an existing regression test (`queuedCannotSucceedOrBeUnknown`) that contradicted the now-required `Queued -> Unknown` transition for remote operations that may already have started. Replaced it with an explicit queued-unknown test and added cases for rejecting queued cancellation of non-cancellable mutations, synchronous `cancelRequested` handlers settling a task as unknown, and rejecting invalid/regressive progress totals. Test code is updated in `tests/TaskManagerTest.cpp`, but **not executed**: the current authoring environment has CMake but no Qt 6 SDK (`find_package(Qt6 6.9 ...)` cannot be satisfied). CI remains disabled; passing build and test status must not be inferred from this static review.
