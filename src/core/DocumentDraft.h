@@ -14,6 +14,14 @@ namespace fortiq {
 
 inline constexpr int kDraftDiffMaxLines = 3000;
 
+// Serialize a manual file Save after any pending draft upload. This prevents
+// the server-side draft from being rewritten after a successful Save deletes it.
+// Callers must not silently drop the user's Save request: refuse with an
+// explicit status and let them retry after the background upload finishes.
+inline bool fileSaveCanStart(bool documentOperationBusy, bool draftUploadPending) {
+    return !documentOperationBusy && !draftUploadPending;
+}
+
 // A successful draft upload covers exactly the immutable editor snapshot it sent.
 // If editing continued meanwhile, a new autosave is required before saying saved.
 // Distinguish a current-server acknowledgement from an obsolete completion.
