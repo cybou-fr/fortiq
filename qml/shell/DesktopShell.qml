@@ -209,6 +209,24 @@ Item {
         windowOrder = windowOrder.filter(key => key !== app).concat([app])
         foregroundApp = app
     }
+    function focusAfterClose(closed) {
+        if (foregroundApp !== closed) return
+        const opened = {
+            files: filesOpen, browser: browserOpen, logs: logsOpen,
+            terminal: terminalOpen, disks: disksOpen, docs: documentsOpen,
+            web: webOpen, network: networkOpen, system: systemOpen,
+            db: dbOpen, mail: mailOpen, settings: settingsOpen
+        }
+        for (let i = windowOrder.length - 1; i >= 0; --i) {
+            const key = windowOrder[i]
+            if (key !== closed && opened[key]) {
+                foregroundApp = key
+                return
+            }
+        }
+        // Keep a valid foreground identity when the desktop has no windows.
+        foregroundApp = "files"
+    }
 
     width: Theme.canvasWidth
     height: Theme.canvasHeight
@@ -322,7 +340,7 @@ Item {
         controller: shell.controller
         fixture: shell.fixture
         fixturePreview: shell.fixturePreview
-        onCloseRequested: { shell.filesOpen = false; if (shell.adaptive && shell.logsOpen) shell.foregroundApp = "logs" }
+        onCloseRequested: { shell.filesOpen = false; shell.focusAfterClose("files"); if (shell.adaptive && shell.foregroundApp === "files") shell.filesOpen = true }
         onRequestServers: shell.serversOpen = true
         onRequestDisconnect: shell.confirmSessionEnd("Se déconnecter", function() { shell.controller.disconnectServer() })
         onRequestDocuments:path=>shell.act("openDocument", { path: path })
@@ -353,7 +371,7 @@ Item {
         fixture: shell.fixture
         fixtureIncident: shell.fixture && shell.fixturePreview === "incident"
         fixtureService: shell.fixture && shell.fixturePreview === "service"
-        onCloseRequested: { shell.logsOpen = false; if (shell.adaptive) { shell.filesOpen = true; shell.foregroundApp = "files" } }
+        onCloseRequested: { shell.logsOpen = false; shell.focusAfterClose("logs"); if (shell.adaptive && shell.foregroundApp === "files") shell.filesOpen = true }
         onRequestServers: shell.serversOpen = true
         onRequestService: unit => shell.act("showService", { unit: unit })
         onRequestCopy: (what, text) => shell.copyText(what, text)
@@ -370,7 +388,7 @@ Item {
         backdrop: wallpaper
         terminal: shell.terminalController
         remote: shell.controller
-        onCloseRequested: { shell.terminalOpen=false; if(shell.adaptive){shell.foregroundApp="files";shell.filesOpen=true} }
+        onCloseRequested: { shell.terminalOpen = false; shell.focusAfterClose("terminal"); if (shell.adaptive && shell.foregroundApp === "files") shell.filesOpen = true }
         onRequestServers: shell.serversOpen=true
     }
 
@@ -384,7 +402,7 @@ Item {
         width: shell.adaptive ? shell.width - 16 : 940; height: shell.adaptive ? shell.appHeight : 660
         z: shell.windowOrder.indexOf("web") + 1
         backdrop: wallpaper; browser: shell.browserController; remote: shell.controller
-        onCloseRequested: { shell.webOpen = false; if (shell.adaptive) { shell.foregroundApp = "files"; shell.filesOpen = true } }
+        onCloseRequested: { shell.webOpen = false; shell.focusAfterClose("web"); if (shell.adaptive && shell.foregroundApp === "files") shell.filesOpen = true }
         onRequestServers: shell.serversOpen = true
     }
 
@@ -396,7 +414,7 @@ Item {
         width: shell.adaptive ? shell.width - 16 : 1000; height: shell.adaptive ? shell.appHeight : 670
         z: shell.windowOrder.indexOf("mail") + 1
         backdrop: wallpaper; mailer: shell.mailController; remote: shell.controller
-        onCloseRequested: { shell.mailOpen = false; if (shell.adaptive) { shell.foregroundApp = "files"; shell.filesOpen = true } }
+        onCloseRequested: { shell.mailOpen = false; shell.focusAfterClose("mail"); if (shell.adaptive && shell.foregroundApp === "files") shell.filesOpen = true }
         onRequestServers: shell.serversOpen = true
         onRequestAttachmentFiles:(serverId,generation)=>shell.route({type:"pickMailAttachment",serverId:serverId,generation:generation})
     }
@@ -409,7 +427,7 @@ Item {
         width: shell.adaptive ? shell.width - 16 : 960; height: shell.adaptive ? shell.appHeight : 650
         z: shell.windowOrder.indexOf("db") + 1
         backdrop: wallpaper; db: shell.dbController; remote: shell.controller
-        onCloseRequested: { shell.dbOpen = false; if (shell.adaptive) { shell.foregroundApp = "files"; shell.filesOpen = true } }
+        onCloseRequested: { shell.dbOpen = false; shell.focusAfterClose("db"); if (shell.adaptive && shell.foregroundApp === "files") shell.filesOpen = true }
         onRequestServers: shell.serversOpen = true
         onRequestCopy: (what, text) => shell.copyText(what, text)
     }
@@ -422,7 +440,7 @@ Item {
         width: shell.adaptive ? shell.width - 16 : 940; height: shell.adaptive ? shell.appHeight : 650
         z: shell.windowOrder.indexOf("system") + 1
         backdrop: wallpaper; sys: shell.systemController; remote: shell.controller
-        onCloseRequested: { shell.systemOpen = false; if (shell.adaptive) { shell.foregroundApp = "files"; shell.filesOpen = true } }
+        onCloseRequested: { shell.systemOpen = false; shell.focusAfterClose("system"); if (shell.adaptive && shell.foregroundApp === "files") shell.filesOpen = true }
         onRequestServers: shell.serversOpen = true
         onRequestLogs: unit => shell.act("showLogs", { unit: unit })
         onRequestCopy: (what, text) => shell.copyText(what, text)
@@ -436,7 +454,7 @@ Item {
         width: shell.adaptive ? shell.width - 16 : 920; height: shell.adaptive ? shell.appHeight : 640
         z: shell.windowOrder.indexOf("network") + 1
         backdrop: wallpaper; network: shell.networkController; remote: shell.controller
-        onCloseRequested: { shell.networkOpen = false; if (shell.adaptive) { shell.foregroundApp = "files"; shell.filesOpen = true } }
+        onCloseRequested: { shell.networkOpen = false; shell.focusAfterClose("network"); if (shell.adaptive && shell.foregroundApp === "files") shell.filesOpen = true }
         onRequestServers: shell.serversOpen = true
         onRequestCopy: (what, text) => shell.copyText(what, text)
     }
@@ -451,7 +469,7 @@ Item {
         backdrop: wallpaper
         wallpapers: shell.wallpapers; wallpaperName: shell.wallpaperName; panelEdge: shell.panelEdge
         appVersion: Qt.application.version
-        onCloseRequested: { shell.settingsOpen = false; if (shell.adaptive) { shell.foregroundApp = "files"; shell.filesOpen = true } }
+        onCloseRequested: { shell.settingsOpen = false; shell.focusAfterClose("settings"); if (shell.adaptive && shell.foregroundApp === "files") shell.filesOpen = true }
         onChooseWallpaper: name => shell.setWallpaper(name)
         onChooseEdge: edge => { shell.panelEdge = edge; if (!shell.fixture) displaySettings.panelEdge = edge }
         onRequestServers: shell.serversOpen = true
@@ -465,7 +483,7 @@ Item {
         width:shell.adaptive?shell.width-16:920;height:shell.adaptive?shell.appHeight:640
         z:shell.windowOrder.indexOf("disks")+1
         backdrop:wallpaper;disks:shell.disksController;remote:shell.controller
-        onCloseRequested:{shell.disksOpen=false;if(shell.adaptive){shell.foregroundApp="files";shell.filesOpen=true}}
+        onCloseRequested: { shell.disksOpen = false; shell.focusAfterClose("disks"); if (shell.adaptive && shell.foregroundApp === "files") shell.filesOpen = true }
         onRequestServers:shell.serversOpen=true
         onOpenPath:path=>shell.act("revealInFiles", { path: path })
     }
@@ -478,7 +496,7 @@ Item {
         width:shell.adaptive?shell.width-16:1020;height:shell.adaptive?shell.appHeight:680
         z:shell.windowOrder.indexOf("docs")+1
         backdrop:wallpaper;documents:shell.documentsController;remote:shell.controller
-        onCloseRequested:{shell.documentsOpen=false;if(shell.adaptive){shell.foregroundApp="files";shell.filesOpen=true}}
+        onCloseRequested: { shell.documentsOpen = false; shell.focusAfterClose("docs"); if (shell.adaptive && shell.foregroundApp === "files") shell.filesOpen = true }
         onRequestServers:shell.serversOpen=true
         onRequestFiles:(path, serverId)=>shell.route({ type:"revealFile", path:path, serverId:serverId })
     }
