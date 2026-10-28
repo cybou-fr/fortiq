@@ -54,10 +54,19 @@ void MarkdownSyntax::highlightBlock(const QString &text) {
     if (rule.match(text).hasMatch()) { setFormat(0, text.size(), m_rule); return; }
     if (quote.match(text).hasMatch()) setFormat(0, text.size(), m_quote);
     if (const auto m = listMarker.match(text); m.hasMatch()) setFormat(m.capturedStart(), m.capturedLength(), m_marker);
-    for (auto it = bold.globalMatch(text); it.hasNext();) { const auto m = it.next(); setFormat(m.capturedStart(), m.capturedLength(), m_bold); }
-    for (auto it = italic.globalMatch(text); it.hasNext();) { const auto m = it.next(); setFormat(m.capturedStart(), m.capturedLength(), m_italic); }
-    for (auto it = link.globalMatch(text); it.hasNext();) { const auto m = it.next(); setFormat(m.capturedStart(), m.capturedLength(), m_link); }
-    for (auto it = inlineCode.globalMatch(text); it.hasNext();) { const auto m = it.next(); setFormat(m.capturedStart(), m.capturedLength(), m_code); }
+    // Most prose blocks contain no Markdown delimiters. Avoid scanning every
+    // block with four global regexes when their opening tokens are absent.
+    const bool hasStar=text.contains(QLatin1Char('*'));
+    const bool hasUnderscore=text.contains(QLatin1Char('_'));
+    if ((hasStar && text.contains(QStringLiteral("**"))) ||
+        (hasUnderscore && text.contains(QStringLiteral("__"))))
+        for (auto it=bold.globalMatch(text);it.hasNext();) {const auto m=it.next();setFormat(m.capturedStart(),m.capturedLength(),m_bold);}
+    if (hasStar || hasUnderscore)
+        for (auto it=italic.globalMatch(text);it.hasNext();) {const auto m=it.next();setFormat(m.capturedStart(),m.capturedLength(),m_italic);}
+    if (text.contains(QLatin1Char('[')) && text.contains(QStringLiteral("](")))
+        for (auto it=link.globalMatch(text);it.hasNext();) {const auto m=it.next();setFormat(m.capturedStart(),m.capturedLength(),m_link);}
+    if (text.contains(QLatin1Char('`')))
+        for (auto it=inlineCode.globalMatch(text);it.hasNext();) {const auto m=it.next();setFormat(m.capturedStart(),m.capturedLength(),m_code);}
 }
 
 void MarkdownHighlighter::setDocument(QQuickTextDocument *document) {
