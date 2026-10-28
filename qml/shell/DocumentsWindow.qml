@@ -44,7 +44,7 @@ Item {
     function perform(action,path){
         if(action==="close")closeRequested()
         else if(action==="quit")Qt.quit()
-        else if(documents){if(action==="open")documents.open(path);else if(action==="new")documents.createNew()}
+        else if(documents){if(action==="open"){if(path.toLowerCase().endsWith(".pdf"))documents.openPdf(path);else documents.open(path)}else if(action==="new")documents.createNew()}
     }
     function clearPending(){
         pendingAction="";pendingPath="";pendingServerId="";pendingGeneration=-1;pendingContinuation=null
@@ -191,7 +191,7 @@ Item {
         }
         Column {
             x:16;y:54;width:parent.width-32;spacing:16
-            Text { text:"DOCUMENT MARKDOWN";color:Theme.inkMuted;font.pixelSize:10 }
+            Text { text:win.documents && win.documents.pdfMode?"DOCUMENT PDF":"DOCUMENT MARKDOWN";color:Theme.inkMuted;font.pixelSize:10 }
             Text { width:parent.width;textFormat:Text.PlainText;wrapMode:Text.WrapAnywhere;text:win.documents && win.documents.hasDocument?(win.documents.path||"Nouveau document"):"Aucun document ouvert";color:Theme.ink;font.pixelSize:12 }
             Text { width:parent.width;textFormat:Text.PlainText;wrapMode:Text.WrapAnywhere;text:win.documents?win.documents.sourceLabel:"";color:Theme.inkMuted;font.pixelSize:11 }
             Button {
@@ -218,7 +218,7 @@ Item {
                     ToolTip.visible:hovered;ToolTip.text:"Ligne "+modelData.line
                 }
             }
-            Text { width:parent.width;wrapMode:Text.WordWrap;text:"Markdown UTF-8\n256 Kio maximum\n\nLes images et liens externes ne sont pas chargés.\n\nPDF : pas encore disponible.";color:Theme.inkMuted;font.pixelSize:11 }
+            Text { width:parent.width;wrapMode:Text.WordWrap;text:"Markdown UTF-8 (256 Kio maximum) et PDF en lecture seule via Poppler sur le serveur. Aucune ressource externe chargée.";color:Theme.inkMuted;font.pixelSize:11 }
         }
     }
     Item {
@@ -230,8 +230,8 @@ Item {
             id:actions;anchors.right:parent.right;anchors.rightMargin:8;anchors.verticalCenter:parent.verticalCenter;spacing:4
             ToolButtonGlass { glyph:"+";touch:win.adaptive;tip:"Nouveau Markdown";enabledState:win.connected && win.documents!==null && !win.documents.busy;onClicked:win.request("new","") }
             ToolButtonGlass { objectName:"documentsOpenButton";glyph:"↗";touch:win.adaptive;tip:"Ouvrir le chemin saisi";enabledState:win.connected && win.documents!==null && !win.documents.busy;onClicked:win.request("open",pathInput.text) }
-            ToolButtonGlass { objectName:"documentsSaveButton";glyph:"✓";touch:win.adaptive;tip:"Enregistrer (Ctrl+S)";enabledState:win.documents!==null && win.documents.canSave && !win.documents.busy && (win.documents.dirty||win.documents.isNew);onClicked:win.saveDocument() }
-            ToolButtonGlass { glyph:"⧉";touch:win.adaptive;tip:"Enregistrer une copie au chemin saisi";enabledState:win.documents!==null && win.documents.canSave && !win.documents.busy;onClicked:win.documents.saveAs(pathInput.text) }
+            ToolButtonGlass { objectName:"documentsSaveButton";glyph:"✓";touch:win.adaptive;tip:"Enregistrer (Ctrl+S)";enabledState:win.documents!==null && win.documents.canSave && !win.documents.busy && !win.documents.pdfMode && (win.documents.dirty||win.documents.isNew);onClicked:win.saveDocument() }
+            ToolButtonGlass { glyph:"⧉";touch:win.adaptive;tip:"Enregistrer une copie au chemin saisi";enabledState:win.documents!==null && win.documents.canSave && !win.documents.busy && !win.documents.pdfMode;onClicked:win.documents.saveAs(pathInput.text) }
             ToolButtonGlass { glyph:"eye";touch:win.adaptive;tip:"Édition / aperçu";checked:win.previewMode;onClicked:win.previewMode=!win.previewMode }
             ToolButtonGlass { glyph:"×";touch:win.adaptive;tip:"Fermer";onClicked:win.request("close","") }
         }
@@ -240,7 +240,7 @@ Item {
     TextField {
         id:pathInput;objectName:"documentsPath"
         x:win.contentLeft+12;y:52;width:win.width-x-12;height:win.adaptive?44:34
-        placeholderText:"Chemin absolu du document .md sur le serveur";selectByMouse:true
+        placeholderText:"Chemin absolu du document .md ou .pdf sur le serveur";selectByMouse:true
         enabled:!win.documents || !win.documents.busy
         onAccepted:win.request("open",text)
     }
@@ -297,7 +297,7 @@ Item {
     }
     Flow {
         id:formatBar;objectName:"documentsFormatToolbar"
-        visible:win.documents!==null && win.documents.hasDocument && !win.documents.busy && (!win.previewMode || win.split)
+        visible:win.documents!==null && win.documents.hasDocument && !win.documents.pdfMode && !win.documents.busy && (!win.previewMode || win.split)
         x:win.contentLeft+12;y:pathInput.y+pathInput.height+8+(recoveryBanner.visible?recoveryBanner.height+6:0)+(findBar.visible?findBar.height+6:0)
         width:win.width-x-12;spacing:4
         Button { text:"H1";onClicked:win.insertBlock("# ") }
@@ -313,7 +313,7 @@ Item {
     }
     Item {
         id:body;x:win.contentLeft+12;y:formatBar.y+(formatBar.visible?formatBar.height+6:0);width:win.width-x-12;height:Math.max(32,win.height-y-80)
-        visible:win.documents!==null && win.documents.hasDocument
+        visible:win.documents!==null && win.documents.hasDocument && !win.documents.pdfMode
         Flickable {
             id:editScroll;objectName:"documentsEditorScroll";visible:win.split || !win.previewMode
             width:win.split?(parent.width-8)/2:parent.width;height:parent.height
@@ -334,6 +334,41 @@ Item {
             clip:true;contentWidth:width;contentHeight:preview.documentHeight;boundsBehavior:Flickable.StopAtBounds
             ScrollBar.vertical:ScrollBar { policy:ScrollBar.AsNeeded }
             MarkdownPreview { id:preview;objectName:"documentsPreview";y:previewScroll.contentY;width:previewScroll.width;height:previewScroll.height;scrollY:previewScroll.contentY }
+        }
+    }
+    Item {
+        id:pdfView;objectName:"documentsPdfView"
+        visible:win.documents!==null && win.documents.pdfMode
+        x:win.contentLeft+12;y:pathInput.y+pathInput.height+8
+        width:win.width-x-12;height:Math.max(100,win.height-y-85)
+        property real zoom:1.0
+        Row {
+            id:pdfActions;spacing:8;height:38
+            Button { text:"‹";enabled:win.documents && !win.documents.busy && win.documents.pdfPage>1;onClicked:win.documents.showPdfPage(win.documents.pdfPage-1) }
+            Text { text:win.documents?(win.documents.pdfPage||"…")+" / "+win.documents.pdfPages:"";color:Theme.ink;anchors.verticalCenter:parent.verticalCenter }
+            Button { text:"›";enabled:win.documents && !win.documents.busy && win.documents.pdfPage<win.documents.pdfPages;onClicked:win.documents.showPdfPage(win.documents.pdfPage+1) }
+            Button { text:"−";onClicked:pdfView.zoom=Math.max(0.5,pdfView.zoom-0.25) }
+            Button { text:Math.round(pdfView.zoom*100)+" %";onClicked:pdfView.zoom=1 }
+            Button { text:"+";onClicked:pdfView.zoom=Math.min(3,pdfView.zoom+0.25) }
+        }
+        Flickable {
+            y:pdfActions.height+4;width:parent.width;height:parent.height-y
+            clip:true;boundsBehavior:Flickable.StopAtBounds
+            contentWidth:Math.max(width,pdfImage.implicitWidth*pdfView.zoom)
+            contentHeight:Math.max(height,pdfImage.implicitHeight*pdfView.zoom)
+            ScrollBar.vertical:ScrollBar { policy:ScrollBar.AsNeeded }
+            ScrollBar.horizontal:ScrollBar { policy:ScrollBar.AsNeeded }
+            Image {
+                id:pdfImage;objectName:"documentsPdfPage"
+                source:win.documents?win.documents.pdfImage:""
+                width:implicitWidth*pdfView.zoom;height:implicitHeight*pdfView.zoom
+                fillMode:Image.PreserveAspectFit
+                asynchronous:true
+            }
+        }
+        Text {
+            anchors.centerIn:parent;visible:win.documents && win.documents.busy
+            color:Theme.ink;text:"Chargement de la page PDF…"
         }
     }
     Rectangle {
@@ -365,14 +400,14 @@ Item {
         x:win.contentLeft+16;y:160;width:win.width-x-16;spacing:14
         Text { width:parent.width;horizontalAlignment:Text.AlignHCenter;wrapMode:Text.WordWrap;text:"MDok · documents Markdown du serveur";color:Theme.ink;font.pixelSize:16 }
         Button { objectName:"documentsConnectButton";visible:!win.connected;anchors.horizontalCenter:parent.horizontalCenter;text:"Choisir un serveur…";onClicked:win.requestServers() }
-        Text { width:parent.width;horizontalAlignment:Text.AlignHCenter;wrapMode:Text.WordWrap;text:"Ouvrez un .md depuis Fichiers ou saisissez son chemin ci-dessus.";color:Theme.inkMuted;font.pixelSize:12 }
+        Text { width:parent.width;horizontalAlignment:Text.AlignHCenter;wrapMode:Text.WordWrap;text:"Ouvrez un Markdown ou PDF du serveur, ou saisissez son chemin ci-dessus.";color:Theme.inkMuted;font.pixelSize:12 }
     }
     Text { x:win.contentLeft+12;anchors.bottom:parent.bottom;anchors.bottomMargin:34;width:win.width-x-12;height:42;wrapMode:Text.WordWrap;maximumLineCount:3;elide:Text.ElideRight;textFormat:Text.PlainText;color:Theme.inkMuted;font.pixelSize:11;text:win.documents?(win.documents.hasDocument && !win.documents.sourceAvailable?"Source indisponible · texte conservé en mémoire. ":"")+win.documents.status+(win.documents.draftStatus!==""?"  ·  "+win.documents.draftStatus:""):"Choisissez un serveur Linux." }
     ToolButtonGlass { x:win.contentLeft+12;anchors.bottom:parent.bottom;anchors.bottomMargin:4;glyph:"⧉";tip:"Copier le brouillon dans le presse-papiers";enabledState:win.documents!==null && win.documents.hasDocument;onClicked:{const start=editor.selectionStart,end=editor.selectionEnd;editor.selectAll();editor.copy();editor.select(start,end)} }
     Text { x:win.contentLeft+50;anchors.bottom:parent.bottom;anchors.bottomMargin:10;visible:preview.limited;text:"Aperçu limité aux 64 000 premiers caractères";color:Theme.inkMuted;font.pixelSize:10 }
     Keys.onPressed:event=>{
         const ctrl=event.modifiers&Qt.ControlModifier
-        if(ctrl && event.key===Qt.Key_S){win.saveDocument();event.accepted=true}
+        if(ctrl && event.key===Qt.Key_S && win.documents && !win.documents.pdfMode){win.saveDocument();event.accepted=true}
         else if(!win.documents || !win.documents.hasDocument)return
         else if(ctrl && event.key===Qt.Key_F){win.openFind(false);event.accepted=true}
         else if(ctrl && event.key===Qt.Key_H){win.openFind(true);event.accepted=true}
