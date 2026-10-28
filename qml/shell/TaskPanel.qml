@@ -11,13 +11,15 @@ Rectangle {
     property var controller: null     // RemoteController: resolves name conflicts
     property var tasks: manager ? manager.tasks : []
     property bool expanded: true
+    // Host-provided vertical space; the list scrolls rather than running offscreen.
+    property real availableHeight: 260
     readonly property int active: tasks.filter(t => t.active).length
 
     radius: 12
     color: "#F20E182A"
     border.width: 1
     border.color: "#33FFFFFF"
-    height: expanded ? Math.min(header.height + list.contentHeight + 8, 260) : header.height
+    height: expanded ? Math.min(header.height + list.contentHeight + 8, 260, Math.max(header.height, availableHeight)) : header.height
     clip: true
     Behavior on height { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
 
