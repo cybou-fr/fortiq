@@ -139,3 +139,7 @@ Ctrl+Shift+F, ввод запроса без SSH-байтов, возврат ф
 совпадений, conceal, scrollback, лимиты запроса/совпадений, инвалидирование при новом выводе,
 изоляция альтернативного экрана и reset. Windows и Android arm64 собраны; APK установлен
 и запущен в FortiqTablet. Живой SSH не повторялся, физический Android IME остаётся открытым.
+
+## Terminal lifecycle hardening — 2026-10-28
+
+Opening the Terminal window no longer resets the per-connection autostart guard. A terminal that was explicitly closed, completed, or lost its SSH link must not spawn a new remote shell merely because the user switched away and back to the window; a manual Start remains possible. The polling path also marks a disconnected SSH terminal task as failed with an unknown remote process state, instead of reporting success. This is distinct from an intentionally exited shell. Changes were committed to `main` without building or running tests, per the owner's instruction; CI remains disabled.
