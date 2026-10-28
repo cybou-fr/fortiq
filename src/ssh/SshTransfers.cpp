@@ -247,6 +247,12 @@ SshResult SshSession::upload(const QString &localPath, const QString &remoteDir,
             return transferFail(QStringLiteral("Destination type, permissions or owner/group changed during upload."), QStringLiteral("conflict"));
         }
     }
+    // The metadata recheck above may take time: honour cancellation one last
+    // time before the irreversible remote rename/publication.
+    if (progress && !progress(done, done)) {
+        removeTemp();
+        return transferFail(QStringLiteral("Cancelled immediately before publication; destination unchanged."), QStringLiteral("cancelled"));
+    }
     const int published = replacement
         ? replaceFile(d->handle, d->sftp, tempUtf8, finalUtf8)
         : libssh2_sftp_rename_ex(d->sftp, tempUtf8.constData(), static_cast<unsigned int>(tempUtf8.size()),
