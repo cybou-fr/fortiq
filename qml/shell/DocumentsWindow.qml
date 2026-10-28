@@ -175,6 +175,12 @@ Item {
                 }
             }
         }
+        const existing=tabSessions[prefix+path]
+        if(existing && existing!==documents){
+            // Do not replace another editor buffer after a competing Save As.
+            tabNotice="Chemin déjà ouvert : les deux documents restent accessibles."
+            return
+        }
         tabSessions[prefix+path]=documents
         trackDocument()
     }
@@ -495,7 +501,18 @@ Item {
             ToolButtonGlass { glyph:"×";touch:win.adaptive;tip:"Fermer";onClicked:win.request("close","") }
         }
     }
-    function saveDocument(){if(documents){if(documents.isNew)documents.saveAs(pathInput.text);else documents.save()}}
+    function saveDocument(){
+        if(!documents)return
+        if(documents.isNew){
+            const target=normalizedDocumentPath(pathInput.text.trim())
+            const key=remote?remote.activeServerId+"|"+target:""
+            if(tabSessions[key] && tabSessions[key]!==documents){
+                tabNotice="Ce chemin est déjà ouvert dans un autre onglet. Choisissez un autre nom."
+                return
+            }
+            documents.saveAs(target)
+        }else documents.save()
+    }
     TextField {
         id:pathInput;objectName:"documentsPath"
         x:win.contentLeft+12;y:52;width:win.width-x-12;height:win.adaptive?44:34
