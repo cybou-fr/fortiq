@@ -94,3 +94,7 @@ Logs maximizes as one foreground app on narrow/portrait screens, with source dra
 scrollable filters and narrow incident synopsis/events tabs. Server/data semantics are unchanged.
 This is an offscreen-tested layout, not device touch/accessibility/GPU acceptance; see
 [Android foundation](ANDROID_FOUNDATION.md).
+
+## Live follow task identity on source changes — 2026-10-28
+
+Changing the selected journal, unit, or file while live follow is active now closes the previous TaskManager follow task and opens a new task for the newly selected source. The active follow timer continues; existing per-request sequence and SSH-token checks reject stale results. This prevents the task panel from claiming to follow a source which is no longer selected. Changes committed without running CI, build, or tests per the owner's instruction.
