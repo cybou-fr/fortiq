@@ -335,20 +335,31 @@ Item {
         else editor.select(a+prefix.length,b+prefix.length)
     }
     function updateOutline(){
-        const lines=editor.text.split("\n"), result=[]
-        let offset=0, fenced=false, fenceChar="", fenceLength=0
-        for(let i=0;i<lines.length;i++){
-            const line=lines[i]
-            const fence=/^ {0,3}(`{3,}|~{3,})/.exec(line)
-            if(fence){
-                const mark=fence[1]
-                if(!fenced){fenced=true;fenceChar=mark[0];fenceLength=mark.length}
-                else if(mark[0]===fenceChar && mark.length>=fenceLength && line.slice(fence[0].length).trim()==="")fenced=false
-            }else if(!fenced){
-                const match=/^ {0,3}(#{1,6})[ \t]+(.+?)\s*#*\s*$/.exec(line)
-                if(match && result.length<200)result.push({level:match[1].length,title:match[2],offset:offset,line:i+1})
+        const source=editor.text
+        const result=[]
+        let offset=0,lineNumber=1,fenced=false,fenceChar="",fenceLength=0
+        // Walk line boundaries without allocating an array of every line.
+        // Keep scanning after the 200-entry UI cap to preserve fence state.
+        while(offset<source.length){
+            const end=source.indexOf("\n",offset)
+            const next=end<0?source.length:end
+            const line=source.slice(offset,next)
+            let start=0
+            while(start<line.length && start<4 && line[start]===" ")start++
+            if(start<=3 && (line[start]==="\`" || line[start]==="~")){
+                const marker=line[start]
+                let count=0
+                while(line[start+count]===marker)count++
+                if(count>=3){
+                    if(!fenced){fenced=true;fenceChar=marker;fenceLength=count}
+                    else if(marker===fenceChar && count>=fenceLength && line.slice(start+count).trim()==="")fenced=false
+                }
+            }else if(!fenced && result.length<200 && start<=3 && line[start]==="#"){
+                const match=/^(#{1,6})[ \t]+(.+?)\s*#*\s*$/.exec(line.slice(start))
+                if(match)result.push({level:match[1].length,title:match[2],offset:offset,line:lineNumber})
             }
-            offset+=line.length+1
+            offset=next+1
+            lineNumber++
         }
         headings=result
     }
