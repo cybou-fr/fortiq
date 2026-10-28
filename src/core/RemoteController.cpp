@@ -237,8 +237,12 @@ void RemoteController::disconnectServer() {
                 : QStringLiteral("Déconnecté du serveur.");
             if (running && (t->upload || documentMayBePartial)) m_tasks->markUnknown(id, message);
             else m_tasks->markCancelled(id, message);
+        } else if (m_tasks->task(id).value("kind").toString() == QLatin1String("terminal") && running) {
+            // Disconnecting the SSH channel does not prove the remote shell
+            // or its foreground process terminated. Preserve uncertainty.
+            m_tasks->markUnknown(id, QStringLiteral("Connexion SSH perdue : état du processus terminal distant inconnu."));
         } else if (m_tasks->task(id).value("session").toBool()) {
-            // A read, a view or an interactive session: there is nothing to verify afterwards.
+            // Read-only views and other session-scoped reads can be cancelled.
             m_tasks->markCancelled(id, QStringLiteral("Déconnecté du serveur."));
         } else if (running) {
             m_tasks->markUnknown(id, QStringLiteral("Déconnecté du serveur pendant l'opération ; vérifiez le résultat sur le serveur."));
