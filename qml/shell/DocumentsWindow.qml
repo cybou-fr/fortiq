@@ -25,6 +25,7 @@ Item {
     property var stats:({ "words":0, "characters":0, "lines":0 })
     property var headings:[]
     property bool outlineOpen:true
+    property bool imageInsertOpen:false
     DocumentSearch { id:finder }
     MarkdownHighlighter { document:editor.textDocument }
     readonly property bool drawer:adaptive && width<900
@@ -37,7 +38,7 @@ Item {
     property var loadedImages:({})
     function refreshImageResources(){
         if(!documents || !documents.hasDocument || documents.pdfMode || documents.isNew)return
-        const regex=/!\\[[^\\]]*\\]\\(([^\\s)]+)(?:\\s+["'][^"']*["'])?\\)/g
+        const regex=/!\[[^\]]*\]\(([^\s)]+)(?:\s+["'][^"']*["'])?\)/g
         const source=editor.text.slice(0,64000)
         let match, count=0
         while((match=regex.exec(source))!==null && count<12){
@@ -322,10 +323,31 @@ Item {
         Button { text:"❝";onClicked:win.insertBlock("> ") }
         Button { text:"Code";onClicked:win.wrapSelection("`","`",false) }
         Button { text:"Lien";onClicked:win.wrapSelection("[","](https://)",true) }
+        Button { text:"Image";onClicked:win.imageInsertOpen=!win.imageInsertOpen }
         Button { text:"Rechercher";onClicked:win.openFind(false) }
     }
+    Row {
+        id:imageInsertRow;objectName:"documentsImageInsert"
+        visible:win.imageInsertOpen && formatBar.visible
+        x:win.contentLeft+12;y:formatBar.y+formatBar.height+4
+        width:win.width-x-12;height:40;spacing:6
+        TextField { id:imagePathField;width:Math.max(90,parent.width-110);height:38;placeholderText:"images/figure.png (sur le serveur)";selectByMouse:true }
+        Button {
+            text:"Insérer";height:38
+            enabled:imagePathField.text.length>0
+            onClicked:{
+                const path=imagePathField.text.trim()
+                if(!/^(?![/.])(?:[^/\\?#:]+\\/)*[^/\\?#:]+\\.(png|jpe?g|webp)$/i.test(path) || path.split("/").some(p=>p==="."||p===".."))return
+                const alt=editor.selectedText.replace(/\\u2029/g," ").replace(/[\\[\\]]/g,"")
+                const at=editor.selectionStart, end=editor.selectionEnd
+                editor.remove(at,end);editor.insert(at,"!["+alt+"]("+path+")")
+                editor.forceActiveFocus();win.imageInsertOpen=false
+                imagePathField.text=""
+            }
+        }
+    }
     Item {
-        id:body;x:win.contentLeft+12;y:formatBar.y+(formatBar.visible?formatBar.height+6:0);width:win.width-x-12;height:Math.max(32,win.height-y-80)
+        id:body;x:win.contentLeft+12;y:(imageInsertRow.visible?imageInsertRow.y+imageInsertRow.height+4:formatBar.y+(formatBar.visible?formatBar.height+6:0));width:win.width-x-12;height:Math.max(32,win.height-y-80)
         visible:win.documents!==null && win.documents.hasDocument && !win.documents.pdfMode
         Flickable {
             id:editScroll;objectName:"documentsEditorScroll";visible:win.split || !win.previewMode
