@@ -95,7 +95,7 @@ Item {
         if(!tabSessions[server+"|"+path])tabSessions[server+"|"+path]=documents
     }
     function recoverDraftAsNew(source){
-        if(!source || !tabRoot || !remote || !remote.connected || remote.linkLost || source.busy)return
+        if(!source || !tabRoot || !remote || !remote.connected || remote.linkLost || source.busy || tabRoot.hasBusyTabs())return
         if(!tabCapacityAvailable())return
         const fresh=tabRoot.createTabSession()
         if(!fresh.recoverAsNew(source)){
@@ -133,7 +133,8 @@ Item {
         }
         untitledTabs=untitledTabs.filter(t=>t.session!==session)
         if(session!==tabRoot){
-            documents=tabRoot;syncDocument()
+            const next=untitledTabs.length>0?untitledTabs[untitledTabs.length-1].session:tabRoot
+            documents=next;syncDocument()
             tabRoot.releaseTabSession(session)
         }else if(pinnedTabs.length>0)openRecent(pinnedTabs[pinnedTabs.length-1])
         else win.closeRequested()
@@ -162,7 +163,6 @@ Item {
         if(tab!==tabRoot && documents!==tab && tabRoot)tabRoot.releaseTabSession(tab)
     }
     function rekeySavedTab(path){
-        untitledTabs=untitledTabs.filter(t=>t.session!==documents)
         if(!documents || !path || !remote)return
         const prefix=remote.activeServerId+"|"
         const keys=Object.keys(tabSessions)
@@ -181,6 +181,7 @@ Item {
             tabNotice="Chemin déjà ouvert : les deux documents restent accessibles."
             return
         }
+        untitledTabs=untitledTabs.filter(t=>t.session!==documents)
         tabSessions[prefix+path]=documents
         trackDocument()
     }
