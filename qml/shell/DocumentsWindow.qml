@@ -26,6 +26,8 @@ Item {
     property var headings:[]
     property bool outlineOpen:true
     property bool imageInsertOpen:false
+    property var recentDocuments:[]
+    property string recentServerId:""
     DocumentSearch { id:finder }
     MarkdownHighlighter { document:editor.textDocument }
     readonly property bool drawer:adaptive && width<900
@@ -46,12 +48,27 @@ Item {
             if(!loadedImages[path]){loadedImages[path]=true;documents.requestMarkdownImage(path);count++}
         }
     }
+    function trackDocument(){
+        if(!documents || !documents.hasDocument || documents.isNew || !documents.path || !remote)return
+        const server=documents.sourceServerId
+        if(!server)return
+        if(recentServerId!==server){recentDocuments=[];recentServerId=server}
+        const path=documents.path
+        const entries=recentDocuments.filter(p=>p!==path)
+        entries.unshift(path)
+        recentDocuments=entries.slice(0,10)
+    }
+    function openRecent(path){
+        if(!documents || !remote || !remote.connected || remote.activeServerId!==recentServerId)return
+        request("open",path)
+    }
     function syncDocument(){
         if(!editor || !pathInput)return
         syncing=true;editor.text=documents?documents.text:"";syncing=false
         loadedImages=({});preview.clearImages()
         pathInput.text=documents?(documents.path || (connected?remote.currentDirectory+"/Nouveau document.md":"")):""
         previewTimer.restart()
+        trackDocument()
         if(visible && (split || !previewMode))editor.forceActiveFocus()
     }
     function perform(action,path){
@@ -207,6 +224,25 @@ Item {
             Text { text:win.documents && win.documents.pdfMode?"DOCUMENT PDF":"DOCUMENT MARKDOWN";color:Theme.inkMuted;font.pixelSize:10 }
             Text { width:parent.width;textFormat:Text.PlainText;wrapMode:Text.WrapAnywhere;text:win.documents && win.documents.hasDocument?(win.documents.path||"Nouveau document"):"Aucun document ouvert";color:Theme.ink;font.pixelSize:12 }
             Text { width:parent.width;textFormat:Text.PlainText;wrapMode:Text.WrapAnywhere;text:win.documents?win.documents.sourceLabel:"";color:Theme.inkMuted;font.pixelSize:11 }
+            Text { text:"DOCUMENTS RÉCENTS";color:Theme.inkMuted;font.pixelSize:10 }
+            ListView {
+                objectName:"documentsRecentFiles"
+                width:parent.width
+                height:Math.min(170,win.recentDocuments.length*34)
+                clip:true
+                visible:win.recentDocuments.length>0 && win.connected && win.remote.activeServerId===win.recentServerId
+                model:win.recentDocuments
+                delegate:Button {
+                    required property string modelData
+                    width:ListView.view.width;height:32
+                    text:modelData.split("/").pop()
+                    font.pixelSize:11
+                    highlighted:win.documents && win.documents.path===modelData
+                    ToolTip.visible:hovered
+                    ToolTip.text:modelData
+                    onClicked:win.openRecent(modelData)
+                }
+            }
             Button {
                 objectName:"documentsShowInFiles";width:parent.width;text:"Afficher dans Fichiers"
                 enabled:win.documents!==null && win.documents.hasDocument && !win.documents.isNew
