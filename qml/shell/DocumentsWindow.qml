@@ -337,7 +337,10 @@ Item {
             enabled:imagePathField.text.length>0
             onClicked:{
                 const path=imagePathField.text.trim()
-                if(!/^(?![/.])(?:[^/\\?#:]+\\/)*[^/\\?#:]+\\.(png|jpe?g|webp)$/i.test(path) || path.split("/").some(p=>p==="."||p===".."))return
+                const segments=path.split("/")
+                if(path.length>256 || path.startsWith("/") || path.includes("\\") || path.includes(":") ||
+                   path.includes("?") || path.includes("#") || segments.some(p=>!p||p==="."||p==="..") ||
+                   !["png","jpg","jpeg","webp"].includes(path.split(".").pop().toLowerCase()))return
                 const alt=editor.selectedText.replace(/\\u2029/g," ").replace(/[\\[\\]]/g,"")
                 const at=editor.selectionStart, end=editor.selectionEnd
                 editor.remove(at,end);editor.insert(at,"!["+alt+"]("+path+")")
