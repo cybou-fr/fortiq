@@ -633,11 +633,13 @@ Item {
             visible: win.view !== "service" && win.lc && !win.lc.busy && (win.view === "timeline" ? win.shownEvents.length === 0 : win.lc.patterns.length === 0)
             anchors.centerIn: parent
             spacing: 6
-            Text {
+            AppStateMessage {
                 anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.max(0, Math.min(400, win.width - win.contentLeft - 40))
+                state: "empty"; touch: win.adaptive
+                horizontalAlignment: Text.AlignHCenter
                 text: !win.connected ? "Aucun serveur connecté : choisissez-en un en haut à gauche."
                     : (win.lc && win.lc.events.length > 0 ? "Aucun événement ne correspond au filtre." : "Aucun événement dans cette période.")
-                color: Theme.ink; font.pixelSize: 13; font.family: Theme.fontFamily
             }
         }
         BusyIndicator { anchors.centerIn: parent; running: win.lc && win.lc.busy && win.lc.events.length === 0; visible: running }
