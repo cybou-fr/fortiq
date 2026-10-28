@@ -120,12 +120,16 @@ Item {
         const next=function(){Qt.callLater(function(){win.requestAllDocumentsReady(proceed)})}
         request("continue","",next)
     }
+    function ownsUntitled(session){
+        return !!session && untitledTabs.some(t=>t.session===session)
+    }
     function activateUntitled(session){
-        if(!session || (documents && documents.busy))return
+        // A deferred UI callback must not reactivate a released tab session.
+        if(!ownsUntitled(session) || (documents && documents.busy))return
         documents=session;syncDocument()
     }
     function closeUntitled(session){
-        if(!session || session.busy)return
+        if(!ownsUntitled(session) || session.busy)return
         documents=session;syncDocument()
         if(session.dirty){
             request("continue","",function(){win.closeUntitled(session)})
