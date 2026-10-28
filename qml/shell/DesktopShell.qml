@@ -99,7 +99,7 @@ Item {
         const managerWasOpen = serversOpen
         const guarded = function() { if(managerWasOpen)shell.serversOpen=true;sessionGuard.ask(label, proceed) }
         if(documentsController && documentsController.hasDirtyTabs() && !documentsController.hasBusyTabs()){
-            serversOpen=false;documentsOpen=true;raiseApp("docs");documentsWindow.request("continue","",guarded)
+            serversOpen=false;documentsOpen=true;raiseApp("docs");documentsWindow.requestAllDocumentsReady(guarded)
         } else guarded()
     }
     function endSession() {
