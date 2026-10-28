@@ -1495,7 +1495,7 @@ private slots:
             sh(QStringLiteral("rm -f '%1' %2/%3.*\n").arg(doc, cacheDir, fortiq::draftId(doc)));
             settings.remove(pin);
         });
-        sh(QStringLiteral("printf 'initial\\\n' > '%1'\n").arg(doc));
+        sh(QStringLiteral("printf initial > '%1'\n").arg(doc));
         fortiq::DocumentsController docs(&controller);
         docs.setAutosaveDelay(30);
         docs.open(doc);
