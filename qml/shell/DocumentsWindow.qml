@@ -29,6 +29,8 @@ Item {
     property var recentDocuments:[]
     property string recentServerId:""
     property var pinnedTabs:[]
+    property var tabRoot:null
+    property var tabSessions:({})
     DocumentSearch { id:finder }
     MarkdownHighlighter { document:editor.textDocument }
     readonly property bool drawer:adaptive && width<900
@@ -75,8 +77,14 @@ Item {
         if(documents && documents.path===path && pinnedTabs.length>0)openRecent(pinnedTabs[pinnedTabs.length-1])
     }
     function openRecent(path){
-        if(!documents || !remote || !remote.connected || remote.activeServerId!==recentServerId)return
-        request("open",path)
+        if(!remote || !remote.connected || remote.activeServerId!==recentServerId)return
+        const key=recentServerId+"|"+path
+        const tab=tabSessions[key]
+        if(tab){
+            if(documents && documents.busy)return
+            documents=tab
+            syncDocument()
+        }else request("open",path)
     }
     function syncDocument(){
         if(!editor || !pathInput)return
@@ -88,6 +96,15 @@ Item {
         if(visible && (split || !previewMode))editor.forceActiveFocus()
     }
     function perform(action,path){
+        if(action==="open" && path && tabRoot && remote && remote.connected){
+            const key=remote.activeServerId+"|"+path
+            if(tabSessions[key]){documents=tabSessions[key];syncDocument();return}
+            if(documents && documents.hasDocument && documents.path!==path){
+                const newSession=tabRoot.createTabSession()
+                tabSessions[key]=newSession
+                documents=newSession
+            }
+        }
         if(action==="close")closeRequested()
         else if(action==="quit")Qt.quit()
         else if(documents){if(action==="open"){if(path.toLowerCase().endsWith(".pdf"))documents.openPdf(path);else documents.open(path)}else if(action==="new")documents.createNew()}
@@ -121,7 +138,9 @@ Item {
         if(action==="open" && documents && documents.isCurrentDocument(path)){
             editor.forceActiveFocus();return
         }
-        if(documents && documents.dirty){
+        const isTabSwitch=action==="open" && tabRoot && remote && remote.connected &&
+                          tabSessions[remote.activeServerId+"|"+(path||"")]
+        if(documents && documents.dirty && !isTabSwitch){
             pendingAction=action;pendingPath=path||"";pendingContinuation=continuation||null
             pendingServerId=remote?remote.activeServerId:"";pendingGeneration=remote?remote.connectionGeneration:-1
             confirm.openWith("Modifications non enregistrées","Enregistrez vos modifications avant de continuer, ou abandonnez-les explicitement.",documents.canSave?"Enregistrer et continuer":"Abandonner",!documents.canSave,false,"")
@@ -220,7 +239,7 @@ Item {
         request("close","");return true
     }
     onDocumentsChanged:syncDocument()
-    Component.onCompleted:syncDocument()
+    Component.onCompleted:{tabRoot=documents;syncDocument()}
     Glass { anchors.fill:parent;backdrop:win.backdrop;tint:"#B3121C30";blurAmount:0.9;radius:16 }
     MouseArea { visible:win.drawer && win.navigationOpen;anchors.fill:parent;z:30;onClicked:win.navigationOpen=false }
     Rectangle {
