@@ -401,10 +401,15 @@ Item {
         Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: "Aucun serveur connecté"; color: Theme.ink; font.pixelSize: 16 }
         Button { objectName: "systemConnectButton"; anchors.horizontalCenter: parent.horizontalCenter; text: "Choisir un serveur…"; onClicked: win.requestServers() }
     }
-    Text {
-        visible: win.connected && win.sys !== null && (win.sys.state === "error" || win.sys.state === "loading") && win.sys.processes.length === 0
-        x: win.contentLeft + 20; y: 110; width: parent.width - x - 20; wrapMode: Text.WordWrap; textFormat: Text.PlainText
-        text: win.sys ? win.sys.status : ""; color: win.sys && win.sys.state === "error" ? "#FCA5A5" : Theme.inkMuted; font.pixelSize: 13
+    AppStateMessage {
+        // Processes are not the source of truth for the Services or Overview tabs.
+        readonly property bool sectionEmpty: win.section === "processes" ? win.sys.processes.length === 0
+            : win.section === "services" ? win.sys.services.length === 0 : true
+        visible: win.connected && win.sys !== null && (win.sys.state === "error" || win.sys.state === "loading") && sectionEmpty
+        state: win.sys && win.sys.state === "error" ? "error" : "loading"
+        touch: win.adaptive
+        x: win.contentLeft + 20; y: 110; width: Math.max(0, parent.width - x - 20)
+        text: win.sys ? win.sys.status : ""
     }
     Text {
         x: win.contentLeft + 12; anchors.bottom: parent.bottom; anchors.bottomMargin: 6; width: parent.width - x - 12; elide: Text.ElideRight; textFormat: Text.PlainText
