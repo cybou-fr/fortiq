@@ -113,3 +113,7 @@ Static inspection of `DesktopShell.qml` found `endSession()` closed most app win
 ### Desktop window focus after close — 2026-10-28
 
 `DesktopShell.qml` now chooses the topmost remaining open application from `windowOrder` when the foreground window closes, instead of leaving the foreground key pointed at the closed app or unconditionally switching to Files. The same `focusAfterClose()` policy is applied to standard app windows and the dynamically created Chromium browser window. On adaptive layouts, Files is reopened only when it is the chosen fallback. When no windows remain on the desktop, the foreground key resets to `files` without opening a window. This is a source-level lifecycle change; actual keyboard focus and window transitions still require Qt runtime/visual verification. CI, builds and tests remain disabled.
+
+### Keyboard focus on Desktop Shell foreground transitions — 2026-10-28
+
+`DesktopShell` now schedules a focus handoff after `foregroundApp` changes: when the selected app window is visible it receives `forceActiveFocus()`, otherwise the shell takes focus. This addresses keyboard focus left on hidden controls after a close or application switch. This is a focus-scope fallback, not a guarantee that a particular child editor regains its previous caret; modal dialog and per-app focus restoration require runtime verification. No Qt build or tests run; CI remains disabled.
