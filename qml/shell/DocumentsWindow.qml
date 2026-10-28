@@ -33,6 +33,8 @@ Item {
     property var tabSessions:({})
     property var untitledTabs:[]
     property int untitledSerial:0
+    property string tabNotice:""
+    readonly property int maxOpenTabs:12
     property int tabGeneration:-1
     DocumentSearch { id:finder }
     MarkdownHighlighter { document:editor.textDocument }
@@ -78,6 +80,7 @@ Item {
     }
     function recoverDraftAsNew(source){
         if(!source || !tabRoot || !remote || !remote.connected || remote.linkLost || source.busy)return
+        if(!tabCapacityAvailable())return
         const fresh=tabRoot.createTabSession()
         if(!fresh.recoverAsNew(source)){
             tabRoot.releaseTabSession(fresh)
@@ -190,8 +193,16 @@ Item {
         }
         return "/"+parts.join("/")
     }
+    function tabCapacityAvailable(){
+        if(!tabRoot)return true
+        const count=Object.keys(tabSessions).length+untitledTabs.length
+        if(count<maxOpenTabs){tabNotice="";return true}
+        tabNotice="Limite de 12 documents : fermez un onglet avant d’en ouvrir un autre."
+        return false
+    }
     function perform(action,path){
         if(action==="new" && tabRoot && remote && remote.connected){
+            if(!tabCapacityAvailable())return
             if(documents && documents.hasDocument){
                 const fresh=tabRoot.createTabSession()
                 documents=fresh
@@ -206,6 +217,7 @@ Item {
             const key=remote.activeServerId+"|"+path
             if(tabSessions[key]){documents=tabSessions[key];syncDocument();return}
             if(documents && documents.hasDocument && documents.path!==path){
+                if(!tabCapacityAvailable())return
                 if(documents.path && !documents.isNew && documents.sourceAvailable)tabSessions[remote.activeServerId+"|"+documents.path]=documents
                 const newSession=tabRoot.createTabSession()
                 tabSessions[key]=newSession
@@ -515,22 +527,37 @@ Item {
         }
         Button { x:parent.width-(win.adaptive?48:34);y:4;width:win.adaptive?44:30;height:win.adaptive?40:28;text:"×";onClicked:win.closeFind() }
     }
-    Row {
+    Flickable {
         id:untitledStrip;objectName:"documentsUntitledTabs"
         visible:win.untitledTabs.length>0
         x:win.contentLeft+12
         y:pathInput.y+pathInput.height+8+(recoveryBanner.visible?recoveryBanner.height+6:0)+(findBar.visible?findBar.height+6:0)
-        spacing:6;height:visible?34:0
-        Repeater {
-            model:win.untitledTabs
-            delegate:Button {
-                required property var modelData
-                text:"Sans titre "+modelData.id+(modelData.session.dirty?" ●":"")+" ×"
-                font.pixelSize:11
-                onClicked:win.activateUntitled(modelData.session)
-                onPressAndHold:win.closeUntitled(modelData.session)
-                ToolTip.visible:hovered
-                ToolTip.text:"Cliquer pour ouvrir; maintenir pour fermer"
+        width:win.width-x-12;height:visible?38:0
+        clip:true;flickableDirection:Flickable.HorizontalFlick
+        contentWidth:untitledRow.implicitWidth;contentHeight:height
+        Row {
+            id:untitledRow;spacing:6
+            Repeater {
+                model:win.untitledTabs
+                delegate:Rectangle {
+                    required property var modelData
+                    width:145;height:34;radius:7
+                    color:win.documents===modelData.session?"#5590B9E9":"#26FFFFFF"
+                    border.color:"#35FFFFFF"
+                    Text {
+                        x:9;anchors.verticalCenter:parent.verticalCenter
+                        width:parent.width-42;elide:Text.ElideRight
+                        color:Theme.ink;font.pixelSize:11
+                        text:"Sans titre "+parent.modelData.id+(parent.modelData.session.dirty?" ●":"")
+                    }
+                    MouseArea { anchors.fill:parent;anchors.rightMargin:35;onClicked:win.activateUntitled(parent.modelData.session) }
+                    Button {
+                        objectName:"documentsCloseUntitled"
+                        anchors.right:parent.right;anchors.verticalCenter:parent.verticalCenter
+                        width:34;height:32;text:"×";padding:0
+                        onClicked:win.closeUntitled(parent.modelData.session)
+                    }
+                }
             }
         }
     }
@@ -566,10 +593,18 @@ Item {
             }
         }
     }
+    Text {
+        id:tabWarning;objectName:"documentsTabWarning"
+        visible:win.tabNotice.length>0
+        x:win.contentLeft+12;y:tabStrip.y+tabStrip.height+2
+        width:win.width-x-12;height:visible?26:0
+        color:Theme.inkMuted;font.pixelSize:11;elide:Text.ElideRight
+        text:win.tabNotice
+    }
     Flow {
         id:formatBar;objectName:"documentsFormatToolbar"
         visible:win.documents!==null && win.documents.hasDocument && !win.documents.pdfMode && !win.documents.busy && (!win.previewMode || win.split)
-        x:win.contentLeft+12;y:tabStrip.y+tabStrip.height+4
+        x:win.contentLeft+12;y:tabWarning.y+tabWarning.height+4
         width:win.width-x-12;spacing:4
         Button { text:"H1";onClicked:win.insertBlock("# ") }
         Button { text:"H2";onClicked:win.insertBlock("## ") }
