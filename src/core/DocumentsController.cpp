@@ -229,6 +229,34 @@ void DocumentsController::exportPdf(const QString &destination){
         return result.status==SshResult::Status::Ok?session.runScript(script,4096,{},120000):result;
     }));
 }
+
+void DocumentsController::requestMarkdownImage(const QString &relativePath){
+    if(m_pdfMode||m_new||m_path.isEmpty()||!sourceAvailable()||relativePath.isEmpty()||relativePath.size()>256)return;
+    if(relativePath.startsWith('/')||relativePath.startsWith('\\')||relativePath.contains('\\')||
+       relativePath.contains('?')||relativePath.contains('#')||relativePath.contains(':')||
+       relativePath.contains(QChar::Null))return;
+    const QStringList components=relativePath.split('/');
+    for(const QString &part:components)if(part.isEmpty()||part=="."||part=="..")return;
+    const QString lower=relativePath.toLower();
+    if(!(lower.endsWith(".png")||lower.endsWith(".jpg")||lower.endsWith(".jpeg")||lower.endsWith(".webp")))return;
+    const auto target=cleanAbsolutePath(parentPath(m_path)+"/"+relativePath);
+    if(!target)return;
+    const QString path=m_path, server=m_sourceServerId;
+    const int token=m_remote->connectionToken(),epoch=m_seq;
+    const auto request=m_remote->connectionRequest();
+    auto *watcher=new QFutureWatcher<SshResult>(this);
+    connect(watcher,&QFutureWatcher<SshResult>::finished,this,[this,watcher,path,server,token,epoch,relativePath]{
+        const auto result=watcher->result();watcher->deleteLater();
+        if(epoch!=m_seq||path!=m_path||!sourceAvailable()||token!=m_remote->connectionToken()||
+           server!=m_remote->activeServerId()||result.status!=SshResult::Status::Ok||result.truncated||
+           result.data.isEmpty()||result.data.size()>2097152)return;
+        emit markdownImageReady(relativePath,QString::fromLatin1(result.data.toBase64()));
+    });
+    watcher->setFuture(QtConcurrent::run(&m_pool,[request,target=*target]{
+        SshSession session;auto r=session.open(request);
+        return r.status==SshResult::Status::Ok?session.readFile(target,2097152):r;
+    }));
+}
 void DocumentsController::save(){if(!m_pdfMode && !m_new)write(m_path,false);}
 void DocumentsController::saveAs(const QString &path){if(!m_pdfMode)write(path,true);}
 void DocumentsController::write(const QString &path,bool copy){
