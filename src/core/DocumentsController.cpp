@@ -72,7 +72,7 @@ QVariantList DocumentsController::dirtyTabSessions()const{
     return result;
 }
 bool DocumentsController::releaseTabSession(DocumentsController *session){
-    if(!session||session==this||session->parent()!=this||session->dirty()||session->busy())return false;
+    if(!session||session==this||session->parent()!=this||session->dirty()||session->busy()||session->m_draftUploadPending)return false;
     for(auto &tab:m_tabSessions)if(tab==session){
         tab->deleteLater();
         tab=nullptr;
