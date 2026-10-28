@@ -18,6 +18,11 @@ inline constexpr int kDraftDiffMaxLines = 3000;
 // the server-side draft from being rewritten after a successful Save deletes it.
 // Callers must not silently drop the user's Save request: refuse with an
 // explicit status and let them retry after the background upload finishes.
+inline bool pendingManualSaveMayRun(bool userRequested, bool draftConfirmed,
+                                    bool sourceStillValid, bool resultUnknown) {
+    return userRequested && draftConfirmed && sourceStillValid && !resultUnknown;
+}
+
 inline bool fileSaveCanStart(bool documentOperationBusy, bool draftUploadPending) {
     return !documentOperationBusy && !draftUploadPending;
 }
