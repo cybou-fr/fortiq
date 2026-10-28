@@ -124,6 +124,7 @@ Item {
         trackDocument()
     }
     function openRecent(path){
+        path=normalizedDocumentPath(path)
         if(!remote || !remote.connected || remote.activeServerId!==recentServerId)return
         checkTabSession()
         const key=recentServerId+"|"+path
@@ -143,7 +144,18 @@ Item {
         trackDocument()
         if(visible && (split || !previewMode))editor.forceActiveFocus()
     }
+    function normalizedDocumentPath(path){
+        if(typeof path!=="string" || !path.startsWith("/") || path.indexOf("\u0000")>=0)return path
+        const parts=[]
+        for(const part of path.split("/")){
+            if(!part || part===".")continue
+            if(part===".."){if(parts.length===0)return path;parts.pop()}
+            else parts.push(part)
+        }
+        return "/"+parts.join("/")
+    }
     function perform(action,path){
+        if(action==="open")path=normalizedDocumentPath(path)
         if(action==="open" && path && tabRoot && remote && remote.connected){
             checkTabSession()
             const key=remote.activeServerId+"|"+path
@@ -184,6 +196,7 @@ Item {
         saveDocument()
     }
     function request(action,path,continuation){
+        if(action==="open")path=normalizedDocumentPath(path)
         if(documents && documents.busy)return
         if(action==="open" && documents && documents.isCurrentDocument(path)){
             editor.forceActiveFocus();return
