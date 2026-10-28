@@ -58,6 +58,7 @@ public:
     void setText(const QString &text);
     Q_INVOKABLE void open(const QString &path);
     Q_INVOKABLE void createNew();
+    Q_INVOKABLE bool recoverAsNew(DocumentsController *source);
     Q_INVOKABLE DocumentsController *createTabSession();
     Q_INVOKABLE bool hasDirtyTabs()const;
     Q_INVOKABLE bool hasBusyTabs()const;
