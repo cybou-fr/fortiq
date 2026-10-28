@@ -53,7 +53,7 @@ bool DocumentsController::isCurrentDocument(const QString &path) const {
     return clean && m_hasDocument && !m_new && !m_unknown && *clean==m_path && m_remote->connected()
         && m_sourceToken==m_remote->connectionToken() && m_sourceServerId==m_remote->activeServerId();
 }
-void DocumentsController::setText(const QString &text){if(m_busy || text==m_text)return;m_text=text;emit changed();scheduleDraft();}
+void DocumentsController::setText(const QString &text){if(m_busy || text==m_text)return;m_text=text;if(dirty())m_draftStatus="Modifications non encore sauvegardées sur le serveur.";emit changed();scheduleDraft();}
 void DocumentsController::setAutosaveDelay(int ms){m_autosaveMs=qBound(0,ms,600000);}
 void DocumentsController::discardDraft(){if(m_busy)return;m_draftTimer.stop();if(dirty()&&hasDocument()&&!m_new)deleteDraft();m_text=m_base;m_conflict=false;m_recovery.clear();emit changed();emit loaded();}
 void DocumentsController::createNew(){
