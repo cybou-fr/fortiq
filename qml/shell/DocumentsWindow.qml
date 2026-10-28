@@ -23,6 +23,8 @@ Item {
     property var matchStarts:[]
     property int matchIndex:-1
     property var stats:({ "words":0, "characters":0, "lines":0 })
+    property var headings:[]
+    property bool outlineOpen:true
     DocumentSearch { id:finder }
     MarkdownHighlighter { document:editor.textDocument }
     readonly property bool drawer:adaptive && width<900
@@ -131,6 +133,39 @@ Item {
         if(selectInner)editor.select(b+prefix.length+suffix.indexOf("(")+1,b+prefix.length+suffix.length-1)
         else editor.select(a+prefix.length,b+prefix.length)
     }
+    function updateOutline(){
+        const lines=editor.text.split("\\n"), result=[]
+        let offset=0, fenced=false, fenceChar="", fenceLength=0
+        for(let i=0;i<lines.length;i++){
+            const line=lines[i]
+            const fence=/^ {0,3}(`{3,}|~{3,})/.exec(line)
+            if(fence){
+                const mark=fence[1]
+                if(!fenced){fenced=true;fenceChar=mark[0];fenceLength=mark.length}
+                else if(mark[0]===fenceChar && mark.length>=fenceLength && line.slice(fence[0].length).trim()==="")fenced=false
+            }else if(!fenced){
+                const match=/^ {0,3}(#{1,6})[ \\t]+(.+?)\\s*#*\\s*$/.exec(line)
+                if(match && result.length<200)result.push({level:match[1].length,title:match[2],offset:offset,line:i+1})
+            }
+            offset+=line.length+1
+        }
+        headings=result
+    }
+    function jumpToHeading(offset){
+        if(win.previewMode && !win.split)win.previewMode=false
+        editor.cursorPosition=Math.min(offset,editor.length)
+        editor.forceActiveFocus()
+        win.navigationOpen=false
+    }
+    function insertBlock(prefix){
+        const a=editor.selectionStart,b=editor.selectionEnd
+        if(a===b){editor.insert(a,prefix);editor.cursorPosition=a+prefix.length}
+        else {
+            const selected=editor.selectedText.replace(/\\u2029/g,"\\n")
+            editor.remove(a,b);editor.insert(a,selected.split("\\n").map(line=>prefix+line).join("\\n"))
+        }
+        editor.forceActiveFocus()
+    }
     function handleBack(){
         if(confirm.visible){if(!confirm.busy){confirm.visible=false;clearPending()}return true}
         if(navigationOpen){navigationOpen=false;return true}
@@ -164,6 +199,24 @@ Item {
                 enabled:win.documents!==null && win.documents.hasDocument && !win.documents.isNew
                     && win.connected && win.documents.sourceAvailable && win.documents.sourceServerId===win.remote.activeServerId
                 onClicked:{win.navigationOpen=false;win.requestFiles(win.documents.path,win.documents.sourceServerId)}
+            }
+            Button { width:parent.width;text:win.outlineOpen?"Plan du document ▾":"Plan du document ▸";onClicked:win.outlineOpen=!win.outlineOpen }
+            Text { visible:win.outlineOpen && win.headings.length===0;width:parent.width;text:"Aucun titre Markdown";color:Theme.inkMuted;font.pixelSize:11 }
+            ListView {
+                objectName:"documentsOutline"
+                visible:win.outlineOpen && win.headings.length>0
+                width:parent.width;height:visible?Math.min(270,Math.max(64,win.height-375)):0
+                clip:true;model:win.headings
+                delegate:Button {
+                    required property var modelData
+                    width:ListView.view.width
+                    height:30
+                    leftPadding:Math.min(36,(modelData.level-1)*9)+4
+                    text:modelData.title
+                    font.pixelSize:11
+                    onClicked:win.jumpToHeading(modelData.offset)
+                    ToolTip.visible:hovered;ToolTip.text:"Ligne "+modelData.line
+                }
             }
             Text { width:parent.width;wrapMode:Text.WordWrap;text:"Markdown UTF-8\n256 Kio maximum\n\nLes images et liens externes ne sont pas chargés.\n\nPDF : pas encore disponible.";color:Theme.inkMuted;font.pixelSize:11 }
         }
@@ -242,8 +295,24 @@ Item {
         }
         Button { x:parent.width-(win.adaptive?48:34);y:4;width:win.adaptive?44:30;height:win.adaptive?40:28;text:"×";onClicked:win.closeFind() }
     }
+    Flow {
+        id:formatBar;objectName:"documentsFormatToolbar"
+        visible:win.documents!==null && win.documents.hasDocument && !win.documents.busy && (!win.previewMode || win.split)
+        x:win.contentLeft+12;y:pathInput.y+pathInput.height+8+(recoveryBanner.visible?recoveryBanner.height+6:0)+(findBar.visible?findBar.height+6:0)
+        width:win.width-x-12;spacing:4
+        Button { text:"H1";onClicked:win.insertBlock("# ") }
+        Button { text:"H2";onClicked:win.insertBlock("## ") }
+        Button { text:"B";font.bold:true;onClicked:win.wrapSelection("**","**",false) }
+        Button { text:"I";font.italic:true;onClicked:win.wrapSelection("*","*",false) }
+        Button { text:"• Liste";onClicked:win.insertBlock("- ") }
+        Button { text:"1. Liste";onClicked:win.insertBlock("1. ") }
+        Button { text:"❝";onClicked:win.insertBlock("> ") }
+        Button { text:"Code";onClicked:win.wrapSelection("`","`",false) }
+        Button { text:"Lien";onClicked:win.wrapSelection("[","](https://)",true) }
+        Button { text:"Rechercher";onClicked:win.openFind(false) }
+    }
     Item {
-        id:body;x:win.contentLeft+12;y:pathInput.y+pathInput.height+8+(recoveryBanner.visible?recoveryBanner.height+6:0)+(findBar.visible?findBar.height+6:0);width:win.width-x-12;height:Math.max(32,win.height-y-80)
+        id:body;x:win.contentLeft+12;y:formatBar.y+(formatBar.visible?formatBar.height+6:0);width:win.width-x-12;height:Math.max(32,win.height-y-80)
         visible:win.documents!==null && win.documents.hasDocument
         Flickable {
             id:editScroll;objectName:"documentsEditorScroll";visible:win.split || !win.previewMode
@@ -285,7 +354,7 @@ Item {
             Button { objectName:"documentsConflictClose";text:"Garder mon texte, décider plus tard";onClicked:win.documents.closeConflict() }
         }
     }
-    Timer { id:previewTimer;interval:180;onTriggered:{preview.source=editor.text;win.stats=finder.stats(editor.text);if(win.findOpen)win.refreshMatches()} }
+    Timer { id:previewTimer;interval:180;onTriggered:{preview.source=editor.text;win.stats=finder.stats(editor.text);win.updateOutline();if(win.findOpen)win.refreshMatches()} }
     Text {
         objectName:"documentsStats";visible:win.documents!==null && win.documents.hasDocument
         anchors.right:parent.right;anchors.rightMargin:12;anchors.bottom:parent.bottom;anchors.bottomMargin:10;color:Theme.inkMuted;font.pixelSize:10
