@@ -76,9 +76,26 @@ Item {
         else if (view === "service") view = "timeline"
     }
 
-    onConnectedChanged: if (connected && !fixture && logs) { logs.loadSources(); logs.reload() }
-    Component.onCompleted: if (connected && !fixture && logs) { logs.loadSources(); logs.reload() }
-    onVisibleChanged: if (visible && connected && !fixture && logs && logs.events.length === 0) { logs.loadSources(); logs.reload() }
+    // The shell can signal connection, completion and visibility in the same
+    // event-loop turn. Coalesce initial loads so one open does not enqueue
+    // multiple SSH reads or invalidate its own request generations.
+    property bool initialLoadScheduled: false
+    function scheduleInitialLoad() {
+        if (initialLoadScheduled || !visible || !connected || fixture || !logs
+            || logs.busy || logs.events.length > 0) return
+        initialLoadScheduled = true
+        Qt.callLater(function() {
+            initialLoadScheduled = false
+            if (!visible || !connected || fixture || !logs || logs.busy
+                || logs.events.length > 0) return
+            logs.loadSources()
+            logs.reload()
+        })
+    }
+    onConnectedChanged: scheduleInitialLoad()
+    onLogsChanged: scheduleInitialLoad()
+    Component.onCompleted: scheduleInitialLoad()
+    onVisibleChanged: if (visible) scheduleInitialLoad()
     onXChanged: body.syncOrigin()
     onYChanged: body.syncOrigin()
 
