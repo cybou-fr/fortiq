@@ -218,3 +218,7 @@ An asynchronous non-cancellable remote mutation can begin in a worker before its
 ### Task progress and transition consistency — 2026-10-28
 
 `TaskManager::setProgress` rejects malformed transfer progress (`done < 0`, `total < -1`, or `done > total` when known) and stale callbacks that would decrease acknowledged progress. A conflict-resolution retry uses `resolveDecision()` to reset progress to zero before restarting, so legitimate retries remain possible. `TaskManager.h` now documents the actual `Queued → Unknown` transition and the rule that user cancellation requires `Spec::cancellable` even when queued. This is source-level hardening only; builds, CI and tests were not run.
+
+### TaskManager callback-order hardening — 2026-10-28
+
+Queued-task cancellation emits `cancelRequested` first so the owner can stop queued work. Owners are allowed to settle a task synchronously while handling this signal; `requestCancel()` now inspects the state again before calling `markCancelled`, preserving any terminal result (including `unknown`) reported by that handler. Progress callbacks also cannot erase an established total or reduce its value; conflict resolution still explicitly resets progress for a new transfer attempt. This is source-level hardening; CI, builds and tests were not run.
