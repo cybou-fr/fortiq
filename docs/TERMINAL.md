@@ -147,3 +147,7 @@ Opening the Terminal window no longer resets the per-connection autostart guard.
 ## Input queue and local shutdown semantics — 2026-10-28
 
 A local `stop()` without a confirmed shell exit is now recorded as **cancelled**, not **succeeded**; a normal remote `exit` observed by the polling callback still counts as success. This keeps task history from claiming successful remote process termination when only the local SSH channel was closed. Also, a paste that would exceed the 32 KiB controller input queue is rejected atomically with a visible status instead of killing the active terminal and clearing previously buffered keystrokes. Nothing is automatically replayed. The SSH transport continues to enforce its own 64 KiB queue bound. These source changes are not build- or runtime-tested; CI remains disabled.
+
+## Streaming output memory and paste limit — 2026-10-28
+
+`TerminalView::feedLater()` now compacts already-consumed queue bytes before appending new SSH output once its consumed prefix reaches 64 KiB; it preserves all unread data and the existing hysteretic backpressure at 256/64 KiB. The paste confirmation's existing 16,000-character warning is also enforced at acceptance, rather than forwarding the oversized text to the controller. These are source-level hardening changes; no build or tests were run, and CI remains disabled.
