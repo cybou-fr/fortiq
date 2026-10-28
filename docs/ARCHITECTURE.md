@@ -214,3 +214,7 @@ An asynchronous non-cancellable remote mutation can begin in a worker before its
 ### TaskManager cancellation contract — 2026-10-28
 
 `requestCancel()` now checks `spec.cancellable` **before** the queued-state branch. Previously, non-cancellable remote mutations could be marked `cancelled` while their worker had potentially started before the queued-to-running notification reached the GUI thread. Such tasks now reject cancellation in all non-terminal states. On SSH disconnect, queued mutations with uncertain execution remain eligible for `unknown`; no automatic retry is performed. Cancellable queued tasks still signal their owner to stop work and then become `cancelled`. This was a source-level fix committed directly to `main`; CI/build/tests remain disabled.
+
+### Task progress and transition consistency — 2026-10-28
+
+`TaskManager::setProgress` rejects malformed transfer progress (`done < 0`, `total < -1`, or `done > total` when known) and stale callbacks that would decrease acknowledged progress. A conflict-resolution retry uses `resolveDecision()` to reset progress to zero before restarting, so legitimate retries remain possible. `TaskManager.h` now documents the actual `Queued → Unknown` transition and the rule that user cancellation requires `Spec::cancellable` even when queued. This is source-level hardening only; builds, CI and tests were not run.
