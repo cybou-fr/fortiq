@@ -97,7 +97,12 @@ Item {
             pendingRevealPath="";showNotice("Impossible d'ouvrir le dossier du document.",true);return
         }
         const index=shown.findIndex(e=>e.path===pendingRevealPath)
-        if(index<0 && controller.hasMore===true && entries.length<50000){controller.loadMore(true);Qt.callLater(tryReveal);return}
+        if(index<0 && controller.hasMore===true && entries.length<50000){
+            // Wait for the next controller/listing notification instead of
+            // spinning Qt.callLater while an SSH page is still in flight.
+            controller.loadMore(true)
+            return
+        }
         pendingRevealPath=""
         if(index<0){showNotice("Le fichier n'est pas présent dans les éléments chargés de ce dossier.",true);return}
         grid.currentIndex=index;list.currentIndex=index
