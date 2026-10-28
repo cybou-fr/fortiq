@@ -115,6 +115,11 @@ Item {
     function endSession() {
         sessionMenuOpen = false; launcherOpen = false; controlOpen = false
         filesOpen = false; logsOpen = false; terminalOpen = false; disksOpen = false; documentsOpen = false; webOpen = false; networkOpen = false; systemOpen = false; dbOpen = false; mailOpen = false
+        // Settings and the fixture browser are windows too. Leaving either
+        // open can expose a stale panel above the next server login.
+        settingsOpen = false; browserOpen = false
+        foregroundApp = "files"
+        notificationsOpen = false
         if (controller) controller.disconnectServer()
         serversOpen = true
     }
