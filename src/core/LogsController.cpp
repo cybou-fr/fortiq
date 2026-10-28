@@ -55,6 +55,10 @@ bool LogsController::accepts(int token) const {
 }
 
 void LogsController::select(const QString &source, const QString &target) {
+    // A live-follow task belongs to one specific source. Do not keep the old
+    // task label/identity after switching journals or files.
+    const bool sourceChanged = source != m_source || target != m_target;
+    if (sourceChanged && m_following) endFollowTask(true);
     ++m_serviceSeq;
     m_serviceBusy = false;
     closeInspector();
@@ -66,6 +70,7 @@ void LogsController::select(const QString &source, const QString &target) {
     m_serviceError.clear();
     emit serviceChanged();
     if (source == "file") m_maxPriority = 7; // plain files carry no priority
+    if (sourceChanged && m_following) beginFollowTask();
     reload();
 }
 void LogsController::setRange(const QString &range) { m_range = range; reload(); }
