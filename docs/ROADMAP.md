@@ -133,3 +133,9 @@ Static Shell review found the task panel (`TaskCenter`) could calculate a negati
 ### TaskPanel scrollable viewport height — 2026-10-28
 
 `TaskPanel.qml` now accepts `availableHeight` and caps its expanded height to that viewport allowance (while preserving the header). `DesktopShell` supplies its current height minus small margins. Because TaskPanel already uses a bounded/clipped ListView with a vertical scrollbar, task rows remain scrollable instead of requiring the whole panel to extend beyond a short viewport. This specifically improves access to task action buttons when the host becomes short; conflict-action row width and on-screen keyboard interactions still need real-device inspection. No build or tests run; CI remains disabled.
+
+### TaskPanel conflict actions on narrow displays — 2026-10-28
+
+Conflict decision controls in `TaskPanel.qml` previously sat in a single `Row` with a fixed 64px delegate, so long French labels could overflow the panel. They now use a width-constrained `Flow`; the task delegate grows with the actual wrapped controls, allowing the existing `ListView` to scroll instead of clipping lower actions. On narrow rows the final replace-confirmation label is shortened to `Confirmer`, without changing its action. This requires runtime checking for very small sizes, font scaling and keyboard focus. Build/tests not run; CI disabled.
+
+**Cross-app UX review still required:** active focus inside per-app modals, status/error readability, touch target sizing, responsive navigation, task conflict handling via keyboard, and visual comparison to approved reference. Source-only checks are not release acceptance.
