@@ -570,3 +570,7 @@ MDok теперь централизованно поддерживает вид
 ### MD-21 — корректность вкладок восстановления (28.10.2026)
 
 При конфликте Save As с другим открытым документом восстановленная безымянная вкладка теперь не удаляется из реестра до проверки коллизии. При закрытии одной из нескольких безымянных вкладок MDok выбирает другую оставшуюся сессию, а не обязательно корневой контроллер. Запуск восстановления также не происходит, если хотя бы одна C++-сессия занята SSH-операцией. Интеграционные тесты пока не запускались.
+
+## Untitled tab callback ownership — 2026-10-28
+
+The UI now checks that an untitled document session is still present in `untitledTabs` before activating or closing it. This guards against stale UI/deferred callbacks targeting a session that was released after a tab was closed or restructured. The check intentionally stays within DocumentsWindow (UI tab ownership) rather than introducing a speculative shared service. This is a static source-level hardening change; no Qt build, runtime tests, or CI were run.
