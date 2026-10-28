@@ -134,7 +134,7 @@ Item {
         else editor.select(a+prefix.length,b+prefix.length)
     }
     function updateOutline(){
-        const lines=editor.text.split("\\n"), result=[]
+        const lines=editor.text.split("\n"), result=[]
         let offset=0, fenced=false, fenceChar="", fenceLength=0
         for(let i=0;i<lines.length;i++){
             const line=lines[i]
@@ -144,7 +144,7 @@ Item {
                 if(!fenced){fenced=true;fenceChar=mark[0];fenceLength=mark.length}
                 else if(mark[0]===fenceChar && mark.length>=fenceLength && line.slice(fence[0].length).trim()==="")fenced=false
             }else if(!fenced){
-                const match=/^ {0,3}(#{1,6})[ \\t]+(.+?)\\s*#*\\s*$/.exec(line)
+                const match=/^ {0,3}(#{1,6})[ \t]+(.+?)\s*#*\s*$/.exec(line)
                 if(match && result.length<200)result.push({level:match[1].length,title:match[2],offset:offset,line:i+1})
             }
             offset+=line.length+1
@@ -161,8 +161,8 @@ Item {
         const a=editor.selectionStart,b=editor.selectionEnd
         if(a===b){editor.insert(a,prefix);editor.cursorPosition=a+prefix.length}
         else {
-            const selected=editor.selectedText.replace(/\\u2029/g,"\\n")
-            editor.remove(a,b);editor.insert(a,selected.split("\\n").map(line=>prefix+line).join("\\n"))
+            const selected=editor.selectedText.replace(/\u2029/g,"\n")
+            editor.remove(a,b);editor.insert(a,selected.split("\n").map(line=>prefix+line).join("\n"))
         }
         editor.forceActiveFocus()
     }
