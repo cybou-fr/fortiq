@@ -80,3 +80,7 @@ permissions or direct network fallback are introduced. The FortiqTablet emulator
 file navigation/edit/save and native SAF upload/download with identical round-trip bytes; staging
 now uses an explicit private app-cache directory. Physical hardware and provider failure/grant
 coverage remain pending. [Implementation and Android evidence](ANDROID_FOUNDATION.md).
+
+### Transfer lifecycle hardening (2026-10-28)
+
+The Files transfer engine rejects attempts to start a transfer when there is no active SSH connection, the TaskManager job is terminal or cancelling, or the conflict policy is out of range. A late conflict dialog action cannot rearm a cancelled job after disconnect. The allowed policies are `Fail`, `Replace`, and `KeepBoth`; the UI only submits `skip`, `replace`, or `keepBoth` at conflict resolution. Transfer completion already treats a lost SSH connection during remote publication as an *unknown* outcome, requiring user verification before retrying. These changes were committed without running a build or tests, as requested; CI remains disabled.
