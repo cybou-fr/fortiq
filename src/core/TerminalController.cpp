@@ -22,6 +22,8 @@ TerminalController::TerminalController(RemoteController *remote, QObject *parent
             m_historyToken=-1; m_history.clear(); m_historyStatus=QStringLiteral("Source SSH déconnectée."); emit historyChanged();
         }
         if (m_serverToken >= 0 && (!m_remote->connected() || m_remote->connectionToken() != m_serverToken)) {
+            m_endHow=QStringLiteral("failed");
+            m_endMessage=QStringLiteral("Connexion SSH perdue : état du processus distant inconnu.");
             stop(); emit resetScreen();
             m_history.clear(); m_historyStatus = QStringLiteral("Source SSH déconnectée."); emit historyChanged();
             m_status = QStringLiteral("Source SSH déconnectée ou changée."); emit changed();
