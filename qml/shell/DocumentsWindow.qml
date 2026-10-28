@@ -176,7 +176,8 @@ Item {
         if(action==="open" && documents && documents.isCurrentDocument(path)){
             editor.forceActiveFocus();return
         }
-        const isTabSwitch=action==="open" && tabRoot && remote && remote.connected && path
+        // Untitled drafts have no stable tab identity: never switch away from them silently.
+        const isTabSwitch=action==="open" && tabRoot && remote && remote.connected && path && documents && !documents.isNew
         if(documents && documents.dirty && !isTabSwitch){
             pendingAction=action;pendingPath=path||"";pendingContinuation=continuation||null
             pendingServerId=remote?remote.activeServerId:"";pendingGeneration=remote?remote.connectionGeneration:-1
