@@ -153,7 +153,9 @@ private slots:
             terminal.setWindowActive(false);terminal.setWindowActive(true); // reuse the existing shell
             terminal.stop();remote.changed();QTest::qWait(150);QVERIFY(!terminal.running());
             terminal.setWindowActive(false);terminal.setWindowActive(true);
-            QTRY_VERIFY_WITH_TIMEOUT(terminal.running(),20000); // window reopen starts once
+            QVERIFY(!terminal.running()); // window focus must never relaunch a closed shell
+            terminal.start(); // explicit user action opens a new remote shell
+            QTRY_VERIFY_WITH_TIMEOUT(terminal.running(),20000);
             remote.disconnectServer();QVERIFY(!terminal.running());QVERIFY(reset.size()>=2);
             QVERIFY(terminal.history().isEmpty());
             const auto count=output.size();terminal.send("must-not-send\r");QTest::qWait(200);QCOMPARE(output.size(),count);
