@@ -27,6 +27,10 @@ class DocumentsController:public QObject {
     Q_PROPERTY(bool conflictBusy READ conflictBusy NOTIFY changed)
     Q_PROPERTY(QString conflictDiff READ conflictDiff NOTIFY changed)
     Q_PROPERTY(QString conflictSummary READ conflictSummary NOTIFY changed)
+    Q_PROPERTY(bool pdfMode READ pdfMode NOTIFY changed)
+    Q_PROPERTY(int pdfPage READ pdfPage NOTIFY changed)
+    Q_PROPERTY(int pdfPages READ pdfPages NOTIFY changed)
+    Q_PROPERTY(QString pdfImage READ pdfImage NOTIFY changed)
 public:
     explicit DocumentsController(RemoteController *remote,QObject *parent=nullptr);
     ~DocumentsController() override;
@@ -38,6 +42,12 @@ public:
     bool hasDocument()const{return m_hasDocument;} bool isNew()const{return m_new;}
     bool canSave()const;
     bool sourceAvailable()const;
+    bool pdfMode()const{return m_pdfMode;}
+    int pdfPage()const{return m_pdfPage;}
+    int pdfPages()const{return m_pdfPages;}
+    QString pdfImage()const{return m_pdfImage;}
+    Q_INVOKABLE void openPdf(const QString &path);
+    Q_INVOKABLE void showPdfPage(int page);
     QVariantMap recovery()const{return m_recovery;} QString draftStatus()const{return m_draftStatus;}
     bool conflictActive()const{return m_conflict;} bool conflictBusy()const{return m_conflictBusy;}
     QString conflictDiff()const{return m_conflictDiff;} QString conflictSummary()const{return m_conflictSummary;}
@@ -65,12 +75,16 @@ private:
     void deleteDraftFor(const QString &path);
     void checkDraft();
     void beginConflict();
+    void renderPdfPage(const QString &path, int page, int pages);
     RemoteController *m_remote;
     QThreadPool m_pool;
     int m_seq=0,m_sourceToken=-1,m_operationToken=-1;
     bool m_busy=false,m_writing=false,m_hasDocument=false,m_new=false,m_bom=false,m_crlf=false,m_unknown=false;
     QString m_path,m_text,m_base,m_sourceServerId,m_sourceLabel,m_status="Ouvrez un document Markdown du serveur.";
     QByteArray m_hash;
+    bool m_pdfMode=false;
+    int m_pdfPage=0,m_pdfPages=0;
+    QString m_pdfImage;
     QTimer m_draftTimer;
     int m_autosaveMs=5000;
     bool m_draftUploadPending=false; // keep at most one in-flight draft upload
