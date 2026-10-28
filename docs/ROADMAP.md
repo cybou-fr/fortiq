@@ -143,3 +143,7 @@ Conflict decision controls in `TaskPanel.qml` previously sat in a single `Row` w
 ### Cross-app dialog keyboard interaction — 2026-10-28
 
 A source-level review across Files, MDok, Logs, Mail, DB, System, Network and Disks found a shared accessibility gap in `GlassDialog`: action buttons were clickable `Rectangle`/`MouseArea` elements but were not keyboard tab stops. Shared dialog actions now accept Tab focus and Space/Enter activation, show a visible focused border, and route mouse and keyboard through the same guarded handler. This applies to every dialog using the shared component rather than duplicating fixes in apps. Runtime verification remains required for Tab order, screen readers, input method behavior, scaled layouts and busy-state transitions; CI/build/tests were intentionally not run.
+
+### Cross-app lost-SSH state recovery — 2026-10-28
+
+Reviewed the shared `LinkBanner` used by Disks, Network and System (and other apps). A lost-link warning existed, but its `Réessayer` action was mouse-only, unlike the recently improved shared dialogs. The retry control is now keyboard-focusable via Tab, exposes an active-focus border, and accepts Enter/Space as well as mouse clicks. The warning text width is clamped to avoid negative geometry on narrow screens. This preserves each app's own retry callback. Empty/loading/error states are still implemented differently between apps and need unified UX acceptance criteria; no Qt runtime, build, tests or CI were run.
