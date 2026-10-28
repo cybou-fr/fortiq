@@ -21,6 +21,13 @@ private slots:
         QVERIFY(fortiq::decodeMarkdown(QByteArray(262144,'x')).error.isEmpty());
     }
     // ---- MDok server drafts and the conflict diff (src/core/DocumentDraft.h) ----
+    void inFlightDraftMustNotMaskNewEdits(){
+        using fortiq::draftNeedsAnotherSave;
+        QVERIFY(!draftNeedsAnotherSave("a","a",true,false));
+        QVERIFY(draftNeedsAnotherSave("a","a b",true,false));
+        QVERIFY(!draftNeedsAnotherSave("a","a b",false,false));
+        QVERIFY(!draftNeedsAnotherSave("a","a b",true,true));
+    }
     void draftIdIsAHashOfThePathOnly(){
         const auto a=fortiq::draftId("/home/u/notes.md"),b=fortiq::draftId("/home/u/other.md");
         QVERIFY(fortiq::validDraftId(a));QVERIFY(a!=b);QVERIFY(!a.contains("notes"));
