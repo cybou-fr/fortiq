@@ -3,6 +3,8 @@
 #include <QThreadPool>
 #include <QByteArray>
 #include <QTimer>
+#include <QPointer>
+#include <QVector>
 #include <QVariantMap>
 namespace fortiq {
 class RemoteController;
@@ -56,6 +58,9 @@ public:
     void setText(const QString &text);
     Q_INVOKABLE void open(const QString &path);
     Q_INVOKABLE void createNew();
+    Q_INVOKABLE DocumentsController *createTabSession();
+    Q_INVOKABLE bool hasDirtyTabs()const;
+    Q_INVOKABLE bool hasBusyTabs()const;
     Q_INVOKABLE void discardDraft();
     Q_INVOKABLE void save();
     Q_INVOKABLE void saveAs(const QString &path);
@@ -80,6 +85,7 @@ private:
     void beginConflict();
     void renderPdfPage(const QString &path, int page, int pages);
     RemoteController *m_remote;
+    QVector<QPointer<DocumentsController>> m_tabSessions;
     QThreadPool m_pool;
     int m_seq=0,m_sourceToken=-1,m_operationToken=-1;
     bool m_busy=false,m_writing=false,m_hasDocument=false,m_new=false,m_bom=false,m_crlf=false,m_unknown=false;
