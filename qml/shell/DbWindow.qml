@@ -311,11 +311,12 @@ Item {
                 anchors.right: parent.right; y: editorBox.height + 3; touch: win.adaptive
                 onClicked: win.requestCopy("résultat de la requête", win.resultAsText())
             }
-            Text {
+            AppStateMessage {
                 id: errorLine
                 objectName: "dbError"
                 visible: win.db && win.db.error !== ""
-                y: editorBox.height + 6; width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText; font.pixelSize: 11; color: "#FCA5A5"
+                state: "error"; touch: win.adaptive
+                y: editorBox.height + 6; width: parent.width
                 text: win.db ? win.db.error : ""; maximumLineCount: 5; elide: Text.ElideRight
             }
             Flickable {
