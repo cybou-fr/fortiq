@@ -59,7 +59,7 @@ void DocumentsController::discardDraft(){if(m_busy)return;m_draftTimer.stop();if
 void DocumentsController::createNew(){
     if(m_busy || !m_remote->connected())return;
     if(dirty()){m_status="Conservez ou abandonnez le brouillon avant de changer de document.";emit changed();return;}
-    ++m_seq;m_sourceToken=m_remote->connectionToken();m_sourceLabel=m_remote->serverLabel();m_sourceServerId=m_remote->activeServerId();
+    ++m_seq;m_pdfMode=false;m_pdfImage.clear();m_pdfPage=m_pdfPages=0;m_sourceToken=m_remote->connectionToken();m_sourceLabel=m_remote->serverLabel();m_sourceServerId=m_remote->activeServerId();
     m_recovery.clear();m_conflict=false;m_draftTimer.stop();m_path.clear();m_base.clear();m_text="# Nouveau document\n";m_hash.clear();m_bom=m_crlf=m_unknown=false;m_new=m_hasDocument=true;
     m_status="Nouveau Markdown — choisissez un chemin absolu .md pour enregistrer.";emit changed();emit loaded();
 }
@@ -69,6 +69,7 @@ void DocumentsController::open(const QString &path){
     if(dirty()){m_status="Conservez ou abandonnez le brouillon avant d'ouvrir un autre document.";emit changed();return;}
     const auto clean=cleanAbsolutePath(path);
     if(!clean || !markdownPath(*clean)){m_status="Chemin absolu .md ou .markdown requis.";emit changed();return;}
+    m_pdfMode=false;m_pdfImage.clear();m_pdfPage=m_pdfPages=0;
     const auto request=m_remote->connectionRequest();const int token=m_remote->connectionToken(),seq=++m_seq;
     const auto label=m_remote->serverLabel();m_operationToken=token;m_busy=true;m_writing=false;m_status="Lecture du Markdown…";emit changed();
     const int taskId=beginDocTask(m_remote,QStringLiteral("docOpen"),clean->section('/',-1),*clean,true);
@@ -88,6 +89,76 @@ void DocumentsController::open(const QString &path){
         emit changed();
     });
     watcher->setFuture(QtConcurrent::run(&m_pool,[request,target=*clean]{SshSession session;auto r=session.open(request);return r.status==SshResult::Status::Ok?session.readFile(target,MarkdownLimit):r;}));
+}
+
+void DocumentsController::openPdf(const QString &path){
+    if(m_busy || !m_remote->connected() || m_remote->linkLost())return;
+    if(dirty()){m_status="Enregistrez ou abandonnez les modifications avant d’ouvrir un PDF.";emit changed();return;}
+    const auto clean=cleanAbsolutePath(path);
+    if(!clean || !clean->endsWith(".pdf",Qt::CaseInsensitive)){m_status="Chemin absolu .pdf requis.";emit changed();return;}
+    const auto request=m_remote->connectionRequest();
+    const int token=m_remote->connectionToken(),seq=++m_seq;
+    const QString server=m_remote->activeServerId();
+    m_operationToken=token;m_busy=true;m_writing=false;m_status="Lecture des informations PDF…";emit changed();
+    auto *watcher=new QFutureWatcher<SshResult>(this);
+    connect(watcher,&QFutureWatcher<SshResult>::finished,this,[this,watcher,seq,token,server,target=*clean]{
+        const auto result=watcher->result();watcher->deleteLater();
+        if(seq!=m_seq||!m_remote->connected()||m_remote->linkLost()||token!=m_remote->connectionToken()||server!=m_remote->activeServerId())return;
+        m_busy=false;
+        bool ok=false;
+        const int pages=QString::fromUtf8(result.data).trimmed().toInt(&ok);
+        if(result.status!=SshResult::Status::Ok || result.code!="exit:0" || result.truncated || !ok || pages<1 || pages>10000){
+            m_status="Impossible de lire ce PDF (pdfinfo absent, fichier invalide ou trop grand).";emit changed();return;
+        }
+        m_pdfMode=true;m_path=target;m_pdfPages=pages;m_pdfPage=0;m_pdfImage.clear();
+        m_hasDocument=true;m_new=false;m_unknown=false;m_base=m_text=QString();
+        m_sourceToken=token;m_sourceServerId=server;m_sourceLabel=m_remote->serverLabel();
+        m_status=QString("PDF · %1 page(s) · lecture seule").arg(pages);
+        m_recovery.clear();m_conflict=false;m_draftTimer.stop();
+        emit changed();emit loaded();
+        renderPdfPage(target,1,pages);
+    });
+    const QByteArray script="LC_ALL=C pdfinfo " + SshSession::shellQuote(*clean).toUtf8()
+        + " 2>/dev/null | awk '/^Pages:[[:space:]]+[0-9]+/{print $2; found=1; exit} END{if(!found)exit 2}'\\n";
+    watcher->setFuture(QtConcurrent::run(&m_pool,[request,script]{SshSession session;auto r=session.open(request);return r.status==SshResult::Status::Ok?session.runScript(script,128,{},15000):r;}));
+}
+void DocumentsController::showPdfPage(int page){
+    if(!m_pdfMode||m_busy||!sourceAvailable()||page<1||page>m_pdfPages)return;
+    renderPdfPage(m_path,page,m_pdfPages);
+}
+void DocumentsController::renderPdfPage(const QString &path,int page,int pages){
+    const auto request=m_remote->connectionRequest();
+    const int token=m_remote->connectionToken(),seq=++m_seq;
+    const QString server=m_sourceServerId;
+    m_operationToken=token;m_busy=true;m_writing=false;m_status=QString("Rendu PDF · page %1/%2…").arg(page).arg(pages);emit changed();
+    const QByteArray file=SshSession::shellQuote(path).toUtf8();
+    const QByteArray number=QByteArray::number(page);
+    const QByteArray script=
+        "umask 077\\n"
+        "command -v pdftoppm >/dev/null 2>&1 || exit 12\\n"
+        "dir=$(mktemp -d) || exit 13\\n"
+        "trap 'rm -rf \"$dir\"' EXIT HUP INT TERM\\n"
+        "pdftoppm -f "+number+" -l "+number+" -singlefile -scale-to 1600 -png "+file+" \"$dir/page\" >/dev/null 2>&1 || exit 14\\n"
+        "test -f \"$dir/page.png\" || exit 15\\n"
+        "bytes=$(wc -c < \"$dir/page.png\")\\n"
+        "test \"$bytes\" -le 3000000 || exit 16\\n"
+        "base64 \"$dir/page.png\" | tr -d '\\n'\\n";
+    auto *watcher=new QFutureWatcher<SshResult>(this);
+    connect(watcher,&QFutureWatcher<SshResult>::finished,this,[this,watcher,seq,token,server,path,page,pages]{
+        const auto result=watcher->result();watcher->deleteLater();
+        if(seq!=m_seq||!m_remote->connected()||m_remote->linkLost()||token!=m_remote->connectionToken()||server!=m_remote->activeServerId()||path!=m_path||!m_pdfMode)return;
+        m_busy=false;
+        const QByteArray png=QByteArray::fromBase64(result.data.trimmed());
+        if(result.status!=SshResult::Status::Ok||result.code!="exit:0"||result.truncated||
+           png.size()>3000000||!png.startsWith(QByteArray::fromHex("89504e470d0a1a0a"))){
+            m_status="Rendu PDF impossible : vérifiez pdftoppm et les permissions.";emit changed();return;
+        }
+        m_pdfImage=QStringLiteral("data:image/png;base64,")+QString::fromLatin1(result.data.trimmed());
+        m_pdfPage=page;m_pdfPages=pages;
+        m_status=QString("PDF · page %1/%2 · lecture seule").arg(page).arg(pages);
+        emit changed();
+    });
+    watcher->setFuture(QtConcurrent::run(&m_pool,[request,script]{SshSession session;auto r=session.open(request);return r.status==SshResult::Status::Ok?session.runScript(script,4100000,{},30000):r;}));
 }
 void DocumentsController::save(){if(!m_new)write(m_path,false);}
 void DocumentsController::saveAs(const QString &path){write(path,true);}
