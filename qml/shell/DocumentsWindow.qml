@@ -28,6 +28,7 @@ Item {
     property bool imageInsertOpen:false
     property var recentDocuments:[]
     property string recentServerId:""
+    property var pinnedTabs:[]
     DocumentSearch { id:finder }
     MarkdownHighlighter { document:editor.textDocument }
     readonly property bool drawer:adaptive && width<900
@@ -52,11 +53,26 @@ Item {
         if(!documents || !documents.hasDocument || documents.isNew || !documents.path || !remote)return
         const server=documents.sourceServerId
         if(!server)return
-        if(recentServerId!==server){recentDocuments=[];recentServerId=server}
+        if(recentServerId!==server){recentDocuments=[];pinnedTabs=[];recentServerId=server}
         const path=documents.path
         const entries=recentDocuments.filter(p=>p!==path)
         entries.unshift(path)
         recentDocuments=entries.slice(0,10)
+        if(pinnedTabs.indexOf(path)<0)pinnedTabs=pinnedTabs.concat([path]).slice(-8)
+    }
+    function closePinnedTab(path){
+        if(documents && documents.path===path && documents.dirty){
+            // Closing a visible dirty tab must go through the existing Save /
+            // Discard / Cancel confirmation, never drop the live editor.
+            request("close","",function(){
+                pinnedTabs=pinnedTabs.filter(p=>p!==path)
+                if(pinnedTabs.length>0)openRecent(pinnedTabs[pinnedTabs.length-1])
+                else win.closeRequested()
+            })
+            return
+        }
+        pinnedTabs=pinnedTabs.filter(p=>p!==path)
+        if(documents && documents.path===path && pinnedTabs.length>0)openRecent(pinnedTabs[pinnedTabs.length-1])
     }
     function openRecent(path){
         if(!documents || !remote || !remote.connected || remote.activeServerId!==recentServerId)return
@@ -345,10 +361,42 @@ Item {
         }
         Button { x:parent.width-(win.adaptive?48:34);y:4;width:win.adaptive?44:30;height:win.adaptive?40:28;text:"×";onClicked:win.closeFind() }
     }
+    Flickable {
+        id:tabStrip;objectName:"documentsTabStrip"
+        visible:win.pinnedTabs.length>0 && win.connected && win.remote.activeServerId===win.recentServerId
+        x:win.contentLeft+12
+        y:pathInput.y+pathInput.height+8+(recoveryBanner.visible?recoveryBanner.height+6:0)+(findBar.visible?findBar.height+6:0)
+        width:win.width-x-12;height:visible?36:0
+        contentWidth:tabRow.implicitWidth;contentHeight:height
+        clip:true;flickableDirection:Flickable.HorizontalFlick
+        Row {
+            id:tabRow;spacing:5
+            Repeater {
+                model:win.pinnedTabs
+                delegate:Rectangle {
+                    required property string modelData
+                    width:Math.min(180,Math.max(96,tabName.implicitWidth+38))
+                    height:32;radius:7
+                    color:win.documents && win.documents.path===modelData?"#5590B9E9":"#26FFFFFF"
+                    border.color:"#35FFFFFF"
+                    Text {
+                        id:tabName;x:8;anchors.verticalCenter:parent.verticalCenter
+                        width:parent.width-30;elide:Text.ElideMiddle
+                        text:parent.modelData.split("/").pop()+(win.documents && win.documents.path===parent.modelData && win.documents.dirty?" ●":"")
+                        color:Theme.ink;font.pixelSize:11
+                    }
+                    MouseArea { anchors.fill:parent;anchors.rightMargin:24;onClicked:win.openRecent(parent.modelData) }
+                    Text { anchors.right:parent.right;anchors.rightMargin:7;anchors.verticalCenter:parent.verticalCenter;text:"×";color:Theme.ink;font.pixelSize:15
+                        MouseArea { anchors.fill:parent;onClicked:win.closePinnedTab(parent.modelData) }
+                    }
+                }
+            }
+        }
+    }
     Flow {
         id:formatBar;objectName:"documentsFormatToolbar"
         visible:win.documents!==null && win.documents.hasDocument && !win.documents.pdfMode && !win.documents.busy && (!win.previewMode || win.split)
-        x:win.contentLeft+12;y:pathInput.y+pathInput.height+8+(recoveryBanner.visible?recoveryBanner.height+6:0)+(findBar.visible?findBar.height+6:0)
+        x:win.contentLeft+12;y:tabStrip.y+tabStrip.height+4
         width:win.width-x-12;spacing:4
         Button { text:"H1";onClicked:win.insertBlock("# ") }
         Button { text:"H2";onClicked:win.insertBlock("## ") }
