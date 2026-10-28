@@ -99,3 +99,9 @@ Immediate lifecycle fix: LogsWindow previously invoked `loadSources()` and `relo
 - P1: performance profiling for large directory lists, logs, document tabs, large shell output and QML binding churn; avoid claims without runtime measurements.
 
 No build or tests were performed in this pass.
+
+### Files / MDok ownership and pagination audit (2026-10-28)
+
+Inspected FilesWindow and DocumentsWindow. Documents owns editor/tab UI coordination while DocumentsController owns remote document state, with server-generation checks for tab association; Files owns directory filtering, sorting and reveal navigation while RemoteController owns paginated listing. Shared extraction must target proven duplicate contracts rather than force these distinct responsibilities into a generic controller.
+
+Found an event-loop pressure bug in Files' cross-app `revealFile` flow: when a file was not in the current page and more remote entries remained, `tryReveal` called `loadMore(true)` and immediately rescheduled itself through `Qt.callLater`, even before the SSH page completed. That unbounded retry loop is now removed; the existing `onShownChanged` and controller `onChanged` signals retry on data/state updates. A paginated reveal must be manually verified with a remote directory containing many entries. No tests or builds run, CI remains disabled.
