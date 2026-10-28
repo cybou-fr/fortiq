@@ -346,7 +346,7 @@ Item {
             const line=source.slice(offset,next)
             let start=0
             while(start<line.length && start<4 && line[start]===" ")start++
-            if(start<=3 && (line[start]==="\`" || line[start]==="~")){
+            if(start<=3 && (line.charCodeAt(start)===96 || line[start]==="~")){
                 const marker=line[start]
                 let count=0
                 while(line[start+count]===marker)count++
