@@ -768,6 +768,7 @@ Item {
                                                       : (shell.taskManager !== null && shell.taskManager.count > 0))
         manager: shell.fixture ? fixtureTasks : shell.taskManager
         controller: shell.controller
+        availableHeight: Math.max(34, shell.height - 16)
         width: Math.max(0, Math.min(420, shell.width - 24))
         x: Math.max(12, shell.width - width - 12)
         // Keep the task panel accessible above the bottom dock and within
