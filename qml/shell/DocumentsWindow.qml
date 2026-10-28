@@ -34,9 +34,21 @@ Item {
     signal closeRequested()
     signal requestServers()
     signal requestFiles(string path, string serverId)
+    property var loadedImages:({})
+    function refreshImageResources(){
+        if(!documents || !documents.hasDocument || documents.pdfMode || documents.isNew)return
+        const regex=/!\\[[^\\]]*\\]\\(([^\\s)]+)(?:\\s+["'][^"']*["'])?\\)/g
+        const source=editor.text.slice(0,64000)
+        let match, count=0
+        while((match=regex.exec(source))!==null && count<12){
+            const path=match[1]
+            if(!loadedImages[path]){loadedImages[path]=true;documents.requestMarkdownImage(path);count++}
+        }
+    }
     function syncDocument(){
         if(!editor || !pathInput)return
         syncing=true;editor.text=documents?documents.text:"";syncing=false
+        loadedImages=({});preview.clearImages()
         pathInput.text=documents?(documents.path || (connected?remote.currentDirectory+"/Nouveau document.md":"")):""
         previewTimer.restart()
         if(visible && (split || !previewMode))editor.forceActiveFocus()
@@ -390,7 +402,7 @@ Item {
             Button { objectName:"documentsConflictClose";text:"Garder mon texte, décider plus tard";onClicked:win.documents.closeConflict() }
         }
     }
-    Timer { id:previewTimer;interval:180;onTriggered:{preview.source=editor.text;win.stats=finder.stats(editor.text);win.updateOutline();if(win.findOpen)win.refreshMatches()} }
+    Timer { id:previewTimer;interval:180;onTriggered:{preview.source=editor.text;win.stats=finder.stats(editor.text);win.updateOutline();win.refreshImageResources();if(win.findOpen)win.refreshMatches()} }
     Text {
         objectName:"documentsStats";visible:win.documents!==null && win.documents.hasDocument
         anchors.right:parent.right;anchors.rightMargin:12;anchors.bottom:parent.bottom;anchors.bottomMargin:10;color:Theme.inkMuted;font.pixelSize:10
@@ -431,6 +443,7 @@ Item {
         Keys.onReleased:event=>{if(event.key===Qt.Key_Escape){event.accepted=true;if(!busy){visible=false;win.clearPending();editor.forceActiveFocus()}}}
     }
     Connections { target:win.documents
+        function onMarkdownImageReady(path,base64){preview.setImageData(path,base64)}
         function onChanged(){
             if(win.waitingForSave && !win.documents.busy && win.documents.dirty){
                 win.waitingForSave=false;confirm.busy=false;confirm.error=win.documents.status
