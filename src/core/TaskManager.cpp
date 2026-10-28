@@ -59,7 +59,9 @@ bool TaskManager::setProgress(int id, qint64 done, qint64 total) {
     // Reject impossible or regressive progress reports from delayed worker
     // callbacks. An unknown total is represented by -1.
     if (done < 0 || total < -1 || (total >= 0 && done > total)
-        || done < t->done) return false;
+        || done < t->done
+        || (t->total >= 0 && total < 0)
+        || (t->total >= 0 && total < t->total)) return false;
     if (t->done == done && t->total == total) return true;
     t->done = done;
     t->total = total;
@@ -149,7 +151,10 @@ bool TaskManager::requestCancel(int id) {
     if (t->state == State::Queued) {
         // Cancellable queued jobs are stopped through their owning controller.
         emit cancelRequested(id);
-        markCancelled(id, QStringLiteral("Annulé."));
+        // The owner can synchronously settle the task (including Unknown)
+        // while handling cancelRequested. Do not overwrite that result.
+        if (const auto after = state(id); after && !isTerminal(*after))
+            return markCancelled(id, QStringLiteral("Annulé."));
         return true;
     }
     t->state = State::Cancelling;
