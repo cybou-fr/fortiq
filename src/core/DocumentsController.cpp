@@ -133,12 +133,21 @@ void DocumentsController::writeDraftNow(){
     const auto script=buildDraftWriteScript(draftId(m_path),draftMetaText(meta),bytes,QUuid::createUuid().toString(QUuid::Id128).left(12));
     if(script.isEmpty())return;
     const auto request=m_remote->connectionRequest();const int token=m_remote->connectionToken();const QString path=m_path;
+    const QString snapshot=m_text;
     auto *watcher=new QFutureWatcher<SshResult>(this);
-    connect(watcher,&QFutureWatcher<SshResult>::finished,this,[this,watcher,token,path]{
+    connect(watcher,&QFutureWatcher<SshResult>::finished,this,[this,watcher,token,path,snapshot]{
         const auto r=watcher->result();watcher->deleteLater();
         if(path!=m_path||!m_remote->connected()||token!=m_remote->connectionToken())return;
-        m_draftStatus=(r.status==SshResult::Status::Ok&&r.code=="exit:0")?"Brouillon gardé sur le serveur à "+QDateTime::currentDateTime().toString("HH:mm:ss")
-                                                                      :"Brouillon serveur non enregistré ("+(r.message.isEmpty()?r.code:r.message.left(80))+") : le texte n'est que dans la mémoire du client.";
+        const bool success=r.status==SshResult::Status::Ok&&r.code=="exit:0";
+        // A completed SSH write only protects the snapshot sent, not edits made
+        // while the remote operation was in flight. Never claim those edits are saved.
+        if(success && draftNeedsAnotherSave(snapshot,m_text,dirty(),m_unknown)){
+            m_draftStatus="Brouillon précédent enregistré ; nouvelles modifications en attente.";
+            scheduleDraft();
+        }else{
+            m_draftStatus=success?"Brouillon gardé sur le serveur à "+QDateTime::currentDateTime().toString("HH:mm:ss")
+                                 :"Brouillon serveur non enregistré ("+(r.message.isEmpty()?r.code:r.message.left(80))+") : le texte n'est que dans la mémoire du client.";
+        }
         emit changed();
     });
     watcher->setFuture(QtConcurrent::run(&m_pool,[request,script]{SshSession session;auto o=session.open(request);if(o.status!=SshResult::Status::Ok)return o;return session.runScript(script,4096);}));
