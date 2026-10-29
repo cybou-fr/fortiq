@@ -84,10 +84,10 @@ Item {
             Text { visible:win.section==="mounts";x:win.adaptive?60:46;y:117;text:"Ouvrir dans Fichiers";color:Theme.inkMuted;font.pixelSize:12 }
         }
     }
-    Column {
-        visible:!win.connected;x:win.contentLeft+16;y:150;width:parent.width-x-16;spacing:18
-        Text { width:parent.width;horizontalAlignment:Text.AlignHCenter;text:"Aucun serveur connecté";color:Theme.ink;font.pixelSize:16 }
-        Button { objectName:"disksConnectButton";anchors.horizontalCenter:parent.horizontalCenter;text:"Choisir un serveur…";onClicked:win.requestServers() }
+    NoServerState {
+        visible: !win.connected; x: win.contentLeft + 16; y: 150; width: parent.width - x - 16
+        touch: win.adaptive; buttonName: "disksConnectButton"; hint: "Les volumes et les périphériques sont lus sur le serveur Linux choisi."
+        onChooseServer: win.requestServers()
     }
     AppStateMessage {
         readonly property string sectionError: win.disks ? (win.section==="mounts"?win.disks.mountError:win.disks.deviceError) : ""

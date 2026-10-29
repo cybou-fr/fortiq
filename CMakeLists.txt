@@ -130,6 +130,8 @@ set(FORTIQ_SHELL_QML
     qml/shell/SessionGuard.qml
     qml/shell/LinkBanner.qml
     qml/shell/AppStateMessage.qml
+    qml/shell/NoServerState.qml
+    qml/shell/StateButton.qml
     qml/shell/CopyChip.qml
     qml/shell/Toast.qml
     qml/shell/MailWindow.qml

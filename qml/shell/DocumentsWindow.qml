@@ -802,11 +802,16 @@ Item {
         anchors.right:parent.right;anchors.rightMargin:12;anchors.bottom:parent.bottom;anchors.bottomMargin:10;color:Theme.inkMuted;font.pixelSize:11
         text:win.stats.words+" mots · "+win.stats.characters+" car. · "+win.stats.lines+" lignes"
     }
+    NoServerState {
+        visible:!win.connected && (!win.documents || !win.documents.hasDocument)
+        x:win.contentLeft+16;y:160;width:win.width-x-16
+        touch:win.adaptive;buttonName:"documentsConnectButton";hint:"Les documents Markdown et PDF sont lus sur le serveur Linux choisi."
+        onChooseServer:win.requestServers()
+    }
     Column {
-        visible:!win.documents || !win.documents.hasDocument
-        x:win.contentLeft+16;y:160;width:win.width-x-16;spacing:14
-        Text { width:parent.width;horizontalAlignment:Text.AlignHCenter;wrapMode:Text.WordWrap;text:"MDok · documents Markdown du serveur";color:Theme.ink;font.pixelSize:16 }
-        Button { objectName:"documentsConnectButton";visible:!win.connected;anchors.horizontalCenter:parent.horizontalCenter;text:"Choisir un serveur…";onClicked:win.requestServers() }
+        visible:win.connected && (!win.documents || !win.documents.hasDocument)
+        x:win.contentLeft+16;y:160;width:win.width-x-16;spacing:10
+        Text { width:parent.width;horizontalAlignment:Text.AlignHCenter;wrapMode:Text.WordWrap;text:"MDok · documents Markdown du serveur";color:Theme.ink;font.pixelSize:18 }
         Text { width:parent.width;horizontalAlignment:Text.AlignHCenter;wrapMode:Text.WordWrap;text:"Ouvrez un Markdown ou PDF du serveur, ou saisissez son chemin ci-dessus.";color:Theme.inkMuted;font.pixelSize:13 }
     }
     Text { x:win.contentLeft+12;anchors.bottom:parent.bottom;anchors.bottomMargin:34;width:win.width-x-12;height:42;wrapMode:Text.WordWrap;maximumLineCount:3;elide:Text.ElideRight;textFormat:Text.PlainText;color:Theme.inkMuted;font.pixelSize:12;text:win.documents?(win.documents.hasDocument && !win.documents.sourceAvailable?"Source indisponible · texte conservé en mémoire. ":"")+win.documents.status+(win.documents.draftStatus!==""?"  ·  "+win.documents.draftStatus:""):"Choisissez un serveur Linux." }

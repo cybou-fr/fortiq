@@ -396,10 +396,10 @@ Item {
     }
 
     // ── no connection / explicit errors ────────────────────────────────
-    Column {
-        visible: !win.connected; x: win.contentLeft + 16; y: 150; width: parent.width - x - 16; spacing: 18
-        Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: "Aucun serveur connecté"; color: Theme.ink; font.pixelSize: 16 }
-        Button { objectName: "systemConnectButton"; anchors.horizontalCenter: parent.horizontalCenter; text: "Choisir un serveur…"; onClicked: win.requestServers() }
+    NoServerState {
+        visible: !win.connected; x: win.contentLeft + 16; y: 150; width: parent.width - x - 16
+        touch: win.adaptive; buttonName: "systemConnectButton"; hint: "Les processus et les services sont ceux du serveur Linux choisi, en lecture seule."
+        onChooseServer: win.requestServers()
     }
     AppStateMessage {
         // Processes are not the source of truth for the Services or Overview tabs.

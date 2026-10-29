@@ -294,10 +294,10 @@ Item {
     }
 
     // No connection / explicit error
-    Column {
-        visible: !win.connected; x: win.contentLeft + 16; y: 150; width: parent.width - x - 16; spacing: 18
-        Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: "Aucun serveur connecté"; color: Theme.ink; font.pixelSize: 16 }
-        Button { objectName: "networkConnectButton"; anchors.horizontalCenter: parent.horizontalCenter; text: "Choisir un serveur…"; onClicked: win.requestServers() }
+    NoServerState {
+        visible: !win.connected; x: win.contentLeft + 16; y: 150; width: parent.width - x - 16
+        touch: win.adaptive; buttonName: "networkConnectButton"; hint: "Le réseau est lu sur le serveur Linux choisi, en lecture seule."
+        onChooseServer: win.requestServers()
     }
     AppStateMessage {
         visible: win.connected && win.network !== null && win.network.state === "error" && (win.section === "interfaces" || win.section === "ports" || win.section === "routes" || win.section === "dns")

@@ -529,21 +529,11 @@ Item {
     }
 
     // No connection: the server manager is global, not part of Files.
-    Column {
+    NoServerState {
         visible: !win.fixture && !win.connected
-        x: win.contentLeft; y: toolbar.height
-        width: parent.width - x
-        topPadding: 70
-        spacing: 12
-        Text { anchors.horizontalCenter: parent.horizontalCenter; text: "Aucun serveur connecté"; color: Theme.ink; font.pixelSize: 16; font.family: Theme.fontFamily }
-        Text { anchors.horizontalCenter: parent.horizontalCenter; text: "Les fichiers affichés sont ceux du serveur Linux choisi."; color: Theme.inkMuted; font.pixelSize: 12; font.family: Theme.fontFamily }
-        Rectangle {
-            anchors.horizontalCenter: parent.horizontalCenter
-            height: 34; radius: 9; width: chooseLabel.implicitWidth + 30
-            color: chooseMouse.containsMouse ? Theme.selection : "#992D6FE0"
-            Text { id: chooseLabel; anchors.centerIn: parent; text: "Choisir un serveur…"; color: "white"; font.pixelSize: 13; font.family: Theme.fontFamily }
-            MouseArea { id: chooseMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.requestServers() }
-        }
+        x: win.contentLeft + 16; y: toolbar.height + 70; width: parent.width - x - 16
+        touch: win.adaptive; buttonName: "filesConnectButton"; hint: "Les fichiers affichés sont ceux du serveur Linux choisi."
+        onChooseServer: win.requestServers()
     }
 
     // ── status bar ─────────────────────────────────────────────────────

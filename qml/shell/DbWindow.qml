@@ -377,10 +377,10 @@ Item {
     }
 
     // ── placeholders ───────────────────────────────────────────────────
-    Column {
-        visible: !win.connected; x: win.contentLeft + 16; y: 150; width: parent.width - x - 16; spacing: 18
-        Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: "Aucun serveur connecté"; color: Theme.ink; font.pixelSize: 16 }
-        Button { objectName: "dbConnectButton"; anchors.horizontalCenter: parent.horizontalCenter; text: "Choisir un serveur…"; onClicked: win.requestServers() }
+    NoServerState {
+        visible: !win.connected; x: win.contentLeft + 16; y: 150; width: parent.width - x - 16
+        touch: win.adaptive; buttonName: "dbConnectButton"; hint: "Les bases de données sont lues sur le serveur Linux choisi, en lecture seule."
+        onChooseServer: win.requestServers()
     }
     Text {
         visible: win.connected && win.db !== null && !win.hasProfile && !win.formOpen

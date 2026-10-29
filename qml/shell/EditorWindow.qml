@@ -310,11 +310,16 @@ Item {
     }
 
     // ---- placeholder when no document ----
+    NoServerState {
+        visible:!win.connected && !win.hasDoc
+        x:16;y:170;width:win.width-32
+        touch:win.adaptive;buttonName:"editorConnectButton";hint:"Les fichiers texte et le code sont lus et enregistrés sur le serveur Linux choisi."
+        onChooseServer:win.requestServers()
+    }
     Column {
-        visible:!win.hasDoc
-        x:16;y:170;width:win.width-32;spacing:14
-        Text { width:parent.width;horizontalAlignment:Text.AlignHCenter;wrapMode:Text.WordWrap;text:"Éditeur · fichiers texte et code du serveur";color:Theme.ink;font.pixelSize:16 }
-        Button { objectName:"editorConnectButton";visible:!win.connected;anchors.horizontalCenter:parent.horizontalCenter;text:"Choisir un serveur…";onClicked:win.requestServers() }
+        visible:win.connected && !win.hasDoc
+        x:16;y:170;width:win.width-32;spacing:10
+        Text { width:parent.width;horizontalAlignment:Text.AlignHCenter;wrapMode:Text.WordWrap;text:"Éditeur · fichiers texte et code du serveur";color:Theme.ink;font.pixelSize:18 }
         Text { width:parent.width;horizontalAlignment:Text.AlignHCenter;wrapMode:Text.WordWrap;text:"Saisissez le chemin absolu d’un fichier UTF-8 (256 Kio maximum), ou ouvrez-le depuis Fichiers.";color:Theme.inkMuted;font.pixelSize:13 }
     }
 
