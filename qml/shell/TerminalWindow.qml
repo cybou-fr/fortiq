@@ -13,7 +13,7 @@ Item {
     property bool searchOpen: false
     readonly property bool connected: remote !== null && remote.connected
     readonly property bool drawer: adaptive && width < 900
-    readonly property real contentLeft: drawer ? 0 : 210
+    readonly property real contentLeft: drawer ? 0 : 250
     signal closeRequested()
     signal requestServers()
     // A command proposed by another app ("Terminal ici"): shown in full, typed after the user confirms and never run: no line break is sent, Enter is the user's.
@@ -37,6 +37,8 @@ Item {
         }
         return out
     }
+    // The one way a history row reaches the prompt: text only, never a line break (the terminal view refuses control characters).
+    function insertHistory(text) { if (surface.inputEnabled) { navigationOpen = false; surface.insertHistory(text.replace(/\t/g, " ")) } }
     component Action: Rectangle {
         property string text: ""
         signal clicked()
@@ -61,7 +63,7 @@ Item {
         id: sidebar
         objectName: "terminalSidebar"
         visible: !win.drawer || win.navigationOpen
-        width: win.drawer ? Math.min(260,win.width-32) : 210
+        width: win.drawer ? Math.min(260,win.width-32) : 250
         height: parent.height
         z: win.drawer ? 40 : 0
         topLeftRadius: 16; bottomLeftRadius: 16
@@ -80,12 +82,13 @@ Item {
                 }
             }
         }
-        // Command history of the server (~/.bash_history): compact one-line rows, newest first, repeats folded into the most recent one.
+        // Command history of the server (~/.bash_history), newest first, repeats folded into the most recent one.
+        // Every row says what a click does: the arrow button inserts the command at the prompt (never runs it), the copy button copies it.
         Text { x:18;y:50;text:"HISTORIQUE";color:"#8FA2C2";font.pixelSize:11;font.letterSpacing:1;font.family:Theme.fontFamily }
         Text {
             anchors.right:parent.right;anchors.rightMargin:16;y:50
             visible:win.historyShown.length>0
-            text:win.historyShown.length+(win.historyFilter.length>0?" trouvée(s)":"")
+            text:win.historyShown.length+(win.historyFilter.length>0?" trouv\u00e9e(s)":"")
             color:"#8FA2C2";font.pixelSize:11;font.family:Theme.fontFamily
         }
         TextField {
@@ -94,34 +97,64 @@ Item {
             placeholderText:"Filtrer l\u2019historique";selectByMouse:true;maximumLength:128;font.pixelSize:12
             onTextChanged:win.historyFilter=text
         }
+        Text {
+            x:18;y:106;width:parent.width-36;elide:Text.ElideRight;textFormat:Text.PlainText
+            text:"\u21b3 ins\u00e9rer au prompt   \u29c9 copier"
+            color:"#7F93B5";font.pixelSize:11;font.family:Theme.fontFamily
+        }
+        TextEdit { id:historyClip;visible:false }
         ListView {
             objectName: "terminalHistory"
-            x:6;y:108;width:parent.width-12;height:Math.max(0,parent.height-y-34)
-            clip:true;spacing:1;interactive:count>0
+            x:6;y:128;width:parent.width-12;height:Math.max(0,parent.height-y-34)
+            clip:true;spacing:2;interactive:count>0
             model:win.historyShown
             ScrollBar.vertical: ScrollBar { policy:ScrollBar.AsNeeded }
             delegate: Rectangle {
+                id:row
                 required property var modelData
-                width:ListView.view.width;height:win.adaptive ? 40 : 25;radius:5
-                color:historyMouse.containsMouse ? "#553E80C4" : "transparent"
-                Text { x:7;anchors.verticalCenter:parent.verticalCenter;text:"\u203a";color:"#5F7396";font.pixelSize:14;font.family:Theme.fontFamily }
-                Text {
-                    x:20;anchors.verticalCenter:parent.verticalCenter;width:parent.width-26
-                    text:modelData.text;textFormat:Text.PlainText;elide:Text.ElideRight;maximumLineCount:1
-                    color:Theme.ink;font.pixelSize:12;font.family:Theme.monoFamily
-                }
+                width:ListView.view.width;height:win.adaptive ? 44 : 30;radius:6
+                color:historyMouse.containsMouse || insertButton.hovered || copyButton.hovered ? "#4D3E80C4" : "#14FFFFFF"
                 MouseArea {
                     id:historyMouse;anchors.fill:parent;hoverEnabled:true;enabled:surface.inputEnabled
                     cursorShape:Qt.PointingHandCursor
-                    ToolTip.visible:containsMouse;ToolTip.delay:450;ToolTip.timeout:8000;ToolTip.text:modelData.text + "\n\nClic : insérer dans le terminal (sans l\u2019exécuter)"
-                    onClicked:{win.navigationOpen=false;surface.insertHistory(modelData.text.replace(/\t/g," "))}
+                    ToolTip.visible:containsMouse;ToolTip.delay:500;ToolTip.timeout:9000;ToolTip.text:row.modelData.text
+                    onClicked:win.insertHistory(row.modelData.text)
+                }
+                // insert at the prompt
+                Rectangle {
+                    id:insertButton
+                    readonly property bool hovered:insertMouse.containsMouse
+                    x:4;anchors.verticalCenter:parent.verticalCenter;width:win.adaptive?36:24;height:win.adaptive?36:22;radius:6
+                    color:hovered ? Theme.selection : "#26FFFFFF"
+                    opacity:surface.inputEnabled ? 1 : 0.4
+                    Text { anchors.centerIn:parent;text:"\u21b3";color:"white";font.pixelSize:14;font.family:Theme.fontFamily }
+                    MouseArea { id:insertMouse;anchors.fill:parent;hoverEnabled:true;enabled:surface.inputEnabled;cursorShape:Qt.PointingHandCursor
+                        ToolTip.visible:containsMouse;ToolTip.delay:300;ToolTip.text:"Ins\u00e9rer au prompt (sans ex\u00e9cuter)"
+                        onClicked:win.insertHistory(row.modelData.text) }
+                }
+                Text {
+                    x:insertButton.x+insertButton.width+8;anchors.verticalCenter:parent.verticalCenter
+                    width:parent.width-x-copyButton.width-10
+                    text:row.modelData.text;textFormat:Text.PlainText;elide:Text.ElideRight;maximumLineCount:1
+                    color:Theme.ink;font.pixelSize:12;font.family:Theme.monoFamily
+                }
+                // copy
+                Rectangle {
+                    id:copyButton
+                    readonly property bool hovered:copyMouse.containsMouse
+                    anchors.right:parent.right;anchors.rightMargin:4;anchors.verticalCenter:parent.verticalCenter;width:win.adaptive?36:24;height:win.adaptive?36:22;radius:6
+                    color:hovered ? "#40FFFFFF" : "transparent"
+                    Text { anchors.centerIn:parent;text:"\u29c9";color:parent.hovered ? "white" : "#8FA2C2";font.pixelSize:14;font.family:Theme.fontFamily }
+                    MouseArea { id:copyMouse;anchors.fill:parent;hoverEnabled:true;cursorShape:Qt.PointingHandCursor
+                        ToolTip.visible:containsMouse;ToolTip.delay:300;ToolTip.text:"Copier la commande"
+                        onClicked:{historyClip.text=row.modelData.text;historyClip.selectAll();historyClip.copy();historyClip.deselect();historyClip.text=""} }
                 }
             }
         }
         Text {
             anchors.left:parent.left;anchors.leftMargin:14;anchors.right:parent.right;anchors.rightMargin:14;anchors.bottom:parent.bottom;anchors.bottomMargin:10
             elide:Text.ElideRight;maximumLineCount:1;textFormat:Text.PlainText
-            text: win.terminal ? win.terminal.historyStatus : "Historique enregistré sur le serveur."
+            text: win.terminal ? win.terminal.historyStatus : "Historique enregistr\u00e9 sur le serveur."
             color:Theme.inkMuted;font.pixelSize:11;font.family:Theme.fontFamily
         }
     }
