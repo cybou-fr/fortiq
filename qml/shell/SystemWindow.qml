@@ -403,7 +403,8 @@ Item {
     }
     AppStateMessage {
         // Processes are not the source of truth for the Services or Overview tabs.
-        readonly property bool sectionEmpty: win.section === "processes" ? win.sys.processes.length === 0
+        readonly property bool sectionEmpty: !win.sys ? true
+            : win.section === "processes" ? win.sys.processes.length === 0
             : win.section === "services" ? win.sys.services.length === 0 : true
         visible: win.connected && win.sys !== null && (win.sys.state === "error" || win.sys.state === "loading") && sectionEmpty
         state: win.sys && win.sys.state === "error" ? "error" : "loading"

@@ -182,7 +182,7 @@ void DocumentsController::openPdf(const QString &path){
         emit changed();emit loaded();
         renderPdfPage(target,1,pages);
     });
-    const QByteArray script="LC_ALL=C pdfinfo " + SshSession::shellQuote(*clean).toUtf8()
+    const QByteArray script="LC_ALL=C pdfinfo " + SshSession::shellQuote(*clean)
         + " 2>/dev/null | awk '/^Pages:[[:space:]]+[0-9]+/{print $2; found=1; exit} END{if(!found)exit 2}'\n";
     watcher->setFuture(QtConcurrent::run(&m_pool,[request,script]{SshSession session;auto r=session.open(request);return r.status==SshResult::Status::Ok?session.runScript(script,128,{},15000):r;}));
 }
@@ -195,7 +195,7 @@ void DocumentsController::renderPdfPage(const QString &path,int page,int pages){
     const int token=m_remote->connectionToken(),seq=++m_seq;
     const QString server=m_sourceServerId;
     m_operationToken=token;m_busy=true;m_writing=false;m_status=QString("Rendu PDF · page %1/%2…").arg(page).arg(pages);emit changed();
-    const QByteArray file=SshSession::shellQuote(path).toUtf8();
+    const QByteArray file=SshSession::shellQuote(path);
     const QByteArray number=QByteArray::number(page);
     const QByteArray script=
         "umask 077\n"
@@ -236,8 +236,8 @@ void DocumentsController::exportPdf(const QString &destination){
         m_status="Document Markdown trop grand ou invalide.";emit changed();return;
     }
     const QString parent=parentPath(*clean);
-    const QByteArray folder=SshSession::shellQuote(parent).toUtf8();
-    const QByteArray output=SshSession::shellQuote(*clean).toUtf8();
+    const QByteArray folder=SshSession::shellQuote(parent);
+    const QByteArray output=SshSession::shellQuote(*clean);
     // The Markdown travels only as base64 in a quoted here-document. Pandoc is
     // invoked without shell interpolation of document contents or destination.
     const QByteArray delimiter="FQMD"+QUuid::createUuid().toString(QUuid::Id128).toLatin1();
@@ -322,10 +322,10 @@ void DocumentsController::requestMarkdownImage(const QString &relativePath){
         // Reject symlinks in every relative component. Non-atomic with SFTP
         // read: this is a mitigation, not a sandbox against concurrent renames.
         QString item=base;
-        QByteArray guard="test -d "+SshSession::shellQuote(base).toUtf8()+" || exit 11\n";
+        QByteArray guard="test -d "+SshSession::shellQuote(base)+" || exit 11\n";
         for(const QString &part:relativePath.split('/')){
             item+="/"+part;
-            guard+="test ! -L "+SshSession::shellQuote(item).toUtf8()+" || exit 12\n";
+            guard+="test ! -L "+SshSession::shellQuote(item)+" || exit 12\n";
         }
         guard+="echo checked\n";
         const auto check=session.runScript(guard,128,{},10000);

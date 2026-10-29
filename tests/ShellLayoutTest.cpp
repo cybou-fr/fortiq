@@ -1208,6 +1208,10 @@ QtObject { property bool connected: true; property bool linkLost: false; propert
                     property bool conflictBusy:false
                     property string conflictDiff:""
                     property string conflictSummary:""
+                    signal markdownImageReady(string relativePath,string base64)
+                    function hasBusyTabs(){return false}
+                    function hasDirtyTabs(){return false}
+                    function dirtyTabSessions(){return []}
                     function restoreDraft(){}
                     function dismissRecovery(d){}
                     function resolveConflictSaveCopy(){}

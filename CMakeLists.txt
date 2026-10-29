@@ -635,6 +635,32 @@ if(WIN32 AND QT6_IS_SHARED_LIBS_BUILD)
             set_property(TARGET ${FORTIQ_TARGET} PROPERTY QT_QML_MODULE_NO_IMPORT_SCAN TRUE)
         endif()
     endforeach()
+
+    # Runnable copy of the app: <build>/app/fortiq.exe with the Qt runtime next
+    # to it, so a plain build starts without Qt on PATH. Kept in its own folder:
+    # deploying into the build root would shadow the platform plugins and QML
+    # import paths the test executables use (e.g. the offscreen platform).
+    # Packaging (tool/package_windows.py) deploys its own stage separately.
+    option(FORTIQ_DEPLOY_QT "Create <build>/app with fortiq.exe and the Qt runtime" ON)
+    get_target_property(FORTIQ_QMAKE_LOCATION Qt6::qmake IMPORTED_LOCATION)
+    get_filename_component(FORTIQ_QT_BIN_DIR "${FORTIQ_QMAKE_LOCATION}" DIRECTORY)
+    find_program(FORTIQ_WINDEPLOYQT windeployqt HINTS "${FORTIQ_QT_BIN_DIR}")
+    if(FORTIQ_DEPLOY_QT AND FORTIQ_WINDEPLOYQT AND TARGET fortiq)
+        set(FORTIQ_APP_DIR "${CMAKE_CURRENT_BINARY_DIR}/app")
+        add_custom_command(TARGET fortiq POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${FORTIQ_APP_DIR}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:fortiq>" "${FORTIQ_APP_DIR}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:fortiq> "${FORTIQ_APP_DIR}"
+            COMMAND "${FORTIQ_WINDEPLOYQT}"
+                $<IF:$<CONFIG:Debug>,--debug,--release>
+                --qmldir "${CMAKE_CURRENT_SOURCE_DIR}/qml"
+                --no-compiler-runtime --no-translations
+                "${FORTIQ_APP_DIR}/$<TARGET_FILE_NAME:fortiq>"
+            COMMENT "Deploying Qt runtime into ${FORTIQ_APP_DIR}"
+            COMMAND_EXPAND_LISTS VERBATIM)
+    elseif(FORTIQ_DEPLOY_QT)
+        message(WARNING "windeployqt not found: build/app will not be created")
+    endif()
 endif()
 
 # Debian graphical-client package. Enabled only on native Linux builds, never

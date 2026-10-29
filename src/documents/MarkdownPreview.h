@@ -7,7 +7,11 @@
 class SafeMarkdownDocument:public QTextDocument {
 public:
     QVariant loadResource(int type,const QUrl &url)override {
-        if(type==QTextDocument::ImageResource)return images.value(url.toString());
+        if(type==QTextDocument::ImageResource){
+            // Only images supplied in memory; anything else must stay an invalid QVariant (no file/network fallback).
+            const auto found=images.constFind(url.toString());
+            return found==images.constEnd()?QVariant():QVariant(*found);
+        }
         return {};
     }
     QHash<QString,QImage> images;

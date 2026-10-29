@@ -41,6 +41,7 @@ for document in ROOT.rglob("*.md"):
            for part in document.relative_to(ROOT).parts[:-1]):
         continue
     raw = document.read_text(encoding="utf-8")
+    raw = re.sub(r"```.*?```|`[^`\n]*`", "", raw, flags=re.S)  # code samples are not links
     relative_path = document.relative_to(ROOT)
     for item in LINK.finditer(raw):
         href = item.group(1).strip()
