@@ -290,6 +290,7 @@ Item {
             return false
         }
         switch (a.type) {
+        case "pickFile": filesWindow.pickFor = a.kind; filesOpen = true; raiseApp("files"); launcherOpen = false; break
         case "openInEditor": editorOpen = true; raiseApp("editor"); launcherOpen = false; editorWindow.request("open", a.path); break
         case "openDocument": documentsOpen = true; raiseApp("docs"); launcherOpen = false; documentsWindow.request("open", a.path); break
         case "revealInFiles": controller.navigate(a.path); filesOpen = true; raiseApp("files"); launcherOpen = false; break
@@ -383,6 +384,7 @@ Item {
         onRequestDisconnect: shell.confirmSessionEnd("Se déconnecter", function() { shell.controller.disconnectServer() })
         onRequestDocuments:path=>shell.act("openDocument", { path: path })
         onRequestMail:path=>shell.act("attachToMail", { path:path })
+        onPicked: (kind, path) => shell.route({ type: kind === "docs" ? "openDocument" : "openInEditor", path: path, serverId: shell.controller ? shell.controller.activeServerId : "" })
         onRequestEditor:path=>shell.route({ type:"openInEditor", path:path, serverId:shell.controller ? shell.controller.activeServerId : "" })
         onRequestTerminal: path => shell.act("terminalHere", { path: path })
     }
@@ -538,6 +540,7 @@ Item {
         onCloseRequested: { shell.documentsOpen = false; shell.focusAfterClose("docs"); if (shell.adaptive && shell.foregroundApp === "files") shell.filesOpen = true }
         onRequestServers:shell.serversOpen=true
         onRequestFiles:(path, serverId)=>shell.route({ type:"revealFile", path:path, serverId:serverId })
+        onRequestBrowse:shell.route({ type:"pickFile", kind:"docs", serverId:shell.controller ? shell.controller.activeServerId : "" })
     }
     EditorWindow {
         id:editorWindow
@@ -550,6 +553,7 @@ Item {
         onCloseRequested: { shell.editorOpen = false; shell.focusAfterClose("editor"); if (shell.adaptive && shell.foregroundApp === "files") shell.filesOpen = true }
         onRequestServers:shell.serversOpen=true
         onRequestFiles:(path, serverId)=>shell.route({ type:"revealFile", path:path, serverId:serverId })
+        onRequestBrowse:shell.route({ type:"pickFile", kind:"editor", serverId:shell.controller ? shell.controller.activeServerId : "" })
     }
     // Closing the window: unsaved MDok drafts first, then running tasks (asked once, then the app quits).
     function allowAppClose(){

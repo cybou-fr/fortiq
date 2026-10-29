@@ -18,6 +18,7 @@ Item {
     readonly property real contentLeft: drawer ? 0 : 172
     function pickUpload() { uploadDialog.open() }
     function handleBack() {
+        if (pickFor !== "") { cancelPick(); return true }
         if (navigationOpen) { navigationOpen = false; return true }
         if (fileViewer.visible) { fileViewer.requestClose(); return true }
         return false
@@ -30,6 +31,11 @@ Item {
     signal requestDocuments(string path)
     signal requestMail(string path)
     signal requestEditor(string path)
+    // Pick mode: another application asked "choose a file for me" (Editeur / MDok "Parcourir..."). A double-click or Enter on a file
+    // hands its path back instead of previewing it; folders still open.
+    property string pickFor: ""
+    signal picked(string kind, string path)
+    function cancelPick() { pickFor = "" }
     signal requestTerminal(string path)
     signal closeRequested()
     signal requestServers()
@@ -128,6 +134,7 @@ Item {
         if (!entry || fixture || !connected) return
         // A symbolic link may point to a folder; the server answers on open.
         if (entry.directory || entry.link) { filterText = ""; controller.navigate(entry.path) }
+        else if (pickFor !== "") { const kind = pickFor; pickFor = ""; picked(kind, entry.path) }
         else if(/\.(md|markdown|pdf)$/i.test(entry.path))requestDocuments(entry.path)
         else controller.openFile(entry.path)
     }
@@ -310,6 +317,29 @@ Item {
         }
 
         FilesTrashBanner { files: win }
+
+        Rectangle {
+            objectName: "filesPickBanner"
+            visible: win.pickFor !== ""
+            z: 5
+            x: 10; y: 8; width: parent.width - 20; height: 40; radius: 10
+            color: "#E61F3F78"; border.width: 1; border.color: "#802F8CFF"
+            Text {
+                x: 14; anchors.verticalCenter: parent.verticalCenter
+                width: parent.width - cancelPick.width - 40; elide: Text.ElideRight; textFormat: Text.PlainText
+                text: "Choisissez un fichier pour " + (win.pickFor === "docs" ? "MDok" : "l’Éditeur") + " — double-cliquez dessus"
+                color: "white"; font.pixelSize: 13; font.family: Theme.fontFamily
+            }
+            Rectangle {
+                id: cancelPick
+                objectName: "filesPickCancel"
+                anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
+                width: cancelLabel.implicitWidth + 24; height: 28; radius: 8
+                color: cancelMouse.containsMouse ? "#40FFFFFF" : "#26FFFFFF"
+                Text { id: cancelLabel; anchors.centerIn: parent; text: "Annuler"; color: "white"; font.pixelSize: 13; font.family: Theme.fontFamily }
+                MouseArea { id: cancelMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.cancelPick() }
+            }
+        }
 
         Rectangle {
             objectName: "filesMoreBar"

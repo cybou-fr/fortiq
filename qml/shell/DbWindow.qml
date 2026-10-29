@@ -137,7 +137,7 @@ Item {
         id: header
         x: win.contentLeft; width: parent.width - x; height: 48
         WindowDragArea { anchors.fill: parent; windowItem: win; movable: !win.adaptive }
-        ToolButtonGlass { visible: win.drawer; x: 4; y: 2; touch: true; glyph: "☰"; onClicked: win.navigationOpen = !win.navigationOpen }
+        ToolButtonGlass { visible: win.drawer; x: 4; y: 2; touch: true; glyph: "☰"; tip: "Menu"; onClicked: win.navigationOpen = !win.navigationOpen }
         Text {
             x: win.drawer ? 54 : 14; width: Math.max(0, parent.width - x - 330); anchors.verticalCenter: parent.verticalCenter
             text: "Bases de données · " + (win.hasProfile && win.db.selected.name ? win.db.selected.name : (win.connected ? win.remote.serverLabel : "Aucun serveur"))

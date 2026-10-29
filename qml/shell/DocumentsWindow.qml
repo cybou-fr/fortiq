@@ -60,6 +60,7 @@ Item {
     }
     signal closeRequested()
     signal requestServers()
+    signal requestBrowse()
     signal requestFiles(string path, string serverId)
     property var loadedImages:({})
     function refreshImageResources(){
@@ -252,6 +253,7 @@ Item {
             }
         }
         if(action==="close")closeRequested()
+        else if(action==="browse")requestBrowse()
         else if(action==="quit")Qt.quit()
         else if(documents){if(action==="open"){if(path.toLowerCase().endsWith(".pdf"))documents.openPdf(path);else documents.open(path)}else if(action==="new")documents.createNew()}
     }
@@ -493,7 +495,7 @@ Item {
     Item {
         x:win.contentLeft;width:parent.width-x;height:48
         WindowDragArea { anchors.fill:parent;windowItem:win;movable:!win.adaptive }
-        ToolButtonGlass { visible:win.drawer;x:4;y:2;touch:true;glyph:"☰";onClicked:win.navigationOpen=!win.navigationOpen }
+        ToolButtonGlass { visible:win.drawer;x:4;y:2;touch:true;glyph:"☰"; tip: "Menu";onClicked:win.navigationOpen=!win.navigationOpen }
         Text { x:win.drawer?54:14;anchors.verticalCenter:parent.verticalCenter;width:Math.max(0,parent.width-actions.width-x-12);elide:Text.ElideRight;text:"MDok"+(win.documents && win.documents.dirty?" ●":"");color:Theme.ink;font.pixelSize:14 }
         Row {
             id:actions;anchors.right:parent.right;anchors.rightMargin:8;anchors.verticalCenter:parent.verticalCenter;spacing:4
@@ -520,10 +522,17 @@ Item {
     }
     TextField {
         id:pathInput;objectName:"documentsPath"
-        x:win.contentLeft+12;y:52;width:win.width-x-12;height:win.adaptive?44:34
+        x:win.contentLeft+12;y:52;width:win.width-x-12-browseButton.width-8;height:win.adaptive?44:34
         placeholderText:"Chemin absolu du document .md ou .pdf sur le serveur";selectByMouse:true
         enabled:!win.documents || !win.documents.busy
         onAccepted:win.request("open",text)
+    }
+    Button {
+        id:browseButton;objectName:"documentsBrowse"
+        x:win.width-12-width;y:52;width:win.adaptive?120:110;height:win.adaptive?44:34
+        text:"Parcourir…";enabled:win.connected && (!win.documents || !win.documents.busy)
+        ToolTip.visible:hovered;ToolTip.delay:400;ToolTip.text:"Choisir un document du serveur dans Fichiers"
+        onClicked:win.request("browse","")
     }
     Rectangle {
         id:recoveryBanner;objectName:"documentsRecoveryBanner"

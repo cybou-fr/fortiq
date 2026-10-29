@@ -80,7 +80,7 @@ Item {
     Item {
         x: win.contentLeft; width: parent.width - x; height: 48
         WindowDragArea { anchors.fill: parent; windowItem: win; movable: !win.adaptive }
-        ToolButtonGlass { visible: win.drawer; x: 4; y: 2; touch: true; glyph: "☰"; onClicked: win.navigationOpen = !win.navigationOpen }
+        ToolButtonGlass { visible: win.drawer; x: 4; y: 2; touch: true; glyph: "☰"; tip: "Menu"; onClicked: win.navigationOpen = !win.navigationOpen }
         Text {
             x: win.drawer ? 54 : 14; width: Math.max(0, parent.width - x - 52); anchors.verticalCenter: parent.verticalCenter
             text: "Réseau · " + (win.connected ? (win.network && win.network.hostname.length > 0 ? win.network.hostname : win.remote.serverLabel) : "Aucun serveur")

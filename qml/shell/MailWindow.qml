@@ -202,7 +202,7 @@ Item {
         id: header
         x: win.contentLeft; width: parent.width - x; height: 48
         WindowDragArea { anchors.fill: parent; windowItem: win; movable: !win.adaptive }
-        ToolButtonGlass { visible: win.drawer; x: 4; y: 2; touch: true; glyph: "☰"; onClicked: win.navigationOpen = !win.navigationOpen }
+        ToolButtonGlass { visible: win.drawer; x: 4; y: 2; touch: true; glyph: "☰"; tip: "Menu"; onClicked: win.navigationOpen = !win.navigationOpen }
         ToolButtonGlass { visible: win.stacked && win.readerShown; x: win.drawer ? 50 : 4; y: 2; touch: win.adaptive; glyph: "←"; tip: "Retour à la liste"; onClicked: win.mailer.closeThread() }
         Text {
             x: (win.drawer ? 54 : 14) + (win.stacked && win.readerShown ? 46 : 0); width: Math.max(0, parent.width - x - 60); anchors.verticalCenter: parent.verticalCenter

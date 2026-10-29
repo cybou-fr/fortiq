@@ -31,6 +31,7 @@ Item {
     signal closeRequested()
     signal requestServers()
     signal requestFiles(string path,string serverId)
+    signal requestBrowse()
 
     DocumentSearch { id:finder }
     CodeHighlighter { document:editor.textDocument;fileName:win.documents && win.documents.path ? win.documents.path : "" }
@@ -77,6 +78,7 @@ Item {
     // ---- guarded actions (unsaved text is never dropped silently) ----
     function perform(action,path){
         if(action==="close")closeRequested()
+        else if(action==="browse")requestBrowse()
         else if(action==="quit")Qt.quit()
         else if(documents){if(action==="open")documents.open(normalizedPath(path));else if(action==="new")documents.createNew()}
     }
@@ -208,10 +210,18 @@ Item {
     }
     TextField {
         id:pathInput;objectName:"editorPath"
-        x:12;y:52;width:win.width-24;height:win.adaptive?44:34
+        x:12;y:52;width:win.width-24-browseButton.width-8;height:win.adaptive?44:34
         placeholderText:"Chemin absolu du fichier sur le serveur";selectByMouse:true
         enabled:!win.documents || !win.documents.busy
         onAccepted:win.request("open",text.trim())
+    }
+
+    Button {
+        id:browseButton;objectName:"editorBrowse"
+        x:win.width-12-width;y:52;width:win.adaptive?120:110;height:win.adaptive?44:34
+        text:"Parcourir…";enabled:win.connected && (!win.documents || !win.documents.busy)
+        ToolTip.visible:hovered;ToolTip.delay:400;ToolTip.text:"Choisir un fichier du serveur dans Fichiers"
+        onClicked:win.request("browse","")
     }
 
     // ---- server draft found for this file ----

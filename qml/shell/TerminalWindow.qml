@@ -101,7 +101,7 @@ Item {
         id: toolbar
         x:win.contentLeft;width:parent.width-x;height:48
         WindowDragArea { anchors.fill: parent; windowItem: win; movable: !win.adaptive }
-        ToolButtonGlass { visible:win.drawer;x:4;y:2;touch:true;glyph:"☰";onClicked:win.navigationOpen=!win.navigationOpen }
+        ToolButtonGlass { visible:win.drawer;x:4;y:2;touch:true;glyph:"☰"; tip: "Menu";onClicked:win.navigationOpen=!win.navigationOpen }
         Text {
             x:win.drawer?54:14;anchors.verticalCenter:parent.verticalCenter;width:Math.max(0,parent.width-actions.width-x-20);elide:Text.ElideMiddle
             text:"Terminal · "+(win.connected?win.remote.serverLabel:"Aucun serveur")
@@ -133,9 +133,9 @@ Item {
         Timer { id:searchDelay;interval:180;onTriggered:surface.findText(searchInput.text,false) }
         Row {
             id:searchActions;anchors.right:parent.right;spacing:4
-            ToolButtonGlass { glyph:"↑";touch:win.adaptive;enabled:searchInput.text.length>0;onClicked:{searchDelay.stop();surface.findText(searchInput.text,true)} }
-            ToolButtonGlass { glyph:"↓";touch:win.adaptive;enabled:searchInput.text.length>0;onClicked:{searchDelay.stop();surface.findText(searchInput.text,false)} }
-            ToolButtonGlass { glyph:"×";touch:win.adaptive;onClicked:win.closeSearch() }
+            ToolButtonGlass { glyph:"↑";tip:"Résultat précédent";touch:win.adaptive;enabled:searchInput.text.length>0;onClicked:{searchDelay.stop();surface.findText(searchInput.text,true)} }
+            ToolButtonGlass { glyph:"↓";tip:"Résultat suivant";touch:win.adaptive;enabled:searchInput.text.length>0;onClicked:{searchDelay.stop();surface.findText(searchInput.text,false)} }
+            ToolButtonGlass { glyph:"×";tip:"Fermer la recherche";touch:win.adaptive;onClicked:win.closeSearch() }
         }
     }
     TerminalView {

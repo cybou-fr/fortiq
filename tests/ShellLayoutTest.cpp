@@ -389,7 +389,26 @@ private slots:
         QVERIFY(QMetaObject::invokeMethod(ed,"request",Q_ARG(QVariant,QVariant("close")),Q_ARG(QVariant,QVariant("")),Q_ARG(QVariant,QVariant())));
         QVERIFY(dialog->isVisible());QVERIFY(QMetaObject::invokeMethod(dialog,"confirm"));
         QTRY_V(!shell->property("editorOpen").toBool());QCOMPARE(fixture->property("saves").toInt(),2);
-        Q_UNUSED(adaptive);
+        shell->setProperty("editorOpen",true);shell->setProperty("foregroundApp","editor");settle(window);
+        // Browse: the button hands over to Files, which then picks a file for this application.
+        auto *browse=ed->findChild<QQuickItem *>("editorBrowse");QVERIFY(browse);QVERIFY(browse->isVisible());
+        QVERIFY(browse->x()+browse->width()<=ed->width());
+        auto *pathField=ed->findChild<QQuickItem *>("editorPath");QVERIFY(pathField);QVERIFY(pathField->x()+pathField->width()<=browse->x());
+        QSignalSpy browseSpy(ed,SIGNAL(requestBrowse()));QVERIFY(browseSpy.isValid());
+        QVERIFY(QMetaObject::invokeMethod(ed,"request",Q_ARG(QVariant,QVariant("browse")),Q_ARG(QVariant,QVariant("")),Q_ARG(QVariant,QVariant())));
+        QCOMPARE(browseSpy.count(),1);
+        auto *filesWin=shell->findChild<QQuickItem *>("filesWindow");QVERIFY(filesWin);
+        filesWin->setProperty("pickFor",QString("editor"));shell->setProperty("filesOpen",true);shell->setProperty("foregroundApp","files");settle(window);   // what the shell route does
+        auto *pickBanner=filesWin->findChild<QQuickItem *>("filesPickBanner");QVERIFY(pickBanner);QVERIFY(pickBanner->isVisible());
+        QVERIFY(QMetaObject::invokeMethod(filesWin,"cancelPick"));settle(window);QVERIFY(!pickBanner->isVisible());
+        // The hint of a dock icon opens ABOVE the panel (there is no room below a bottom panel).
+        auto *panel=shell->findChild<QQuickItem *>("appPanel");auto *trashSlot=shell->findChild<QQuickItem *>("dockTrash");auto *dockTip=shell->findChild<QQuickItem *>("dockTip");
+        if(!adaptive && panel && trashSlot && dockTip && shell->property("panelEdge").toString()==QLatin1String("bottom")){
+            QVERIFY(QMetaObject::invokeMethod(panel,"hint",Q_ARG(QVariant,QVariant::fromValue(trashSlot)),Q_ARG(QVariant,QVariant("Corbeille du serveur"))));
+            QTRY_V(dockTip->isVisible() && dockTip->opacity()>0.9);
+            QVERIFY(dockTip->mapToScene(QPointF(0,dockTip->height())).y()<=panel->mapToScene(QPointF(0,0)).y());
+            QVERIFY(dockTip->mapToScene(QPointF(0,0)).y()>=0);
+        }
     }
     void viewport_data() {
         QTest::addColumn<QSize>("size"); QTest::addColumn<QString>("preview");

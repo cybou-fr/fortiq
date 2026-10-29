@@ -55,7 +55,7 @@ Item {
     Item {
         x:win.contentLeft;width:parent.width-x;height:48
         WindowDragArea { anchors.fill:parent;windowItem:win;movable:!win.adaptive }
-        ToolButtonGlass { visible:win.drawer;x:4;y:2;touch:true;glyph:"☰";onClicked:win.navigationOpen=!win.navigationOpen }
+        ToolButtonGlass { visible:win.drawer;x:4;y:2;touch:true;glyph:"☰"; tip: "Menu";onClicked:win.navigationOpen=!win.navigationOpen }
         Text { x:win.drawer?54:14;width:Math.max(0,parent.width-x-52);anchors.verticalCenter:parent.verticalCenter;text:"Disques · "+(win.connected?win.remote.serverLabel:"Aucun serveur");elide:Text.ElideMiddle;textFormat:Text.PlainText;color:Theme.ink;font.pixelSize:14 }
         ToolButtonGlass { anchors.right:parent.right;anchors.rightMargin:8;y:4;touch:win.adaptive;glyph:"↻";tip:"Actualiser";enabledState:win.connected && win.disks!==null && !win.disks.busy;onClicked:win.disks.reload() }
     }
