@@ -68,7 +68,7 @@ Rectangle {
         Text {
             x: 14; anchors.verticalCenter: parent.verticalCenter
             text: "⇅  Tâches" + (panel.active > 0 ? " — " + panel.active + " en cours" : "")
-            color: Theme.ink; font.pixelSize: 12; font.weight: Font.DemiBold; font.family: Theme.fontFamily
+            color: Theme.ink; font.pixelSize: 13; font.weight: Font.DemiBold; font.family: Theme.fontFamily
         }
         Row {
             anchors.right: parent.right; anchors.rightMargin: 8
@@ -79,7 +79,7 @@ Rectangle {
                 visible: panel.tasks.length > panel.active
                 anchors.verticalCenter: parent.verticalCenter
                 text: "Effacer terminées"
-                color: "#9CC6FF"; font.pixelSize: 11; font.family: Theme.fontFamily
+                color: "#9CC6FF"; font.pixelSize: 12; font.family: Theme.fontFamily
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: panel.manager.clearFinished() }
             }
             ToolButtonGlass { glyph: panel.expanded ? "⌄" : "⌃"; width: 26; height: 24; onClicked: panel.expanded = !panel.expanded }
@@ -115,7 +115,7 @@ Rectangle {
                 width: parent.width - x - actions.width - 16
                 elide: Text.ElideMiddle
                 text: panel.titleText(row.t)
-                color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily
+                color: Theme.ink; font.pixelSize: 13; font.family: Theme.fontFamily
             }
             Text {
                 x: 38; y: 21
@@ -123,7 +123,7 @@ Rectangle {
                 elide: Text.ElideRight
                 text: panel.stateText(row.t)
                 color: panel.bad(row.t) ? "#FCA5A5" : row.t.decision === "conflict" ? "#FCD34D" : Theme.inkMuted
-                font.pixelSize: 10; font.family: Theme.fontFamily
+                font.pixelSize: 11; font.family: Theme.fontFamily
             }
             Rectangle {
                 visible: (row.t.state === "running" || row.t.state === "cancelling") && row.t.total > 0
@@ -160,7 +160,7 @@ Rectangle {
                         height: 22; radius: 6
                         width: label.implicitWidth + 16
                         color: modelData.danger ? "#B91C1C" : (btnMouse.containsMouse ? "#33FFFFFF" : "#1FFFFFFF")
-                        Text { id: label; anchors.centerIn: parent; text: modelData.k === "replace" && row.width < 340 ? "Confirmer" : modelData.t; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
+                        Text { id: label; anchors.centerIn: parent; text: modelData.k === "replace" && row.width < 340 ? "Confirmer" : modelData.t; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
                         MouseArea {
                             id: btnMouse
                             anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor

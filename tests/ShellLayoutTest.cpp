@@ -747,6 +747,7 @@ private slots:
                     QVERIFY(advice->isVisible()); QVERIFY(advice->property("text").toString().contains("mots de passe d"));
                     findByName(mailWin, "mailWizImapHost")->setProperty("text", "imap.example.net");
                 }
+                wizardFlick->setProperty("contentY", wizardFlick->property("contentHeight").toDouble() - wizardFlick->height()); settle(window);   // the buttons sit at the bottom of the scrolled wizard
                 click(findByName(mailWin, "mailWizTestSmtp"));
                 QVERIFY(fakeMail->property("calls").toStringList().contains("smtp:perso"));
                 click(findByName(mailWin, "mailWizSync"));

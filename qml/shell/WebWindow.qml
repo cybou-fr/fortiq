@@ -90,7 +90,7 @@ Item {
                 x: 36; width: parent.width - 52
                 anchors.verticalCenter: parent.verticalCenter
                 color: Theme.ink; selectionColor: Theme.accent
-                font.pixelSize: win.adaptive ? 14 : 12; font.family: Theme.fontFamily
+                font.pixelSize: win.adaptive ? 14 : 13; font.family: Theme.fontFamily
                 clip: true
                 selectByMouse: true
                 inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
@@ -101,7 +101,7 @@ Item {
                     visible: parent.text.length === 0 && !parent.activeFocus
                     anchors.verticalCenter: parent.verticalCenter
                     text: win.connected ? "Rechercher ou saisir une adresse — chargé par le serveur Linux" : "Aucun serveur connecté"
-                    color: "#7F93B5"; font.pixelSize: win.adaptive ? 14 : 12; font.family: Theme.fontFamily
+                    color: "#7F93B5"; font.pixelSize: win.adaptive ? 14 : 13; font.family: Theme.fontFamily
                 }
             }
             Connections {
@@ -124,7 +124,7 @@ Item {
                 color: engineMouse.containsMouse ? "#33FFFFFF" : "#1AFFFFFF"
                 Text {
                     id: engineLabel; anchors.centerIn: parent; color: Theme.ink; font.family: Theme.fontFamily
-                    font.pixelSize: win.adaptive ? 13 : 11
+                    font.pixelSize: win.adaptive ? 13 : 12
                     text: "⌕ " + win.engineName
                 }
                 MouseArea { id: engineMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; enabled: win.browser !== null; onClicked: engineMenu.popup() }
@@ -187,7 +187,7 @@ Item {
             x: 14; y: 6; width: parent.width - 28
             wrapMode: Text.WordWrap; textFormat: Text.PlainText
             text: win.browser ? win.browser.notes.join("  ·  ") : ""
-            color: "#FEF3C7"; font.pixelSize: 11; font.family: Theme.fontFamily
+            color: "#FEF3C7"; font.pixelSize: 12; font.family: Theme.fontFamily
         }
     }
 
@@ -229,7 +229,7 @@ Item {
                                     objectName: "webFormField"
                                     x: 14; width: parent.width - 28; anchors.verticalCenter: parent.verticalCenter
                                     color: Theme.ink; selectionColor: Theme.accent; clip: true; selectByMouse: true
-                                    font.pixelSize: win.adaptive ? 14 : 12; font.family: Theme.fontFamily
+                                    font.pixelSize: win.adaptive ? 14 : 13; font.family: Theme.fontFamily
                                     text: fieldBox.modelData.value
                                     inputMethodHints: Qt.ImhNoPredictiveText
                                     Component.onCompleted: formItem.typed[fieldBox.modelData.name] = text
@@ -254,7 +254,7 @@ Item {
                             anchors.verticalCenter: parent.verticalCenter
                             visible: !win.adaptive
                             text: "→ " + formItem.modelData.host
-                            color: Theme.inkMuted; font.pixelSize: 10; font.family: Theme.fontFamily
+                            color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
                         }
                     }
                 }
@@ -307,7 +307,7 @@ Item {
                 wrapMode: TextEdit.WrapAnywhere
                 text: win.browser && (win.kind === "text" || win.kind === "json") ? win.browser.contentText : ""
                 color: Theme.ink; selectionColor: Theme.accent
-                font.pixelSize: win.adaptive ? 13 : 12; font.family: Theme.monoFamily
+                font.pixelSize: win.adaptive ? 13 : 13; font.family: Theme.monoFamily
                 onTextChanged: textFlick.contentY = 0
             }
         }
@@ -337,7 +337,7 @@ Item {
                     : win.kind === "empty" && win.browser && win.browser.url.length === 0
                         ? "Saisissez une adresse, ou des mots à chercher avec " + win.engineName + ". curl, exécuté sur le serveur, récupère la page ; ici elle est affichée sans JavaScript ni ressources externes."
                     : win.browser ? win.browser.status : ""
-                color: Theme.inkMuted; font.pixelSize: 12; font.family: Theme.fontFamily
+                color: Theme.inkMuted; font.pixelSize: 13; font.family: Theme.fontFamily
             }
             Flow {
                 visible: win.connected && win.kind === "empty" && win.browser !== null && win.browser.url.length === 0
@@ -350,7 +350,7 @@ Item {
                         objectName: "webQuick"
                         height: 30; radius: 15; width: quickLabel.implicitWidth + 28
                         color: quickMouse.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
-                        Text { id: quickLabel; anchors.centerIn: parent; text: parent.modelData.t; color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily }
+                        Text { id: quickLabel; anchors.centerIn: parent; text: parent.modelData.t; color: Theme.ink; font.pixelSize: 13; font.family: Theme.fontFamily }
                         MouseArea { id: quickMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.browser.open(parent.modelData.u) }
                     }
                 }
@@ -368,7 +368,7 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 height: 30; radius: 8; width: retryLabel.implicitWidth + 26
                 color: retryMouse.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
-                Text { id: retryLabel; anchors.centerIn: parent; text: "Réessayer"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
+                Text { id: retryLabel; anchors.centerIn: parent; text: "Réessayer"; color: "white"; font.pixelSize: 13; font.family: Theme.fontFamily }
                 MouseArea { id: retryMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.browser.open(win.browser.info.requested) }
             }
         }
@@ -395,29 +395,29 @@ Item {
                     Text { width: parent.width; wrapMode: Text.Wrap; color: "#FCD34D"; font.pixelSize: 15; font.bold: true; font.family: Theme.fontFamily
                            text: "Adresse interne au serveur" }
                     Text {
-                        width: parent.width; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText; color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily
+                        width: parent.width; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText; color: Theme.ink; font.pixelSize: 13; font.family: Theme.fontFamily
                         text: win.browser && win.browser.pendingConfirm.url ? win.browser.pendingConfirm.url : ""
                     }
                     Text {
                         visible: win.browser && win.browser.pendingConfirm.from !== undefined && win.browser.pendingConfirm.from !== ""
-                        width: parent.width; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText; color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
+                        width: parent.width; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText; color: Theme.inkMuted; font.pixelSize: 12; font.family: Theme.fontFamily
                         text: win.browser && win.browser.pendingConfirm.from ? "Redirection depuis : " + win.browser.pendingConfirm.from : ""
                     }
                     Text {
-                        width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
+                        width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; color: Theme.inkMuted; font.pixelSize: 12; font.family: Theme.fontFamily
                         text: win.browser && win.browser.pendingConfirm.reason ? win.browser.pendingConfirm.reason : ""
                     }
                     Repeater {
                         model: win.browser && win.browser.pendingConfirm.details ? win.browser.pendingConfirm.details : []
                         Text {
                             required property var modelData
-                            width: confirmColumn.width; textFormat: Text.PlainText; font.pixelSize: 11; font.family: Theme.monoFamily
+                            width: confirmColumn.width; textFormat: Text.PlainText; font.pixelSize: 12; font.family: Theme.monoFamily
                             color: modelData.cls === "public" ? Theme.inkMuted : "#FCD34D"
                             text: "• " + modelData.ip + "   " + modelData.label
                         }
                     }
                     Text {
-                        width: parent.width; wrapMode: Text.Wrap; color: Theme.inkMuted; font.pixelSize: 10; font.family: Theme.fontFamily
+                        width: parent.width; wrapMode: Text.Wrap; color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
                         text: "Aucune requête n'a été envoyée. « Ouvrir une fois » autorise cet hôte et ce port pour cette navigation seulement (redirections comprises) ; les adresses de métadonnées du cloud ne sont jamais ouvertes."
                     }
                     Row {
@@ -448,7 +448,7 @@ Item {
             Column {
                 id: infoColumn
                 width: parent.width; spacing: 6
-                Text { text: "RÉPONSE DU SERVEUR"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2; font.family: Theme.fontFamily }
+                Text { text: "RÉPONSE DU SERVEUR"; color: "#8FA2C2"; font.pixelSize: 11; font.letterSpacing: 1.2; font.family: Theme.fontFamily }
                 Repeater {
                     model: win.browser && win.browser.info.status !== undefined ? [
                         { k: "État", v: "HTTP " + win.browser.info.status + " " + win.browser.info.statusText },
@@ -463,11 +463,11 @@ Item {
                     Column {
                         required property var modelData
                         width: infoColumn.width
-                        Text { text: modelData.k; color: Theme.inkMuted; font.pixelSize: 10; font.family: Theme.fontFamily }
-                        Text { width: parent.width; text: modelData.v; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText; color: Theme.ink; font.pixelSize: 11; font.family: Theme.fontFamily }
+                        Text { text: modelData.k; color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily }
+                        Text { width: parent.width; text: modelData.v; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText; color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily }
                     }
                 }
-                Text { visible: win.browser !== null && win.browser.info.timings !== undefined; topPadding: 6; text: "DURÉES (depuis le serveur)"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2; font.family: Theme.fontFamily }
+                Text { visible: win.browser !== null && win.browser.info.timings !== undefined; topPadding: 6; text: "DURÉES (depuis le serveur)"; color: "#8FA2C2"; font.pixelSize: 11; font.letterSpacing: 1.2; font.family: Theme.fontFamily }
                 Repeater {
                     model: win.browser && win.browser.info.timings !== undefined ? [
                         { k: "DNS", v: win.fmtSeconds(win.browser.info.timings.dns) },
@@ -479,23 +479,23 @@ Item {
                     Row {
                         required property var modelData
                         spacing: 8
-                        Text { width: 100; text: modelData.k; color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily }
-                        Text { text: modelData.v; color: Theme.ink; font.pixelSize: 11; font.family: Theme.fontFamily }
+                        Text { width: 100; text: modelData.k; color: Theme.inkMuted; font.pixelSize: 12; font.family: Theme.fontFamily }
+                        Text { text: modelData.v; color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily }
                     }
                 }
-                Text { visible: win.browser !== null && win.browser.info.redirectChain !== undefined && win.browser.info.redirectChain.length > 0; topPadding: 6; text: "REDIRECTIONS"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2; font.family: Theme.fontFamily }
+                Text { visible: win.browser !== null && win.browser.info.redirectChain !== undefined && win.browser.info.redirectChain.length > 0; topPadding: 6; text: "REDIRECTIONS"; color: "#8FA2C2"; font.pixelSize: 11; font.letterSpacing: 1.2; font.family: Theme.fontFamily }
                 Repeater {
                     model: win.browser && win.browser.info.redirectChain !== undefined ? win.browser.info.redirectChain : []
-                    Text { required property var modelData; width: infoColumn.width; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText; text: modelData.status + " → " + modelData.location; color: Theme.ink; font.pixelSize: 11; font.family: Theme.fontFamily }
+                    Text { required property var modelData; width: infoColumn.width; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText; text: modelData.status + " → " + modelData.location; color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily }
                 }
-                Text { visible: win.browser !== null && win.browser.headers.length > 0; topPadding: 6; text: "EN-TÊTES"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2; font.family: Theme.fontFamily }
+                Text { visible: win.browser !== null && win.browser.headers.length > 0; topPadding: 6; text: "EN-TÊTES"; color: "#8FA2C2"; font.pixelSize: 11; font.letterSpacing: 1.2; font.family: Theme.fontFamily }
                 Repeater {
                     model: win.browser ? win.browser.headers : []
                     Text {
                         required property var modelData
                         width: infoColumn.width; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText
                         text: modelData.name + ": " + modelData.value
-                        color: Theme.inkMuted; font.pixelSize: 10; font.family: Theme.monoFamily
+                        color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.monoFamily
                     }
                 }
             }
@@ -511,7 +511,7 @@ Item {
             textFormat: Text.PlainText
             text: !win.connected ? "Aucun serveur connecté" : (win.browser ? win.browser.status : "")
             color: win.browser && win.browser.state === "error" ? "#FCA5A5" : Theme.inkMuted
-            font.pixelSize: 11; font.family: Theme.fontFamily
+            font.pixelSize: 12; font.family: Theme.fontFamily
         }
     }
 

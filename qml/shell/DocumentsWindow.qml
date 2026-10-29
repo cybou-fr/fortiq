@@ -414,14 +414,14 @@ Item {
         }
         Column {
             x:16;y:54;width:parent.width-32;spacing:16
-            Text { text:win.documents && win.documents.pdfMode?"DOCUMENT PDF":"DOCUMENT MARKDOWN";color:Theme.inkMuted;font.pixelSize:10 }
-            Text { width:parent.width;textFormat:Text.PlainText;wrapMode:Text.WrapAnywhere;text:win.documents && win.documents.hasDocument?(win.documents.path||"Nouveau document"):"Aucun document ouvert";color:Theme.ink;font.pixelSize:12 }
-            Text { width:parent.width;textFormat:Text.PlainText;wrapMode:Text.WrapAnywhere;text:win.documents?win.documents.sourceLabel:"";color:Theme.inkMuted;font.pixelSize:11 }
+            Text { text:win.documents && win.documents.pdfMode?"DOCUMENT PDF":"DOCUMENT MARKDOWN";color:Theme.inkMuted;font.pixelSize:11 }
+            Text { width:parent.width;textFormat:Text.PlainText;wrapMode:Text.WrapAnywhere;text:win.documents && win.documents.hasDocument?(win.documents.path||"Nouveau document"):"Aucun document ouvert";color:Theme.ink;font.pixelSize:13 }
+            Text { width:parent.width;textFormat:Text.PlainText;wrapMode:Text.WrapAnywhere;text:win.documents?win.documents.sourceLabel:"";color:Theme.inkMuted;font.pixelSize:12 }
             Text {
                 visible:win.tabRoot && win.tabRoot.hasDirtyTabs()
                 width:parent.width;wrapMode:Text.WordWrap
                 text:"BROUILLONS EN MÉMOIRE"
-                color:Theme.ink;font.pixelSize:10
+                color:Theme.ink;font.pixelSize:11
             }
             Repeater {
                 model:win.tabRoot ? win.tabRoot.dirtyTabSessions() : []
@@ -430,7 +430,7 @@ Item {
                     width:176;height:36
                     text:(modelData.path ? modelData.path.split("/").pop() : "Sans titre")+
                          (modelData.sourceAvailable ? " ●" : " ⚠")
-                    font.pixelSize:11
+                    font.pixelSize:12
                     ToolTip.visible:hovered
                     ToolTip.text:modelData.sourceAvailable ? "Brouillon non enregistré" :
                         "Session SSH ancienne : copier votre texte ou enregistrer dans un nouveau document"
@@ -444,7 +444,7 @@ Item {
                 text:"Récupérer comme nouveau…"
                 onClicked:win.recoverDraftAsNew(win.documents)
             }
-            Text { text:"DOCUMENTS RÉCENTS";color:Theme.inkMuted;font.pixelSize:10 }
+            Text { text:"DOCUMENTS RÉCENTS";color:Theme.inkMuted;font.pixelSize:11 }
             ListView {
                 objectName:"documentsRecentFiles"
                 width:parent.width
@@ -456,7 +456,7 @@ Item {
                     required property string modelData
                     width:ListView.view.width;height:32
                     text:modelData.split("/").pop()
-                    font.pixelSize:11
+                    font.pixelSize:12
                     highlighted:win.documents && win.documents.path===modelData
                     ToolTip.visible:hovered
                     ToolTip.text:modelData
@@ -470,7 +470,7 @@ Item {
                 onClicked:{win.navigationOpen=false;win.requestFiles(win.documents.path,win.documents.sourceServerId)}
             }
             Button { width:parent.width;text:win.outlineOpen?"Plan du document ▾":"Plan du document ▸";onClicked:win.outlineOpen=!win.outlineOpen }
-            Text { visible:win.outlineOpen && win.headings.length===0;width:parent.width;text:"Aucun titre Markdown";color:Theme.inkMuted;font.pixelSize:11 }
+            Text { visible:win.outlineOpen && win.headings.length===0;width:parent.width;text:"Aucun titre Markdown";color:Theme.inkMuted;font.pixelSize:12 }
             ListView {
                 objectName:"documentsOutline"
                 visible:win.outlineOpen && win.headings.length>0
@@ -482,12 +482,12 @@ Item {
                     height:30
                     leftPadding:Math.min(36,(modelData.level-1)*9)+4
                     text:modelData.title
-                    font.pixelSize:11
+                    font.pixelSize:12
                     onClicked:win.jumpToHeading(modelData.offset)
                     ToolTip.visible:hovered;ToolTip.text:"Ligne "+modelData.line
                 }
             }
-            Text { width:parent.width;wrapMode:Text.WordWrap;text:"Markdown UTF-8 (256 Kio maximum) et PDF en lecture seule via Poppler sur le serveur. Aucune ressource externe chargée.";color:Theme.inkMuted;font.pixelSize:11 }
+            Text { width:parent.width;wrapMode:Text.WordWrap;text:"Markdown UTF-8 (256 Kio maximum) et PDF en lecture seule via Poppler sur le serveur. Aucune ressource externe chargée.";color:Theme.inkMuted;font.pixelSize:12 }
         }
     }
     Item {
@@ -530,7 +530,7 @@ Item {
         visible:win.documents!==null && win.documents.recovery!==undefined && win.documents.recovery.available===true && !win.documents.dirty
         x:win.contentLeft+12;y:pathInput.y+pathInput.height+6;width:win.width-x-12;height:visible?(win.adaptive?84:62):0;radius:10;color:"#33FCD34D";border.color:"#66FCD34D"
         Text {
-            x:10;y:6;width:parent.width-20;wrapMode:Text.WordWrap;textFormat:Text.PlainText;color:Theme.ink;font.pixelSize:12
+            x:10;y:6;width:parent.width-20;wrapMode:Text.WordWrap;textFormat:Text.PlainText;color:Theme.ink;font.pixelSize:13
             text:win.documents && win.documents.recovery!==undefined && win.documents.recovery.available===true
                  ?"Brouillon non enregistré du "+win.documents.recovery.savedAt+" trouvé sur le serveur ("+win.documents.recovery.changedLines+" ligne(s) différentes)"+(win.documents.recovery.baseMatches?".":" — le fichier a changé depuis.")
                  :""
@@ -562,7 +562,7 @@ Item {
             Button { objectName:"documentsFindNext";width:win.adaptive?44:30;height:parent.height;text:"↓";onClicked:win.goTo(true) }
             Button { id:caseButton;objectName:"documentsFindCase";width:win.adaptive?44:34;height:parent.height;text:"Aa";checkable:true;onToggled:win.refreshMatches() }
             Button { id:wordButton;objectName:"documentsFindWord";width:win.adaptive?54:40;height:parent.height;text:"Mot";checkable:true;onToggled:win.refreshMatches() }
-            Text { id:findCount;objectName:"documentsFindCount";height:parent.height;verticalAlignment:Text.AlignVCenter;color:Theme.inkMuted;font.pixelSize:11;text:"" }
+            Text { id:findCount;objectName:"documentsFindCount";height:parent.height;verticalAlignment:Text.AlignVCenter;color:Theme.inkMuted;font.pixelSize:12;text:"" }
         }
         Row {
             visible:win.replaceMode
@@ -596,7 +596,7 @@ Item {
                     Text {
                         x:9;anchors.verticalCenter:parent.verticalCenter
                         width:parent.width-42;elide:Text.ElideRight
-                        color:Theme.ink;font.pixelSize:11
+                        color:Theme.ink;font.pixelSize:12
                         text:"Sans titre "+parent.modelData.id+(parent.modelData.session.dirty?" ●":"")
                     }
                     MouseArea { anchors.fill:parent;anchors.rightMargin:35;onClicked:win.activateUntitled(parent.modelData.session) }
@@ -632,7 +632,7 @@ Item {
                         id:tabName;x:8;anchors.verticalCenter:parent.verticalCenter
                         width:parent.width-30;elide:Text.ElideMiddle
                         text:parent.modelData.split("/").pop()+(win.documents && win.documents.path===parent.modelData && win.documents.dirty?" ●":"")
-                        color:Theme.ink;font.pixelSize:11
+                        color:Theme.ink;font.pixelSize:12
                     }
                     MouseArea { anchors.fill:parent;anchors.rightMargin:24;onClicked:win.openRecent(parent.modelData) }
                     Text { anchors.right:parent.right;anchors.rightMargin:7;anchors.verticalCenter:parent.verticalCenter;text:"×";color:Theme.ink;font.pixelSize:15
@@ -647,7 +647,7 @@ Item {
         visible:win.tabNotice.length>0
         x:win.contentLeft+12;y:tabStrip.y+tabStrip.height+2
         width:win.width-x-12;height:visible?26:0
-        color:Theme.inkMuted;font.pixelSize:11;elide:Text.ElideRight
+        color:Theme.inkMuted;font.pixelSize:12;elide:Text.ElideRight
         text:win.tabNotice
     }
     Flickable {
@@ -762,11 +762,11 @@ Item {
         visible:win.documents!==null && win.documents.conflictActive
         x:win.contentLeft+12;y:pathInput.y+pathInput.height+8;width:win.width-x-12;height:Math.max(120,win.height-y-12);radius:12;color:"#F2121C30";border.color:"#40FFFFFF"
         Text { x:14;y:10;width:parent.width-28;wrapMode:Text.WordWrap;textFormat:Text.PlainText;color:Theme.ink;font.pixelSize:14;text:"Conflit : le fichier a changé sur le serveur" }
-        Text { x:14;y:36;width:parent.width-28;wrapMode:Text.WordWrap;textFormat:Text.PlainText;color:Theme.inkMuted;font.pixelSize:12;text:win.documents?win.documents.conflictSummary:"" }
+        Text { x:14;y:36;width:parent.width-28;wrapMode:Text.WordWrap;textFormat:Text.PlainText;color:Theme.inkMuted;font.pixelSize:13;text:win.documents?win.documents.conflictSummary:"" }
         Flickable {
             x:14;y:72;width:parent.width-28;height:parent.height-72-(win.adaptive?104:56);clip:true;contentWidth:width;contentHeight:diffText.implicitHeight+8;boundsBehavior:Flickable.StopAtBounds
             ScrollBar.vertical:ScrollBar { policy:ScrollBar.AsNeeded }
-            Text { id:diffText;objectName:"documentsConflictDiff";width:parent.width;wrapMode:Text.WrapAnywhere;textFormat:Text.PlainText;color:Theme.ink;font.family:"monospace";font.pixelSize:12;text:win.documents?win.documents.conflictDiff:"" }
+            Text { id:diffText;objectName:"documentsConflictDiff";width:parent.width;wrapMode:Text.WrapAnywhere;textFormat:Text.PlainText;color:Theme.ink;font.family:"monospace";font.pixelSize:13;text:win.documents?win.documents.conflictDiff:"" }
         }
         Flow {
             x:14;anchors.bottom:parent.bottom;anchors.bottomMargin:10;width:parent.width-28;spacing:8
@@ -799,7 +799,7 @@ Item {
     }
     Text {
         objectName:"documentsStats";visible:win.documents!==null && win.documents.hasDocument
-        anchors.right:parent.right;anchors.rightMargin:12;anchors.bottom:parent.bottom;anchors.bottomMargin:10;color:Theme.inkMuted;font.pixelSize:10
+        anchors.right:parent.right;anchors.rightMargin:12;anchors.bottom:parent.bottom;anchors.bottomMargin:10;color:Theme.inkMuted;font.pixelSize:11
         text:win.stats.words+" mots · "+win.stats.characters+" car. · "+win.stats.lines+" lignes"
     }
     Column {
@@ -807,11 +807,11 @@ Item {
         x:win.contentLeft+16;y:160;width:win.width-x-16;spacing:14
         Text { width:parent.width;horizontalAlignment:Text.AlignHCenter;wrapMode:Text.WordWrap;text:"MDok · documents Markdown du serveur";color:Theme.ink;font.pixelSize:16 }
         Button { objectName:"documentsConnectButton";visible:!win.connected;anchors.horizontalCenter:parent.horizontalCenter;text:"Choisir un serveur…";onClicked:win.requestServers() }
-        Text { width:parent.width;horizontalAlignment:Text.AlignHCenter;wrapMode:Text.WordWrap;text:"Ouvrez un Markdown ou PDF du serveur, ou saisissez son chemin ci-dessus.";color:Theme.inkMuted;font.pixelSize:12 }
+        Text { width:parent.width;horizontalAlignment:Text.AlignHCenter;wrapMode:Text.WordWrap;text:"Ouvrez un Markdown ou PDF du serveur, ou saisissez son chemin ci-dessus.";color:Theme.inkMuted;font.pixelSize:13 }
     }
-    Text { x:win.contentLeft+12;anchors.bottom:parent.bottom;anchors.bottomMargin:34;width:win.width-x-12;height:42;wrapMode:Text.WordWrap;maximumLineCount:3;elide:Text.ElideRight;textFormat:Text.PlainText;color:Theme.inkMuted;font.pixelSize:11;text:win.documents?(win.documents.hasDocument && !win.documents.sourceAvailable?"Source indisponible · texte conservé en mémoire. ":"")+win.documents.status+(win.documents.draftStatus!==""?"  ·  "+win.documents.draftStatus:""):"Choisissez un serveur Linux." }
+    Text { x:win.contentLeft+12;anchors.bottom:parent.bottom;anchors.bottomMargin:34;width:win.width-x-12;height:42;wrapMode:Text.WordWrap;maximumLineCount:3;elide:Text.ElideRight;textFormat:Text.PlainText;color:Theme.inkMuted;font.pixelSize:12;text:win.documents?(win.documents.hasDocument && !win.documents.sourceAvailable?"Source indisponible · texte conservé en mémoire. ":"")+win.documents.status+(win.documents.draftStatus!==""?"  ·  "+win.documents.draftStatus:""):"Choisissez un serveur Linux." }
     ToolButtonGlass { x:win.contentLeft+12;anchors.bottom:parent.bottom;anchors.bottomMargin:4;glyph:"⧉";tip:"Copier le brouillon dans le presse-papiers";enabledState:win.documents!==null && win.documents.hasDocument;onClicked:{const start=editor.selectionStart,end=editor.selectionEnd;editor.selectAll();editor.copy();editor.select(start,end)} }
-    Text { x:win.contentLeft+50;anchors.bottom:parent.bottom;anchors.bottomMargin:10;visible:preview.limited;text:"Aperçu limité aux 64 000 premiers caractères";color:Theme.inkMuted;font.pixelSize:10 }
+    Text { x:win.contentLeft+50;anchors.bottom:parent.bottom;anchors.bottomMargin:10;visible:preview.limited;text:"Aperçu limité aux 64 000 premiers caractères";color:Theme.inkMuted;font.pixelSize:11 }
     Keys.onPressed:event=>{
         const ctrl=event.modifiers&Qt.ControlModifier
         if(ctrl && event.key===Qt.Key_S && win.documents && !win.documents.pdfMode){win.saveDocument();event.accepted=true}

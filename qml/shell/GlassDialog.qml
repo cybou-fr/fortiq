@@ -65,7 +65,7 @@ Rectangle {
             width: parent.width
             spacing: 10
             Text { width: parent.width; text: dialog.title; color: Theme.ink; font.pixelSize: 15; font.weight: Font.DemiBold; wrapMode: Text.WordWrap; font.family: Theme.fontFamily }
-            Text { visible: text.length > 0; width: parent.width; text: dialog.message; color: Theme.inkMuted; font.pixelSize: 12; wrapMode: Text.WordWrap; font.family: Theme.fontFamily }
+            Text { visible: text.length > 0; width: parent.width; text: dialog.message; color: Theme.inkMuted; font.pixelSize: 13; wrapMode: Text.WordWrap; font.family: Theme.fontFamily }
             Rectangle {
                 visible: dialog.withField
                 width: parent.width; height: dialog.touchMode ? 44 : 32; radius: 8
@@ -84,7 +84,7 @@ Rectangle {
                     onAccepted: dialog.confirm()
                 }
             }
-            Text { visible: dialog.error.length > 0; width: parent.width; text: dialog.error; color: "#FCA5A5"; font.pixelSize: 11; wrapMode: Text.WordWrap; font.family: Theme.fontFamily }
+            Text { visible: dialog.error.length > 0; width: parent.width; text: dialog.error; color: "#FCA5A5"; font.pixelSize: 12; wrapMode: Text.WordWrap; font.family: Theme.fontFamily }
             Flow {
                 width: parent.width
                 spacing: 8
@@ -111,7 +111,7 @@ Rectangle {
                         Keys.onSpacePressed: event => { activate(); event.accepted = true }
                         Keys.onReturnPressed: event => { activate(); event.accepted = true }
                         Keys.onEnterPressed: event => { activate(); event.accepted = true }
-                        Text { id: label; anchors.centerIn: parent; text: modelData.t; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
+                        Text { id: label; anchors.centerIn: parent; text: modelData.t; color: "white"; font.pixelSize: 13; font.family: Theme.fontFamily }
                         MouseArea {
                             id: btn
                             anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor

@@ -170,7 +170,7 @@ Item {
                 }
             }
         }
-        Text { x: 18; y: 48; text: "COURRIER"; color: Theme.inkMuted; font.pixelSize: 10; font.letterSpacing: 1 }
+        Text { x: 18; y: 48; text: "COURRIER"; color: Theme.inkMuted; font.pixelSize: 11; font.letterSpacing: 1 }
         Column {
             x: 8; y: 72; width: parent.width - 16; spacing: 4
             Repeater {
@@ -180,11 +180,11 @@ Item {
                     objectName: "mailFolder_" + modelData.key
                     width: parent.width; height: win.adaptive ? 44 : 32; radius: 8
                     color: win.mailer && win.mailer.folderKey === modelData.key ? "#D02D73DA" : (folderMouse.containsMouse ? "#26FFFFFF" : "transparent")
-                    Text { x: 12; width: parent.width - 52; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight; text: modelData.title; color: Theme.ink; font.pixelSize: 12 }
+                    Text { x: 12; width: parent.width - 52; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight; text: modelData.title; color: Theme.ink; font.pixelSize: 13 }
                     Text {
                         visible: modelData.count >= 0 && modelData.key !== "all" && modelData.key !== "deleted"
                         anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter
-                        text: modelData.count; color: modelData.key === "unread" && modelData.count > 0 ? "#8EC1FF" : Theme.inkMuted; font.pixelSize: 11; font.bold: modelData.key === "unread"
+                        text: modelData.count; color: modelData.key === "unread" && modelData.count > 0 ? "#8EC1FF" : Theme.inkMuted; font.pixelSize: 12; font.bold: modelData.key === "unread"
                     }
                     MouseArea { id: folderMouse; anchors.fill: parent; hoverEnabled: true; onClicked: { win.mailer.openFolder(modelData.key); win.navigationOpen = false } }
                 }
@@ -193,7 +193,7 @@ Item {
         Text {
             x: 18; y: parent.height - 96; width: parent.width - 36; wrapMode: Text.WordWrap
             text: "Lecture par notmuch, envoi par msmtp sur le serveur. Les fichiers joints restent sur ce serveur."
-            color: Theme.inkMuted; font.pixelSize: 10
+            color: Theme.inkMuted; font.pixelSize: 11
         }
     }
 
@@ -240,14 +240,14 @@ Item {
                 id: searchInput
                 objectName: "mailSearch"
                 anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14; verticalAlignment: TextInput.AlignVCenter
-                color: Theme.ink; font.pixelSize: 12; clip: true; selectByMouse: true
+                color: Theme.ink; font.pixelSize: 13; clip: true; selectByMouse: true
                 onAccepted: win.mailer.search(text)
-                Text { visible: parent.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Rechercher (de:, sujet:, tag:…) puis Entrée"; color: "#7F93B5"; font.pixelSize: 12 }
+                Text { visible: parent.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Rechercher (de:, sujet:, tag:…) puis Entrée"; color: "#7F93B5"; font.pixelSize: 13 }
             }
         }
         Text {
             id: listStatus
-            y: searchBox.height + 6; width: parent.width; elide: Text.ElideRight; textFormat: Text.PlainText; font.pixelSize: 11
+            y: searchBox.height + 6; width: parent.width; elide: Text.ElideRight; textFormat: Text.PlainText; font.pixelSize: 12
             color: win.mailer && win.mailer.state === "error" ? "#FCA5A5" : Theme.inkMuted
             text: !win.mailer ? "" : win.mailer.state === "error" ? win.mailer.status : (win.mailer.busy ? "Chargement…" : win.mailer.threads.length + " conversation(s)" + (win.mailer.hasMore ? " (liste partielle)" : ""))
         }
@@ -265,20 +265,20 @@ Item {
                 Rectangle { x: 6; y: 12; width: 8; height: 8; radius: 4; color: "#4D9CFF"; visible: modelData.unread }
                 Text {
                     x: 22; y: 5; width: parent.width - 100; elide: Text.ElideRight; textFormat: Text.PlainText
-                    text: modelData.authors; color: Theme.ink; font.pixelSize: 12; font.bold: modelData.unread
+                    text: modelData.authors; color: Theme.ink; font.pixelSize: 13; font.bold: modelData.unread
                 }
                 Text {
                     anchors.right: parent.right; anchors.rightMargin: 8; y: 6; width: 80; horizontalAlignment: Text.AlignRight; textFormat: Text.PlainText
-                    text: modelData.when; color: Theme.inkMuted; font.pixelSize: 10
+                    text: modelData.when; color: Theme.inkMuted; font.pixelSize: 11
                 }
                 Text {
                     x: 22; y: 23; width: parent.width - 60; elide: Text.ElideRight; textFormat: Text.PlainText
-                    text: modelData.subject + (modelData.total > 1 ? "  (" + modelData.total + ")" : ""); color: Theme.ink; font.pixelSize: 12; font.bold: modelData.unread
+                    text: modelData.subject + (modelData.total > 1 ? "  (" + modelData.total + ")" : ""); color: Theme.ink; font.pixelSize: 13; font.bold: modelData.unread
                 }
                 Row {
                     x: 22; y: parent.height - 18; spacing: 8
-                    Text { visible: modelData.flagged; text: "★ suivi"; color: "#FCD34D"; font.pixelSize: 10 }
-                    Text { visible: modelData.attachment; text: "pièce jointe"; color: Theme.inkMuted; font.pixelSize: 10 }
+                    Text { visible: modelData.flagged; text: "★ suivi"; color: "#FCD34D"; font.pixelSize: 11 }
+                    Text { visible: modelData.attachment; text: "pièce jointe"; color: Theme.inkMuted; font.pixelSize: 11 }
                 }
                 MouseArea { id: rowMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.mailer.openThread(modelData.id) }
             }
@@ -304,7 +304,7 @@ Item {
                 objectName: "mailReply"
                 height: win.adaptive ? 44 : 28; radius: 8; width: replyLabel.implicitWidth + 18
                 color: replyMouse.containsMouse ? "#33FFFFFF" : "#1AFFFFFF"
-                Text { id: replyLabel; anchors.centerIn: parent; text: "Répondre"; color: Theme.ink; font.pixelSize: 11 }
+                Text { id: replyLabel; anchors.centerIn: parent; text: "Répondre"; color: Theme.ink; font.pixelSize: 12 }
                 MouseArea { id: replyMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.replyToLast() }
             }
             Repeater {
@@ -320,7 +320,7 @@ Item {
                     readonly property bool has: win.tagOf(win.currentThread, modelData.tag)
                     height: win.adaptive ? 44 : 28; radius: 8; width: actionLabel.implicitWidth + 18
                     color: actionMouse.containsMouse ? "#33FFFFFF" : "#1AFFFFFF"
-                    Text { id: actionLabel; anchors.centerIn: parent; text: parent.has ? modelData.on : modelData.off; color: Theme.ink; font.pixelSize: 11 }
+                    Text { id: actionLabel; anchors.centerIn: parent; text: parent.has ? modelData.on : modelData.off; color: Theme.ink; font.pixelSize: 12 }
                     MouseArea { id: actionMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.mailer.setTag(win.mailer.selectedThreadId, modelData.tag, !parent.has) }
                 }
             }
@@ -328,12 +328,12 @@ Item {
         Text {
             id: attachStatusText
             objectName: "mailAttachStatus"
-            y: actions.height + 4; width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; font.pixelSize: 11; color: "#8EC1FF"
+            y: actions.height + 4; width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; font.pixelSize: 12; color: "#8EC1FF"
             visible: win.mailer !== null && win.mailer.attachStatus !== ""; text: win.mailer ? win.mailer.attachStatus : ""
         }
         Text {
             id: threadStatus
-            y: actions.height + 6 + (attachStatusText.visible ? attachStatusText.implicitHeight + 4 : 0); width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText; font.pixelSize: 11; color: Theme.inkMuted
+            y: actions.height + 6 + (attachStatusText.visible ? attachStatusText.implicitHeight + 4 : 0); width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText; font.pixelSize: 12; color: Theme.inkMuted
             visible: win.mailer && win.mailer.threadStatus !== ""; text: win.mailer ? win.mailer.threadStatus : ""
         }
         ListView {
@@ -354,11 +354,11 @@ Item {
                     readonly property string messageId: modelData.id
                     x: 12; y: 10; width: parent.width - 24; spacing: 4
                     Text { width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; text: modelData.subject; color: Theme.ink; font.pixelSize: 14; font.bold: true }
-                    Text { width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; text: "De : " + modelData.from; color: Theme.ink; font.pixelSize: 11 }
-                    Text { width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; text: "À : " + modelData.to + (modelData.cc !== "" ? "   Cc : " + modelData.cc : ""); color: Theme.inkMuted; font.pixelSize: 10 }
-                    Text { width: parent.width; textFormat: Text.PlainText; text: modelData.date; color: Theme.inkMuted; font.pixelSize: 10 }
+                    Text { width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; text: "De : " + modelData.from; color: Theme.ink; font.pixelSize: 12 }
+                    Text { width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; text: "À : " + modelData.to + (modelData.cc !== "" ? "   Cc : " + modelData.cc : ""); color: Theme.inkMuted; font.pixelSize: 11 }
+                    Text { width: parent.width; textFormat: Text.PlainText; text: modelData.date; color: Theme.inkMuted; font.pixelSize: 11 }
                     Text {
-                        visible: modelData.attachments.length > 0; width: parent.width; textFormat: Text.PlainText; font.pixelSize: 11; color: "#FCD34D"
+                        visible: modelData.attachments.length > 0; width: parent.width; textFormat: Text.PlainText; font.pixelSize: 12; color: "#FCD34D"
                         text: "Pièces jointes (elles restent sur le serveur) :" + (modelData.attachmentsOmitted > 0 ? "  —  " + modelData.attachmentsOmitted + " autres non affichées" : "")
                     }
                     Repeater {
@@ -369,7 +369,7 @@ Item {
                             width: card.width; height: win.adaptive ? 48 : 30
                             Text {
                                 x: 0; width: parent.width - 232; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideMiddle; textFormat: Text.PlainText
-                                text: modelData.name + (modelData.size > 0 ? "  (≈ " + win.sizeText(modelData.size) + ")" : ""); color: Theme.ink; font.pixelSize: 11
+                                text: modelData.name + (modelData.size > 0 ? "  (≈ " + win.sizeText(modelData.size) + ")" : ""); color: Theme.ink; font.pixelSize: 12
                             }
                             Rectangle {
                                 objectName: "mailAttachServer_" + index
@@ -377,7 +377,7 @@ Item {
                                 anchors.right: attachPc.left; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter
                                 height: win.adaptive ? 44 : 26; radius: 8; width: serverLabel.implicitWidth + 16
                                 color: serverMouse.containsMouse ? "#33FFFFFF" : "#1AFFFFFF"
-                                Text { id: serverLabel; anchors.centerIn: parent; text: "Sur le serveur"; color: Theme.ink; font.pixelSize: 11 }
+                                Text { id: serverLabel; anchors.centerIn: parent; text: "Sur le serveur"; color: Theme.ink; font.pixelSize: 12 }
                                 MouseArea { id: serverMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.mailer.saveAttachmentToServer(card.messageId, modelData.part, modelData.name) }
                             }
                             Rectangle {
@@ -387,7 +387,7 @@ Item {
                                 anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                 height: win.adaptive ? 44 : 26; radius: 8; width: pcLabel.implicitWidth + 16
                                 color: pcMouse.containsMouse ? "#33FFFFFF" : "#1AFFFFFF"
-                                Text { id: pcLabel; anchors.centerIn: parent; text: "Sur ce poste…"; color: Theme.ink; font.pixelSize: 11 }
+                                Text { id: pcLabel; anchors.centerIn: parent; text: "Sur ce poste…"; color: Theme.ink; font.pixelSize: 12 }
                                 MouseArea { id: pcMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.askDownload(card.messageId, modelData.part, modelData.name) }
                             }
                         }
@@ -395,23 +395,23 @@ Item {
                     Rectangle { width: parent.width; height: 1; color: "#25DCEBFF" }
                     Text {
                         visible: modelData.hasText && !(win.showHtml && modelData.hasHtml)
-                        width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; text: modelData.text; color: Theme.ink; font.pixelSize: 12
+                        width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; text: modelData.text; color: Theme.ink; font.pixelSize: 13
                     }
                     Text {
                         visible: !modelData.hasText && modelData.hasHtml || (win.showHtml && modelData.hasHtml)
-                        width: parent.width; wrapMode: Text.Wrap; textFormat: Text.RichText; text: modelData.html; color: Theme.ink; font.pixelSize: 12; linkColor: "#8EC1FF"
+                        width: parent.width; wrapMode: Text.Wrap; textFormat: Text.RichText; text: modelData.html; color: Theme.ink; font.pixelSize: 13; linkColor: "#8EC1FF"
                         onLinkHovered: (link) => win.hoveredLink = link
                     }
                     Text {
                         visible: modelData.hasHtml
-                        width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; font.pixelSize: 10; color: Theme.inkMuted
+                        width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; font.pixelSize: 11; color: Theme.inkMuted
                         text: "HTML réduit en texte sûr : " + modelData.htmlScripts + " script(s) ignoré(s), " + modelData.htmlImages + " image(s) remplacée(s) par leur texte, aucun contenu distant chargé."
                     }
                     Rectangle {
                         visible: modelData.hasText && modelData.hasHtml
                         objectName: "mailToggleHtml"
                         height: win.adaptive ? 44 : 26; radius: 8; width: toggleLabel.implicitWidth + 18; color: toggleMouse.containsMouse ? "#33FFFFFF" : "#1AFFFFFF"
-                        Text { id: toggleLabel; anchors.centerIn: parent; text: win.showHtml ? "Afficher le texte brut" : "Afficher la version HTML"; color: Theme.ink; font.pixelSize: 11 }
+                        Text { id: toggleLabel; anchors.centerIn: parent; text: win.showHtml ? "Afficher le texte brut" : "Afficher la version HTML"; color: Theme.ink; font.pixelSize: 12 }
                         MouseArea { id: toggleMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.showHtml = !win.showHtml }
                     }
                 }
@@ -419,7 +419,7 @@ Item {
         }
         Text {
             visible: win.hoveredLink !== ""; anchors.bottom: parent.bottom; width: parent.width; elide: Text.ElideMiddle; textFormat: Text.PlainText
-            text: "Lien (non ouvert) : " + win.hoveredLink; color: "#8EC1FF"; font.pixelSize: 10
+            text: "Lien (non ouvert) : " + win.hoveredLink; color: "#8EC1FF"; font.pixelSize: 11
         }
     }
     Text {
@@ -459,7 +459,7 @@ Item {
         width: Math.min(parent.width - 24, 560); height: bannerText.implicitHeight + 24; radius: 10
         color: "#F0121C30"; border.width: 1
         border.color: win.mailer && (win.mailer.sendState === "sent") ? "#804ADE80" : "#80FCA5A5"
-        Text { id: bannerText; x: 12; y: 12; width: parent.width - 90; wrapMode: Text.Wrap; textFormat: Text.PlainText; text: win.mailer ? win.mailer.sendStatus : ""; color: Theme.ink; font.pixelSize: 12 }
+        Text { id: bannerText; x: 12; y: 12; width: parent.width - 90; wrapMode: Text.Wrap; textFormat: Text.PlainText; text: win.mailer ? win.mailer.sendStatus : ""; color: Theme.ink; font.pixelSize: 13 }
         Button { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: "OK"; onClicked: win.mailer.resetSend() }
     }
 
@@ -480,7 +480,7 @@ Item {
                 width: parent.width; spacing: 8
                 Text { text: win.composeReplyTo !== "" ? "Répondre" : "Nouveau message"; color: Theme.ink; font.pixelSize: 16 }
                 Text {
-                    visible: !win.mailer || win.mailer.accounts.length === 0; width: parent.width; wrapMode: Text.Wrap; color: "#FCD34D"; font.pixelSize: 11
+                    visible: !win.mailer || win.mailer.accounts.length === 0; width: parent.width; wrapMode: Text.Wrap; color: "#FCD34D"; font.pixelSize: 12
                     text: "Aucun compte d'envoi trouvé sur ce serveur (~/.msmtprc). Ouvrez « Comptes » pour en créer un."
                 }
                 ComboBox {
@@ -500,7 +500,7 @@ Item {
                 }
                 TextField { id: subjectField;readOnly:win.composeSending; objectName: "mailComposeSubject"; width: parent.width; placeholderText: "Objet"; selectByMouse: true }
                 Text {
-                    width:parent.width;wrapMode:Text.Wrap;textFormat:Text.PlainText;color:"#FCD34D";font.pixelSize:11
+                    width:parent.width;wrapMode:Text.Wrap;textFormat:Text.PlainText;color:"#FCD34D";font.pixelSize:12
                     visible:win.composeActive && !win.composeSourceAvailable
                     text:"Brouillon de "+win.composeSourceLabel+" : source déconnectée ou changée. Texte conservé ; envoi désactivé."
                 }
@@ -515,29 +515,29 @@ Item {
                         required property var modelData
                         required property int index
                         width:composeColumn.width;spacing:6
-                        Text { width:parent.width-48;height:32;verticalAlignment:Text.AlignVCenter;elide:Text.ElideMiddle;textFormat:Text.PlainText;color:Theme.ink;font.pixelSize:11;text:parent.modelData.name+" · "+parent.modelData.size+" o" }
+                        Text { width:parent.width-48;height:32;verticalAlignment:Text.AlignVCenter;elide:Text.ElideMiddle;textFormat:Text.PlainText;color:Theme.ink;font.pixelSize:12;text:parent.modelData.name+" · "+parent.modelData.size+" o" }
                         Button { width:40;height:32;text:"×";enabled:win.mailer!==null && !win.mailer.actionBusy;onClicked:win.mailer.removeOutgoingAttachment(parent.index) }
                     }
                 }
                 Text {
-                    objectName:"mailComposeAttachmentStatus";width:parent.width;wrapMode:Text.Wrap;textFormat:Text.PlainText;color:Theme.inkMuted;font.pixelSize:10
+                    objectName:"mailComposeAttachmentStatus";width:parent.width;wrapMode:Text.Wrap;textFormat:Text.PlainText;color:Theme.inkMuted;font.pixelSize:11
                     text:(win.mailer?win.mailer.outgoingStatus:"")+"  ·  10 fichiers / 10 Mio au total. Les fichiers restent sur le serveur."
                 }
                 Rectangle {
                     width: parent.width; height: 200; radius: 8; color: "#30182740"; border.width: 1; border.color: bodyField.activeFocus ? Theme.accent : "#25DCEBFF"
                     ScrollView {
                         anchors.fill: parent; anchors.margins: 4; clip: true
-                        TextArea { id: bodyField;readOnly:win.composeSending; objectName: "mailComposeBody"; color: Theme.ink; font.pixelSize: 12; wrapMode: TextEdit.Wrap; selectByMouse: true; background: null }
+                        TextArea { id: bodyField;readOnly:win.composeSending; objectName: "mailComposeBody"; color: Theme.ink; font.pixelSize: 13; wrapMode: TextEdit.Wrap; selectByMouse: true; background: null }
                     }
                 }
                 Text {
-                    width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; font.pixelSize: 11
+                    width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; font.pixelSize: 12
                     visible: win.composeError !== "" || (win.mailer && (win.mailer.sendState === "sending" || win.mailer.sendState === "failed" || win.mailer.sendState === "unknown"))
                     color: win.composeError !== "" || (win.mailer && win.mailer.sendState !== "sending") ? "#FCA5A5" : Theme.inkMuted
                     text: win.composeError !== "" ? win.composeError : (win.mailer ? win.mailer.sendStatus : "")
                 }
                 Text {
-                    width: parent.width; wrapMode: Text.Wrap; color: Theme.inkMuted; font.pixelSize: 10
+                    width: parent.width; wrapMode: Text.Wrap; color: Theme.inkMuted; font.pixelSize: 11
                     text: "Le message est construit ici puis envoyé par msmtp depuis le serveur Linux ; une copie est enregistrée dans le dossier Sent."
                 }
                 Button {
@@ -587,11 +587,11 @@ Item {
                 width: parent.width - 12; spacing: 8
                 Text { text: "Compte courrier (serveur Linux)"; color: Theme.ink; font.pixelSize: 16 }
                 Text {
-                    width: parent.width; wrapMode: Text.Wrap; color: Theme.inkMuted; font.pixelSize: 11
+                    width: parent.width; wrapMode: Text.Wrap; color: Theme.inkMuted; font.pixelSize: 12
                     text: "Écrit ~/.mbsyncrc (réception IMAP, lecture seule côté serveur de courrier : Sync Pull), ~/.msmtprc (envoi) et, s'il manque, ~/.notmuch-config. Le mot de passe est enregistré dans ces fichiers, en mode 0600. Rien n'est écrit avant que vous ayez vu le contenu exact et donné votre accord."
                 }
                 Text {
-                    visible: win.mailer !== null && win.mailer.setupState.ok === true; width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; color: Theme.inkMuted; font.pixelSize: 10
+                    visible: win.mailer !== null && win.mailer.setupState.ok === true; width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; color: Theme.inkMuted; font.pixelSize: 11
                     text: win.mailer && win.mailer.setupState.ok ? "Serveur : " + (win.mailer.setupState.mbsync || "mbsync absent") + " · " + (win.mailer.setupState.msmtp || "msmtp absent") + " · " + (win.mailer.setupState.notmuch || "notmuch absent") + " · courrier dans " + win.mailer.setupState.mailRoot : ""
                 }
                 TextField { id: wName; objectName: "mailWizName"; width: parent.width; placeholderText: "Nom du compte (ex. perso)"; selectByMouse: true; text: "perso" }
@@ -600,7 +600,7 @@ Item {
                     TextField { id: wDisplay; objectName: "mailWizDisplay"; width: (parent.width - 6) / 2; placeholderText: "Nom affiché (expéditeur)"; selectByMouse: true }
                     TextField { id: wEmail; objectName: "mailWizEmail"; width: (parent.width - 6) / 2; placeholderText: "Adresse e-mail"; selectByMouse: true }
                 }
-                Text { text: "Réception (IMAP)"; color: Theme.ink; font.pixelSize: 12; font.bold: true }
+                Text { text: "Réception (IMAP)"; color: Theme.ink; font.pixelSize: 13; font.bold: true }
                 Row {
                     width: parent.width; spacing: 6
                     TextField { id: wImapHost; objectName: "mailWizImapHost"; width: parent.width - 80 - 140 - 12; placeholderText: "Serveur IMAP"; selectByMouse: true }
@@ -612,7 +612,7 @@ Item {
                     }
                 }
                 TextField { id: wImapUser; objectName: "mailWizImapUser"; width: parent.width; placeholderText: "Utilisateur IMAP"; selectByMouse: true }
-                Text { text: "Envoi (SMTP)"; color: Theme.ink; font.pixelSize: 12; font.bold: true }
+                Text { text: "Envoi (SMTP)"; color: Theme.ink; font.pixelSize: 13; font.bold: true }
                 Row {
                     width: parent.width; spacing: 6
                     TextField { id: wSmtpHost; objectName: "mailWizSmtpHost"; width: parent.width - 80 - 140 - 12; placeholderText: "Serveur SMTP"; selectByMouse: true }
@@ -631,15 +631,15 @@ Item {
                     Column {
                         id: warningColumn
                         x: 10; y: 8; width: parent.width - 20; spacing: 4
-                        Text { objectName: "mailWizWarningText"; width: parent.width; wrapMode: Text.Wrap; color: "#FDE68A"; font.pixelSize: 11; font.family: Theme.fontFamily
+                        Text { objectName: "mailWizWarningText"; width: parent.width; wrapMode: Text.Wrap; color: "#FDE68A"; font.pixelSize: 12; font.family: Theme.fontFamily
                                text: win.mailer ? win.mailer.passwordWarning() : "" }
-                        Text { objectName: "mailWizAdvice"; visible: text !== ""; width: parent.width; wrapMode: Text.Wrap; color: "#FEF3C7"; font.pixelSize: 11; font.family: Theme.fontFamily
+                        Text { objectName: "mailWizAdvice"; visible: text !== ""; width: parent.width; wrapMode: Text.Wrap; color: "#FEF3C7"; font.pixelSize: 12; font.family: Theme.fontFamily
                                text: win.mailer ? win.mailer.passwordAdviceFor(wImapHost.text, wEmail.text) : "" }
                     }
                 }
                 TextField { id: wPassword; objectName: "mailWizPassword"; width: parent.width; echoMode: TextInput.Password; placeholderText: "Mot de passe"; selectByMouse: true }
                 TextField { id: wSmtpPassword; objectName: "mailWizSmtpPassword"; width: parent.width; echoMode: TextInput.Password; placeholderText: "Mot de passe SMTP (vide = identique)"; selectByMouse: true }
-                Text { visible: win.wizardError !== ""; width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; color: "#FCA5A5"; font.pixelSize: 11; text: win.wizardError }
+                Text { visible: win.wizardError !== ""; width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; color: "#FCA5A5"; font.pixelSize: 12; text: win.wizardError }
                 Row {
                     spacing: 8
                     Button { objectName: "mailWizPreview"; text: "Aperçu des fichiers"; enabled: win.mailer !== null && !win.mailer.actionBusy; onClicked: win.wizardPreview() }
@@ -653,7 +653,7 @@ Item {
                     visible: win.mailer !== null && win.mailer.setupFiles.length > 0
                     width: parent.width; spacing: 8
                     Rectangle { width: parent.width; height: 1; color: "#25DCEBFF" }
-                    Text { width: parent.width; wrapMode: Text.Wrap; color: Theme.ink; font.pixelSize: 12; text: "Contenu exact qui sera écrit (mot de passe masqué tant que vous ne le révélez pas) :" }
+                    Text { width: parent.width; wrapMode: Text.Wrap; color: Theme.ink; font.pixelSize: 13; text: "Contenu exact qui sera écrit (mot de passe masqué tant que vous ne le révélez pas) :" }
                     CheckBox {
  palette.windowText: Theme.ink
  id: revealBox; objectName: "mailWizReveal"; text: "Révéler le mot de passe dans l'aperçu" }
@@ -675,7 +675,7 @@ Item {
                                 width: parent.width; height: Math.min(260, fileText.implicitHeight + 16); radius: 8; color: "#30182740"; border.width: 1; border.color: "#25DCEBFF"
                                 Flickable {
                                     anchors.fill: parent; anchors.margins: 8; clip: true; contentWidth: fileText.implicitWidth; contentHeight: fileText.implicitHeight; boundsBehavior: Flickable.StopAtBounds
-                                    Text { id: fileText; objectName: "mailWizText_" + modelData.key; textFormat: Text.PlainText; text: revealBox.checked ? modelData.content : modelData.shown; color: Theme.ink; font.pixelSize: 11; font.family: Theme.monoFamily }
+                                    Text { id: fileText; objectName: "mailWizText_" + modelData.key; textFormat: Text.PlainText; text: revealBox.checked ? modelData.content : modelData.shown; color: Theme.ink; font.pixelSize: 12; font.family: Theme.monoFamily }
                                 }
                             }
                         }
@@ -702,7 +702,7 @@ Item {
                 }
                 Text {
                     objectName: "mailWizStatus"
-                    visible: win.mailer !== null && win.mailer.actionStatus !== ""; width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; color: Theme.ink; font.pixelSize: 11
+                    visible: win.mailer !== null && win.mailer.actionStatus !== ""; width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; color: Theme.ink; font.pixelSize: 12
                     text: win.mailer ? win.mailer.actionStatus : ""
                 }
                 Rectangle {
@@ -710,7 +710,7 @@ Item {
                     width: parent.width; height: Math.min(200, outText.implicitHeight + 16); radius: 8; color: "#30182740"; border.width: 1; border.color: "#25DCEBFF"
                     Flickable {
                         anchors.fill: parent; anchors.margins: 8; clip: true; contentWidth: outText.implicitWidth; contentHeight: outText.implicitHeight; boundsBehavior: Flickable.StopAtBounds
-                        Text { id: outText; objectName: "mailWizOutput"; textFormat: Text.PlainText; text: win.mailer ? win.mailer.actionOutput : ""; color: Theme.inkMuted; font.pixelSize: 10; font.family: Theme.monoFamily }
+                        Text { id: outText; objectName: "mailWizOutput"; textFormat: Text.PlainText; text: win.mailer ? win.mailer.actionOutput : ""; color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.monoFamily }
                     }
                 }
             }

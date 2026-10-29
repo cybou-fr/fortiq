@@ -33,7 +33,7 @@ Item {
         color: enabled ? (actionMouse.containsMouse ? "#663E80C4" : "#44395880") : "#221E304A"
         border.width: 1; border.color: "#33DCEBFF"
         opacity: enabled ? 1 : 0.45
-        Text { id: caption; anchors.centerIn: parent; text: parent.text; color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily }
+        Text { id: caption; anchors.centerIn: parent; text: parent.text; color: Theme.ink; font.pixelSize: 13; font.family: Theme.fontFamily }
         MouseArea { id: actionMouse; anchors.fill: parent; hoverEnabled: true; onClicked: parent.clicked() }
     }
     function handleBack() {
@@ -67,11 +67,11 @@ Item {
                 }
             }
         }
-        Text { x:18;y:48;text:"HISTORIQUE BASH";color:"#8FA2C2";font.pixelSize:10;font.letterSpacing:1;font.family:Theme.fontFamily }
+        Text { x:18;y:48;text:"HISTORIQUE BASH";color:"#8FA2C2";font.pixelSize:11;font.letterSpacing:1;font.family:Theme.fontFamily }
         Text {
             x:18;y:70;width:parent.width-36;height:54;wrapMode:Text.WordWrap;maximumLineCount:3;elide:Text.ElideRight
             text: win.terminal ? win.terminal.historyStatus : "Historique enregistré sur le serveur."
-            color:Theme.inkMuted;font.pixelSize:10;font.family:Theme.fontFamily;textFormat:Text.PlainText
+            color:Theme.inkMuted;font.pixelSize:11;font.family:Theme.fontFamily;textFormat:Text.PlainText
         }
         ListView {
             objectName: "terminalHistory"
@@ -88,7 +88,7 @@ Item {
                     x:10;anchors.verticalCenter:parent.verticalCenter;width:parent.width-20
                     text:modelData.text;textFormat:Text.PlainText
                     wrapMode:Text.WrapAnywhere;maximumLineCount:2;elide:Text.ElideRight
-                    color:Theme.ink;font.pixelSize:11;font.family:Theme.fontFamily
+                    color:Theme.ink;font.pixelSize:12;font.family:Theme.fontFamily
                 }
                 MouseArea {
                     id:historyMouse;anchors.fill:parent;hoverEnabled:true;enabled:surface.inputEnabled
@@ -172,7 +172,7 @@ Item {
         Column {
             anchors.centerIn:parent;width:Math.max(40,parent.width-32);spacing:16
             Text { width:parent.width;text:win.connected?(win.terminal?win.terminal.status:"Terminal indisponible."):"Aucun serveur connecté";textFormat:Text.PlainText;wrapMode:Text.WordWrap;horizontalAlignment:Text.AlignHCenter;color:Theme.ink;font.pixelSize:15;font.family:Theme.fontFamily }
-            Text { visible:!win.connected;width:parent.width;text:"Le terminal utilise le serveur Linux choisi.";horizontalAlignment:Text.AlignHCenter;wrapMode:Text.WordWrap;color:Theme.inkMuted;font.pixelSize:12;font.family:Theme.fontFamily }
+            Text { visible:!win.connected;width:parent.width;text:"Le terminal utilise le serveur Linux choisi.";horizontalAlignment:Text.AlignHCenter;wrapMode:Text.WordWrap;color:Theme.inkMuted;font.pixelSize:13;font.family:Theme.fontFamily }
             Action {
                 objectName:"terminalConnectButton"
                 anchors.horizontalCenter:parent.horizontalCenter
@@ -201,14 +201,14 @@ Item {
     Text {
         x:win.contentLeft+12;anchors.bottom:parent.bottom;anchors.bottomMargin:8
         width:Math.max(20,win.width-x-12);elide:Text.ElideRight
-        text:win.searchOpen ? surface.searchStatus : (surface.scrollOffset>0 ? "Historique de sortie · "+surface.scrollOffset+" lignes au-dessus" : (win.terminal?win.terminal.status:"Déconnecté"));color:Theme.inkMuted;font.pixelSize:11
+        text:win.searchOpen ? surface.searchStatus : (surface.scrollOffset>0 ? "Historique de sortie · "+surface.scrollOffset+" lignes au-dessus" : (win.terminal?win.terminal.status:"Déconnecté"));color:Theme.inkMuted;font.pixelSize:12
     }
     Dialog {
         id:pasteDialog
         anchors.centerIn:parent;width:Math.min(440,win.width-24);modal:true
         title:"Envoyer ce texte au shell ?";contentHeight:Math.min(220,Math.max(84,win.pasteText.length/2+90))
         standardButtons:Dialog.Ok|Dialog.Cancel
-        contentItem:Text { objectName:"pastePreview";text:win.pasteText.length>16000?"Texte trop volumineux (limite 16 Ko).":"Le texte suivant sera envoyé au serveur. Les retours à la ligne peuvent exécuter des commandes.\n\n"+win.pasteText.slice(0,300)+(win.pasteText.length>300?"…":"");wrapMode:Text.WrapAnywhere;font.family:Theme.monoFamily;font.pixelSize:12 }
+        contentItem:Text { objectName:"pastePreview";text:win.pasteText.length>16000?"Texte trop volumineux (limite 16 Ko).":"Le texte suivant sera envoyé au serveur. Les retours à la ligne peuvent exécuter des commandes.\n\n"+win.pasteText.slice(0,300)+(win.pasteText.length>300?"…":"");wrapMode:Text.WrapAnywhere;font.family:Theme.monoFamily;font.pixelSize:13 }
         onAccepted:{if(win.pasteText.length<=16000)surface.paste(win.pasteText);win.pasteText="";surface.forceActiveFocus()}
         onRejected:win.pasteText=""
     }

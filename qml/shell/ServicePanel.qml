@@ -44,7 +44,7 @@ Item {
                 visible: panel.lc && panel.lc.serviceError.length > 0
                 width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText
                 text: panel.lc ? panel.lc.serviceError : ""
-                color: "#FCA5A5"; font.pixelSize: 12; font.family: Theme.fontFamily
+                color: "#FCA5A5"; font.pixelSize: 13; font.family: Theme.fontFamily
             }
 
             // Status card
@@ -68,7 +68,7 @@ Item {
                     Text {
                         width: parent.width; elide: Text.ElideRight; textFormat: Text.PlainText
                         text: panel.info.description || ""
-                        color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
+                        color: Theme.inkMuted; font.pixelSize: 12; font.family: Theme.fontFamily
                     }
                     Grid {
                         columns: Math.max(2, Math.floor(statusCol.width / 170))
@@ -88,8 +88,8 @@ Item {
                             Column {
                                 required property var modelData
                                 width: 150
-                                Text { text: modelData.k; color: "#7F93B5"; font.pixelSize: 9; font.family: Theme.fontFamily }
-                                Text { text: String(modelData.v); textFormat: Text.PlainText; color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily }
+                                Text { text: modelData.k; color: "#7F93B5"; font.pixelSize: 11; font.family: Theme.fontFamily }
+                                Text { text: String(modelData.v); textFormat: Text.PlainText; color: Theme.ink; font.pixelSize: 13; font.family: Theme.fontFamily }
                             }
                         }
                     }
@@ -97,20 +97,20 @@ Item {
                         visible: (panel.info.fragment || "").length > 0
                         width: parent.width; elide: Text.ElideMiddle; textFormat: Text.PlainText
                         text: "Fichier d'unité : " + panel.info.fragment
-                        color: "#7F93B5"; font.pixelSize: 10; font.family: Theme.monoFamily
+                        color: "#7F93B5"; font.pixelSize: 11; font.family: Theme.monoFamily
                     }
                     Row {
                         spacing: 10
                         Rectangle {
                             height: 26; radius: 7; width: jl.implicitWidth + 20
                             color: jm.containsMouse ? Theme.selection : "#802D6FE0"
-                            Text { id: jl; anchors.centerIn: parent; text: "Voir le journal de ce service →"; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
+                            Text { id: jl; anchors.centerIn: parent; text: "Voir le journal de ce service →"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
                             MouseArea { id: jm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: panel.showJournal() }
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: "Lecture seule : FORTIQ ne démarre, n'arrête ni ne modifie les services."
-                            color: "#7F93B5"; font.pixelSize: 10; font.family: Theme.fontFamily
+                            color: "#7F93B5"; font.pixelSize: 11; font.family: Theme.fontFamily
                         }
                     }
                 }
@@ -122,14 +122,14 @@ Item {
                 spacing: 6
                 Row {
                     spacing: 12
-                    Text { text: "7 DERNIERS JOURS"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2; font.bold: true; font.family: Theme.fontFamily }
+                    Text { text: "7 DERNIERS JOURS"; color: "#8FA2C2"; font.pixelSize: 11; font.letterSpacing: 1.2; font.bold: true; font.family: Theme.fontFamily }
                     Repeater {
                         model: [ { c: "#4ADE80", t: "démarrages" }, { c: "#FB923C", t: "redémarrages" }, { c: "#F87171", t: "échecs" } ]
                         Row {
                             required property var modelData
                             spacing: 4
                             Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 8; height: 8; radius: 2; color: modelData.c }
-                            Text { text: modelData.t; color: "#9FB2D0"; font.pixelSize: 10; font.family: Theme.fontFamily }
+                            Text { text: modelData.t; color: "#9FB2D0"; font.pixelSize: 11; font.family: Theme.fontFamily }
                         }
                     }
                 }
@@ -159,7 +159,7 @@ Item {
                                 anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter
                                 text: modelData.label + ((modelData.starts + modelData.failures + modelData.restarts) > 0
                                       ? "  " + (modelData.starts + modelData.failures + modelData.restarts) : "")
-                                color: "#9FB2D0"; font.pixelSize: 9; font.family: Theme.fontFamily
+                                color: "#9FB2D0"; font.pixelSize: 11; font.family: Theme.fontFamily
                             }
                         }
                     }
@@ -170,17 +170,17 @@ Item {
             Column {
                 width: parent.width
                 spacing: 3
-                Text { text: "HISTORIQUE (systemd, 7 jours)"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2; font.bold: true; font.family: Theme.fontFamily }
+                Text { text: "HISTORIQUE (systemd, 7 jours)"; color: "#8FA2C2"; font.pixelSize: 11; font.letterSpacing: 1.2; font.bold: true; font.family: Theme.fontFamily }
                 Text {
                     visible: panel.info.historyLimited === true
                     width: parent.width; wrapMode: Text.WordWrap
                     text: "Accès limité : les messages de systemd sur les services système ne sont visibles qu'aux groupes adm ou systemd-journal ; l'historique peut être vide ou incomplet."
-                    color: "#FCD34D"; font.pixelSize: 11; font.family: Theme.fontFamily
+                    color: "#FCD34D"; font.pixelSize: 12; font.family: Theme.fontFamily
                 }
                 Text {
                     visible: panel.history.length === 0 && !(panel.lc && panel.lc.serviceBusy)
                     text: "Aucun démarrage, arrêt ou échec visible sur 7 jours."
-                    color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
+                    color: Theme.inkMuted; font.pixelSize: 12; font.family: Theme.fontFamily
                 }
                 Repeater {
                     model: panel.history.slice(0, 200)
@@ -190,19 +190,19 @@ Item {
                         width: col.width; height: 26; radius: 6
                         color: index % 2 ? "#08FFFFFF" : "transparent"
                         Rectangle { x: 6; anchors.verticalCenter: parent.verticalCenter; width: 8; height: 8; radius: 4; color: panel.kindColor(modelData.kind) }
-                        Text { x: 22; anchors.verticalCenter: parent.verticalCenter; width: 104; text: modelData.timeText; color: "#9FB2D0"; font.pixelSize: 11; font.family: Theme.monoFamily }
+                        Text { x: 22; anchors.verticalCenter: parent.verticalCenter; width: 104; text: modelData.timeText; color: "#9FB2D0"; font.pixelSize: 12; font.family: Theme.monoFamily }
                         Text {
                             x: 130; anchors.verticalCenter: parent.verticalCenter; width: parent.width - x - 8; elide: Text.ElideRight
                             textFormat: Text.PlainText
                             text: modelData.label + (modelData.detail ? " — " + modelData.detail : "")
-                            color: Theme.ink; font.pixelSize: 11; font.family: Theme.fontFamily
+                            color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily
                         }
                     }
                 }
                 Text {
                     visible: panel.history.length > 200
                     text: "… " + (panel.history.length - 200) + " plus anciens non affichés"
-                    color: "#7F93B5"; font.pixelSize: 10
+                    color: "#7F93B5"; font.pixelSize: 11
                 }
             }
         }

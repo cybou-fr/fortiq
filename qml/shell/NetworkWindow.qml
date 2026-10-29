@@ -50,7 +50,7 @@ Item {
                 }
             }
         }
-        Text { x: 18; y: 48; text: "RÉSEAU"; color: Theme.inkMuted; font.pixelSize: 10; font.letterSpacing: 1 }
+        Text { x: 18; y: 48; text: "RÉSEAU"; color: Theme.inkMuted; font.pixelSize: 11; font.letterSpacing: 1 }
         Column {
             x: 8; y: 72; width: parent.width - 16; spacing: 6
             Repeater {
@@ -60,11 +60,11 @@ Item {
                     objectName: "networkSection_" + modelData.key
                     width: parent.width; height: win.adaptive ? 44 : 34; radius: 8
                     color: win.section === modelData.key ? "#D02D73DA" : "transparent"
-                    Text { x: 12; anchors.verticalCenter: parent.verticalCenter; text: modelData.title; color: Theme.ink; font.pixelSize: 12 }
+                    Text { x: 12; anchors.verticalCenter: parent.verticalCenter; text: modelData.title; color: Theme.ink; font.pixelSize: 13 }
                     Text {
                         visible: modelData.key === "ports" && win.network !== null && win.network.exposedCount > 0
                         anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter
-                        text: win.network ? win.network.exposedCount : ""; color: "#FCD34D"; font.pixelSize: 11
+                        text: win.network ? win.network.exposedCount : ""; color: "#FCD34D"; font.pixelSize: 12
                     }
                     MouseArea { anchors.fill: parent; onClicked: { win.section = modelData.key; win.navigationOpen = false } }
                 }
@@ -73,7 +73,7 @@ Item {
         Text {
             x: 18; y: 270; width: parent.width - 36; wrapMode: Text.WordWrap
             text: "Serveur Linux sélectionné\nLecture seule : aucune modification du réseau"
-            color: Theme.inkMuted; font.pixelSize: 11
+            color: Theme.inkMuted; font.pixelSize: 12
         }
     }
 
@@ -100,7 +100,7 @@ Item {
             text: win.section === "interfaces" ? "Interfaces réseau" : win.section === "ports" ? "Ports en écoute" : "Routes"
         }
         Text {
-            width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText; font.pixelSize: 11
+            width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText; font.pixelSize: 12
             color: win.network && win.network.state === "error" ? "#FCA5A5" : Theme.inkMuted
             text: win.network ? win.network.status + (win.network.updated ? " · mis à jour " + win.network.updated : "") : "Aucun serveur connecté"
         }
@@ -137,7 +137,7 @@ Item {
                 visible: win.section === "interfaces"
                 x: 30; y: 30; width: parent.width - 42; elide: Text.ElideRight; textFormat: Text.PlainText
                 text: win.section === "interfaces" ? (modelData.mac && modelData.mac !== "00:00:00:00:00:00" ? modelData.mac : modelData.kind) : ""
-                color: Theme.inkMuted; font.pixelSize: 11
+                color: Theme.inkMuted; font.pixelSize: 12
             }
             Column {
                 visible: win.section === "interfaces"
@@ -148,7 +148,7 @@ Item {
                         required property var modelData
                         width: parent.width; elide: Text.ElideMiddle; textFormat: Text.PlainText
                         text: modelData.text + "   " + modelData.scope
-                        color: modelData.family === "inet6" ? "#9CC6FF" : Theme.ink; font.pixelSize: 11; font.family: Theme.monoFamily
+                        color: modelData.family === "inet6" ? "#9CC6FF" : Theme.ink; font.pixelSize: 12; font.family: Theme.monoFamily
                     }
                 }
             }
@@ -157,7 +157,7 @@ Item {
                 x: 30; anchors.bottom: parent.bottom; anchors.bottomMargin: 6; width: parent.width - 42; elide: Text.ElideRight; textFormat: Text.PlainText
                 text: win.section === "interfaces" ? "↓ " + modelData.rx + " (" + modelData.rxPackets + " paquets)   ↑ " + modelData.tx + " (" + modelData.txPackets + ")"
                         + (modelData.errors > 0 ? "   erreurs " + modelData.errors : "") + (modelData.dropped > 0 ? "   perdus " + modelData.dropped : "") : ""
-                color: Theme.inkMuted; font.pixelSize: 10
+                color: Theme.inkMuted; font.pixelSize: 11
             }
 
             // listening ports
@@ -171,7 +171,7 @@ Item {
                 visible: win.section === "ports"
                 x: 12; y: 29; width: parent.width - 150; elide: Text.ElideRight; textFormat: Text.PlainText
                 text: win.section === "ports" ? (modelData.process.length > 0 ? modelData.process + "  (pid " + modelData.pid + ")" : "processus : visible seulement pour votre utilisateur") : ""
-                color: Theme.inkMuted; font.pixelSize: 11
+                color: Theme.inkMuted; font.pixelSize: 12
             }
             Rectangle {
                 visible: win.section === "ports"
@@ -179,7 +179,7 @@ Item {
                 height: 22; radius: 11; width: exposureText.implicitWidth + 20
                 color: win.section === "ports" && modelData.exposure === "all" ? "#33FACC15" : (win.section === "ports" && modelData.exposure === "local" ? "#2616A34A" : "#26FFFFFF")
                 Text {
-                    id: exposureText; anchors.centerIn: parent; font.pixelSize: 10
+                    id: exposureText; anchors.centerIn: parent; font.pixelSize: 11
                     text: win.section === "ports" ? (modelData.exposure === "all" ? "toutes les interfaces" : modelData.exposure === "local" ? "local seulement" : "une adresse") : ""
                     color: win.section === "ports" && modelData.exposure === "all" ? "#FDE68A" : Theme.ink
                 }
@@ -197,7 +197,7 @@ Item {
                 x: 12; y: 25; width: parent.width - 24; elide: Text.ElideRight; textFormat: Text.PlainText
                 text: win.section === "routes" ? (modelData.gateway ? "via " + modelData.gateway + "  " : "") + "dev " + modelData.device
                         + (modelData.metric >= 0 ? "  ·  métrique " + modelData.metric : "") + (modelData.protocol ? "  ·  " + modelData.protocol : "") : ""
-                color: Theme.inkMuted; font.pixelSize: 11
+                color: Theme.inkMuted; font.pixelSize: 12
             }
         }
     }
@@ -211,14 +211,14 @@ Item {
             id: dnsColumn
             width: parent.width; spacing: 8
             Text { text: "DNS"; color: Theme.ink; font.pixelSize: 18 }
-            Text { visible: win.network !== null && win.network.dnsNote.length > 0; width: parent.width; wrapMode: Text.WordWrap; text: win.network ? win.network.dnsNote : ""; color: Theme.inkMuted; font.pixelSize: 11 }
-            Text { text: "SERVEURS"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2 }
+            Text { visible: win.network !== null && win.network.dnsNote.length > 0; width: parent.width; wrapMode: Text.WordWrap; text: win.network ? win.network.dnsNote : ""; color: Theme.inkMuted; font.pixelSize: 12 }
+            Text { text: "SERVEURS"; color: "#8FA2C2"; font.pixelSize: 11; font.letterSpacing: 1.2 }
             Repeater { model: win.network ? win.network.dnsServers : []; Text { required property string modelData; text: modelData; color: Theme.ink; font.pixelSize: 13; font.family: Theme.monoFamily } }
-            Text { visible: win.network !== null && win.network.dnsServers.length === 0; text: "Aucun serveur DNS dans /etc/resolv.conf"; color: "#FCA5A5"; font.pixelSize: 12 }
-            Text { visible: win.network !== null && win.network.dnsSearch.length > 0; topPadding: 6; text: "DOMAINES DE RECHERCHE"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2 }
-            Text { visible: win.network !== null && win.network.dnsSearch.length > 0; width: parent.width; wrapMode: Text.WrapAnywhere; text: win.network ? win.network.dnsSearch.join("  ") : ""; color: Theme.ink; font.pixelSize: 12 }
-            Text { visible: win.network !== null && win.network.resolvedText.length > 0; topPadding: 6; text: "SYSTEMD-RESOLVED"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2 }
-            Text { visible: win.network !== null && win.network.resolvedText.length > 0; width: parent.width; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText; text: win.network ? win.network.resolvedText : ""; color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.monoFamily }
+            Text { visible: win.network !== null && win.network.dnsServers.length === 0; text: "Aucun serveur DNS dans /etc/resolv.conf"; color: "#FCA5A5"; font.pixelSize: 13 }
+            Text { visible: win.network !== null && win.network.dnsSearch.length > 0; topPadding: 6; text: "DOMAINES DE RECHERCHE"; color: "#8FA2C2"; font.pixelSize: 11; font.letterSpacing: 1.2 }
+            Text { visible: win.network !== null && win.network.dnsSearch.length > 0; width: parent.width; wrapMode: Text.WrapAnywhere; text: win.network ? win.network.dnsSearch.join("  ") : ""; color: Theme.ink; font.pixelSize: 13 }
+            Text { visible: win.network !== null && win.network.resolvedText.length > 0; topPadding: 6; text: "SYSTEMD-RESOLVED"; color: "#8FA2C2"; font.pixelSize: 11; font.letterSpacing: 1.2 }
+            Text { visible: win.network !== null && win.network.resolvedText.length > 0; width: parent.width; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText; text: win.network ? win.network.resolvedText : ""; color: Theme.inkMuted; font.pixelSize: 12; font.family: Theme.monoFamily }
         }
     }
 
@@ -229,7 +229,7 @@ Item {
         x: win.contentLeft + 16; y: 58; width: parent.width - x - 16; height: parent.height - y - 12
         Text { id: diagTitle; text: "Diagnostic depuis le serveur"; color: Theme.ink; font.pixelSize: 18 }
         Text {
-            id: diagHint; y: 28; width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 11; color: Theme.inkMuted
+            id: diagHint; y: 28; width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 12; color: Theme.inkMuted
             text: "Résolution, ping et chemin sont exécutés par le serveur (pas par cet appareil). Saisissez un nom d'hôte ou une adresse IP."
         }
         Rectangle {
@@ -257,7 +257,7 @@ Item {
                     height: win.adaptive ? 44 : 30; radius: 8; width: probeLabel.implicitWidth + 24
                     opacity: win.network && !win.network.probeBusy ? 1 : 0.45
                     color: probeMouse.containsMouse ? Theme.selection : "#992D6FE0"
-                    Text { id: probeLabel; anchors.centerIn: parent; text: modelData.t; color: "white"; font.pixelSize: 12 }
+                    Text { id: probeLabel; anchors.centerIn: parent; text: modelData.t; color: "white"; font.pixelSize: 13 }
                     MouseArea { id: probeMouse; anchors.fill: parent; hoverEnabled: true; enabled: win.network !== null && !win.network.probeBusy; onClicked: win.network.runProbe(modelData.k, target.text) }
                 }
             }
@@ -265,12 +265,12 @@ Item {
                 visible: win.network !== null && win.network.probeBusy
                 objectName: "networkProbeCancel"
                 height: win.adaptive ? 44 : 30; radius: 8; width: cancelLabel.implicitWidth + 24; color: "#B91C1C"
-                Text { id: cancelLabel; anchors.centerIn: parent; text: "Arrêter"; color: "white"; font.pixelSize: 12 }
+                Text { id: cancelLabel; anchors.centerIn: parent; text: "Arrêter"; color: "white"; font.pixelSize: 13 }
                 MouseArea { anchors.fill: parent; onClicked: win.network.cancelProbe() }
             }
         }
         Text {
-            id: probeStatus; y: probeButtons.y + probeButtons.height + 8; width: parent.width - 90; textFormat: Text.PlainText; font.pixelSize: 11
+            id: probeStatus; y: probeButtons.y + probeButtons.height + 8; width: parent.width - 90; textFormat: Text.PlainText; font.pixelSize: 12
             text: win.network ? (win.network.probeKind.length > 0 ? win.network.probeKind + " " + win.network.probeTarget + " — " : "") + win.network.probeStatus : ""
             color: win.network && win.network.probeStatus.indexOf("Saisissez") === 0 ? "#FCA5A5" : Theme.inkMuted
         }
@@ -288,7 +288,7 @@ Item {
                 id: probeText
                 objectName: "networkProbeOutput"
                 width: parent.width - 8; readOnly: true; selectByMouse: true; wrapMode: TextEdit.WrapAnywhere; textFormat: TextEdit.PlainText
-                text: win.network ? win.network.probeOutput : ""; color: Theme.ink; font.pixelSize: 12; font.family: Theme.monoFamily
+                text: win.network ? win.network.probeOutput : ""; color: Theme.ink; font.pixelSize: 13; font.family: Theme.monoFamily
             }
         }
     }
@@ -314,7 +314,7 @@ Item {
     Text {
         x: win.contentLeft + 12; anchors.bottom: parent.bottom; anchors.bottomMargin: 8; width: parent.width - x - 12; elide: Text.ElideRight; textFormat: Text.PlainText
         visible: win.network !== null && win.network.notes.length > 0 && win.section !== "diag"
-        text: win.network ? win.network.notes.join("  ·  ") : ""; color: Theme.inkMuted; font.pixelSize: 10
+        text: win.network ? win.network.notes.join("  ·  ") : ""; color: Theme.inkMuted; font.pixelSize: 11
     }
     LinkBanner { remote: win.remote; touch: win.adaptive; onRetry: if (win.network && !win.network.busy) win.network.reload() }
 }

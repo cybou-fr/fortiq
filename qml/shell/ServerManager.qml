@@ -170,7 +170,7 @@ Item {
                         Text {
                             x: 6; y: 128; width: parent.width - 12; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideMiddle
                             text: tile.modelData.user + "@" + tile.modelData.host + (tile.modelData.port !== 22 ? ":" + tile.modelData.port : "")
-                            color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
+                            color: Theme.inkMuted; font.pixelSize: 12; font.family: Theme.fontFamily
                         }
                         MouseArea {
                             id: tm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
@@ -249,26 +249,26 @@ Item {
                         visible: mgr.storeAvailable
                         width: 18; height: 18; radius: 4
                         color: mgr.remember ? Theme.accent : "#26FFFFFF"; border.width: 1; border.color: "#66FFFFFF"
-                        Text { anchors.centerIn: parent; visible: mgr.remember; text: "✓"; color: "white"; font.pixelSize: 12; font.bold: true }
+                        Text { anchors.centerIn: parent; visible: mgr.remember; text: "✓"; color: "white"; font.pixelSize: 13; font.bold: true }
                         MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: mgr.remember = !mgr.remember }
                     }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         text: mgr.storeAvailable ? (mgr.selected && mgr.selected.keyPath ? "Se souvenir de la phrase de passe (coffre sécurisé)" : "Se souvenir du mot de passe (coffre sécurisé)")
                                                  : "Mot de passe non enregistrable : aucun coffre sécurisé sur cette plateforme"
-                        color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
+                        color: Theme.inkMuted; font.pixelSize: 12; font.family: Theme.fontFamily
                         MouseArea { anchors.fill: parent; enabled: mgr.storeAvailable; onClicked: mgr.remember = !mgr.remember }
                     }
                 }
                 Row {
                     anchors.horizontalCenter: parent.horizontalCenter; spacing: 8
                     visible: mgr.selected !== null && mgr.selected.secretSaved === true
-                    Text { anchors.verticalCenter: parent.verticalCenter; text: "🔒 Mot de passe enregistré dans le coffre sécurisé"; color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily }
+                    Text { anchors.verticalCenter: parent.verticalCenter; text: "🔒 Mot de passe enregistré dans le coffre sécurisé"; color: Theme.inkMuted; font.pixelSize: 12; font.family: Theme.fontFamily }
                     Rectangle {
                         objectName: "loginForget"
                         height: 22; radius: 11; width: fl.implicitWidth + 20
                         color: fm.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
-                        Text { id: fl; anchors.centerIn: parent; text: "Oublier"; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
+                        Text { id: fl; anchors.centerIn: parent; text: "Oublier"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
                         MouseArea { id: fm; anchors.fill: parent; hoverEnabled: true; onClicked: if (mgr.selected) mgr.controller.forgetSecret(mgr.selected.id) }
                     }
                 }
@@ -276,7 +276,7 @@ Item {
                     width: parent.width; horizontalAlignment: Text.AlignHCenter
                     text: mgr.selected ? (mgr.selected.keyPath ? "Connexion par clé " + mgr.selected.keyPath.split(/[\\/]/).pop() : "Connexion par mot de passe")
                                          + "  ·  " + (mgr.selected.pinned ? "empreinte vérifiée" : "empreinte à vérifier") : ""
-                    color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily; elide: Text.ElideMiddle
+                    color: Theme.inkMuted; font.pixelSize: 12; font.family: Theme.fontFamily; elide: Text.ElideMiddle
                 }
 
                 // Host key verification (first use) — never bypassed.
@@ -297,13 +297,13 @@ Item {
                         Text {
                             width: parent.width; wrapMode: Text.WordWrap
                             text: "Comparez-la avec la console du serveur (ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub -E sha256) ou un autre canal de confiance. N'acceptez pas une empreinte inattendue."
-                            color: "#FEF3C7"; font.pixelSize: 11; font.family: Theme.fontFamily
+                            color: "#FEF3C7"; font.pixelSize: 12; font.family: Theme.fontFamily
                         }
                         Rectangle {
                             height: 32; radius: 8; width: tl.implicitWidth + 24
                             color: tm2.containsMouse ? "#CA8A04" : "#A16207"
                             opacity: mgr.busy ? 0.5 : 1
-                            Text { id: tl; anchors.centerIn: parent; text: "Vérifiée — faire confiance à cet hôte"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
+                            Text { id: tl; anchors.centerIn: parent; text: "Vérifiée — faire confiance à cet hôte"; color: "white"; font.pixelSize: 13; font.family: Theme.fontFamily }
                             MouseArea { id: tm2; anchors.fill: parent; hoverEnabled: true; enabled: !mgr.busy; onClicked: mgr.controller.trustHost() }
                         }
                     }
@@ -314,7 +314,7 @@ Item {
                     visible: mgr.controller && !mgr.connected && mgr.controller.statusText.length > 0 && mgr.controller.statusText !== "No Linux server connected."
                     width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; textFormat: Text.PlainText
                     text: mgr.controller ? (mgr.busy ? "Connexion… " : "") + mgr.controller.statusText : ""
-                    color: mgr.busy ? Theme.inkMuted : "#FCA5A5"; font.pixelSize: 12; font.family: Theme.fontFamily
+                    color: mgr.busy ? Theme.inkMuted : "#FCA5A5"; font.pixelSize: 13; font.family: Theme.fontFamily
                 }
 
                 // Edit / remove the chosen account.
@@ -325,14 +325,14 @@ Item {
                         color: em.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
                         Row { id: el; anchors.centerIn: parent; spacing: 6
                             SymbolGlyph { anchors.verticalCenter: parent.verticalCenter; glyph: "✎"; color: "white"; size: 12 }
-                            Text { anchors.verticalCenter: parent.verticalCenter; text: "Modifier"; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily } }
+                            Text { anchors.verticalCenter: parent.verticalCenter; text: "Modifier"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily } }
                         MouseArea { id: em; anchors.fill: parent; hoverEnabled: true; onClicked: mgr.startEdit(mgr.selected) }
                     }
                     Rectangle {
                         height: mgr.adaptive ? 40 : 28; radius: 14; width: rl.implicitWidth + 24
                         color: rm.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
                         Text {
-                            id: rl; anchors.centerIn: parent; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily
+                            id: rl; anchors.centerIn: parent; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily
                             text: mgr.selected && mgr.confirmRemoveId === mgr.selected.id ? "✓  Confirmer le retrait de la liste" : "🗑  Retirer de la liste"
                         }
                         MouseArea {
@@ -373,7 +373,7 @@ Item {
                     Text {
                         width: parent.width; wrapMode: Text.WordWrap
                         text: "Une connexion SSH sert toutes les applications : Fichiers, Journaux… Seuls l'adresse, l'utilisateur, le chemin de la clé et l'empreinte vérifiée de l'hôte sont mémorisés sur cet appareil ; les mots de passe ne le sont jamais."
-                        color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
+                        color: Theme.inkMuted; font.pixelSize: 12; font.family: Theme.fontFamily
                     }
                     component Field: Rectangle {
                         property alias text: input.text
@@ -382,7 +382,7 @@ Item {
                         property string hint: ""
                         height: 46; radius: 8; color: "#14FFFFFF"
                         border.width: 1; border.color: input.activeFocus ? Theme.accent : "#2BFFFFFF"
-                        Text { x: 10; y: 5; width: parent.width - 20; elide: Text.ElideRight; text: parent.label; color: "#8FA2C2"; font.pixelSize: 9; font.family: Theme.fontFamily }
+                        Text { x: 10; y: 5; width: parent.width - 20; elide: Text.ElideRight; text: parent.label; color: "#8FA2C2"; font.pixelSize: 11; font.family: Theme.fontFamily }
                         TextInput {
                             id: input
                             x: 10; y: 20; width: parent.width - 20
@@ -408,24 +408,24 @@ Item {
                         Field { id: keyField; width: form.width - 108; label: "CLÉ PRIVÉE OPENSSH (VIDE = MOT DE PASSE)"; hint: Qt.platform.os === "android" ? "Choisir via Parcourir…" : "C:/Users/vous/.ssh/id_ed25519" }
                         Rectangle {
                             width: 100; height: 46; radius: 8; color: bm.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
-                            Text { anchors.centerIn: parent; text: "Parcourir…"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
+                            Text { anchors.centerIn: parent; text: "Parcourir…"; color: "white"; font.pixelSize: 13; font.family: Theme.fontFamily }
                             MouseArea { id: bm; anchors.fill: parent; hoverEnabled: true; onClicked: keyDialog.open() }
                         }
                     }
-                    Text { id: formError; visible: text.length > 0; width: parent.width; wrapMode: Text.WordWrap; color: "#FCA5A5"; font.pixelSize: 11; font.family: Theme.fontFamily }
+                    Text { id: formError; visible: text.length > 0; width: parent.width; wrapMode: Text.WordWrap; color: "#FCA5A5"; font.pixelSize: 12; font.family: Theme.fontFamily }
                     Row {
                         spacing: 8
                         Rectangle {
                             height: mgr.adaptive ? 44 : 32; radius: 8; width: sl.implicitWidth + 26
                             color: sm2.containsMouse ? Theme.selection : "#992D6FE0"
-                            Text { id: sl; anchors.centerIn: parent; text: "Enregistrer"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
+                            Text { id: sl; anchors.centerIn: parent; text: "Enregistrer"; color: "white"; font.pixelSize: 13; font.family: Theme.fontFamily }
                             MouseArea { id: sm2; anchors.fill: parent; hoverEnabled: true; onClicked: mgr.saveEdit() }
                         }
                         Rectangle {
                             visible: mgr.servers.length > 0
                             height: mgr.adaptive ? 44 : 32; radius: 8; width: xl.implicitWidth + 26
                             color: xm.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
-                            Text { id: xl; anchors.centerIn: parent; text: "Annuler"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
+                            Text { id: xl; anchors.centerIn: parent; text: "Annuler"; color: "white"; font.pixelSize: 13; font.family: Theme.fontFamily }
                             MouseArea { id: xm; anchors.fill: parent; hoverEnabled: true; onClicked: mgr.editingId = "" }
                         }
                     }

@@ -220,7 +220,7 @@ Item {
         visible:win.documents!==null && win.documents.recovery!==undefined && win.documents.recovery.available===true && !win.documents.dirty
         x:12;y:pathInput.y+pathInput.height+6;width:win.width-24;height:visible?(win.adaptive?84:62):0;radius:10;color:"#33FCD34D";border.color:"#66FCD34D"
         Text {
-            x:10;y:6;width:parent.width-20;wrapMode:Text.WordWrap;textFormat:Text.PlainText;color:Theme.ink;font.pixelSize:12
+            x:10;y:6;width:parent.width-20;wrapMode:Text.WordWrap;textFormat:Text.PlainText;color:Theme.ink;font.pixelSize:13
             text:win.documents && win.documents.recovery!==undefined && win.documents.recovery.available===true
                  ?"Brouillon non enregistré du "+win.documents.recovery.savedAt+" trouvé sur le serveur ("+win.documents.recovery.changedLines+" ligne(s) différentes)"+(win.documents.recovery.baseMatches?".":" — le fichier a changé depuis.")
                  :""
@@ -254,7 +254,7 @@ Item {
             Button { objectName:"editorFindNext";width:win.adaptive?44:30;height:parent.height;text:"↓";onClicked:win.goTo(true) }
             Button { id:caseButton;width:win.adaptive?44:34;height:parent.height;text:"Aa";checkable:true;onToggled:win.refreshMatches() }
             Button { id:wordButton;width:win.adaptive?54:40;height:parent.height;text:"Mot";checkable:true;onToggled:win.refreshMatches() }
-            Text { id:findCount;objectName:"editorFindCount";height:parent.height;verticalAlignment:Text.AlignVCenter;color:Theme.inkMuted;font.pixelSize:11;text:"" }
+            Text { id:findCount;objectName:"editorFindCount";height:parent.height;verticalAlignment:Text.AlignVCenter;color:Theme.inkMuted;font.pixelSize:12;text:"" }
         }
         Row {
             visible:win.replaceMode
@@ -315,19 +315,19 @@ Item {
         x:16;y:170;width:win.width-32;spacing:14
         Text { width:parent.width;horizontalAlignment:Text.AlignHCenter;wrapMode:Text.WordWrap;text:"Éditeur · fichiers texte et code du serveur";color:Theme.ink;font.pixelSize:16 }
         Button { objectName:"editorConnectButton";visible:!win.connected;anchors.horizontalCenter:parent.horizontalCenter;text:"Choisir un serveur…";onClicked:win.requestServers() }
-        Text { width:parent.width;horizontalAlignment:Text.AlignHCenter;wrapMode:Text.WordWrap;text:"Saisissez le chemin absolu d’un fichier UTF-8 (256 Kio maximum), ou ouvrez-le depuis Fichiers.";color:Theme.inkMuted;font.pixelSize:12 }
+        Text { width:parent.width;horizontalAlignment:Text.AlignHCenter;wrapMode:Text.WordWrap;text:"Saisissez le chemin absolu d’un fichier UTF-8 (256 Kio maximum), ou ouvrez-le depuis Fichiers.";color:Theme.inkMuted;font.pixelSize:13 }
     }
 
     // ---- status line ----
     Text {
         x:14;anchors.bottom:parent.bottom;anchors.bottomMargin:10;width:parent.width-210;elide:Text.ElideRight;textFormat:Text.PlainText
-        color:Theme.inkMuted;font.pixelSize:11
+        color:Theme.inkMuted;font.pixelSize:12
         text:win.documents?win.documents.status+(win.documents.draftStatus?" · "+win.documents.draftStatus:""):""
     }
     Text {
         objectName:"editorCaret";visible:win.hasDoc
         anchors.right:parent.right;anchors.rightMargin:14;anchors.bottom:parent.bottom;anchors.bottomMargin:10
-        color:Theme.inkMuted;font.pixelSize:11
+        color:Theme.inkMuted;font.pixelSize:12
         text:"Ln "+win.caretLine+", Col "+win.caretColumn+" · "+Math.max(1,editor.lineCount)+" lignes"
     }
 
@@ -337,11 +337,11 @@ Item {
         visible:win.documents!==null && win.documents.conflictActive
         x:12;y:pathInput.y+pathInput.height+8;width:win.width-24;height:Math.max(120,win.height-y-12);radius:12;color:"#F2121C30";border.color:"#40FFFFFF"
         Text { x:14;y:10;width:parent.width-28;wrapMode:Text.WordWrap;textFormat:Text.PlainText;color:Theme.ink;font.pixelSize:14;text:"Conflit : le fichier a changé sur le serveur" }
-        Text { x:14;y:36;width:parent.width-28;wrapMode:Text.WordWrap;textFormat:Text.PlainText;color:Theme.inkMuted;font.pixelSize:12;text:win.documents?win.documents.conflictSummary:"" }
+        Text { x:14;y:36;width:parent.width-28;wrapMode:Text.WordWrap;textFormat:Text.PlainText;color:Theme.inkMuted;font.pixelSize:13;text:win.documents?win.documents.conflictSummary:"" }
         Flickable {
             x:14;y:72;width:parent.width-28;height:parent.height-72-(win.adaptive?104:56);clip:true;contentWidth:width;contentHeight:diffText.implicitHeight+8;boundsBehavior:Flickable.StopAtBounds
             ScrollBar.vertical:ScrollBar { policy:ScrollBar.AsNeeded }
-            Text { id:diffText;objectName:"editorConflictDiff";width:parent.width;wrapMode:Text.WrapAnywhere;textFormat:Text.PlainText;color:Theme.ink;font.family:"monospace";font.pixelSize:12;text:win.documents?win.documents.conflictDiff:"" }
+            Text { id:diffText;objectName:"editorConflictDiff";width:parent.width;wrapMode:Text.WrapAnywhere;textFormat:Text.PlainText;color:Theme.ink;font.family:"monospace";font.pixelSize:13;text:win.documents?win.documents.conflictDiff:"" }
         }
         Flow {
             x:14;anchors.bottom:parent.bottom;anchors.bottomMargin:10;width:parent.width-28;spacing:8

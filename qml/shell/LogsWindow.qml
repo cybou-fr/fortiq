@@ -196,7 +196,7 @@ Item {
         signal picked()
         height: win.adaptive ? 44 : 24; radius: 6; width: segText.implicitWidth + 14
         color: on ? Theme.selection : (segMouse.containsMouse ? "#26FFFFFF" : "transparent")
-        Text { id: segText; anchors.centerIn: parent; text: parent.label; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
+        Text { id: segText; anchors.centerIn: parent; text: parent.label; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
         MouseArea { id: segMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: parent.picked() }
     }
 
@@ -236,7 +236,7 @@ Item {
             id: sources
             x: 8; y: 44; width: parent.width - 16
             spacing: 1
-            Text { x: 10; text: "SOURCES"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2; font.family: Theme.fontFamily; bottomPadding: 4 }
+            Text { x: 10; text: "SOURCES"; color: "#8FA2C2"; font.pixelSize: 11; font.letterSpacing: 1.2; font.family: Theme.fontFamily; bottomPadding: 4 }
             Repeater {
                 model: [ { s: "journal", g: "≣", t: "Journal système" }, { s: "user", g: "☺", t: "Mon journal" } ]
                 Rectangle {
@@ -245,13 +245,13 @@ Item {
                     width: parent.width; height: win.adaptive ? 44 : 28; radius: 7
                     color: active ? Theme.selection : (srcMouse.containsMouse ? "#1AFFFFFF" : "transparent")
                     SymbolGlyph { x: 10; anchors.verticalCenter: parent.verticalCenter; glyph: modelData.g; color: "white"; size: 13 }
-                    Text { x: 32; anchors.verticalCenter: parent.verticalCenter; text: modelData.t; color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily }
+                    Text { x: 32; anchors.verticalCenter: parent.verticalCenter; text: modelData.t; color: Theme.ink; font.pixelSize: 13; font.family: Theme.fontFamily }
                     MouseArea { id: srcMouse; anchors.fill: parent; hoverEnabled: true; enabled: win.connected; onClicked: win.choose(modelData.s, "") }
                 }
             }
         }
 
-        Text { id: servicesTitle; x: 18; y: sources.y + sources.height + 12; text: "SERVICES"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2; font.family: Theme.fontFamily }
+        Text { id: servicesTitle; x: 18; y: sources.y + sources.height + 12; text: "SERVICES"; color: "#8FA2C2"; font.pixelSize: 11; font.letterSpacing: 1.2; font.family: Theme.fontFamily }
         Rectangle {
             id: unitSearch
             x: 10; y: servicesTitle.y + 16; width: parent.width - 20; height: 24; radius: 7
@@ -260,9 +260,9 @@ Item {
                 id: unitInput
                 anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8
                 verticalAlignment: TextInput.AlignVCenter
-                color: Theme.ink; font.pixelSize: 11; font.family: Theme.fontFamily; clip: true
+                color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily; clip: true
                 onTextEdited: win.unitFilter = text
-                Text { visible: parent.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Filtrer les services"; color: "#7F93B5"; font.pixelSize: 11; font.family: Theme.fontFamily }
+                Text { visible: parent.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Filtrer les services"; color: "#7F93B5"; font.pixelSize: 12; font.family: Theme.fontFamily }
             }
         }
         ListView {
@@ -285,18 +285,18 @@ Item {
                 }
                 Text {
                     x: 24; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 30 - (modelData.user ? 40 : 0); elide: Text.ElideRight
-                    text: modelData.name.replace(/\.service$/, ""); color: Theme.ink; font.pixelSize: 11; font.family: Theme.fontFamily
+                    text: modelData.name.replace(/\.service$/, ""); color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily
                 }
                 Text {
                     visible: modelData.user === true
                     anchors.right: parent.right; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter
-                    text: "utilisateur"; color: "#7F93B5"; font.pixelSize: 8; font.family: Theme.fontFamily
+                    text: "utilisateur"; color: "#7F93B5"; font.pixelSize: 11; font.family: Theme.fontFamily
                 }
                 MouseArea { id: uMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.choose(modelData.user ? "userunit" : "unit", modelData.name) }
             }
         }
 
-        Text { id: filesTitle; x: 18; y: unitList.y + unitList.height + 8; text: "FICHIERS /var/log"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2; font.family: Theme.fontFamily }
+        Text { id: filesTitle; x: 18; y: unitList.y + unitList.height + 8; text: "FICHIERS /var/log"; color: "#8FA2C2"; font.pixelSize: 11; font.letterSpacing: 1.2; font.family: Theme.fontFamily }
         ListView {
             id: fileList
             interactive: count > 0
@@ -315,7 +315,7 @@ Item {
                 SymbolGlyph { x: 10; anchors.verticalCenter: parent.verticalCenter; glyph: modelData.readable ? "▤" : "🔒"; color: "white"; size: 10 }
                 Text {
                     x: 26; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 32; elide: Text.ElideMiddle
-                    text: modelData.name; color: Theme.ink; font.pixelSize: 11; font.family: Theme.fontFamily
+                    text: modelData.name; color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily
                 }
                 MouseArea { id: fMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.choose("file", modelData.path) }
                 ToolTipLite { text: modelData.readable ? modelData.path : "Non lisible par cet utilisateur"; shown: fMouse.containsMouse }
@@ -364,7 +364,7 @@ Item {
                         NumberAnimation { to: 0.3; duration: 700 } NumberAnimation { to: 1; duration: 700 }
                     }
                 }
-                Text { id: liveText; x: 23; anchors.verticalCenter: parent.verticalCenter; text: "En direct"; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
+                Text { id: liveText; x: 23; anchors.verticalCenter: parent.verticalCenter; text: "En direct"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
                 MouseArea { id: liveMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; enabled: !win.fixture && win.connected; onClicked: win.logs.setFollowing(!win.logs.following) }
             }
             ToolButtonGlass { glyph: "↻"; tip: "Recharger"; enabledState: !win.fixture && win.connected && win.lc && !win.lc.busy; onClicked: win.logs.reload() }
@@ -380,7 +380,7 @@ Item {
         boundsBehavior: Flickable.StopAtBounds
         contentWidth: win.adaptive ? Math.max(width, 680) : width
         contentHeight: height
-        width: win.width - x; height: (win.adaptive ? 160 : 72) + (banner.visible ? banner.height + 6 : 0)
+        width: win.width - x; height: (win.adaptive ? 160 : 108) + (banner.visible ? banner.height + 6 : 0)
         Item {
             width: strip.contentWidth; height: strip.height
         Row {
@@ -411,23 +411,23 @@ Item {
                     color: "#14FFFFFF"; border.width: 1; border.color: "#1FFFFFFF"
                     opacity: modelData.count > 0 ? 1 : 0.45
                     Rectangle { x: 9; anchors.verticalCenter: parent.verticalCenter; width: 7; height: 7; radius: 3.5; color: win.priorityColor(modelData.level) }
-                    Text { id: cText; x: 20; anchors.verticalCenter: parent.verticalCenter; text: modelData.count + " " + modelData.label; color: Theme.ink; font.pixelSize: 11; font.family: Theme.fontFamily }
+                    Text { id: cText; x: 20; anchors.verticalCenter: parent.verticalCenter; text: modelData.count + " " + modelData.label; color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily }
                 }
             }
         }
         Row {
-            anchors.right: win.adaptive ? undefined : parent.right; anchors.rightMargin: 12; x: win.adaptive ? 12 : 0; y: win.adaptive ? 104 : 8
+            x: 12; y: win.adaptive ? 104 : 74
             spacing: 6
             Rectangle {
-                width: 110; height: 24; radius: 12; color: "#1AFFFFFF"
+                width: 170; height: 26; radius: 13; color: "#1AFFFFFF"
                 border.width: 1; border.color: filterInput.activeFocus ? Theme.accent : "#1FFFFFFF"
                 TextInput {
                     id: filterInput
                     anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10
                     verticalAlignment: TextInput.AlignVCenter
-                    color: Theme.ink; font.pixelSize: 11; font.family: Theme.fontFamily; clip: true
+                    color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily; clip: true
                     onTextEdited: win.textFilter = text
-                    Text { visible: parent.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Filtrer le texte"; color: "#7F93B5"; font.pixelSize: 11; font.family: Theme.fontFamily }
+                    Text { visible: parent.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Filtrer le texte"; color: "#7F93B5"; font.pixelSize: 12; font.family: Theme.fontFamily }
                 }
             }
             Row {
@@ -439,7 +439,7 @@ Item {
                         required property var modelData
                         height: win.adaptive ? 44 : 24; radius: 6; width: vt.implicitWidth + 14
                         color: win.view === modelData.k ? Theme.selection : (vm.containsMouse ? "#26FFFFFF" : "transparent")
-                        Text { id: vt; anchors.centerIn: parent; text: modelData.t; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
+                        Text { id: vt; anchors.centerIn: parent; text: modelData.t; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
                         MouseArea {
                             id: vm; anchors.fill: parent; hoverEnabled: true
                             onClicked: {
@@ -454,7 +454,7 @@ Item {
         Rectangle {
             id: banner
             visible: win.lc && win.lc.stateText.length > 0
-            x: 12; y: win.adaptive ? 160 : 72; width: win.adaptive ? strip.width - 24 : parent.width - 24
+            x: 12; y: win.adaptive ? 160 : 108; width: win.adaptive ? strip.width - 24 : parent.width - 24
             height: bannerText.implicitHeight + 12; radius: 8
             color: win.lc && (win.lc.state === "limited" || win.lc.state === "rotated") ? "#26FACC15" : "#33F87171"
             border.width: 1; border.color: win.lc && (win.lc.state === "limited" || win.lc.state === "rotated") ? "#66FACC15" : "#66F87171"
@@ -463,7 +463,7 @@ Item {
                 x: 10; y: 6; width: parent.width - 20; wrapMode: Text.WordWrap
                 text: win.lc ? win.lc.stateText : ""
                 textFormat: Text.PlainText
-                color: Theme.ink; font.pixelSize: 11; font.family: Theme.fontFamily
+                color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily
             }
         }
         }
@@ -483,11 +483,11 @@ Item {
             Text {
                 x: 10; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 120; elide: Text.ElideRight
                 text: "Répétition : " + win.patternLabel; textFormat: Text.PlainText
-                color: Theme.ink; font.pixelSize: 11; font.family: Theme.fontFamily
+                color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily
             }
             Text {
                 anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter
-                text: "Tout afficher ×"; color: "#9CC6FF"; font.pixelSize: 11; font.family: Theme.fontFamily
+                text: "Tout afficher ×"; color: "#9CC6FF"; font.pixelSize: 12; font.family: Theme.fontFamily
                 MouseArea { anchors.fill: parent; onClicked: { win.patternKey = ""; win.patternLabel = "" } }
             }
         }
@@ -519,18 +519,18 @@ Item {
                     color: ev.open ? "#262F8CFF" : (evMouse.containsMouse ? "#12FFFFFF" : (ev.index % 2 ? "#08FFFFFF" : "transparent"))
                 }
                 Rectangle { x: 4; y: 5; width: 3; height: 16; radius: 1.5; color: win.priorityColor(ev.modelData.priority) }
-                Text { x: 14; y: 5; width: 98; text: ev.modelData.timeText || "—"; color: "#9FB2D0"; font.pixelSize: 11; font.family: Theme.monoFamily }
+                Text { x: 14; y: 5; width: 98; text: ev.modelData.timeText || "—"; color: "#9FB2D0"; font.pixelSize: 12; font.family: Theme.monoFamily }
                 Text {
                     x: 116; y: 5; width: 120; elide: Text.ElideRight
                     text: ev.modelData.unit; textFormat: Text.PlainText
-                    color: "#B9C6DA"; font.pixelSize: 11; font.family: Theme.fontFamily
+                    color: "#B9C6DA"; font.pixelSize: 12; font.family: Theme.fontFamily
                 }
                 Text {
                     visible: !ev.open
                     x: 242; y: 5; width: parent.width - x - 8; elide: Text.ElideRight
                     text: ev.modelData.message; textFormat: Text.PlainText
                     color: ev.modelData.priority >= 0 && ev.modelData.priority <= 3 ? "#FECACA" : Theme.ink
-                    font.pixelSize: 11; font.family: Theme.monoFamily
+                    font.pixelSize: 12; font.family: Theme.monoFamily
                 }
                 TextEdit {
                     id: full
@@ -539,14 +539,14 @@ Item {
                     readOnly: true; selectByMouse: true
                     wrapMode: TextEdit.WrapAnywhere; textFormat: TextEdit.PlainText
                     text: ev.open ? ev.modelData.message : ""
-                    color: Theme.ink; selectionColor: Theme.accent; font.pixelSize: 11; font.family: Theme.monoFamily
+                    color: Theme.ink; selectionColor: Theme.accent; font.pixelSize: 12; font.family: Theme.monoFamily
                 }
                 Text {
                     visible: ev.open
                     anchors.right: parent.right; anchors.rightMargin: 10
                     y: meta.y
                     text: "Inspecter autour (±5 min) →"
-                    color: "#9CC6FF"; font.pixelSize: 10; font.underline: inspMouse.containsMouse; font.family: Theme.fontFamily
+                    color: "#9CC6FF"; font.pixelSize: 11; font.underline: inspMouse.containsMouse; font.family: Theme.fontFamily
                     z: 3
                     MouseArea {
                         id: inspMouse
@@ -570,7 +570,7 @@ Item {
                     textFormat: Text.PlainText
                     text: "priorité " + ev.modelData.priorityName + (ev.modelData.pid ? "  ·  pid " + ev.modelData.pid : "")
                           + (ev.modelData.boot ? "  ·  démarrage " + ev.modelData.boot : "")
-                    color: "#7F93B5"; font.pixelSize: 10; font.family: Theme.fontFamily
+                    color: "#7F93B5"; font.pixelSize: 11; font.family: Theme.fontFamily
                 }
                 MouseArea {
                     id: evMouse
@@ -600,19 +600,19 @@ Item {
                     x: 10; anchors.verticalCenter: parent.verticalCenter
                     width: 46; height: 26; radius: 13
                     color: Qt.rgba(0, 0, 0, 0.25); border.width: 1; border.color: win.priorityColor(pat.modelData.priority)
-                    Text { anchors.centerIn: parent; text: "×" + pat.modelData.count; color: "white"; font.pixelSize: 12; font.bold: true; font.family: Theme.fontFamily }
+                    Text { anchors.centerIn: parent; text: "×" + pat.modelData.count; color: "white"; font.pixelSize: 13; font.bold: true; font.family: Theme.fontFamily }
                 }
                 Text {
                     x: 66; y: 6; width: parent.width - x - 12; elide: Text.ElideRight
                     text: pat.modelData.template; textFormat: Text.PlainText
-                    color: Theme.ink; font.pixelSize: 11; font.family: Theme.monoFamily
+                    color: Theme.ink; font.pixelSize: 12; font.family: Theme.monoFamily
                 }
                 Text {
                     x: 66; y: 25; width: parent.width - x - 12; elide: Text.ElideRight
                     textFormat: Text.PlainText
                     text: pat.modelData.unit + "  ·  " + pat.modelData.priorityName + "  ·  " + pat.modelData.first
                           + (pat.modelData.count > 1 ? " → " + pat.modelData.last : "")
-                    color: "#7F93B5"; font.pixelSize: 10; font.family: Theme.fontFamily
+                    color: "#7F93B5"; font.pixelSize: 11; font.family: Theme.fontFamily
                 }
                 MouseArea {
                     id: pMouse
@@ -667,14 +667,14 @@ Item {
             x: 14; anchors.verticalCenter: parent.verticalCenter
             width: parent.width - 220; elide: Text.ElideRight
             text: win.lc ? win.lc.coverage + (win.shownEvents.length !== win.lc.events.length ? "  ·  " + win.shownEvents.length + " affichés" : "") : ""
-            color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
+            color: Theme.inkMuted; font.pixelSize: 12; font.family: Theme.fontFamily
         }
         Text {
             anchors.right: parent.right; anchors.rightMargin: 22; anchors.verticalCenter: parent.verticalCenter
             text: !win.lc ? "" : win.lc.state === "disconnected" ? "source déconnectée" + (win.lc.dataLabel ? " · données de " + win.lc.dataLabel : "")
                 : (win.lc.busy ? "lecture…" : (win.lc.following ? "en direct · " : "") + "màj " + win.lc.lastUpdate) + "  ·  lecture seule"
             color: win.lc && win.lc.state === "disconnected" ? "#FCA5A5" : "#7F93B5"
-            font.pixelSize: 10; font.family: Theme.fontFamily
+            font.pixelSize: 11; font.family: Theme.fontFamily
         }
     }
 

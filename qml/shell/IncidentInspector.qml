@@ -62,7 +62,7 @@ Rectangle {
                     : (insp.lc && insp.lc.inspectorError.length > 0 ? insp.lc.inspectorError
                        : insp.events.length + " événements dans la fenêtre · règles déterministes, sans AI")
                 color: insp.lc && insp.lc.inspectorError.length > 0 ? "#FCA5A5" : Theme.inkMuted
-                font.pixelSize: 10; font.family: Theme.fontFamily
+                font.pixelSize: 11; font.family: Theme.fontFamily
             }
         }
         Row {
@@ -78,7 +78,7 @@ Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     height: insp.narrow ? 44 : 24; radius: 6; width: wl.implicitWidth + 14
                     color: insp.lc && insp.lc.inspectorWindow === modelData.s ? Theme.selection : (wm.containsMouse ? "#26FFFFFF" : "transparent")
-                    Text { id: wl; anchors.centerIn: parent; text: modelData.t; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
+                    Text { id: wl; anchors.centerIn: parent; text: modelData.t; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
                     MouseArea { id: wm; anchors.fill: parent; hoverEnabled: true; onClicked: if (insp.lc.setInspectorWindow) insp.lc.setInspectorWindow(modelData.s) }
                 }
             }
@@ -86,14 +86,14 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 height: insp.narrow ? 44 : 24; radius: 6; width: cl.implicitWidth + 16
                 color: cm.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
-                Text { id: cl; anchors.centerIn: parent; text: "Copier le rapport"; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
+                Text { id: cl; anchors.centerIn: parent; text: "Copier le rapport"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
                 MouseArea { id: cm; anchors.fill: parent; hoverEnabled: true; onClicked: insp.copyReport() }
                 Rectangle {
                     id: copied
                     visible: false
                     anchors.top: parent.bottom; anchors.topMargin: 4; anchors.horizontalCenter: parent.horizontalCenter
                     width: ct.implicitWidth + 14; height: 20; radius: 6; color: "#F0101B2E"; z: 5
-                    Text { id: ct; anchors.centerIn: parent; text: "Copié"; color: "#86EFAC"; font.pixelSize: 10 }
+                    Text { id: ct; anchors.centerIn: parent; text: "Copié"; color: "#86EFAC"; font.pixelSize: 11 }
                 }
             }
             ToolButtonGlass { touch: insp.narrow; glyph: "×"; tip: "Fermer (Échap)"; onClicked: insp.closed() }
@@ -135,8 +135,8 @@ Rectangle {
                     visible: items.length > 0
                     Row {
                         spacing: 8
-                        Text { text: section.modelData.t; color: section.modelData.c; font.pixelSize: 10; font.bold: true; font.letterSpacing: 1.2; font.family: Theme.fontFamily }
-                        Text { text: section.modelData.hint; color: "#7F93B5"; font.pixelSize: 10; font.family: Theme.fontFamily }
+                        Text { text: section.modelData.t; color: section.modelData.c; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.2; font.family: Theme.fontFamily }
+                        Text { text: section.modelData.hint; color: "#7F93B5"; font.pixelSize: 11; font.family: Theme.fontFamily }
                     }
                     Repeater {
                         model: section.items
@@ -156,7 +156,7 @@ Rectangle {
                                 wrapMode: Text.WordWrap; textFormat: Text.PlainText
                                 text: stmt.modelData.text
                                 color: stmt.modelData.action ? "#9CC6FF" : Theme.ink
-                                font.pixelSize: 11; font.underline: stmt.modelData.action !== undefined && sm.containsMouse
+                                font.pixelSize: 12; font.underline: stmt.modelData.action !== undefined && sm.containsMouse
                                 font.family: Theme.fontFamily
                             }
                             Flow {
@@ -169,12 +169,12 @@ Rectangle {
                                         required property var modelData
                                         height: 16; radius: 8; width: rt.implicitWidth + 10
                                         color: "#262F8CFF"
-                                        Text { id: rt; anchors.centerIn: parent; text: "#" + (modelData + 1); color: "#BFDBFE"; font.pixelSize: 9; font.family: Theme.monoFamily }
+                                        Text { id: rt; anchors.centerIn: parent; text: "#" + (modelData + 1); color: "#BFDBFE"; font.pixelSize: 11; font.family: Theme.monoFamily }
                                     }
                                 }
                                 Text {
                                     visible: stmt.modelData.refs.length > 12
-                                    text: "+" + (stmt.modelData.refs.length - 12); color: "#7F93B5"; font.pixelSize: 9
+                                    text: "+" + (stmt.modelData.refs.length - 12); color: "#7F93B5"; font.pixelSize: 11
                                 }
                             }
                             MouseArea {
@@ -225,7 +225,7 @@ Rectangle {
                 x: 12; y: 4
                 text: "#" + (row.index + 1) + "  " + row.modelData.timeText + "  " + row.modelData.unit + (row.isAnchor ? "   ▶ choisi" : "")
                 textFormat: Text.PlainText
-                color: row.isAnchor ? "#FDE68A" : "#9FB2D0"; font.pixelSize: 10; font.family: Theme.monoFamily
+                color: row.isAnchor ? "#FDE68A" : "#9FB2D0"; font.pixelSize: 11; font.family: Theme.monoFamily
             }
             Text {
                 id: msg
@@ -234,7 +234,7 @@ Rectangle {
                 textFormat: Text.PlainText
                 text: row.modelData.message
                 color: row.modelData.priority >= 0 && row.modelData.priority <= 3 ? "#FECACA" : Theme.ink
-                font.pixelSize: 11; font.family: Theme.monoFamily
+                font.pixelSize: 12; font.family: Theme.monoFamily
             }
         }
     }

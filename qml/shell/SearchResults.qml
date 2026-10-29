@@ -53,7 +53,7 @@ Rectangle {
             Text {
                 width: parent.width; elide: Text.ElideRight
                 text: panel.controller ? panel.controller.searchInfo : ""
-                color: Theme.inkMuted; font.pixelSize: 10; font.family: Theme.fontFamily
+                color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
             }
         }
         Row {
@@ -67,7 +67,7 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 height: 24; radius: 6; width: stopLabel.implicitWidth + 16
                 color: stopMouse.containsMouse ? "#33FFFFFF" : "#1FFFFFFF"
-                Text { id: stopLabel; anchors.centerIn: parent; text: "Arrêter"; color: "white"; font.pixelSize: 11; font.family: Theme.fontFamily }
+                Text { id: stopLabel; anchors.centerIn: parent; text: "Arrêter"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
                 MouseArea { id: stopMouse; anchors.fill: parent; hoverEnabled: true; onClicked: panel.controller.cancelSearch() }
             }
             ToolButtonGlass { glyph: "×"; tip: "Fermer la recherche (Échap)"; onClicked: panel.closed() }
@@ -105,7 +105,7 @@ Rectangle {
                 elide: Text.ElideMiddle
                 textFormat: Text.StyledText
                 text: "<b>" + panel.highlight(row.modelData.name) + "</b>  <font color='#7F93B5'>" + panel.escapeHtml(panel.relative(row.modelData.path)) + "</font>"
-                color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily
+                color: Theme.ink; font.pixelSize: 13; font.family: Theme.fontFamily
             }
             Text {
                 visible: row.hasText
@@ -113,14 +113,14 @@ Rectangle {
                 elide: Text.ElideRight
                 textFormat: Text.StyledText
                 text: "<font color='#7F93B5'>" + row.modelData.line + ":</font> " + panel.highlight(row.modelData.text || "")
-                color: "#CFDAEC"; font.pixelSize: 11; font.family: Theme.monoFamily
+                color: "#CFDAEC"; font.pixelSize: 12; font.family: Theme.monoFamily
             }
             Text {
                 id: locate
                 anchors.right: parent.right; anchors.rightMargin: 10; y: 6
                 text: "Emplacement"
                 visible: rowMouse.containsMouse || list.currentIndex === row.index
-                color: "#9CC6FF"; font.pixelSize: 10; font.underline: locMouse.containsMouse; font.family: Theme.fontFamily
+                color: "#9CC6FF"; font.pixelSize: 11; font.underline: locMouse.containsMouse; font.family: Theme.fontFamily
                 MouseArea {
                     id: locMouse
                     anchors.fill: parent; anchors.margins: -4; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; z: 2

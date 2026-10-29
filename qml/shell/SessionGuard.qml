@@ -62,7 +62,7 @@ Item {
                     text: guard.tasks.length > 0 ? "Des tâches sont encore en cours" : "Les tâches sont terminées"
                 }
                 Text {
-                    width: parent.width; wrapMode: Text.Wrap; color: Theme.inkMuted; font.pixelSize: 11
+                    width: parent.width; wrapMode: Text.Wrap; color: Theme.inkMuted; font.pixelSize: 12
                     text: "Si vous continuez, la connexion est fermée. Ce qui est interrompu n'est pas rejoué : une écriture dont le résultat n'est pas connu est signalée « inconnu » dans la liste des tâches."
                 }
                 Repeater {
@@ -74,8 +74,8 @@ Item {
                         Column {
                             id: taskText
                             x: 10; y: 7; width: parent.width - 20; spacing: 2
-                            Text { width: parent.width; elide: Text.ElideMiddle; textFormat: Text.PlainText; text: modelData.title; color: Theme.ink; font.pixelSize: 12; font.bold: true }
-                            Text { width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; text: guard.describe(modelData); color: "#FCD34D"; font.pixelSize: 10 }
+                            Text { width: parent.width; elide: Text.ElideMiddle; textFormat: Text.PlainText; text: modelData.title; color: Theme.ink; font.pixelSize: 13; font.bold: true }
+                            Text { width: parent.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; text: guard.describe(modelData); color: "#FCD34D"; font.pixelSize: 11 }
                         }
                     }
                 }

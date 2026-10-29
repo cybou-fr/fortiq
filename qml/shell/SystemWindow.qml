@@ -104,7 +104,7 @@ Item {
                 }
             }
         }
-        Text { x: 18; y: 48; text: "SYSTÈME"; color: Theme.inkMuted; font.pixelSize: 10; font.letterSpacing: 1 }
+        Text { x: 18; y: 48; text: "SYSTÈME"; color: Theme.inkMuted; font.pixelSize: 11; font.letterSpacing: 1 }
         Column {
             x: 8; y: 72; width: parent.width - 16; spacing: 6
             Repeater {
@@ -114,11 +114,11 @@ Item {
                     objectName: "systemSection_" + modelData.key
                     width: parent.width; height: win.adaptive ? 44 : 34; radius: 8
                     color: win.section === modelData.key ? "#D02D73DA" : "transparent"
-                    Text { x: 12; anchors.verticalCenter: parent.verticalCenter; text: modelData.title; color: Theme.ink; font.pixelSize: 12 }
+                    Text { x: 12; anchors.verticalCenter: parent.verticalCenter; text: modelData.title; color: Theme.ink; font.pixelSize: 13 }
                     Text {
                         visible: modelData.key === "services" && win.failedCount > 0
                         anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter
-                        text: win.failedCount; color: "#FCA5A5"; font.pixelSize: 11; font.bold: true
+                        text: win.failedCount; color: "#FCA5A5"; font.pixelSize: 12; font.bold: true
                     }
                     MouseArea { anchors.fill: parent; onClicked: { win.section = modelData.key; win.navigationOpen = false; win.filterText = "" } }
                 }
@@ -127,7 +127,7 @@ Item {
         Text {
             x: 18; y: 230; width: parent.width - 36; wrapMode: Text.WordWrap
             text: "Serveur Linux sélectionné\nLecture seule : aucun processus ni service n'est modifié"
-            color: Theme.inkMuted; font.pixelSize: 11
+            color: Theme.inkMuted; font.pixelSize: 12
         }
     }
 
@@ -150,7 +150,7 @@ Item {
                 height: win.adaptive ? 44 : 28; radius: 8; width: autoLabel.implicitWidth + 20
                 color: win.autoRefresh ? "#592F8CFF" : (autoMouse.containsMouse ? "#26FFFFFF" : "transparent")
                 border.width: win.autoRefresh ? 1 : 0; border.color: "#802F8CFF"
-                Text { id: autoLabel; anchors.centerIn: parent; text: "Auto 5 s"; color: Theme.ink; font.pixelSize: 11 }
+                Text { id: autoLabel; anchors.centerIn: parent; text: "Auto 5 s"; color: Theme.ink; font.pixelSize: 12 }
                 MouseArea { id: autoMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.autoRefresh = !win.autoRefresh }
             }
             ToolButtonGlass {
@@ -176,9 +176,9 @@ Item {
                     id: filterInput
                     objectName: "systemFilter"
                     anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14; verticalAlignment: TextInput.AlignVCenter
-                    color: Theme.ink; font.pixelSize: 12; clip: true; selectByMouse: true
+                    color: Theme.ink; font.pixelSize: 13; clip: true; selectByMouse: true
                     text: win.filterText; onTextEdited: win.filterText = text
-                    Text { visible: parent.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Filtrer : nom, commande, utilisateur, PID"; color: "#7F93B5"; font.pixelSize: 12 }
+                    Text { visible: parent.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Filtrer : nom, commande, utilisateur, PID"; color: "#7F93B5"; font.pixelSize: 13 }
                 }
             }
             Row {
@@ -192,7 +192,7 @@ Item {
                         height: win.adaptive ? 44 : 28; radius: 8; width: sortLabel.implicitWidth + 18
                         color: win.sortKey === modelData.k ? "#592F8CFF" : (sortMouse.containsMouse ? "#26FFFFFF" : "transparent")
                         border.width: win.sortKey === modelData.k ? 1 : 0; border.color: "#802F8CFF"
-                        Text { id: sortLabel; anchors.centerIn: parent; text: modelData.t + (win.sortKey === modelData.k ? (win.sortDescending ? " ▼" : " ▲") : ""); color: Theme.ink; font.pixelSize: 11 }
+                        Text { id: sortLabel; anchors.centerIn: parent; text: modelData.t + (win.sortKey === modelData.k ? (win.sortDescending ? " ▼" : " ▲") : ""); color: Theme.ink; font.pixelSize: 12 }
                         MouseArea {
                             id: sortMouse; anchors.fill: parent; hoverEnabled: true
                             onClicked: { if (win.sortKey === modelData.k) win.sortDescending = !win.sortDescending; else { win.sortKey = modelData.k; win.sortDescending = modelData.k !== "name" && modelData.k !== "pid" } }
@@ -206,13 +206,13 @@ Item {
                 height: win.adaptive ? 44 : 28; radius: 8; width: kernelLabel.implicitWidth + 18
                 color: win.showKernel ? "#592F8CFF" : (kernelMouse.containsMouse ? "#26FFFFFF" : "transparent")
                 border.width: win.showKernel ? 1 : 0; border.color: "#802F8CFF"
-                Text { id: kernelLabel; anchors.centerIn: parent; text: "Threads noyau"; color: Theme.ink; font.pixelSize: 11 }
+                Text { id: kernelLabel; anchors.centerIn: parent; text: "Threads noyau"; color: Theme.ink; font.pixelSize: 12 }
                 MouseArea { id: kernelMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.showKernel = !win.showKernel }
             }
         }
         Text {
             id: procSummary
-            y: procTools.height + 6; width: parent.width; elide: Text.ElideRight; textFormat: Text.PlainText; font.pixelSize: 11
+            y: procTools.height + 6; width: parent.width; elide: Text.ElideRight; textFormat: Text.PlainText; font.pixelSize: 12
             color: win.sys && win.sys.state === "error" ? "#FCA5A5" : Theme.inkMuted
             text: !win.sys ? "" : win.sys.state === "error" ? win.sys.status
                 : win.overview.processes + " processus · " + win.overview.running + " en cours · " + win.overview.zombies + " zombie(s) · "
@@ -236,12 +236,12 @@ Item {
                 }
                 Text {
                     x: 24; y: 23; width: parent.width - 250; elide: Text.ElideMiddle; textFormat: Text.PlainText
-                    text: modelData.user + "  ·  pid " + modelData.pid + "  ·  " + modelData.command; color: Theme.inkMuted; font.pixelSize: 10
+                    text: modelData.user + "  ·  pid " + modelData.pid + "  ·  " + modelData.command; color: Theme.inkMuted; font.pixelSize: 11
                 }
-                Text { anchors.right: parent.right; anchors.rightMargin: 150; y: 6; width: 80; horizontalAlignment: Text.AlignRight; text: win.pct(modelData.cpu); color: modelData.cpu >= 50 ? "#FCD34D" : Theme.ink; font.pixelSize: 12; font.family: Theme.monoFamily }
-                Text { anchors.right: parent.right; anchors.rightMargin: 70; y: 6; width: 76; horizontalAlignment: Text.AlignRight; text: win.pct(modelData.mem); color: Theme.ink; font.pixelSize: 12; font.family: Theme.monoFamily }
-                Text { anchors.right: parent.right; anchors.rightMargin: 10; y: 6; width: 70; horizontalAlignment: Text.AlignRight; text: modelData.rss; color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.monoFamily }
-                Text { anchors.right: parent.right; anchors.rightMargin: 10; y: 24; width: 200; horizontalAlignment: Text.AlignRight; text: modelData.threads + " thread(s) · " + modelData.elapsed; color: Theme.inkMuted; font.pixelSize: 10 }
+                Text { anchors.right: parent.right; anchors.rightMargin: 150; y: 6; width: 80; horizontalAlignment: Text.AlignRight; text: win.pct(modelData.cpu); color: modelData.cpu >= 50 ? "#FCD34D" : Theme.ink; font.pixelSize: 13; font.family: Theme.monoFamily }
+                Text { anchors.right: parent.right; anchors.rightMargin: 70; y: 6; width: 76; horizontalAlignment: Text.AlignRight; text: win.pct(modelData.mem); color: Theme.ink; font.pixelSize: 13; font.family: Theme.monoFamily }
+                Text { anchors.right: parent.right; anchors.rightMargin: 10; y: 6; width: 70; horizontalAlignment: Text.AlignRight; text: modelData.rss; color: Theme.inkMuted; font.pixelSize: 12; font.family: Theme.monoFamily }
+                Text { anchors.right: parent.right; anchors.rightMargin: 10; y: 24; width: 200; horizontalAlignment: Text.AlignRight; text: modelData.threads + " thread(s) · " + modelData.elapsed; color: Theme.inkMuted; font.pixelSize: 11 }
                 MouseArea { id: rowMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.selectedPid = win.selectedPid === modelData.pid ? -1 : modelData.pid }
             }
         }
@@ -253,7 +253,7 @@ Item {
             radius: 10; color: "#40182740"; border.width: 1; border.color: "#25DCEBFF"
             Text {
                 id: detailText
-                x: 12; y: 10; width: parent.width - 24; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText; color: Theme.ink; font.pixelSize: 11; font.family: Theme.monoFamily
+                x: 12; y: 10; width: parent.width - 24; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText; color: Theme.ink; font.pixelSize: 12; font.family: Theme.monoFamily
                 text: win.selectedProcess ? win.selectedProcess.command + "\n\nPID " + win.selectedProcess.pid + "  ·  parent " + win.selectedProcess.ppid
                         + "  ·  utilisateur " + win.selectedProcess.user + "  ·  état " + win.selectedProcess.state + " (" + win.stateText(win.selectedProcess.state) + ")\n"
                         + "démarré il y a " + win.selectedProcess.elapsed + "  ·  " + win.selectedProcess.threads + " thread(s)  ·  mémoire résidente " + win.selectedProcess.rss
@@ -282,9 +282,9 @@ Item {
                 TextInput {
                     id: svcFilter
                     anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14; verticalAlignment: TextInput.AlignVCenter
-                    color: Theme.ink; font.pixelSize: 12; clip: true; selectByMouse: true
+                    color: Theme.ink; font.pixelSize: 13; clip: true; selectByMouse: true
                     text: win.filterText; onTextEdited: win.filterText = text
-                    Text { visible: parent.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Filtrer : nom ou description"; color: "#7F93B5"; font.pixelSize: 12 }
+                    Text { visible: parent.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Filtrer : nom ou description"; color: "#7F93B5"; font.pixelSize: 13 }
                 }
             }
             Row {
@@ -298,7 +298,7 @@ Item {
                         height: win.adaptive ? 44 : 28; radius: 8; width: chipLabel.implicitWidth + 18
                         color: win.serviceFilter === modelData.k ? "#592F8CFF" : (chipMouse.containsMouse ? "#26FFFFFF" : "transparent")
                         border.width: win.serviceFilter === modelData.k ? 1 : 0; border.color: "#802F8CFF"
-                        Text { id: chipLabel; anchors.centerIn: parent; text: modelData.t; color: Theme.ink; font.pixelSize: 11 }
+                        Text { id: chipLabel; anchors.centerIn: parent; text: modelData.t; color: Theme.ink; font.pixelSize: 12 }
                         MouseArea { id: chipMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.serviceFilter = modelData.k }
                     }
                 }
@@ -306,7 +306,7 @@ Item {
         }
         Text {
             id: svcSummary
-            y: svcTools.height + 6; width: parent.width; elide: Text.ElideRight; textFormat: Text.PlainText; font.pixelSize: 11; color: Theme.inkMuted
+            y: svcTools.height + 6; width: parent.width; elide: Text.ElideRight; textFormat: Text.PlainText; font.pixelSize: 12; color: Theme.inkMuted
             text: !win.sys ? "" : !win.sys.hasSystemd ? "Ce serveur n'utilise pas systemd."
                 : win.overview.services + " services · " + win.overview.activeServices + " actifs · " + win.overview.failedServices + " en échec · " + win.shownServices.length + " affichés"
         }
@@ -322,14 +322,14 @@ Item {
                 color: modelData.failed ? "#26EF4444" : (win.selectedUnit === modelData.unit || svcMouse.containsMouse ? "#14FFFFFF" : "transparent")
                 Rectangle { x: 8; y: 10; width: 8; height: 8; radius: 4; color: modelData.failed ? "#EF4444" : modelData.active === "active" ? "#4ADE80" : modelData.active === "activating" ? "#FCD34D" : "#64748B" }
                 Text { x: 24; y: 4; width: parent.width - 200; elide: Text.ElideRight; textFormat: Text.PlainText; text: modelData.unit; color: Theme.ink; font.pixelSize: 13; font.weight: Font.DemiBold }
-                Text { x: 24; y: 23; width: parent.width - 200; elide: Text.ElideRight; textFormat: Text.PlainText; text: modelData.description; color: Theme.inkMuted; font.pixelSize: 10 }
+                Text { x: 24; y: 23; width: parent.width - 200; elide: Text.ElideRight; textFormat: Text.PlainText; text: modelData.description; color: Theme.inkMuted; font.pixelSize: 11 }
                 Text {
                     anchors.right: parent.right; anchors.rightMargin: 10; y: 6; width: 180; horizontalAlignment: Text.AlignRight; textFormat: Text.PlainText
-                    text: modelData.active + " (" + modelData.sub + ")"; color: modelData.failed ? "#FCA5A5" : Theme.ink; font.pixelSize: 12
+                    text: modelData.active + " (" + modelData.sub + ")"; color: modelData.failed ? "#FCA5A5" : Theme.ink; font.pixelSize: 13
                 }
                 Text {
                     anchors.right: parent.right; anchors.rightMargin: 10; y: 24; width: 180; horizontalAlignment: Text.AlignRight; textFormat: Text.PlainText
-                    visible: modelData.load !== "loaded"; text: modelData.load; color: "#FCD34D"; font.pixelSize: 10
+                    visible: modelData.load !== "loaded"; text: modelData.load; color: "#FCD34D"; font.pixelSize: 11
                 }
                 MouseArea { id: svcMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.selectedUnit = (win.selectedUnit === modelData.unit ? "" : modelData.unit) }
             }
@@ -345,7 +345,7 @@ Item {
         height: serviceText.implicitHeight + (win.adaptive ? 66 : 48); radius: 10; color: "#40182740"; border.width: 1; border.color: "#25DCEBFF"; z: 5
         Text {
             id: serviceText
-            x: 12; y: 10; width: parent.width - 24; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText; color: Theme.ink; font.pixelSize: 11; font.family: Theme.monoFamily
+            x: 12; y: 10; width: parent.width - 24; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText; color: Theme.ink; font.pixelSize: 12; font.family: Theme.monoFamily
             text: win.selectedService ? win.selectedService.unit + "\n" + win.selectedService.description + "\nétat " + win.selectedService.active + " (" + win.selectedService.sub + ")  ·  chargement " + win.selectedService.load + "  ·  lecture seule : rien n'est redémarré" : ""
         }
         Row {
@@ -364,32 +364,32 @@ Item {
             id: overviewColumn
             width: parent.width; spacing: 12
             Text { text: "Vue d'ensemble"; color: Theme.ink; font.pixelSize: 18 }
-            Text { width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText; color: Theme.inkMuted; font.pixelSize: 12
+            Text { width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText; color: Theme.inkMuted; font.pixelSize: 13
                    text: (win.overview.os ? win.overview.os + " · " : "") + "noyau " + win.overview.kernel + " · en ligne depuis " + win.overview.uptime }
             Rectangle {
                 width: parent.width; height: 74; radius: 10; color: "#30182740"; border.width: 1; border.color: "#25DCEBFF"
-                Text { x: 12; y: 8; text: "CHARGE (moyenne sur 1 / 5 / 15 min)"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2 }
+                Text { x: 12; y: 8; text: "CHARGE (moyenne sur 1 / 5 / 15 min)"; color: "#8FA2C2"; font.pixelSize: 11; font.letterSpacing: 1.2 }
                 Text {
                     x: 12; y: 26; font.pixelSize: 15; font.family: Theme.monoFamily; color: win.overview.loadRatio > 1 ? "#FCD34D" : Theme.ink
                     text: Number(win.overview.load1).toFixed(2) + "   " + Number(win.overview.load5).toFixed(2) + "   " + Number(win.overview.load15).toFixed(2) + "      sur " + win.overview.cores + " cœur(s)"
                 }
-                Text { x: 12; y: 52; font.pixelSize: 11; color: Theme.inkMuted
+                Text { x: 12; y: 52; font.pixelSize: 12; color: Theme.inkMuted
                        text: win.overview.loadRatio > 1 ? "La charge dépasse le nombre de cœurs : le serveur est saturé." : "Charge par cœur : " + Number(win.overview.loadRatio).toFixed(2) }
             }
             Rectangle {
                 width: parent.width; height: 90; radius: 10; color: "#30182740"; border.width: 1; border.color: "#25DCEBFF"
-                Text { x: 12; y: 8; text: "MÉMOIRE"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2 }
+                Text { x: 12; y: 8; text: "MÉMOIRE"; color: "#8FA2C2"; font.pixelSize: 11; font.letterSpacing: 1.2 }
                 Text { x: 12; y: 26; font.pixelSize: 13; color: Theme.ink; text: win.overview.memUsed + " utilisés sur " + win.overview.memTotal + "   ·   disponible " + win.overview.memAvailable }
                 Rectangle { x: 12; y: 52; width: parent.width - 24; height: 8; radius: 4; color: "#334F6788"
                     Rectangle { width: parent.width * Math.min(1, win.overview.memFraction); height: parent.height; radius: 4; color: win.overview.memFraction >= 0.9 ? "#E5A65F" : "#559CF2" } }
-                Text { x: 12; y: 66; font.pixelSize: 10; color: Theme.inkMuted; text: "Swap : " + win.overview.swapUsed + " / " + win.overview.swapTotal }
+                Text { x: 12; y: 66; font.pixelSize: 11; color: Theme.inkMuted; text: "Swap : " + win.overview.swapUsed + " / " + win.overview.swapTotal }
             }
             Rectangle {
                 width: parent.width; height: 74; radius: 10; color: "#30182740"; border.width: 1; border.color: "#25DCEBFF"
-                Text { x: 12; y: 8; text: "ACTIVITÉ"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2 }
+                Text { x: 12; y: 8; text: "ACTIVITÉ"; color: "#8FA2C2"; font.pixelSize: 11; font.letterSpacing: 1.2 }
                 Text { x: 12; y: 26; font.pixelSize: 13; color: Theme.ink
                        text: win.overview.processes + " processus (" + win.overview.running + " en cours, " + win.overview.zombies + " zombie(s))" }
-                Text { x: 12; y: 48; font.pixelSize: 12; textFormat: Text.PlainText; color: win.overview.failedServices > 0 ? "#FCA5A5" : Theme.inkMuted
+                Text { x: 12; y: 48; font.pixelSize: 13; textFormat: Text.PlainText; color: win.overview.failedServices > 0 ? "#FCA5A5" : Theme.inkMuted
                        text: !win.sys || !win.sys.hasSystemd ? "Pas de systemd" : "systemd : " + win.overview.systemdState + " · " + win.overview.activeServices + " services actifs, " + win.overview.failedServices + " en échec" }
             }
         }
@@ -415,7 +415,7 @@ Item {
     Text {
         x: win.contentLeft + 12; anchors.bottom: parent.bottom; anchors.bottomMargin: 6; width: parent.width - x - 12; elide: Text.ElideRight; textFormat: Text.PlainText
         visible: win.sys !== null && win.sys.notes.length > 0
-        text: win.sys ? win.sys.notes.join("  ·  ") : ""; color: Theme.inkMuted; font.pixelSize: 10
+        text: win.sys ? win.sys.notes.join("  ·  ") : ""; color: Theme.inkMuted; font.pixelSize: 11
     }
     LinkBanner { remote: win.remote; touch: win.adaptive; onRetry: if (win.sys && !win.sys.busy) win.sys.reload() }
 }

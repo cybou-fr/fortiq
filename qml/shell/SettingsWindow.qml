@@ -53,7 +53,7 @@ Item {
                 objectName: "settingsSection_" + modelData.key
                 width: label.implicitWidth + 28; height: 32; radius: 16
                 color: win.section === modelData.key ? "#503B82F6" : (sm.containsMouse ? "#26FFFFFF" : "#14FFFFFF")
-                Text { id: label; anchors.centerIn: parent; text: parent.modelData.title; color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily }
+                Text { id: label; anchors.centerIn: parent; text: parent.modelData.title; color: Theme.ink; font.pixelSize: 13; font.family: Theme.fontFamily }
                 MouseArea { id: sm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.section = parent.modelData.key }
             }
         }
@@ -83,7 +83,7 @@ Item {
                             source: parent.modelData.length > 0 ? Qt.resolvedUrl("../../assets/wallpapers/" + parent.modelData + ".jpg") : ""
                             fillMode: Image.PreserveAspectCrop; asynchronous: true; sourceSize.width: 300
                         }
-                        Text { anchors.centerIn: parent; visible: parent.modelData.length === 0; text: "Uni"; color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily }
+                        Text { anchors.centerIn: parent; visible: parent.modelData.length === 0; text: "Uni"; color: Theme.ink; font.pixelSize: 13; font.family: Theme.fontFamily }
                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: win.chooseWallpaper(parent.modelData) }
                     }
                 }
@@ -98,7 +98,7 @@ Item {
                         objectName: "settingsEdge_" + modelData.k
                         width: 120; height: 36; radius: 18
                         color: win.panelEdge === modelData.k ? "#503B82F6" : (em.containsMouse ? "#26FFFFFF" : "#14FFFFFF")
-                        Text { anchors.centerIn: parent; text: parent.modelData.t; color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily }
+                        Text { anchors.centerIn: parent; text: parent.modelData.t; color: Theme.ink; font.pixelSize: 13; font.family: Theme.fontFamily }
                         MouseArea { id: em; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.chooseEdge(parent.modelData.k) }
                     }
                 }
@@ -106,7 +106,7 @@ Item {
             Text {
                 width: parent.width; wrapMode: Text.WordWrap
                 text: "Ces choix restent sur cet appareil. Clic droit sur la barre : la déplacer."
-                color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
+                color: Theme.inkMuted; font.pixelSize: 12; font.family: Theme.fontFamily
             }
         }
 
@@ -116,12 +116,12 @@ Item {
             Text {
                 width: parent.width; wrapMode: Text.WordWrap
                 text: "Les serveurs enregistrés (adresse, utilisateur, empreinte vérifiée) se gèrent depuis l’écran de connexion : ajout, modification, retrait, mot de passe mémorisé."
-                color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily
+                color: Theme.ink; font.pixelSize: 13; font.family: Theme.fontFamily
             }
             Rectangle {
                 objectName: "settingsOpenServers"
                 width: 220; height: 36; radius: 18; color: osm.containsMouse ? "#66FFFFFF" : "#CC2D6FE0"
-                Text { anchors.centerIn: parent; text: "Ouvrir la liste des serveurs"; color: "white"; font.pixelSize: 12; font.family: Theme.fontFamily }
+                Text { anchors.centerIn: parent; text: "Ouvrir la liste des serveurs"; color: "white"; font.pixelSize: 13; font.family: Theme.fontFamily }
                 MouseArea { id: osm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.requestServers() }
             }
         }
@@ -133,12 +133,12 @@ Item {
             Text {
                 width: parent.width; wrapMode: Text.WordWrap
                 text: "Un bureau Linux distant : tout le travail se passe sur votre serveur, par SSH uniquement. Ce client ne se connecte à aucun autre service."
-                color: Theme.ink; font.pixelSize: 12; font.family: Theme.fontFamily
+                color: Theme.ink; font.pixelSize: 13; font.family: Theme.fontFamily
             }
             Text {
                 width: parent.width; wrapMode: Text.WordWrap
                 text: "Construit avec Qt (LGPLv3), libssh2, OpenSSL et zlib. Les textes de licence accompagnent l’application (dossier licenses)."
-                color: Theme.inkMuted; font.pixelSize: 11; font.family: Theme.fontFamily
+                color: Theme.inkMuted; font.pixelSize: 12; font.family: Theme.fontFamily
             }
         }
     }

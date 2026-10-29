@@ -98,7 +98,7 @@ Item {
                 }
             }
         }
-        Text { x: 18; y: 48; text: "PROFILS"; color: Theme.inkMuted; font.pixelSize: 10; font.letterSpacing: 1 }
+        Text { x: 18; y: 48; text: "PROFILS"; color: Theme.inkMuted; font.pixelSize: 11; font.letterSpacing: 1 }
         ListView {
             objectName: "dbProfileList"
             x: 8; y: 70; width: parent.width - 16; height: Math.max(0, parent.height - y - 150)
@@ -108,8 +108,8 @@ Item {
                 objectName: "dbProfile_" + modelData.name
                 width: ListView.view.width; height: win.adaptive ? 52 : 44; radius: 8
                 color: win.db && win.db.selectedId === modelData.id ? "#D02D73DA" : (profMouse.containsMouse ? "#26FFFFFF" : "transparent")
-                Text { x: 12; y: 6; width: parent.width - 48; elide: Text.ElideRight; textFormat: Text.PlainText; text: modelData.name; color: Theme.ink; font.pixelSize: 12; font.weight: Font.DemiBold }
-                Text { x: 12; y: 24; width: parent.width - 48; elide: Text.ElideMiddle; textFormat: Text.PlainText; text: (modelData.engine === "sqlite" ? "SQLite · " : "PostgreSQL · ") + modelData.summary; color: Theme.inkMuted; font.pixelSize: 9 }
+                Text { x: 12; y: 6; width: parent.width - 48; elide: Text.ElideRight; textFormat: Text.PlainText; text: modelData.name; color: Theme.ink; font.pixelSize: 13; font.weight: Font.DemiBold }
+                Text { x: 12; y: 24; width: parent.width - 48; elide: Text.ElideMiddle; textFormat: Text.PlainText; text: (modelData.engine === "sqlite" ? "SQLite · " : "PostgreSQL · ") + modelData.summary; color: Theme.inkMuted; font.pixelSize: 11 }
                 MouseArea { id: profMouse; anchors.fill: parent; hoverEnabled: true; onClicked: { win.db.select(modelData.id); win.navigationOpen = false } }
                 Rectangle {
                     anchors.right: parent.right; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter
@@ -128,7 +128,7 @@ Item {
         Text {
             x: 18; y: parent.height - 100; width: parent.width - 36; wrapMode: Text.WordWrap
             text: "Lecture seule : aucune écriture dans la base. Pour une vraie garantie, utilisez un rôle de base de données sans droit d'écriture."
-            color: Theme.inkMuted; font.pixelSize: 10
+            color: Theme.inkMuted; font.pixelSize: 11
         }
     }
 
@@ -146,7 +146,7 @@ Item {
         Row {
             anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 4
             visible: win.hasProfile
-            Text { anchors.verticalCenter: parent.verticalCenter; text: "Délai"; color: Theme.inkMuted; font.pixelSize: 10 }
+            Text { anchors.verticalCenter: parent.verticalCenter; text: "Délai"; color: Theme.inkMuted; font.pixelSize: 11 }
             ComboBox {
                 id: timeoutBox
                 objectName: "dbTimeout"
@@ -156,7 +156,7 @@ Item {
                 currentIndex: win.db ? Math.max(0, model.indexOf(win.db.timeoutSec)) : 1
                 onActivated: win.db.setLimits(model[currentIndex], win.db.maxRows)
             }
-            Text { anchors.verticalCenter: parent.verticalCenter; text: "Lignes"; color: Theme.inkMuted; font.pixelSize: 10 }
+            Text { anchors.verticalCenter: parent.verticalCenter; text: "Lignes"; color: Theme.inkMuted; font.pixelSize: 11 }
             ComboBox {
                 id: rowsBox
                 objectName: "dbMaxRows"
@@ -196,19 +196,19 @@ Item {
                 spacing: 8; width: parent.width
                 Text { text: roleBanner.level === "ok" ? "✓" : roleBanner.level === "unknown" ? "?" : "!"; color: roleBanner.tone; font.pixelSize: 13; font.bold: true }
                 Text {
-                    width: parent.width - 80; textFormat: Text.PlainText; color: Theme.ink; font.pixelSize: 11
+                    width: parent.width - 80; textFormat: Text.PlainText; color: Theme.ink; font.pixelSize: 12
                     elide: roleBanner.expanded ? Text.ElideNone : Text.ElideRight; wrapMode: roleBanner.expanded ? Text.Wrap : Text.NoWrap
                     text: roleBanner.check.summary ? roleBanner.check.summary : ""
                 }
-                Text { visible: roleBanner.level !== "ok"; text: roleBanner.expanded ? "Moins ▴" : "Détails ▾"; color: roleBanner.tone; font.pixelSize: 10 }
+                Text { visible: roleBanner.level !== "ok"; text: roleBanner.expanded ? "Moins ▴" : "Détails ▾"; color: roleBanner.tone; font.pixelSize: 11 }
             }
             Repeater {
                 model: roleBanner.expanded && roleBanner.check.findings ? roleBanner.check.findings : []
-                Text { required property string modelData; width: bannerColumn.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; text: "• " + modelData; color: Theme.ink; font.pixelSize: 11 }
+                Text { required property string modelData; width: bannerColumn.width; wrapMode: Text.Wrap; textFormat: Text.PlainText; text: "• " + modelData; color: Theme.ink; font.pixelSize: 12 }
             }
             Text {
                 visible: roleBanner.expanded && roleBanner.check.recommendation !== undefined && roleBanner.check.recommendation !== ""
-                width: parent.width; wrapMode: Text.Wrap; color: Theme.inkMuted; font.pixelSize: 10
+                width: parent.width; wrapMode: Text.Wrap; color: Theme.inkMuted; font.pixelSize: 11
                 text: "Pour une vraie garantie, utilisez un rôle sans droit d'écriture. Recette (à faire exécuter par un administrateur) :"
             }
             TextEdit {
@@ -216,7 +216,7 @@ Item {
                 objectName: "dbRoleRecipe"
                 visible: roleBanner.expanded && roleBanner.check.recommendation !== undefined && roleBanner.check.recommendation !== ""
                 width: parent.width; readOnly: true; selectByMouse: true; wrapMode: TextEdit.NoWrap; textFormat: TextEdit.PlainText
-                color: Theme.ink; font.pixelSize: 10; font.family: Theme.monoFamily
+                color: Theme.ink; font.pixelSize: 11; font.family: Theme.monoFamily
                 text: roleBanner.check.recommendation ? roleBanner.check.recommendation : ""
             }
             Button {
@@ -239,11 +239,11 @@ Item {
             objectName: "dbSchema"
             visible: !win.narrow
             width: visible ? 210 : 0; height: parent.height; radius: 10; color: "#30182740"; border.width: 1; border.color: "#25DCEBFF"
-            Text { x: 10; y: 8; text: "SCHÉMA"; color: "#8FA2C2"; font.pixelSize: 9; font.letterSpacing: 1.2 }
+            Text { x: 10; y: 8; text: "SCHÉMA"; color: "#8FA2C2"; font.pixelSize: 11; font.letterSpacing: 1.2 }
             Text {
                 visible: win.db && win.db.schemaStatus !== ""
                 x: 10; y: 28; width: parent.width - 20; wrapMode: Text.WordWrap; textFormat: Text.PlainText
-                text: win.db ? win.db.schemaStatus : ""; color: Theme.inkMuted; font.pixelSize: 10
+                text: win.db ? win.db.schemaStatus : ""; color: Theme.inkMuted; font.pixelSize: 11
             }
             ListView {
                 objectName: "dbSchemaList"
@@ -257,7 +257,7 @@ Item {
                     color: rowMouse.containsMouse ? "#14FFFFFF" : "transparent"
                     Text {
                         x: modelData.kind === "object" ? 6 : 24; anchors.verticalCenter: parent.verticalCenter; width: parent.width - x - (modelData.kind === "object" ? 34 : 6)
-                        elide: Text.ElideRight; textFormat: Text.PlainText; font.pixelSize: modelData.kind === "object" ? 11 : 10
+                        elide: Text.ElideRight; textFormat: Text.PlainText; font.pixelSize: modelData.kind === "object" ? 12 : 11
                         color: modelData.kind === "object" ? Theme.ink : Theme.inkMuted
                         text: modelData.kind === "object" ? ((win.expanded[modelData.key] ? "▾ " : "▸ ") + modelData.label + (modelData.objectKind === "view" ? " (vue)" : ""))
                                                           : modelData.label + "  " + modelData.type + (modelData.nullable ? "" : " ·NN")
@@ -270,7 +270,7 @@ Item {
                         visible: modelData.kind === "object"
                         anchors.right: parent.right; anchors.rightMargin: 2; anchors.verticalCenter: parent.verticalCenter
                         width: 28; height: 24; radius: 5; color: selMouse.containsMouse ? "#33FFFFFF" : "transparent"
-                        Text { anchors.centerIn: parent; text: "⏵"; color: Theme.ink; font.pixelSize: 12 }
+                        Text { anchors.centerIn: parent; text: "⏵"; color: Theme.ink; font.pixelSize: 13 }
                         MouseArea { id: selMouse; anchors.fill: parent; hoverEnabled: true; onClicked: { editor.text = win.db.selectAllFor(modelData.object); editor.forceActiveFocus() } }
                     }
                 }
@@ -288,7 +288,7 @@ Item {
                     TextArea {
                         id: editor
                         objectName: "dbEditor"
-                        color: Theme.ink; font.pixelSize: 12; font.family: Theme.monoFamily; wrapMode: TextEdit.WrapAnywhere; selectByMouse: true
+                        color: Theme.ink; font.pixelSize: 13; font.family: Theme.monoFamily; wrapMode: TextEdit.WrapAnywhere; selectByMouse: true
                         placeholderText: "SELECT … (Ctrl+Entrée pour exécuter)"; placeholderTextColor: "#7F93B5"
                         background: null
                         Keys.onPressed: (event) => {
@@ -300,7 +300,7 @@ Item {
             Text {
                 id: infoLine
                 objectName: "dbInfo"
-                y: editorBox.height + 6; width: parent.width - 90; elide: Text.ElideRight; textFormat: Text.PlainText; font.pixelSize: 11
+                y: editorBox.height + 6; width: parent.width - 90; elide: Text.ElideRight; textFormat: Text.PlainText; font.pixelSize: 12
                 color: win.db && win.db.error !== "" ? "#FCA5A5" : Theme.inkMuted
                 text: !win.db ? "" : (win.db.error !== "" ? "" : (win.db.busy ? win.db.status : (win.db.resultInfo !== "" ? win.db.resultInfo : win.db.status)))
                 visible: win.db && win.db.error === ""
@@ -340,7 +340,7 @@ Item {
                                 required property int index
                                 width: win.colWidth; height: 28; color: "#40307CF0"; border.width: 1; border.color: "#25DCEBFF"
                                 Text { anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight; textFormat: Text.PlainText
-                                       horizontalAlignment: win.db.numeric[index] ? Text.AlignRight : Text.AlignLeft; text: modelData; color: Theme.ink; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                       horizontalAlignment: win.db.numeric[index] ? Text.AlignRight : Text.AlignLeft; text: modelData; color: Theme.ink; font.pixelSize: 12; font.weight: Font.DemiBold }
                             }
                         }
                     }
@@ -364,7 +364,7 @@ Item {
                                         anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight; textFormat: Text.PlainText
                                         horizontalAlignment: win.db.numeric[index] ? Text.AlignRight : Text.AlignLeft
                                         text: modelData === null ? "NULL" : String(modelData).replace(/\n/g, "⏎")
-                                        font.pixelSize: 11; font.italic: modelData === null; font.family: win.db.numeric[index] ? Theme.monoFamily : ""
+                                        font.pixelSize: 12; font.italic: modelData === null; font.family: win.db.numeric[index] ? Theme.monoFamily : ""
                                         color: modelData === null ? "#7F93B5" : Theme.ink
                                     }
                                 }
@@ -414,7 +414,7 @@ Item {
                             objectName: "dbEngine_" + modelData.k
                             width: 110; height: win.adaptive ? 44 : 30; radius: 8
                             color: win.formEngine === modelData.k ? "#592F8CFF" : "#1AFFFFFF"; border.width: win.formEngine === modelData.k ? 1 : 0; border.color: "#802F8CFF"
-                            Text { anchors.centerIn: parent; text: modelData.t; color: Theme.ink; font.pixelSize: 12 }
+                            Text { anchors.centerIn: parent; text: modelData.t; color: Theme.ink; font.pixelSize: 13 }
                             MouseArea { anchors.fill: parent; onClicked: win.formEngine = modelData.k }
                         }
                     }
@@ -437,10 +437,10 @@ Item {
  palette.windowText: Theme.ink
  id: clearPassword; visible: win.formEngine === "postgres" && win.formHadPassword; text: "Effacer le mot de passe enregistré" }
                 Text {
-                    visible: win.formEngine === "postgres"; width: parent.width; wrapMode: Text.WordWrap; color: Theme.inkMuted; font.pixelSize: 10
+                    visible: win.formEngine === "postgres"; width: parent.width; wrapMode: Text.WordWrap; color: Theme.inkMuted; font.pixelSize: 11
                     text: "La connexion est ouverte depuis le serveur Linux (psql), pas depuis ce poste. Le mot de passe n'est jamais dans la ligne de commande ni dans un journal."
                 }
-                Text { visible: win.formError !== ""; width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText; color: "#FCA5A5"; font.pixelSize: 11; text: win.formError }
+                Text { visible: win.formError !== ""; width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText; color: "#FCA5A5"; font.pixelSize: 12; text: win.formError }
                 Row {
                     spacing: 8
                     Button { objectName: "dbFormSave"; text: "Enregistrer"; onClicked: win.submitForm() }
