@@ -29,6 +29,7 @@ Item {
     property string fixturePreview: ""
     signal requestDocuments(string path)
     signal requestMail(string path)
+    signal requestEditor(string path)
     signal requestTerminal(string path)
     signal closeRequested()
     signal requestServers()
@@ -414,6 +415,7 @@ Item {
         palette.text: "#F5F9FF"; palette.base: "#152238"; palette.light: "#152238"; palette.mid: "#2A3A58"
         palette.highlightedText: "#FFFFFF"; palette.buttonText: "#F5F9FF"
         MenuItem { text: "Ouvrir"; onTriggered: win.open(win.selected) }
+        MenuItem { objectName:"filesOpenInEditor"; text:"Ouvrir dans l’éditeur"; enabled:win.connected && !win.fixture && !win.inTrash && win.selected!==null && !win.selected.directory; onTriggered:win.requestEditor(win.selected.path) }
         MenuItem { objectName:"filesAttachToMail"; text:"Joindre à un message…"; enabled:win.connected && !win.fixture && !win.inTrash && win.selected!==null && !win.selected.directory && !win.selected.link; onTriggered:win.requestMail(win.selected.path) }
         MenuItem { text: "Télécharger…"; enabled: win.selected !== null && !win.selected.directory; onTriggered: win.askDownload(win.selected) }
         MenuSeparator {}

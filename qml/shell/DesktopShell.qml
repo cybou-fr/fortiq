@@ -383,6 +383,7 @@ Item {
         onRequestDisconnect: shell.confirmSessionEnd("Se déconnecter", function() { shell.controller.disconnectServer() })
         onRequestDocuments:path=>shell.act("openDocument", { path: path })
         onRequestMail:path=>shell.act("attachToMail", { path:path })
+        onRequestEditor:path=>shell.route({ type:"openInEditor", path:path, serverId:shell.controller ? shell.controller.activeServerId : "" })
         onRequestTerminal: path => shell.act("terminalHere", { path: path })
     }
 

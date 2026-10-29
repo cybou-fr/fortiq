@@ -33,6 +33,7 @@ Item {
     signal requestFiles(string path,string serverId)
 
     DocumentSearch { id:finder }
+    CodeHighlighter { document:editor.textDocument;fileName:win.documents && win.documents.path ? win.documents.path : "" }
 
     // ---- document <-> editor ----
     function syncDocument(){

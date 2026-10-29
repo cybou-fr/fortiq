@@ -151,6 +151,7 @@ qt_add_qml_module(fortiq_shell ${FORTIQ_QML_SCAN_OPTIONS}
     SOURCES src/terminal/TerminalView.cpp src/terminal/TerminalView.h
         src/documents/MarkdownPreview.cpp src/documents/MarkdownPreview.h
         src/documents/MarkdownHighlighter.cpp src/documents/MarkdownHighlighter.h
+        src/documents/CodeHighlighter.cpp src/documents/CodeHighlighter.h
         src/documents/DocumentSearch.cpp src/documents/DocumentSearch.h
     RESOURCES
         assets/wallpapers/aurora.jpg
@@ -593,6 +594,10 @@ if(BUILD_TESTING)
     target_include_directories(fortiq_highlighter_tests PRIVATE src)
     target_link_libraries(fortiq_highlighter_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml Qt6::Test)
     add_test(NAME fortiq_highlighter COMMAND fortiq_highlighter_tests -o "${CMAKE_CURRENT_BINARY_DIR}/highlighter-results.txt,txt" -o "-,txt")
+    qt_add_executable(fortiq_code_highlighter_tests tests/CodeHighlighterTest.cpp src/documents/CodeHighlighter.cpp src/documents/CodeHighlighter.h)
+    target_include_directories(fortiq_code_highlighter_tests PRIVATE src)
+    target_link_libraries(fortiq_code_highlighter_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml Qt6::Test)
+    add_test(NAME fortiq_code_highlighter COMMAND fortiq_code_highlighter_tests -o "${CMAKE_CURRENT_BINARY_DIR}/code-highlighter-results.txt,txt" -o "-,txt")
     qt_add_executable(fortiq_layout_tests tests/ShellLayoutTest.cpp src/core/TaskManager.cpp src/core/TaskManager.h)
     qt_add_qml_module(fortiq_layout_tests ${FORTIQ_QML_SCAN_OPTIONS} URI Fortiq.App VERSION 1.0
         IMPORT_PATH ${CMAKE_CURRENT_BINARY_DIR}/qml
