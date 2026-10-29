@@ -647,10 +647,25 @@ if(WIN32 AND QT6_IS_SHARED_LIBS_BUILD)
     find_program(FORTIQ_WINDEPLOYQT windeployqt HINTS "${FORTIQ_QT_BIN_DIR}")
     if(FORTIQ_DEPLOY_QT AND FORTIQ_WINDEPLOYQT AND TARGET fortiq)
         set(FORTIQ_APP_DIR "${CMAKE_CURRENT_BINARY_DIR}/app")
+        # TARGET_RUNTIME_DLLS misses libssh2's own dependencies (zlib, OpenSSL):
+        # take every DLL from the folder that holds the libssh2 runtime.
+        set(FORTIQ_VENDOR_DLLS)
+        foreach(FORTIQ_DLL_PROP IMPORTED_LOCATION_RELEASE IMPORTED_LOCATION)
+            get_target_property(FORTIQ_SSH_DLL ${FORTIQ_SSH_TARGET} ${FORTIQ_DLL_PROP})
+            if(FORTIQ_SSH_DLL AND FORTIQ_SSH_DLL MATCHES "[.]dll$")
+                get_filename_component(FORTIQ_SSH_DLL_DIR "${FORTIQ_SSH_DLL}" DIRECTORY)
+                file(GLOB FORTIQ_VENDOR_DLLS "${FORTIQ_SSH_DLL_DIR}/*.dll")
+                break()
+            endif()
+        endforeach()
+        if(NOT FORTIQ_VENDOR_DLLS)
+            message(WARNING "libssh2 runtime DLLs not found: build/app may miss z.dll / libcrypto")
+        endif()
         add_custom_command(TARGET fortiq POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory "${FORTIQ_APP_DIR}"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:fortiq>" "${FORTIQ_APP_DIR}"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:fortiq> "${FORTIQ_APP_DIR}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${FORTIQ_VENDOR_DLLS} "${FORTIQ_APP_DIR}"
             COMMAND "${FORTIQ_WINDEPLOYQT}"
                 $<IF:$<CONFIG:Debug>,--debug,--release>
                 --qmldir "${CMAKE_CURRENT_SOURCE_DIR}/qml"
