@@ -201,7 +201,7 @@ Item {
     }
 
     RectangularShadow { anchors.fill: parent; offset.y: 14; radius: 16; blur: 44; color: "#73000814" }
-    Glass { id: body; anchors.fill: parent; backdrop: win.backdrop; radius: 16; shadow: false; tint: "#B3121C30"; blurAmount: 0.9 }
+    Glass { id: body; anchors.fill: parent; backdrop: win.backdrop; radius: 16; shadow: false; tint: Theme.appWindow; blurAmount: 0.9 }
 
     // ── sidebar ────────────────────────────────────────────────────────
     Rectangle {

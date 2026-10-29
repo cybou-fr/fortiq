@@ -176,7 +176,7 @@ Item {
     onDocumentsChanged:syncDocument()
     Component.onCompleted:syncDocument()
 
-    Glass { anchors.fill:parent;backdrop:win.backdrop;tint:"#B3121C30";blurAmount:0.9;radius:16 }
+    Glass { anchors.fill:parent;backdrop:win.backdrop;tint:Theme.appWindow;blurAmount:0.9;radius:16 }
 
     // ---- title bar ----
     Item {

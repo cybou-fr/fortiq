@@ -150,7 +150,7 @@ Item {
     }
     function tagOf(thread, tag) { return thread !== null && thread.tags.indexOf(tag) >= 0 }
 
-    Glass { anchors.fill: parent; backdrop: win.backdrop; tint: "#B3121C30"; blurAmount: 0.9; radius: 16 }
+    Glass { anchors.fill: parent; backdrop: win.backdrop; tint: Theme.appWindow; blurAmount: 0.9; radius: 16 }
     MouseArea { visible: win.drawer && win.navigationOpen; anchors.fill: parent; z: 30; onClicked: win.navigationOpen = false }
 
     Rectangle {

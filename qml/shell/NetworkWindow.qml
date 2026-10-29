@@ -30,7 +30,7 @@ Item {
     ]
     readonly property var listModel: !network ? [] : section === "interfaces" ? network.interfaces : section === "ports" ? network.listeners : section === "routes" ? network.routes : []
 
-    Glass { anchors.fill: parent; backdrop: win.backdrop; tint: "#B3121C30"; blurAmount: 0.9; radius: 16 }
+    Glass { anchors.fill: parent; backdrop: win.backdrop; tint: Theme.appWindow; blurAmount: 0.9; radius: 16 }
     MouseArea { visible: win.drawer && win.navigationOpen; anchors.fill: parent; z: 30; onClicked: win.navigationOpen = false }
 
     Rectangle {

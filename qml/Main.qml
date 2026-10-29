@@ -13,6 +13,27 @@ ApplicationWindow {
     minimumHeight: 320
     title: "FORTIQ"
     color: "#06152A"
+    // One dark-glass palette for every standard control of every app (Fusion draws fields, buttons, menus,
+    // tool tips and scroll bars from it): no white fields or light-grey buttons on the dark glass.
+    palette.window: "#101A2E"
+    palette.windowText: Theme.ink
+    palette.base: "#162440"
+    palette.alternateBase: "#1B2B4A"
+    palette.text: Theme.ink
+    palette.placeholderText: "#8FA0BC"
+    palette.button: "#26375A"
+    palette.buttonText: Theme.ink
+    palette.brightText: "#FFFFFF"
+    palette.highlight: Theme.selection
+    palette.highlightedText: "#FFFFFF"
+    palette.light: "#4A5E86"
+    palette.midlight: "#3A4C70"
+    palette.mid: "#3A4C70"
+    palette.dark: "#0A1224"
+    palette.shadow: "#000000"
+    palette.toolTipBase: "#1B2B4A"
+    palette.toolTipText: Theme.ink
+    palette.link: "#7CC4FF"
     // Android draws its own status icons. Give that safe inset the system
     // palette background rather than wallpaper; navigation stays edge-to-edge.
     background: Item {

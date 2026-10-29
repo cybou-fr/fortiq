@@ -21,7 +21,7 @@ Item {
         { key: "appearance", title: "Apparence" }, { key: "servers", title: "Serveurs" }, { key: "about", title: "À propos" }
     ]
 
-    Glass { anchors.fill: parent; backdrop: win.backdrop; tint: "#B3121C30"; blurAmount: 0.9; radius: 16 }
+    Glass { anchors.fill: parent; backdrop: win.backdrop; tint: Theme.appWindow; blurAmount: 0.9; radius: 16 }
     WindowDragArea { anchors.left: parent.left; anchors.right: parent.right; height: 44; windowItem: win; movable: !win.adaptive }
 
     Row {

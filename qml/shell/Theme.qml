@@ -19,6 +19,8 @@ QtObject {
     readonly property color tileLight: "#E6EFF9FE"
     readonly property color tileDark: "#59424A66"
     readonly property color dock: "#E2121A28"
+    // Body of every application window (not the sketch's Files window): dense enough that text of a window underneath never shows through.
+    readonly property color appWindow: "#EB121C30"
 
     readonly property color accent: "#2F8CFF"
     readonly property color accentDeep: "#1F6FE5"

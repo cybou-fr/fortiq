@@ -37,7 +37,7 @@ Item {
     function focusAddress() { address.forceActiveFocus(); address.selectAll() }
     function fmtSeconds(v) { return v > 0 ? (v * 1000).toFixed(0) + " ms" : "—" }
 
-    Glass { anchors.fill: parent; backdrop: win.backdrop; tint: "#B3121C30"; blurAmount: 0.9; radius: 16 }
+    Glass { anchors.fill: parent; backdrop: win.backdrop; tint: Theme.appWindow; blurAmount: 0.9; radius: 16 }
 
     // ── toolbar (also the drag handle) ─────────────────────────────────
     Item {

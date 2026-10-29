@@ -20,7 +20,7 @@ Item {
         backdrop: win.backdrop
         radius: 14
         shadow: false
-        tint: "#B3121C30"
+        tint: Theme.appWindow
         blurAmount: 0.9
     }
     onXChanged: { chrome.syncOrigin(); page.syncOrigin() }
