@@ -20,7 +20,7 @@ Item {
         { app: "files", kind: "files", label: "Fichiers", ready: true },
         { app: "logs", kind: "logs", label: "Journaux", ready: true },
         { app: "terminal", kind: "terminal", label: "Terminal", ready: true },
-        { app: "editor", kind: "editor", label: "Éditeur", ready: false },
+        { app: "editor", kind: "editor", label: "Éditeur", ready: !fixture },
         { app: "browser", kind: "browser", label: "Navigateur", ready: !fixture },
         { app: "settings", kind: "settings", label: "Paramètres", ready: !fixture }
     ].concat(fixture?[]:[{app:"disks",kind:"disks",label:"Disques",ready:true},{app:"network",kind:"network",label:"Réseau",ready:true},{app:"system",kind:"system",label:"Système",ready:true},{app:"db",kind:"db",label:"Bases",ready:true},{app:"mail",kind:"mail",label:"Courrier",ready:true},{app:"docs",kind:"docs",label:"MDok",ready:true}])

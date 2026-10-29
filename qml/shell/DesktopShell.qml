@@ -57,7 +57,9 @@ Item {
     property bool settingsOpen: false
     property bool disksOpen: false
     property var documentsController:null
+    property var editorController:null
     property bool documentsOpen:false
+    property bool editorOpen:false
     property bool fixture: false
     property string fixturePreview: ""
     property url wallpaperSource: ""
@@ -104,17 +106,31 @@ Item {
             pushNotification("warning", "MDok", "Un document est en cours de traitement. Réessayez après la fin de l'opération.")
             return
         }
-        if(documentsController && documentsController.hasDirtyTabs()){
-            serversOpen=false;documentsOpen=true;raiseApp("docs");documentsWindow.requestAllDocumentsReady(function(){
-                // Re-check: a different tab may have started writing during confirmation.
-                if(documentsController.hasBusyTabs() || documentsController.hasDirtyTabs())return
-                guarded()
+        if(editorController && editorController.busy){
+            serversOpen=false;editorOpen=true;raiseApp("editor")
+            pushNotification("warning", "Éditeur", "Un fichier est en cours d'enregistrement. Réessayez après la fin de l'opération.")
+            return
+        }
+        // Unsaved text of the code editor is asked about first, then MDok tabs, then running tasks.
+        const afterEditor = function() {
+            if(documentsController && documentsController.hasDirtyTabs()){
+                serversOpen=false;documentsOpen=true;raiseApp("docs");documentsWindow.requestAllDocumentsReady(function(){
+                    // Re-check: a different tab may have started writing during confirmation.
+                    if(documentsController.hasBusyTabs() || documentsController.hasDirtyTabs())return
+                    guarded()
+                })
+            } else guarded()
+        }
+        if(editorController && editorController.dirty){
+            serversOpen=false;editorOpen=true;raiseApp("editor");editorWindow.requestAllReady(function(){
+                if(editorController.busy || editorController.dirty)return
+                afterEditor()
             })
-        } else guarded()
+        } else afterEditor()
     }
     function endSession() {
         sessionMenuOpen = false; launcherOpen = false; controlOpen = false
-        filesOpen = false; logsOpen = false; terminalOpen = false; disksOpen = false; documentsOpen = false; webOpen = false; networkOpen = false; systemOpen = false; dbOpen = false; mailOpen = false
+        filesOpen = false; logsOpen = false; terminalOpen = false; disksOpen = false; documentsOpen = false; editorOpen = false; webOpen = false; networkOpen = false; systemOpen = false; dbOpen = false; mailOpen = false
         // Settings and the fixture browser are windows too. Leaving either
         // open can expose a stale panel above the next server login.
         settingsOpen = false; browserOpen = false
@@ -171,7 +187,7 @@ Item {
         target: shell.controller
         function onChanged() { if (shell.controller.connected && shell.serversOpen && !shell.fixture) shell.serversOpen = false }
     }
-    property var windowOrder: ["files", "browser", "logs", "terminal", "disks", "docs", "web", "network", "system", "db", "mail"]
+    property var windowOrder: ["files", "browser", "logs", "terminal", "disks", "docs", "editor", "web", "network", "system", "db", "mail"]
     // Wallpaper choice is a display preference of this device (the reference scene neither reads nor writes it).
     function setWallpaper(name) {
         wallpaperName = name
@@ -189,7 +205,7 @@ Item {
         { t: "Fichiers", k: "files", d: "Application" }, { t: "Journaux", k: "logs", d: "Application" }, { t: "Terminal", k: "terminal", d: "Application" },
         { t: "Navigateur", k: "browser", d: "Application" }, { t: "Réseau", k: "network", d: "Application" }, { t: "Système", k: "system", d: "Application" },
         { t: "Bases de données", k: "db", d: "Application" }, { t: "Courrier", k: "mail", d: "Application" }, { t: "Disques", k: "disks", d: "Application" },
-        { t: "MDok (documents)", k: "docs", d: "Application" }, { t: "Corbeille", k: "trash", d: "Fichiers" },
+        { t: "MDok (documents)", k: "docs", d: "Application" }, { t: "Éditeur de code", k: "editor", d: "Application" }, { t: "Corbeille", k: "trash", d: "Fichiers" },
         { t: "Paramètres", k: "settings", d: "Application" }, { t: "Fond d’écran", k: "settings", d: "Paramètre", section: "appearance" },
         { t: "Position de la barre des applications", k: "settings", d: "Paramètre", section: "appearance" },
         { t: "Serveurs", k: "servers", d: "Paramètre" }, { t: "À propos de FORTIQ", k: "settings", d: "Paramètre", section: "about" }
@@ -213,7 +229,7 @@ Item {
         if (foregroundApp !== closed) return
         const opened = {
             files: filesOpen, browser: browserOpen, logs: logsOpen,
-            terminal: terminalOpen, disks: disksOpen, docs: documentsOpen,
+            terminal: terminalOpen, disks: disksOpen, docs: documentsOpen, editor: editorOpen,
             web: webOpen, network: networkOpen, system: systemOpen,
             db: dbOpen, mail: mailOpen, settings: settingsOpen
         }
@@ -274,6 +290,7 @@ Item {
             return false
         }
         switch (a.type) {
+        case "openInEditor": editorOpen = true; raiseApp("editor"); launcherOpen = false; editorWindow.request("open", a.path); break
         case "openDocument": documentsOpen = true; raiseApp("docs"); launcherOpen = false; documentsWindow.request("open", a.path); break
         case "revealInFiles": controller.navigate(a.path); filesOpen = true; raiseApp("files"); launcherOpen = false; break
         case "pickMailAttachment":
@@ -313,6 +330,7 @@ Item {
         else if (app === "logs") { raiseApp("logs"); logsOpen = true; launcherOpen = false }
         else if (app === "terminal") { terminalOpen = true; raiseApp("terminal"); launcherOpen = false }
         else if (app === "docs") { documentsOpen=true;raiseApp("docs");launcherOpen=false }
+        else if (app === "editor") { editorOpen=true;raiseApp("editor");launcherOpen=false }
         else if (app === "disks") { disksOpen=true;raiseApp("disks");launcherOpen=false }
         else if (app === "network") { networkOpen = true; raiseApp("network"); launcherOpen = false }
         else if (app === "system") { systemOpen = true; raiseApp("system"); launcherOpen = false }
@@ -520,13 +538,25 @@ Item {
         onRequestServers:shell.serversOpen=true
         onRequestFiles:(path, serverId)=>shell.route({ type:"revealFile", path:path, serverId:serverId })
     }
+    EditorWindow {
+        id:editorWindow
+        visible:shell.editorOpen && (!shell.adaptive || shell.foregroundApp==="editor")
+        adaptive:shell.adaptive
+        x:shell.adaptive?8:310;y:shell.adaptive?shell.appTop:80
+        width:shell.adaptive?shell.width-16:1020;height:shell.adaptive?shell.appHeight:680
+        z:shell.windowOrder.indexOf("editor")+1
+        backdrop:wallpaper;documents:shell.editorController;remote:shell.controller
+        onCloseRequested: { shell.editorOpen = false; shell.focusAfterClose("editor"); if (shell.adaptive && shell.foregroundApp === "files") shell.filesOpen = true }
+        onRequestServers:shell.serversOpen=true
+        onRequestFiles:(path, serverId)=>shell.route({ type:"revealFile", path:path, serverId:serverId })
+    }
     // Closing the window: unsaved MDok drafts first, then running tasks (asked once, then the app quits).
     function allowAppClose(){
         if(mailWindow.hasUnsentDraft){
             serversOpen=false;mailOpen=true;raiseApp("mail")
             mailWindow.requestQuit(function(){if(shell.allowAppClose())Qt.quit()});return false
         }
-        if ((documentsController && documentsController.hasDirtyTabs())
+        if ((documentsController && documentsController.hasDirtyTabs()) || (editorController && editorController.dirty)
                 || (taskManager && taskManager.guardingCount() > 0)) {
             confirmSessionEnd("Quitter", function() { Qt.quit() }); return false
         }
@@ -540,7 +570,7 @@ Item {
         z: 9
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         onPressed: mouse => {
-            const windows = [{key: "files", item: filesWindow}, {key: "browser", item: browserWindow}, {key: "logs", item: logsWindow}, {key: "terminal", item: terminalWindow}, {key:"disks",item:disksWindow}, {key:"docs",item:documentsWindow}, {key:"web",item:(shell.engineOn && shell.engineWindowItem) ? shell.engineWindowItem : webWindow}, {key:"network",item:networkWindow}, {key:"system",item:systemWindow}, {key:"db",item:dbWindow}, {key:"mail",item:mailWindow}, {key:"settings",item:settingsWindow}]
+            const windows = [{key: "files", item: filesWindow}, {key: "browser", item: browserWindow}, {key: "logs", item: logsWindow}, {key: "terminal", item: terminalWindow}, {key:"disks",item:disksWindow}, {key:"docs",item:documentsWindow}, {key:"editor",item:editorWindow}, {key:"web",item:(shell.engineOn && shell.engineWindowItem) ? shell.engineWindowItem : webWindow}, {key:"network",item:networkWindow}, {key:"system",item:systemWindow}, {key:"db",item:dbWindow}, {key:"mail",item:mailWindow}, {key:"settings",item:settingsWindow}]
             windows.sort((a, b) => b.item.z - a.item.z)
             for (const entry of windows) {
                 const p = entry.item.mapFromItem(shell, mouse.x, mouse.y)
@@ -618,7 +648,7 @@ Item {
         y: edge === "left" ? 59 : parent.height - height - 8
         width: edge === "left" ? 84 : (shell.fixture?560:Math.min(parent.width-16,appPanel.apps.length*60+84))
         height: edge === "left" ? parent.height - 59 - 8 : 70
-        running: ({ files: shell.filesOpen, logs: shell.logsOpen, terminal: shell.terminalOpen, disks:shell.disksOpen, docs:shell.documentsOpen, browser: shell.fixture ? shell.browserOpen : shell.webOpen, network: shell.networkOpen, system: shell.systemOpen, db: shell.dbOpen, mail: shell.mailOpen, settings: shell.settingsOpen, launcher: shell.launcherOpen })
+        running: ({ files: shell.filesOpen, logs: shell.logsOpen, terminal: shell.terminalOpen, disks:shell.disksOpen, docs:shell.documentsOpen, editor:shell.editorOpen, browser: shell.fixture ? shell.browserOpen : shell.webOpen, network: shell.networkOpen, system: shell.systemOpen, db: shell.dbOpen, mail: shell.mailOpen, settings: shell.settingsOpen, launcher: shell.launcherOpen })
         onLaunch: (app) => shell.launch(app)
         onMoveTo: (edge) => {
             shell.panelEdge = edge
@@ -809,6 +839,7 @@ Item {
         if (launcherOpen || controlOpen) { launcherOpen = false; controlOpen = false; return true }
         if (foregroundApp === "files" && filesWindow.handleBack()) return true
         if(foregroundApp==="docs")return documentsWindow.handleBack()
+        if(foregroundApp==="editor")return editorWindow.handleBack()
         if (foregroundApp === "disks") {
             if(disksWindow.handleBack())return true
             foregroundApp="files";filesOpen=true;return true

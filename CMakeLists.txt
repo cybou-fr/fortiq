@@ -92,6 +92,7 @@ set(FORTIQ_SHELL_QML
     qml/shell/TerminalWindow.qml
     qml/shell/DisksWindow.qml
     qml/shell/DocumentsWindow.qml
+    qml/shell/EditorWindow.qml
     qml/shell/AppIcon.qml
     qml/shell/FolderGlyph.qml
     qml/shell/FileThumb.qml

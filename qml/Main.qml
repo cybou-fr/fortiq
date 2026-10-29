@@ -52,6 +52,7 @@ ApplicationWindow {
         dbController: typeof databases !== "undefined" ? databases : null
         mailController: typeof mail !== "undefined" ? mail : null
         documentsController: typeof documents !== "undefined" ? documents : null
+        editorController: typeof codeEditor !== "undefined" ? codeEditor : null
         fixture: shellFixture
         fixturePreview: shellFixturePreview
         wallpaperSource: shellWallpaper

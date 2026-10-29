@@ -29,6 +29,8 @@ class DocumentsController:public QObject {
     Q_PROPERTY(bool conflictBusy READ conflictBusy NOTIFY changed)
     Q_PROPERTY(QString conflictDiff READ conflictDiff NOTIFY changed)
     Q_PROPERTY(QString conflictSummary READ conflictSummary NOTIFY changed)
+    // Code editor mode (Éditeur app): any absolute path, plain UTF-8 text; the Markdown rules (.md only) do not apply.
+    Q_PROPERTY(bool codeMode READ codeMode WRITE setCodeMode NOTIFY changed)
     Q_PROPERTY(bool pdfMode READ pdfMode NOTIFY changed)
     Q_PROPERTY(int pdfPage READ pdfPage NOTIFY changed)
     Q_PROPERTY(int pdfPages READ pdfPages NOTIFY changed)
@@ -44,6 +46,9 @@ public:
     bool hasDocument()const{return m_hasDocument;} bool isNew()const{return m_new;}
     bool canSave()const;
     bool sourceAvailable()const;
+    bool codeMode()const{return m_code;}
+    void setCodeMode(bool on){if(on!=m_code){m_code=on;emit changed();}}
+    bool acceptsPath(const QString &path)const;
     bool pdfMode()const{return m_pdfMode;}
     int pdfPage()const{return m_pdfPage;}
     int pdfPages()const{return m_pdfPages;}
@@ -95,6 +100,7 @@ private:
     QString m_path,m_text,m_base,m_sourceServerId,m_sourceLabel,m_status="Ouvrez un document Markdown du serveur.";
     QByteArray m_hash;
     bool m_pdfMode=false;
+    bool m_code=false;
     int m_pdfPage=0,m_pdfPages=0;
     QString m_pdfImage;
     QTimer m_draftTimer;

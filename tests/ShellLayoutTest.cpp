@@ -294,6 +294,103 @@ private slots:
         QVERIFY(!doc.resource(QTextDocument::ImageResource,QUrl("https://example.invalid/image.png")).isValid());
         QVERIFY(!doc.resource(QTextDocument::ImageResource,QUrl("data:image/png;base64,AA==")).isValid());
     }
+    void codeEditor_data() {
+        QTest::addColumn<QSize>("size");
+        QTest::newRow("desktop") << QSize(1536,1024);
+        QTest::newRow("phone") << QSize(390,844);
+    }
+    // The Éditeur app: opens a server file, edits with line numbers, saves, guards unsaved text, finds.
+    void codeEditor() {
+        QFETCH(QSize, size);
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("shellFixture", true);
+        engine.rootContext()->setContextProperty("shellFixturePreview", QString());
+        engine.rootContext()->setContextProperty("shellWallpaper", QUrl());
+        engine.rootContext()->setContextProperty("shellWallpaperName", "");
+        engine.rootContext()->setContextProperty("remote", QVariant::fromValue<QObject *>(nullptr));
+        engine.rootContext()->setContextProperty("logs", QVariant::fromValue<QObject *>(nullptr));
+        engine.loadFromModule("Fortiq.App", "Main");
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first()); QVERIFY(window);
+        window->resize(size); settle(window);
+        auto *shell = window->findChild<QQuickItem *>("desktopShell"); QVERIFY(shell);
+        const bool adaptive = shell->property("adaptive").toBool();
+        shell->setProperty("editorOpen",true);shell->setProperty("foregroundApp","editor");settle(window);
+        auto *ed=shell->findChild<QQuickItem *>("editorWindow");QVERIFY(ed);QVERIFY(ed->isVisible());
+        QVERIFY(ed->x()>=0 && ed->y()>=47);QVERIFY(ed->x()+ed->width()<=shell->width());
+        QQmlComponent component(&engine);
+#ifndef Q_MOC_RUN // moc cannot parse this raw string
+        component.setData(R"(import QtQml
+            QtObject {
+                id:fx
+                property bool connected:true
+                property string currentDirectory:"/home/fixture"
+                property string activeServerId:"code-fixture"
+                property int connectionGeneration:1
+                property bool sourceAvailable:true
+                property bool linkLost:false
+                property bool busy:false
+                property bool hasDocument:true
+                property bool isNew:false
+                property bool canSave:true
+                property bool pdfMode:false
+                property string path:"/home/fixture/main.cpp"
+                property string base:"int main() {\n    return 0;\n}\n"
+                property string text:base
+                readonly property bool dirty:text!==base
+                property string status:"Fichier chargé"
+                property string draftStatus:""
+                property var recovery:({})
+                property bool conflictActive:false
+                property bool conflictBusy:false
+                property string conflictDiff:""
+                property string conflictSummary:""
+                property int saves:0
+                signal changed()
+                signal loaded()
+                signal saved(string path)
+                function isCurrentDocument(p){return p===path}
+                function open(p){path=p;base=text="other\n";loaded()}
+                function createNew(){}
+                function save(){base=text;saves++;saved(path)}
+                function saveAs(p){path=p;save()}
+                function discardDraft(){text=base;loaded()}
+                function restoreDraft(){}
+                function dismissRecovery(d){}
+                function resolveConflictSaveCopy(){}
+                function resolveConflictTakeServer(){}
+                function closeConflict(){}
+            })",QUrl());
+#endif
+        auto *fixture=component.create();QVERIFY2(fixture,qPrintable(component.errorString()));fixture->setParent(window);
+        shell->setProperty("editorController",QVariant::fromValue(fixture));ed->setProperty("remote",QVariant::fromValue(fixture));settle(window);
+        auto *text=ed->findChild<QQuickItem *>("editorText");QVERIFY(text);
+        auto *gutter=ed->findChild<QQuickItem *>("editorGutter");QVERIFY(gutter);
+        QCOMPARE(text->property("text").toString(),fixture->property("base").toString());
+        QTRY_V(gutter->property("text").toString().startsWith("1\n2\n3"));
+        // Typing marks the document dirty; Ctrl+S saves it through the controller.
+        text->setProperty("text",QString("int main() {\n    return 1;\n}\n"));QVERIFY(fixture->property("dirty").toBool());
+        text->forceActiveFocus();QTest::keyClick(window,Qt::Key_S,Qt::ControlModifier);
+        QVERIFY(!fixture->property("dirty").toBool());QCOMPARE(fixture->property("saves").toInt(),1);
+        // Unsaved text is never dropped: closing asks first, Escape keeps the window.
+        text->setProperty("text",QString("changed"));QVERIFY(fixture->property("dirty").toBool());
+        QVERIFY(QMetaObject::invokeMethod(ed,"request",Q_ARG(QVariant,QVariant("close")),Q_ARG(QVariant,QVariant("")),Q_ARG(QVariant,QVariant())));
+        auto *dialog=ed->findChild<QQuickItem *>("editorUnsavedDialog");QVERIFY(dialog);QVERIFY(dialog->isVisible());
+        QCOMPARE(dialog->property("confirmText").toString(),QString("Enregistrer et continuer"));
+        QTest::keyClick(window,Qt::Key_Escape);QVERIFY(!dialog->isVisible());QVERIFY(ed->isVisible());QVERIFY(fixture->property("dirty").toBool());
+        // Find in place.
+        QVERIFY(QMetaObject::invokeMethod(ed,"openFind",Q_ARG(QVariant,QVariant(false))));
+        auto *findBar=ed->findChild<QQuickItem *>("editorFindBar");QVERIFY(findBar);QTRY_V(findBar->isVisible());
+        auto *find=ed->findChild<QQuickItem *>("editorFind");QVERIFY(find);find->setProperty("text",QString("chan"));
+        auto *count=ed->findChild<QQuickItem *>("editorFindCount");QVERIFY(count);
+        QTRY_V(count->property("text").toString().startsWith("1"));
+        QTest::keyClick(window,Qt::Key_Escape);QTRY_V(!findBar->isVisible());
+        // Save and continue, then the window closes.
+        QVERIFY(QMetaObject::invokeMethod(ed,"request",Q_ARG(QVariant,QVariant("close")),Q_ARG(QVariant,QVariant("")),Q_ARG(QVariant,QVariant())));
+        QVERIFY(dialog->isVisible());QVERIFY(QMetaObject::invokeMethod(dialog,"confirm"));
+        QTRY_V(!shell->property("editorOpen").toBool());QCOMPARE(fixture->property("saves").toInt(),2);
+        Q_UNUSED(adaptive);
+    }
     void viewport_data() {
         QTest::addColumn<QSize>("size"); QTest::addColumn<QString>("preview");
         for (const QSize size : {QSize(1536,1024), QSize(1600,950), QSize(1024,768), QSize(768,1024), QSize(390,844)})

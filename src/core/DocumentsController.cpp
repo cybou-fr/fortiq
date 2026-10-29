@@ -49,6 +49,7 @@ DocumentsController::DocumentsController(RemoteController *remote,QObject *paren
 DocumentsController::~DocumentsController(){m_pool.waitForDone();}
 DocumentsController *DocumentsController::createTabSession(){
     auto *tab=new DocumentsController(m_remote,this);
+    tab->m_code=m_code;
     m_tabSessions.append(tab);
     connect(tab,&DocumentsController::changed,this,&DocumentsController::changed);
     connect(tab,&QObject::destroyed,this,[this]{
@@ -90,6 +91,7 @@ bool DocumentsController::hasBusyTabs()const{
     return false;
 }
 
+bool DocumentsController::acceptsPath(const QString &path)const{return m_code||markdownPath(path);}
 bool DocumentsController::sourceAvailable()const{return m_hasDocument&&m_remote->connected()&&!m_remote->linkLost()&&m_sourceToken==m_remote->connectionToken()&&m_sourceServerId==m_remote->activeServerId();}
 bool DocumentsController::canSave()const{return sourceAvailable()&&!m_unknown;}
 bool DocumentsController::isCurrentDocument(const QString &path) const {
@@ -105,7 +107,7 @@ void DocumentsController::createNew(){
     if(dirty()){m_status="Conservez ou abandonnez le brouillon avant de changer de document.";emit changed();return;}
     ++m_seq;m_pdfMode=false;m_pdfImage.clear();m_pdfPage=m_pdfPages=0;m_sourceToken=m_remote->connectionToken();m_sourceLabel=m_remote->serverLabel();m_sourceServerId=m_remote->activeServerId();
     m_recovery.clear();m_conflict=false;m_draftTimer.stop();m_path.clear();m_base.clear();m_text="# Nouveau document\n";m_hash.clear();m_bom=m_crlf=m_unknown=false;m_new=m_hasDocument=true;
-    m_status="Nouveau Markdown — choisissez un chemin absolu .md pour enregistrer.";emit changed();emit loaded();
+    m_status=m_code?"Nouveau fichier — choisissez un chemin absolu pour enregistrer.":"Nouveau Markdown — choisissez un chemin absolu .md pour enregistrer.";emit changed();emit loaded();
 }
 bool DocumentsController::recoverAsNew(DocumentsController *source){
     if(!source||source==this||source->m_remote!=m_remote||source->m_pdfMode||
@@ -132,10 +134,10 @@ void DocumentsController::open(const QString &path){
     if(isCurrentDocument(path))return; // Re-activate without losing edits, selection or Undo.
     if(dirty()){m_status="Conservez ou abandonnez le brouillon avant d'ouvrir un autre document.";emit changed();return;}
     const auto clean=cleanAbsolutePath(path);
-    if(!clean || !markdownPath(*clean)){m_status="Chemin absolu .md ou .markdown requis.";emit changed();return;}
+    if(!clean || !acceptsPath(*clean)){m_status=m_code?"Chemin absolu requis.":"Chemin absolu .md ou .markdown requis.";emit changed();return;}
     m_pdfMode=false;m_pdfImage.clear();m_pdfPage=m_pdfPages=0;
     const auto request=m_remote->connectionRequest();const int token=m_remote->connectionToken(),seq=++m_seq;
-    const auto label=m_remote->serverLabel();m_operationToken=token;m_busy=true;m_writing=false;m_status="Lecture du Markdown…";emit changed();
+    const auto label=m_remote->serverLabel();m_operationToken=token;m_busy=true;m_writing=false;m_status=m_code?"Lecture du fichier…":"Lecture du Markdown…";emit changed();
     const int taskId=beginDocTask(m_remote,QStringLiteral("docOpen"),clean->section('/',-1),*clean,true);
     auto *watcher=new QFutureWatcher<SshResult>(this);
     connect(watcher,&QFutureWatcher<SshResult>::finished,this,[this,watcher,seq,token,target=*clean,label,taskId]{
@@ -146,7 +148,7 @@ void DocumentsController::open(const QString &path){
         if(result.status!=SshResult::Status::Ok || !decoded.error.isEmpty())m_status=result.status==SshResult::Status::Ok?decoded.error:result.message;
         else {
             m_path=target;m_text=m_base=decoded.text;m_bom=decoded.bom;m_crlf=decoded.crlf;m_hash=QCryptographicHash::hash(result.data,QCryptographicHash::Sha256);
-            m_sourceToken=token;m_sourceLabel=label;m_sourceServerId=m_remote->activeServerId();m_hasDocument=true;m_new=m_unknown=false;m_status="Markdown chargé · UTF-8 · "+QString(m_crlf?"CRLF":"LF");
+            m_sourceToken=token;m_sourceLabel=label;m_sourceServerId=m_remote->activeServerId();m_hasDocument=true;m_new=m_unknown=false;m_status=QString(m_code?"Fichier chargé":"Markdown chargé")+" · UTF-8 · "+QString(m_crlf?"CRLF":"LF");
             m_recovery.clear();m_conflict=false;m_draftStatus.clear();m_draftTimer.stop();
             emit changed();emit loaded();checkDraft();return;
         }
@@ -351,7 +353,7 @@ void DocumentsController::write(const QString &path,bool copy){
         return;
     }
     const auto clean=cleanAbsolutePath(path);
-    if(!clean || !markdownPath(*clean)){m_status="Destination absolue .md ou .markdown requise.";emit changed();return;}
+    if(!clean || !acceptsPath(*clean)){m_status=m_code?"Destination absolue requise.":"Destination absolue .md ou .markdown requise.";emit changed();return;}
     const auto bytes=encodeMarkdown(m_text,m_bom,m_crlf);
     if(bytes.size()>MarkdownLimit || m_text.contains(QChar::Null)){m_status="Document supérieur à 256 Kio ou caractère NUL.";emit changed();return;}
     m_draftTimer.stop();
@@ -524,7 +526,7 @@ void DocumentsController::beginConflict(){
 void DocumentsController::resolveConflictSaveCopy(){
     if(!m_conflict||m_busy||m_conflictBusy||m_path.isEmpty())return;
     const QString name=m_path.section('/',-1);const qsizetype dot=name.lastIndexOf('.');
-    const QString copyName=(dot>0?name.left(dot):name)+" (ma version)"+(dot>0?name.mid(dot):QString(".md"));
+    const QString copyName=(dot>0?name.left(dot):name)+" (ma version)"+(dot>0?name.mid(dot):(m_code?QString():QString(".md")));
     write(parentPath(m_path)+(parentPath(m_path).endsWith('/')?"":"/")+copyName,true);
 }
 void DocumentsController::resolveConflictTakeServer(){

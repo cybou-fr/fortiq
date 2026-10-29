@@ -155,6 +155,9 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("logs", &logs);
     fortiq::DocumentsController documents(&controller);
     engine.rootContext()->setContextProperty("documents", &documents);
+    fortiq::DocumentsController codeEditor(&controller);
+    codeEditor.setCodeMode(true);
+    engine.rootContext()->setContextProperty("codeEditor", &codeEditor);
     fortiq::DisksController disks(&controller);
     engine.rootContext()->setContextProperty("disks", &disks);
     fortiq::BrowserController browser(&controller);
@@ -184,6 +187,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("network", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("systemInfo", QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty("documents", QVariant::fromValue<QObject *>(nullptr));
+    engine.rootContext()->setContextProperty("codeEditor", QVariant::fromValue<QObject *>(nullptr));
 #endif
     engine.loadFromModule("Fortiq.App", "Main");
     if (engine.rootObjects().isEmpty()) return 1;
