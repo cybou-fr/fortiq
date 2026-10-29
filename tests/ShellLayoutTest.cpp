@@ -1226,7 +1226,9 @@ QtObject { property bool connected: true; property bool linkLost: false; propert
             auto *editor=doc->findChild<QQuickItem *>("documentsEditor");QVERIFY(editor);
             auto *render=doc->findChild<QQuickItem *>("documentsPreview");QVERIFY(render);
             QString rendered;
+            if(adaptive)doc->setProperty("previewMode",true);   // the hidden preview is deliberately not rendered
             QTRY_V([&] { rendered.clear(); return QMetaObject::invokeMethod(render,"plainText",Q_RETURN_ARG(QString,rendered)) && rendered.contains("Title") && rendered.contains("bold") && !rendered.contains("**bold**"); }());   // the preview renders asynchronously
+            if(adaptive)doc->setProperty("previewMode",false);
             render->setProperty("source",QString(64001,'x'));QVERIFY(render->property("limited").toBool());
             editor->setProperty("text",QString::fromUtf8("# Modifié\nПривет **texte**\n"));QVERIFY(fixture->property("dirty").toBool());
             editor->forceActiveFocus();QTest::keyClick(window,Qt::Key_S,Qt::ControlModifier);QVERIFY(!fixture->property("dirty").toBool());
@@ -1243,6 +1245,8 @@ QtObject { property bool connected: true; property bool linkLost: false; propert
             QVERIFY(!dialog->isVisible());QCOMPARE(fixture->property("text").toString(),QString("unsaved"));
             QCOMPARE(fixture->property("opens").toInt(),0);
             // A different document offers Save and continue; failed saves keep the current text and target pending.
+            // With a tab-capable open document a dirty file stays in its tab; the confirmation path covers a window without one.
+            fixture->setProperty("hasDocument",false);
             auto requestOther=[&] { return QMetaObject::invokeMethod(doc,"request",Q_ARG(QVariant,QVariant("open")),Q_ARG(QVariant,QVariant(QString("/home/fixture/other-%1.md").arg(fixture->property("opens").toInt()))),Q_ARG(QVariant,QVariant())); };
             QVERIFY(requestOther());QVERIFY(dialog->isVisible());
             QCOMPARE(dialog->property("confirmText").toString(),QString("Enregistrer et continuer"));
@@ -1265,7 +1269,7 @@ QtObject { property bool connected: true; property bool linkLost: false; propert
             QVERIFY(QMetaObject::invokeMethod(doc,"continuePending",Q_ARG(QVariant,QVariant(true))));
             QVERIFY(dialog->isVisible());QVERIFY(fixture->property("dirty").toBool());
             QTest::keyClick(window,Qt::Key_Escape);
-            fixture->setProperty("connectionGeneration",1);
+            fixture->setProperty("connectionGeneration",1);fixture->setProperty("hasDocument",true);
             auto *showFiles=doc->findChild<QQuickItem *>("documentsShowInFiles");QVERIFY(showFiles);
             QSignalSpy revealRequests(doc,SIGNAL(requestFiles(QString,QString)));QVERIFY(revealRequests.isValid());
             doc->setProperty("navigationOpen",true);settle(window);QVERIFY(showFiles->isVisible());QVERIFY(showFiles->isEnabled());
@@ -1292,8 +1296,8 @@ QtObject { property bool connected: true; property bool linkLost: false; propert
             auto *statsText=doc->findChild<QQuickItem *>("documentsStats");QVERIFY(statsText);
             editor->setProperty("text",QString::fromUtf8("# Projet Été\n\n**Objectif** : Bonjour Привет.\n\n- Document serveur\n- Enregistrement sûr\n\n> Note de travail\n"));
             fixture->setProperty("base",fixture->property("text"));
-            QTRY_V([&] { QString finalPreview; return QMetaObject::invokeMethod(render,"plainText",Q_RETURN_ARG(QString,finalPreview)) && finalPreview.contains(QString::fromUtf8("Projet Été")); }());
             if(adaptive)doc->setProperty("previewMode",true);
+            QTRY_V([&] { QString finalPreview; return QMetaObject::invokeMethod(render,"plainText",Q_RETURN_ARG(QString,finalPreview)) && finalPreview.contains(QString::fromUtf8("Projet Été")); }());
             settle(window);
             QVERIFY(window->grabWindow().save(QString("layout-captures/%1-mdok.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
         }
