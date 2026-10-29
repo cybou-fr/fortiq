@@ -1174,6 +1174,7 @@ QtObject { property bool connected: true; property bool linkLost: false; propert
 #ifndef Q_MOC_RUN // moc cannot parse this raw string
             component.setData(R"(import QtQml
                 QtObject {
+                    id:fixtureRoot
                     property bool connected:true
                     property string currentDirectory:"/home/fixture"
                     property string activeServerId:"document-fixture"
@@ -1210,8 +1211,8 @@ QtObject { property bool connected: true; property bool linkLost: false; propert
                     property string conflictSummary:""
                     signal markdownImageReady(string relativePath,string base64)
                     function hasBusyTabs(){return false}
-                    function hasDirtyTabs(){return false}
-                    function dirtyTabSessions(){return []}
+                    function hasDirtyTabs(){return dirty}
+                    function dirtyTabSessions(){return dirty?[fixtureRoot]:[]}
                     function restoreDraft(){}
                     function dismissRecovery(d){}
                     function resolveConflictSaveCopy(){}
