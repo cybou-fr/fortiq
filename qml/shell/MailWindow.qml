@@ -440,6 +440,7 @@ Item {
         state: "error"; touch: win.adaptive
         x: win.contentLeft + 20; y: 110; width: Math.max(0, parent.width - x - 20)
         text: win.mailer ? win.mailer.status : ""
+        retryText: "R\u00e9essayer"; onRetry: win.mailer.refresh()
     }
 
     FileDialog {

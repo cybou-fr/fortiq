@@ -410,6 +410,41 @@ private slots:
             QVERIFY(dockTip->mapToScene(QPointF(0,0)).y()>=0);
         }
     }
+    // The shared error state offers a retry; a loading state shows no button.
+    void stateMessageRetry() {
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("shellFixture", true);
+        engine.rootContext()->setContextProperty("shellFixturePreview", QString());
+        engine.rootContext()->setContextProperty("shellWallpaper", QUrl());
+        engine.rootContext()->setContextProperty("shellWallpaperName", "");
+        engine.rootContext()->setContextProperty("remote", QVariant::fromValue<QObject *>(nullptr));
+        engine.rootContext()->setContextProperty("logs", QVariant::fromValue<QObject *>(nullptr));
+        engine.loadFromModule("Fortiq.App", "Main");
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first()); QVERIFY(window);
+        window->resize(QSize(1536,1024)); settle(window);
+        QQmlComponent component(&engine);
+#ifndef Q_MOC_RUN
+        component.setData(R"(import QtQuick
+            import Fortiq.Shell
+            AppStateMessage {
+                property int retries: 0
+                state: "error"; width: 400; x: 100; y: 100; z: 5000
+                retryText: "Réessayer"; text: "Lecture impossible : droits insuffisants."
+                onRetry: retries++
+            })",QUrl());
+#endif
+        auto *msg=qobject_cast<QQuickItem *>(component.create());QVERIFY2(msg,qPrintable(component.errorString()));
+        msg->setParentItem(window->contentItem());settle(window);
+        auto *retry=msg->findChild<QQuickItem *>("stateRetry");QVERIFY(retry);QVERIFY(retry->isVisible());
+        QVERIFY(retry->height()>=38);
+        const QPoint at=retry->mapToScene(QPointF(retry->width()/2,retry->height()/2)).toPoint();
+        QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,at);
+        QCOMPARE(msg->property("retries").toInt(),1);
+        msg->setProperty("state",QString("loading"));settle(window);
+        QVERIFY(!retry->isVisible());
+        delete msg;
+    }
     void viewport_data() {
         QTest::addColumn<QSize>("size"); QTest::addColumn<QString>("preview");
         for (const QSize size : {QSize(1536,1024), QSize(1600,950), QSize(1024,768), QSize(768,1024), QSize(390,844)})

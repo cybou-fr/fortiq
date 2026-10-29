@@ -410,6 +410,7 @@ Item {
         state: win.sys && win.sys.state === "error" ? "error" : "loading"
         touch: win.adaptive
         x: win.contentLeft + 20; y: 110; width: Math.max(0, parent.width - x - 20)
+        retryText: "R\u00e9essayer"; onRetry: win.sys.reload()
         text: win.sys ? win.sys.status : ""
     }
     Text {

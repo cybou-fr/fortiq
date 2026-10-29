@@ -304,6 +304,7 @@ Item {
         state: "error"; touch: win.adaptive
         x: win.contentLeft + 20; y: 165; width: Math.max(0, parent.width - x - 20)
         text: win.network ? win.network.status : ""
+        retryText: "R\u00e9essayer"; onRetry: win.network.reload()
     }
     AppStateMessage {
         visible: win.connected && win.network !== null && win.network.state === "ready" && win.section !== "diag" && win.section !== "dns" && list.count === 0

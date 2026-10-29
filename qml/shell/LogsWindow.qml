@@ -329,7 +329,7 @@ Item {
         MouseArea { anchors.fill: parent; onClicked: win.navigationOpen = false }
     }
     ToolButtonGlass {
-        visible: win.drawer; x: 4; y: 2; z: 2; touch: true; glyph: "☰"
+        visible: win.drawer; x: 4; y: 2; z: 2; touch: true; glyph: "☰"; tip: "Menu"
         onClicked: win.navigationOpen = !win.navigationOpen
     }
     // ── toolbar ────────────────────────────────────────────────────────

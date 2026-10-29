@@ -96,6 +96,7 @@ Item {
         touch:win.adaptive
         x:win.contentLeft+20;y:165;width:Math.max(0,parent.width-x-20)
         text:sectionError || "Aucune entrée signalée par cet outil."
+        retryText: "R\u00e9essayer"; onRetry: win.disks.reload()
     }
     Text { x:win.contentLeft+12;anchors.bottom:parent.bottom;anchors.bottomMargin:10;width:parent.width-x-12;height:45;wrapMode:Text.WordWrap;maximumLineCount:3;elide:Text.ElideRight;textFormat:Text.PlainText;color:Theme.inkMuted;font.pixelSize:11;text:win.disks?win.disks.versions+(win.disks.updated?"\nMis à jour : "+win.disks.updated:""):"lsblk / findmnt via SSH" }
     LinkBanner { remote: win.remote; touch: win.adaptive; onRetry: if (win.disks && !win.disks.busy) win.disks.reload() }

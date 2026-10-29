@@ -82,7 +82,7 @@ Rectangle {
                 color: "#9CC6FF"; font.pixelSize: 12; font.family: Theme.fontFamily
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: panel.manager.clearFinished() }
             }
-            ToolButtonGlass { glyph: panel.expanded ? "⌄" : "⌃"; width: 26; height: 24; onClicked: panel.expanded = !panel.expanded }
+            ToolButtonGlass { glyph: panel.expanded ? "⌄" : "⌃"; tip: panel.expanded ? "Réduire" : "Développer"; width: 26; height: 24; onClicked: panel.expanded = !panel.expanded }
         }
         MouseArea { anchors.fill: parent; z: -1; onDoubleClicked: panel.expanded = !panel.expanded }
     }
