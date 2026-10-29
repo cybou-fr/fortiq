@@ -1557,6 +1557,13 @@ QtObject { property bool connected: true; property bool linkLost: false; propert
             bytes.clear();
             const QString command=QString::fromUtf8("printf 'été Привет'");
             auto *history=term->findChild<QQuickItem *>("terminalHistory");QVERIFY(history);
+            {   // The compact history list (a picture for the review, not an assertion about pixels).
+                QVariantList sample;
+                for (const char *c : {"sudo apt update && sudo apt upgrade","htop","journalctl -u nginx --since \"1 hour ago\" -p warning","cd /srv/app && git pull --ff-only && systemctl restart app.service","ls -la","df -h","tail -f /var/log/nginx/error.log"})
+                    sample.append(QVariantMap{{"text",QString::fromUtf8(c)}});
+                history->setProperty("model",sample);term->setProperty("navigationOpen",true);settle(window);
+                QVERIFY(window->grabWindow().save(QString("layout-captures/%1-terminal-history.png").arg(QString::fromLatin1(QTest::currentDataTag()))));
+            }
             history->setProperty("model",QVariantList{QVariantMap{{"text",command}}});
             term->setProperty("navigationOpen",true);settle(window);
             QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,history->mapToScene(QPointF(30,12)).toPoint());

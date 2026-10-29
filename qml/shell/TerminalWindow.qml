@@ -24,6 +24,19 @@ Item {
     onVisibleChanged: syncSession()
     onTerminalChanged: syncSession()
     Component.onCompleted: syncSession()
+    property string historyFilter: ""
+    readonly property var historyShown: {
+        const src = terminal ? terminal.history : []
+        const q = historyFilter.toLowerCase()
+        const seen = ({}), out = []
+        for (let i = 0; i < src.length && out.length < 300; ++i) {
+            const t = src[i].text
+            if (seen[t] || (q.length > 0 && t.toLowerCase().indexOf(q) < 0)) continue
+            seen[t] = true
+            out.push(src[i])
+        }
+        return out
+    }
     component Action: Rectangle {
         property string text: ""
         signal clicked()
@@ -67,34 +80,49 @@ Item {
                 }
             }
         }
-        Text { x:18;y:48;text:"HISTORIQUE BASH";color:"#8FA2C2";font.pixelSize:11;font.letterSpacing:1;font.family:Theme.fontFamily }
+        // Command history of the server (~/.bash_history): compact one-line rows, newest first, repeats folded into the most recent one.
+        Text { x:18;y:50;text:"HISTORIQUE";color:"#8FA2C2";font.pixelSize:11;font.letterSpacing:1;font.family:Theme.fontFamily }
         Text {
-            x:18;y:70;width:parent.width-36;height:54;wrapMode:Text.WordWrap;maximumLineCount:3;elide:Text.ElideRight
-            text: win.terminal ? win.terminal.historyStatus : "Historique enregistré sur le serveur."
-            color:Theme.inkMuted;font.pixelSize:11;font.family:Theme.fontFamily;textFormat:Text.PlainText
+            anchors.right:parent.right;anchors.rightMargin:16;y:50
+            visible:win.historyShown.length>0
+            text:win.historyShown.length+(win.historyFilter.length>0?" trouvée(s)":"")
+            color:"#8FA2C2";font.pixelSize:11;font.family:Theme.fontFamily
+        }
+        TextField {
+            id:historyFilterField;objectName:"terminalHistoryFilter"
+            x:10;y:72;width:parent.width-20;height:win.adaptive?40:28
+            placeholderText:"Filtrer l\u2019historique";selectByMouse:true;maximumLength:128;font.pixelSize:12
+            onTextChanged:win.historyFilter=text
         }
         ListView {
             objectName: "terminalHistory"
-            x:8;y:130;width:parent.width-16;height:Math.max(0,parent.height-y-12)
+            x:6;y:108;width:parent.width-12;height:Math.max(0,parent.height-y-34)
             clip:true;spacing:1;interactive:count>0
-            model:win.terminal ? win.terminal.history : []
+            model:win.historyShown
             ScrollBar.vertical: ScrollBar { policy:ScrollBar.AsNeeded }
             delegate: Rectangle {
                 required property var modelData
-                width:ListView.view.width;height:Math.max(win.adaptive ? 40 : 24,entry.implicitHeight+8);radius:5
-                color:historyMouse.containsMouse ? "#443E80C4" : "#181B3658"
+                width:ListView.view.width;height:win.adaptive ? 40 : 25;radius:5
+                color:historyMouse.containsMouse ? "#553E80C4" : "transparent"
+                Text { x:7;anchors.verticalCenter:parent.verticalCenter;text:"\u203a";color:"#5F7396";font.pixelSize:14;font.family:Theme.fontFamily }
                 Text {
-                    id:entry
-                    x:10;anchors.verticalCenter:parent.verticalCenter;width:parent.width-20
-                    text:modelData.text;textFormat:Text.PlainText
-                    wrapMode:Text.WrapAnywhere;maximumLineCount:2;elide:Text.ElideRight
-                    color:Theme.ink;font.pixelSize:12;font.family:Theme.fontFamily
+                    x:20;anchors.verticalCenter:parent.verticalCenter;width:parent.width-26
+                    text:modelData.text;textFormat:Text.PlainText;elide:Text.ElideRight;maximumLineCount:1
+                    color:Theme.ink;font.pixelSize:12;font.family:Theme.monoFamily
                 }
                 MouseArea {
                     id:historyMouse;anchors.fill:parent;hoverEnabled:true;enabled:surface.inputEnabled
+                    cursorShape:Qt.PointingHandCursor
+                    ToolTip.visible:containsMouse;ToolTip.delay:450;ToolTip.timeout:8000;ToolTip.text:modelData.text + "\n\nClic : insérer dans le terminal (sans l\u2019exécuter)"
                     onClicked:{win.navigationOpen=false;surface.insertHistory(modelData.text.replace(/\t/g," "))}
                 }
             }
+        }
+        Text {
+            anchors.left:parent.left;anchors.leftMargin:14;anchors.right:parent.right;anchors.rightMargin:14;anchors.bottom:parent.bottom;anchors.bottomMargin:10
+            elide:Text.ElideRight;maximumLineCount:1;textFormat:Text.PlainText
+            text: win.terminal ? win.terminal.historyStatus : "Historique enregistré sur le serveur."
+            color:Theme.inkMuted;font.pixelSize:11;font.family:Theme.fontFamily
         }
     }
     Item {
@@ -110,9 +138,9 @@ Item {
         Row {
             id:actions
             anchors.right:parent.right;anchors.rightMargin:8;anchors.verticalCenter:parent.verticalCenter;spacing:4
-            Action { text:"Copier";enabled:surface.visible;onClicked:surface.copyScreen() }
-            Action { text:"Coller…";enabled:surface.inputEnabled;onClicked:surface.pasteRequested() }
-            Action { objectName:"terminalSearchButton";text:"⌕";enabled:surface.visible;onClicked:win.openSearch() }
+            ToolButtonGlass { objectName:"terminalCopyButton";glyph:"\u29c9";tip:"Copier l\u2019\u00e9cran";touch:win.adaptive;enabledState:surface.visible;onClicked:surface.copyScreen() }
+            ToolButtonGlass { objectName:"terminalPasteButton";glyph:"paste";tip:"Coller\u2026";touch:win.adaptive;enabledState:surface.inputEnabled;onClicked:surface.pasteRequested() }
+            ToolButtonGlass { objectName:"terminalSearchButton";glyph:"\u2315";tip:"Rechercher dans la sortie (Ctrl+Maj+F)";touch:win.adaptive;enabledState:surface.visible;onClicked:win.openSearch() }
         }
     }
     Item {

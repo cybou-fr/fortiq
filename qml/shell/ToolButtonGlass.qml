@@ -17,7 +17,7 @@ Rectangle {
     opacity: enabledState ? 1 : 0.35
 
     SymbolGlyph {
-        visible: ["grid", "list", "eye", "sort"].indexOf(button.glyph) < 0
+        visible: ["grid", "list", "eye", "sort", "paste"].indexOf(button.glyph) < 0
         anchors.centerIn: parent
         glyph: button.glyph
         color: Theme.ink
@@ -38,6 +38,14 @@ Rectangle {
             model: 3
             Rectangle { width: button.glyph === "sort" ? 13 - index * 4 : 13; height: 2; radius: 1; color: Theme.ink }
         }
+    }
+    Item {   // clipboard
+        visible: button.glyph === "paste"
+        anchors.centerIn: parent
+        width: 13; height: 16
+        Rectangle { y: 2; width: 13; height: 14; radius: 2; color: "transparent"; border.width: 1.5; border.color: Theme.ink }
+        Rectangle { x: 3.5; y: 0; width: 6; height: 4; radius: 1.5; color: Theme.ink }
+        Repeater { model: 2; Rectangle { x: 3; y: 7 + index * 3.5; width: 7; height: 1.5; radius: 0.75; color: Theme.ink } }
     }
     Item {
         visible: button.glyph === "eye"
