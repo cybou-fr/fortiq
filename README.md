@@ -4,7 +4,7 @@
 
 **FORTIQ turns a Linux host into a coherent native workspace without installing a remote desktop environment or a proprietary server agent.** Files, documents, terminal, logs, networking, system tools, databases, mail and browser views are presented in one Qt-based shell. Remote operations use SSH, SFTP, PTY and SSH tunnelling; the Linux host remains the authority for working data.
 
-[Architecture](docs/ARCHITECTURE.md) · [Product scope](docs/PRODUCT_SCOPE.md) · [Desktop UX acceptance](docs/DESKTOP_EXPERIENCE_RELEASE_MATRIX.md) · [Build and verification](#build-and-verification) · [GPL-3.0 license](LICENSE)
+[Architecture](docs/ARCHITECTURE.md) · [Open SDK exploration](docs/OPEN_DECLARATIVE_APPS_SDK.md) · [Product scope](docs/PRODUCT_SCOPE.md) · [Desktop UX acceptance](docs/DESKTOP_EXPERIENCE_RELEASE_MATRIX.md) · [Build and verification](#build-and-verification) · [GPL-3.0 license](LICENSE)
 
 > **Project status — October 2026:** Public source code and an actively developed engineering prototype, **not a production-qualified release**. Historical Windows and Android-emulator checks are documented, but current end-to-end builds, clean-install qualification, physical-device testing, security review and visual acceptance remain open. CI is intentionally disabled; no build or tests were run as part of this README update.
 
@@ -44,6 +44,14 @@ flowchart LR
 | **Specifications are not test results** | Source-level hardening, tests present in the repository, executed test evidence and release acceptance are documented separately. | [Release readiness matrix](docs/DESKTOP_EXPERIENCE_RELEASE_MATRIX.md), [test sources](tests/) |
 
 The implementation follows an architectural workflow: **problem framing → constraints → contracts → implementation → threat and failure review → verification evidence → release gate**. See [documentation authority](docs/DOCUMENTATION_AUTHORITY.md) for how design contracts and implementation reports are distinguished.
+
+## Architecture craftsmanship: decisions that remain inspectable
+
+FORTIQ is deliberately presented as a **systems architecture case study**, not just a feature gallery. The repository connects user-facing behavior to the lower-level implementation: SSH trust and session boundaries, asynchronous operation ownership, safe file publication, shared task/UX contracts, multi-application desktop lifecycle, and explicit evidence gates. Each significant design choice can be reviewed against code and architectural documentation.
+
+A good architecture also records what it **has not decided**. One such question is whether internal FORTIQ applications should evolve toward **declarative definitions and a constrained internal SDK**. This might reduce duplicated app scaffolding, but could also add an unnecessary runtime, schema and debugging burden. **This direction is OPEN / UNDECIDED**: no SDK is claimed to exist, no refactor is approved, and the current explicit Qt/QML and C++ design remains the baseline.
+
+[Read the architectural exploration and alternatives](docs/OPEN_DECLARATIVE_APPS_SDK.md) · [Current architecture](docs/ARCHITECTURE.md) · [Release acceptance evidence](docs/DESKTOP_EXPERIENCE_RELEASE_MATRIX.md)
 
 ## Applications and shared capabilities
 
