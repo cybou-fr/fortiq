@@ -51,7 +51,7 @@ for document in ROOT.rglob("*.md"):
         if not filename:
             continue
         candidate = (document.parent / filename).resolve()
-        if not candidate.is_relative_to(ROOT.resolve()) or not candidate.is_file():
+        if not candidate.is_relative_to(ROOT.resolve()) or not (candidate.is_file() or candidate.is_dir()):
             errors.append(f"{relative_path}: broken relative link {href}")
     if str(relative_path) in MANDATORY:
         for phrase in OBSOLETE:
