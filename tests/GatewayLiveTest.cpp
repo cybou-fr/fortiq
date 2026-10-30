@@ -1,7 +1,7 @@
 // Live check of the Browser's SSH gateway (docs/BROWSER.md, "Passerelle SSH") against the disposable fixture: the REAL SshTunnel
 // (libssh2, direct-tcpip channels, pinned host key) behind the ProxyGateway, driven by curl.exe as a stand-in for the engine.
 // Skipped unless FORTIQ_IT_HOST/PORT/USER/FINGERPRINT and (FORTIQ_IT_KEY or FORTIQ_IT_PASSWORD) are set.
-// Needs FORTIQ_IT_WEB_BASE + FORTIQ_IT_POLICY (tests/fixtures/web_fixture.py on 0.0.0.0:8099 and the loopback aliases of
+// Needs FORTIQ_IT_WEB_BASE + FORTIQ_IT_POLICY (tests/fixtures/web_fixture.py on 0.0.0.0:18099 and the loopback aliases of
 // tool/setup_browser_policy_fixture.sh), FORTIQ_IT_REBIND (tool/setup_dns_rebind_fixture.sh), FORTIQ_IT_GATEWAY_TLS
 // (tool/setup_gateway_fixture.sh) and the second host FORTIQ_IT_*_B; each missing piece SKIPS only its own test (and the live run
 // fails on an unwaived skip). Secrets come from the environment and are never printed.
@@ -66,9 +66,11 @@ class GatewayLiveTest : public QObject {
         return r;
     }
 
+    QSet<quint16> gatewayPorts;
     void startGateway(TunnelBackend *t, std::unique_ptr<ProxyGateway> *slot, const GatewayOptions &o = {}) {
         *slot = std::make_unique<ProxyGateway>(t);
         QVERIFY(slot->get()->start(o));
+        gatewayPorts.insert(slot->get()->port());
         slot->get()->setConfirmHandler([this](const InternalAccessRequest &, std::function<void(bool)> reply) { ++asked; reply(answer); });
     }
     void freshGateway(const GatewayOptions &o = {}) {
@@ -138,7 +140,8 @@ class GatewayLiveTest : public QObject {
         return {};
     }
 
-    static QStringList ownTcpAnomalies(quint16 gatewayPort, const QList<quint16> &sshPorts, QStringList *all = nullptr) {
+    // gatewayPorts: every gateway this test process has started (earlier ones may still hold a closing loopback socket; they are ours).
+    static QStringList ownTcpAnomalies(const QSet<quint16> &gatewayPorts, const QList<quint16> &sshPorts, QStringList *all = nullptr) {
         QStringList bad;
 #ifdef Q_OS_WIN
         ULONG size = 0;
@@ -155,14 +158,14 @@ class GatewayLiveTest : public QObject {
             const QString line = QStringLiteral("state %1 local %2 remote %3.%4.%5.%6:%7").arg(row.dwState).arg(lport)
                 .arg(row.dwRemoteAddr & 0xff).arg((row.dwRemoteAddr >> 8) & 0xff).arg((row.dwRemoteAddr >> 16) & 0xff).arg((row.dwRemoteAddr >> 24) & 0xff).arg(rport);
             if (all) *all << line;
-            if (row.dwState == MIB_TCP_STATE_LISTEN) { if (lport != gatewayPort) bad << line; continue; }
-            if (lport == gatewayPort || rport == gatewayPort) continue;        // the local side of the gateway (accepted / test clients)
+            if (row.dwState == MIB_TCP_STATE_LISTEN) { if (!gatewayPorts.contains(lport)) bad << line; continue; }
+            if (gatewayPorts.contains(lport) || gatewayPorts.contains(rport)) continue;   // the local side of a gateway of this test (accepted / test clients)
             if (sshPorts.contains(rport)) continue;                            // the SSH connection(s) to the chosen server(s)
             if (row.dwState == MIB_TCP_STATE_TIME_WAIT || row.dwState == MIB_TCP_STATE_CLOSED) continue;
             bad << line;
         }
 #else
-        Q_UNUSED(gatewayPort); Q_UNUSED(sshPorts); Q_UNUSED(all);
+        Q_UNUSED(gatewayPorts); Q_UNUSED(sshPorts); Q_UNUSED(all);
 #endif
         return bad;
     }
@@ -200,22 +203,22 @@ private slots:
     void httpPageThroughTheTunnel() {
         if (env("FORTIQ_IT_WEB_BASE").isEmpty() || env("FORTIQ_IT_POLICY").isEmpty()) QSKIP("FORTIQ_IT_WEB_BASE and FORTIQ_IT_POLICY are needed");
         freshGateway();
-        const Curl r = curl({ "http://public-fixture.test:8099/page" });
+        const Curl r = curl({ "http://public-fixture.test:18099/page" });
         QVERIFY2(r.exitCode == 0, r.err.constData());
         QCOMPARE(r.http, 200);
         QVERIFY(r.body().contains("Hello fixture"));
         QCOMPARE(asked, 0);   // a public address needs no question
         // the same page, fetched from the server's point of view, came from the public alias
-        const Curl echo = curl({ "http://public-fixture.test:8099/echo" });
+        const Curl echo = curl({ "http://public-fixture.test:18099/echo" });
         QCOMPARE(echo.http, 200);
         QVERIFY2(echo.body().contains("local=93.184.216.34"), echo.body().constData());
-        QVERIFY2(echo.body().contains("host=public-fixture.test:8099"), echo.body().constData());
+        QVERIFY2(echo.body().contains("host=public-fixture.test:18099"), echo.body().constData());
     }
 
     void keepAliveAndSeveralUrlsInOneCurl() {
         if (env("FORTIQ_IT_WEB_BASE").isEmpty() || env("FORTIQ_IT_POLICY").isEmpty()) QSKIP("FORTIQ_IT_WEB_BASE and FORTIQ_IT_POLICY are needed");
         freshGateway();
-        const Curl r = curl({ "-w", "[%{num_connects}]", "http://public-fixture.test:8099/page2", "http://public-fixture.test:8099/json", "http://public-fixture.test:8099/redir", "-L" });
+        const Curl r = curl({ "-w", "[%{num_connects}]", "http://public-fixture.test:18099/page2", "http://public-fixture.test:18099/json", "http://public-fixture.test:18099/redir", "-L" });
         QVERIFY2(r.exitCode == 0, r.err.constData());
         QVERIFY(r.out.contains("Second page"));
         QVERIFY(r.out.contains("\"fortiq\""));
@@ -234,18 +237,18 @@ private slots:
         QVERIFY(f.open(QIODevice::WriteOnly));
         f.write(cert);
         f.close();
-        const Curl r = curl({ "--cacert", caFile, "https://public-fixture.test:8443/" });
+        const Curl r = curl({ "--cacert", caFile, "https://public-fixture.test:18443/" });
         QVERIFY2(r.exitCode == 0, r.err.constData());
         QCOMPARE(r.http, 200);
         QCOMPARE(r.connectCode, 200);   // CONNECT answered by the gateway
         QCOMPARE(r.body(), QByteArray("tls ok"));
         // The server name the TLS server saw proves the handshake was with the real server through the tunnel.
-        const Curl sni = curl({ "--cacert", caFile, "https://public-fixture.test:8443/sni" });
+        const Curl sni = curl({ "--cacert", caFile, "https://public-fixture.test:18443/sni" });
         QVERIFY2(sni.body().contains("sni=public-fixture.test"), sni.body().constData());
         // A certificate the client does not trust must fail: the gateway does not terminate TLS (no interception).
-        const Curl untrusted = curl({ "https://public-fixture.test:8443/" });
+        const Curl untrusted = curl({ "https://public-fixture.test:18443/" });
         QVERIFY2(untrusted.exitCode != 0 && untrusted.http == 0, "self-signed certificate must be refused by the client itself");
-        const Curl big = curl({ "--cacert", caFile, "-o", tmp.filePath(QStringLiteral("big.bin")), "https://public-fixture.test:8443/big" }, 60000);
+        const Curl big = curl({ "--cacert", caFile, "-o", tmp.filePath(QStringLiteral("big.bin")), "https://public-fixture.test:18443/big" }, 60000);
         QCOMPARE(big.exitCode, 0);
         QCOMPARE(QFileInfo(tmp.filePath(QStringLiteral("big.bin"))).size(), qint64(4 * 1024 * 1024));
     }
@@ -253,30 +256,30 @@ private slots:
     void internalAddressNeedsConfirmation() {
         if (env("FORTIQ_IT_WEB_BASE").isEmpty() || env("FORTIQ_IT_POLICY").isEmpty()) QSKIP("FORTIQ_IT_WEB_BASE and FORTIQ_IT_POLICY are needed");
         freshGateway();
-        const Curl hitsBefore = curl({ "http://public-fixture.test:8099/_hits" });
+        const Curl hitsBefore = curl({ "http://public-fixture.test:18099/_hits" });
         const QJsonObject before = QJsonDocument::fromJson(hitsBefore.body()).object();
         QVERIFY(!before.contains("/echo") || before.value("/echo").toInt() >= 0);
         answer = false;
-        const Curl denied = curl({ "http://127.0.0.1:8099/echo" });
+        const Curl denied = curl({ "http://127.0.0.1:18099/echo" });
         QCOMPARE(denied.http, 403);
         QCOMPARE(asked, 1);
-        const Curl hitsAfter = curl({ "http://public-fixture.test:8099/_hits" });
+        const Curl hitsAfter = curl({ "http://public-fixture.test:18099/_hits" });
         QCOMPARE(QJsonDocument::fromJson(hitsAfter.body()).object().value("/echo").toInt(), before.value("/echo").toInt());   // nothing reached the server
-        const Curl deniedName = curl({ "http://internal-fixture.test:8099/echo" });
+        const Curl deniedName = curl({ "http://internal-fixture.test:18099/echo" });
         QCOMPARE(deniedName.http, 403);
         answer = true;
-        const Curl allowed = curl({ "http://127.0.0.1:8099/echo" });
+        const Curl allowed = curl({ "http://127.0.0.1:18099/echo" });
         QCOMPARE(allowed.http, 200);
         QVERIFY2(allowed.body().contains("local=127.0.0.1"), allowed.body().constData());   // it really came from the server's loopback
         const int askedNow = asked;
-        const Curl again = curl({ "http://127.0.0.1:8099/echo" });
+        const Curl again = curl({ "http://127.0.0.1:18099/echo" });
         QCOMPARE(again.http, 200);
         QCOMPARE(asked, askedNow);   // asked once for this host:port
-        const Curl mixed = curl({ "http://mixed-fixture.test:8099/echo" });   // public + loopback behind one name
+        const Curl mixed = curl({ "http://mixed-fixture.test:18099/echo" });   // public + loopback behind one name
         QCOMPARE(mixed.http, 200);
         QVERIFY2(mixed.body().contains("local=127.0.0.1"), "the pinned address of a mixed name is the INTERNAL one the user confirmed");
         QVERIFY(asked > askedNow);
-        const Curl privateNet = curl({ "http://private-fixture.test:8099/echo" }, 15000);   // 10.255.255.1: confirmed, then unreachable
+        const Curl privateNet = curl({ "http://private-fixture.test:18099/echo" }, 15000);   // 10.255.255.1: confirmed, then unreachable
         QVERIFY2(privateNet.http == 502 || privateNet.http == 504 || privateNet.exitCode != 0, "confirmed but not reachable: an honest error");
     }
 
@@ -304,7 +307,7 @@ private slots:
         freshGateway(o);
         int ok = 0, refused = 0, bad = 0;
         for (int i = 0; i < 60; ++i) {
-            const Curl r = curl({ "http://flip-fixture.test:8099/echo" }, 15000);
+            const Curl r = curl({ "http://flip-fixture.test:18099/echo" }, 15000);
             if (r.http == 200) {
                 if (r.body().contains("local=93.184.216.34")) ++ok;
                 else ++bad;   // reached 127.0.0.1 without a "yes": the defence failed
@@ -328,7 +331,7 @@ private slots:
             QTcpSocket *s = socks[i].s.get();
             QByteArray *got = &socks[i].got;
             connect(s, &QTcpSocket::connected, s, [s, auth] {
-                s->write("CONNECT 93.184.216.34:8099 HTTP/1.1\r\nProxy-Authorization: " + auth + "\r\n\r\n");
+                s->write("CONNECT 93.184.216.34:18099 HTTP/1.1\r\nProxy-Authorization: " + auth + "\r\n\r\n");
             });
             connect(s, &QTcpSocket::readyRead, s, [s, got] {
                 const bool had200 = got->contains("\r\n\r\n");
@@ -345,7 +348,7 @@ private slots:
         socks.clear();
         QTRY_COMPARE_WITH_TIMEOUT(gateway->stats().active, 0, 10000);
         // big transfer through the tunnel with a reader that is slower than the network for a while
-        const Curl big = curl({ "-o", tmp.filePath(QStringLiteral("big6.bin")), "http://public-fixture.test:8099/big" }, 90000);
+        const Curl big = curl({ "-o", tmp.filePath(QStringLiteral("big6.bin")), "http://public-fixture.test:18099/big" }, 90000);
         QCOMPARE(big.exitCode, 0);
         QCOMPARE(QFileInfo(tmp.filePath(QStringLiteral("big6.bin"))).size(), qint64(6 * 1024 * 1024));
     }
@@ -355,7 +358,7 @@ private slots:
         freshGateway();
         QSignalSpy states(tunnel.get(), &TunnelBackend::stateChanged);
         // 1. a transfer that cannot finish: the client does not read, so the 6 MiB stay on the server side
-        auto s = rawTunnel(gateway.get(), QStringLiteral("93.184.216.34:8099"));
+        auto s = rawTunnel(gateway.get(), QStringLiteral("93.184.216.34:18099"));
         QVERIFY(s);
         const int sessionsBefore = tunnel->sessionsEstablished();
         QVERIFY(sessionsBefore >= 1);
@@ -388,7 +391,7 @@ private slots:
         for (const auto &row : states) if (row.at(0).value<TunnelBackend::State>() == TunnelBackend::State::Disconnected && !row.at(1).toString().isEmpty()) sawLoss = true;
         QVERIFY2(sawLoss, "a Disconnected state with a reason is announced");
         // 3. the next request reconnects (host key pinned again) and works
-        const Curl again = curl({ "http://public-fixture.test:8099/page" }, 40000);
+        const Curl again = curl({ "http://public-fixture.test:18099/page" }, 40000);
         QVERIFY2(again.http == 200 && again.body().contains("Hello fixture"), again.err.constData());
         QCOMPARE(tunnel->sessionsEstablished(), sessionsBefore + 1);
         QCOMPARE(tunnel->state(), TunnelBackend::State::Connected);
@@ -398,11 +401,11 @@ private slots:
         if (env("FORTIQ_IT_WEB_BASE").isEmpty() || env("FORTIQ_IT_POLICY").isEmpty()) QSKIP("FORTIQ_IT_WEB_BASE and FORTIQ_IT_POLICY are needed");
         freshGateway();
         std::vector<std::unique_ptr<QTcpSocket>> held;
-        for (int i = 0; i < 5; ++i) { held.push_back(rawTunnel(gateway.get(), QStringLiteral("93.184.216.34:8099"))); QVERIFY(held.back()); }
+        for (int i = 0; i < 5; ++i) { held.push_back(rawTunnel(gateway.get(), QStringLiteral("93.184.216.34:18099"))); QVERIFY(held.back()); }
         tunnel->simulateTransportLoss();
         for (auto &s : held) QTRY_VERIFY_WITH_TIMEOUT(s->state() != QAbstractSocket::ConnectedState, 10000);
         QTRY_COMPARE_WITH_TIMEOUT(gateway->stats().active, 0, 5000);
-        const Curl again = curl({ "http://public-fixture.test:8099/page2" }, 40000);   // a session that died idle is replaced transparently
+        const Curl again = curl({ "http://public-fixture.test:18099/page2" }, 40000);   // a session that died idle is replaced transparently
         QCOMPARE(again.http, 200);
     }
 
@@ -410,15 +413,15 @@ private slots:
         SshTunnel bad([&] { ConnectionRequest r = reqA; r.expectedHostFingerprint = QStringLiteral("SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"); return r; }());
         std::unique_ptr<ProxyGateway> g;
         startGateway(&bad, &g);
-        const Curl r = curl(g.get(), { "http://public-fixture.test:8099/page" }, 20000);
+        const Curl r = curl(g.get(), { "http://public-fixture.test:18099/page" }, 20000);
         QCOMPARE(r.http, 502);
         QVERIFY2(r.body().contains("HOST KEY CHANGED"), r.body().constData());
         QCOMPARE(bad.sessionsEstablished(), 0);
         QCOMPARE(bad.connectCalls(), 1);
-        const Curl second = curl(g.get(), { "http://public-fixture.test:8099/page" }, 20000);
+        const Curl second = curl(g.get(), { "http://public-fixture.test:18099/page" }, 20000);
         QCOMPARE(second.http, 502);
         QCOMPARE(bad.connectCalls(), 1);   // the failure is remembered for a moment: no hammering of the server
-        const Curl tls = curl(g.get(), { "https://public-fixture.test:8443/" }, 20000);
+        const Curl tls = curl(g.get(), { "https://public-fixture.test:18443/" }, 20000);
         QCOMPARE(tls.connectCode, 502);
     }
 
@@ -428,7 +431,7 @@ private slots:
         SshTunnel t(r);
         std::unique_ptr<ProxyGateway> g;
         startGateway(&t, &g);
-        const Curl c = curl(g.get(), { "http://public-fixture.test:8099/page" }, 20000);
+        const Curl c = curl(g.get(), { "http://public-fixture.test:18099/page" }, 20000);
         QCOMPARE(c.http, 502);
         QCOMPARE(t.connectCalls(), 0);   // a server the user has not verified is never dialled by the Browser
     }
@@ -439,14 +442,14 @@ private slots:
         std::unique_ptr<ProxyGateway> other;
         startGateway(tunnel.get(), &other);
         QVERIFY(other->token() != gateway->token() && other->port() != gateway->port());
-        const Curl r = curl(gateway.get(), { "http://public-fixture.test:8099/page" }, 15000, other->token());
+        const Curl r = curl(gateway.get(), { "http://public-fixture.test:18099/page" }, 15000, other->token());
         QCOMPARE(r.http, 407);
         const Curl none = [&] {   // no credential at all
             Curl x;
             QTcpSocket s;
             s.connectToHost(QHostAddress::LocalHost, gateway->port());
             s.waitForConnected(3000);
-            s.write("GET http://public-fixture.test:8099/page HTTP/1.1\r\nHost: public-fixture.test\r\n\r\n");
+            s.write("GET http://public-fixture.test:18099/page HTTP/1.1\r\nHost: public-fixture.test\r\n\r\n");
             QByteArray got;
             for (QElapsedTimer t; t.elapsed() < 5000 && !got.contains("\r\n\r\n");) { QTest::qWait(10); got += s.readAll(); }
             x.http = got.mid(9, 3).toInt();
@@ -472,14 +475,14 @@ private slots:
         QVERIFY(ida != idb);
         // credentials and ports are per gateway
         QVERIFY(gb->token() != gateway->token() && gb->port() != gateway->port());
-        const Curl cross = curl(gb.get(), { "http://public-fixture.test:8099/page" }, 15000, gateway->token());
+        const Curl cross = curl(gb.get(), { "http://public-fixture.test:18099/page" }, 15000, gateway->token());
         QCOMPARE(cross.http, 407);
         // a confirmation given on A is not valid on B, and the other way round
         answer = true;
-        const Curl a1 = curl(gateway.get(), { "http://127.0.0.1:8099/echo" });
+        const Curl a1 = curl(gateway.get(), { "http://127.0.0.1:18099/echo" });
         QCOMPARE(a1.http, 200);
         QCOMPARE(asked, 1);
-        const Curl b1 = curl(gb.get(), { "http://127.0.0.1:8099/echo" });
+        const Curl b1 = curl(gb.get(), { "http://127.0.0.1:18099/echo" });
         QCOMPARE(b1.http, 200);
         QCOMPARE(asked, 2);   // B asked on its own
         // the pin of A does not open B
@@ -488,7 +491,7 @@ private slots:
         SshTunnel mixed(crossPin);
         std::unique_ptr<ProxyGateway> gm;
         startGateway(&mixed, &gm);
-        const Curl m = curl(gm.get(), { "http://public-fixture.test:8099/page" }, 20000);
+        const Curl m = curl(gm.get(), { "http://public-fixture.test:18099/page" }, 20000);
         QCOMPARE(m.http, 502);
         QVERIFY(m.body().contains("HOST KEY CHANGED"));
         QCOMPARE(mixed.sessionsEstablished(), 0);
@@ -496,22 +499,22 @@ private slots:
 
     void gatewayMadeNoOtherOutgoingConnection() {
         // Everything above ran in this process: its TCP table may only hold SSH sessions to the chosen server(s) and the local gateway
-        // sockets. A page fetched directly (not through SSH) would show up as a connection to 127.0.0.1:8099 / 93.184.216.34.
+        // sockets. A page fetched directly (not through SSH) would show up as a connection to 127.0.0.1:18099 / 93.184.216.34.
         freshGateway();
         std::vector<std::unique_ptr<QTcpSocket>> held;
-        if (!env("FORTIQ_IT_POLICY").isEmpty()) for (int i = 0; i < 3; ++i) held.push_back(rawTunnel(gateway.get(), QStringLiteral("93.184.216.34:8099")));
+        if (!env("FORTIQ_IT_POLICY").isEmpty()) for (int i = 0; i < 3; ++i) held.push_back(rawTunnel(gateway.get(), QStringLiteral("93.184.216.34:18099")));
         QList<quint16> ssh = { static_cast<quint16>(reqA.port) };
         if (haveB) ssh << static_cast<quint16>(reqB.port);
         QStringList all;
-        const QStringList bad = ownTcpAnomalies(gateway->port(), ssh, &all);
+        const QStringList bad = ownTcpAnomalies(gatewayPorts, ssh, &all);
         qInfo().noquote() << "TCP rows of this process:\n" << all.join('\n');
         QVERIFY2(bad.isEmpty(), qPrintable(bad.join('\n')));
         // Positive control: the same check DOES see a direct connection (so an empty result above means something).
 #ifdef Q_OS_WIN
         QTcpSocket direct;
-        direct.connectToHost(QHostAddress::LocalHost, static_cast<quint16>(reqA.port == 8099 ? 2222 : 8099));   // any port that is not the SSH one
+        direct.connectToHost(QHostAddress::LocalHost, static_cast<quint16>(reqA.port == 18099 ? 2222 : 18099));   // any port that is not the SSH one
         if (direct.waitForConnected(3000)) {
-            QVERIFY2(!ownTcpAnomalies(gateway->port(), ssh).isEmpty(), "a direct connection must be reported by the check");
+            QVERIFY2(!ownTcpAnomalies(gatewayPorts, ssh).isEmpty(), "a direct connection must be reported by the check");
             direct.abort();
         }
 #endif

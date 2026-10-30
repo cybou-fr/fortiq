@@ -182,25 +182,25 @@ echo 'second sshd is not listening on {port_b}' >&2; exit 1""")
 
         # 5. every service the tests rely on must really listen (a silently dead helper = a red test that proves nothing)
         listening = wsl(d, "ss -ltn")
-        missing = [p for p in ("1143", "1993", "2525", "2465", "2587", "8099", "8443", *[str(weak_base + i) for i in range(5)], "5432") if f":{p} " not in listening]
+        missing = [p for p in ("1143", "1993", "2525", "2465", "2587", "18099", "18443", *[str(weak_base + i) for i in range(5)], "5432") if f":{p} " not in listening]
         if missing:
             raise RuntimeError("fixture services are not listening: " + ", ".join(missing))
 
         cmd = [sys.executable, str(TOOL / "run_live_tests.py"), "--build", opts.build, "--host", "127.0.0.1", "--port", opts.ssh_port,
                "--user", u, "--fingerprint", fp, "--key", str(key), "--wsl-distro", d, "--weak-ssh", "--weak-base", str(weak_base), "--rebind",
-               "--web-base", "http://127.0.0.1:8099", "--gateway-tls"]
+               "--web-base", "http://127.0.0.1:18099", "--gateway-tls"]
         for k, v in args.items():
             cmd += [k, v]
         if opts.only:
             cmd += ["--only", opts.only]
         # every port the tests rely on must be reachable FROM WINDOWS too (a WSL-side listener is not enough: see free_weak_base)
         import socket
-        # The web (8099) and gateway-TLS (8443) ports are only dialled from Windows by the gateway and engine suites. A run limited with --only to
+        # The web (18099) and gateway-TLS (18443) ports are only dialled from Windows by the gateway and engine suites. A run limited with --only to
         # other suites does not need them, which matters when Windows has reserved the port (Hyper-V/WinNAT excluded range): the skipped
         # suites are then simply not part of that run's result.
         from_windows_only = ("fortiq_gateway_it", "fortiq_engine_it")
         needs_web_ports = not opts.only or any(name in opts.only.split(",") for name in from_windows_only)
-        for port in [int(opts.ssh_port), 1143, 1993] + ([8099, 8443] if needs_web_ports else []) + [weak_base + i for i in range(5)]:
+        for port in [int(opts.ssh_port), 1143, 1993] + ([18099, 18443] if needs_web_ports else []) + [weak_base + i for i in range(5)]:
             try:
                 socket.create_connection(("127.0.0.1", port), timeout=3).close()
             except OSError:

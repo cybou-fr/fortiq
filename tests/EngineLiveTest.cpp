@@ -228,8 +228,8 @@ class EngineLiveTest : public QObject {
     Q_OBJECT
 
     ConnectionRequest req;
-    QString webBase;           // http://127.0.0.1:8099 as the server sees it
-    QString fixtureHostPort;   // 127.0.0.1:8099
+    QString webBase;           // http://127.0.0.1:18099 as the server sees it
+    QString fixtureHostPort;   // 127.0.0.1:18099
     bool configured = false;
     std::unique_ptr<EngineBrowser> eb;
     QQmlEngine qml;

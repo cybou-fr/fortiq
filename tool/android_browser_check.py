@@ -14,7 +14,7 @@ starts with "emulator-". The key is a THROW-AWAY key of the disposable fixture (
 into the app's private files directory and removed at the end.
 
   python tool/android_browser_check.py --sdk C:/Users/<you>/AppData/Local/Android/Sdk --key <throwaway_key> --fingerprint SHA256:... \
-      [--user fqshell] [--ssh-port 2222] [--web-base http://127.0.0.1:8099] [--wsl-distro fortiq-test] [--background-seconds 120] [--out build-dist]
+      [--user fqshell] [--ssh-port 2222] [--web-base http://127.0.0.1:18099] [--wsl-distro fortiq-test] [--background-seconds 120] [--out build-dist]
 """
 import argparse, json, re, subprocess, sys, threading, time
 from pathlib import Path
@@ -116,7 +116,7 @@ def main():
     ap.add_argument("--fingerprint", required=True)
     ap.add_argument("--user", default="fqshell")
     ap.add_argument("--ssh-port", type=int, default=2222)
-    ap.add_argument("--web-base", default="http://127.0.0.1:8099", help="the fixture web server AS THE SERVER SEES IT")
+    ap.add_argument("--web-base", default="http://127.0.0.1:18099", help="the fixture web server AS THE SERVER SEES IT")
     ap.add_argument("--wsl-distro", default="", help="enables the lost-SSH-server step (kills the user's sshd sessions and the listener, restarts it afterwards)")
     ap.add_argument("--background-seconds", type=int, default=120)
     ap.add_argument("--out", default="build-dist")

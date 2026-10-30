@@ -3108,7 +3108,7 @@ private slots:
         settings.remove(pin); settings.remove("servers/profiles"); settings.remove("db/profiles");
     }
 
-    // Needs FORTIQ_IT_WEB_BASE (for example http://127.0.0.1:8099): tests/fixtures/web_fixture.py running on the test server.
+    // Needs FORTIQ_IT_WEB_BASE (for example http://127.0.0.1:18099): tests/fixtures/web_fixture.py running on the test server.
     void browserFetchesThroughTheServer() {
         const QString web = qEnvironmentVariable("FORTIQ_IT_WEB_BASE");
         if (web.isEmpty()) QSKIP("FORTIQ_IT_WEB_BASE not set");
@@ -3289,11 +3289,11 @@ private slots:
         QVERIFY(shellSession.open(controller.connectionRequest()).status == SshResult::Status::Ok);
         auto shell = [&](const QByteArray &script) { return QString::fromUtf8(shellSession.runScript(script, 65536, {}).data).trimmed(); };
         auto hits = [&](const QString &path) {   // how many requests the fixture actually received for a path
-            const QJsonObject o = QJsonDocument::fromJson(shell("curl -s http://127.0.0.1:8099/_hits\n").toUtf8()).object();
+            const QJsonObject o = QJsonDocument::fromJson(shell("curl -s http://127.0.0.1:18099/_hits\n").toUtf8()).object();
             return o.value(path).toInt(0);
         };
         auto waitIdleOrAsk = [&] { QTRY_VERIFY_WITH_TIMEOUT(browser.state() == "confirm" || !browser.busy(), 30000); };
-        const QString pub = "http://public-fixture.test:8099";
+        const QString pub = "http://public-fixture.test:18099";
         const int tasksBefore = controller.tasks()->count();
 
         // ---- a public address is fetched without a question, and curl is pinned to the address that was checked ----
@@ -3304,7 +3304,7 @@ private slots:
         QCOMPARE(browser.info().value("remoteIp").toString(), QStringLiteral("93.184.216.34"));      // curl really connected to the pinned address
         QVERIFY(browser.contentHtml().contains("Hello fixture"));
         // two public addresses: the first is pinned and used
-        browser.open("http://multi-fixture.test:8099/echo");
+        browser.open("http://multi-fixture.test:18099/echo");
         waitIdleOrAsk();
         QCOMPARE(browser.state(), QStringLiteral("ready"));
         QCOMPARE(browser.info().value("remoteIp").toString(), QStringLiteral("93.184.216.34"));
@@ -3312,7 +3312,7 @@ private slots:
 
         // ---- an internal address asks BEFORE anything is sent ----
         const int pageHitsBefore = hits("/page");
-        browser.open("http://127.0.0.1:8099/page");
+        browser.open("http://127.0.0.1:18099/page");
         waitIdleOrAsk();
         QCOMPARE(browser.state(), QStringLiteral("confirm"));
         QVERIFY(!browser.busy());
@@ -3324,7 +3324,7 @@ private slots:
         QCOMPARE(browser.state() == "confirm", false);
         QCOMPARE(controller.tasks()->tasks().constLast().toMap().value("state").toString(), QStringLiteral("cancelled"));
         QCOMPARE(hits("/page"), pageHitsBefore);
-        browser.open("http://127.0.0.1:8099/page");
+        browser.open("http://127.0.0.1:18099/page");
         waitIdleOrAsk();
         QCOMPARE(browser.state(), QStringLiteral("confirm"));
         browser.confirmInternal();
@@ -3333,16 +3333,16 @@ private slots:
         QCOMPARE(hits("/page"), pageHitsBefore + 1);
         QVERIFY(browser.info().value("addressClass").toString().contains("boucle locale"));
         // the answer is for one navigation only
-        browser.open("http://127.0.0.1:8099/page");
+        browser.open("http://127.0.0.1:18099/page");
         waitIdleOrAsk();
         QCOMPARE(browser.state(), QStringLiteral("confirm"));
         browser.cancelConfirm();
         // names that resolve to something internal ask too; a mixed set is internal and the internal address is the one shown
-        browser.open("http://internal-fixture.test:8099/page");
+        browser.open("http://internal-fixture.test:18099/page");
         waitIdleOrAsk();
         QCOMPARE(browser.state(), QStringLiteral("confirm"));
         browser.cancelConfirm();
-        browser.open("http://mixed-fixture.test:8099/page");
+        browser.open("http://mixed-fixture.test:18099/page");
         waitIdleOrAsk();
         QCOMPARE(browser.state(), QStringLiteral("confirm"));
         const QVariantList mixed = browser.pendingConfirm().value("details").toList();
@@ -3375,7 +3375,7 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(!browser.busy(), 20000);
         QCOMPARE(browser.state(), QStringLiteral("ready"));
         QCOMPARE(browser.info().value("redirects").toInt(), 1);
-        QCOMPARE(browser.url(), QStringLiteral("http://127.0.0.1:8099/page"));
+        QCOMPARE(browser.url(), QStringLiteral("http://127.0.0.1:18099/page"));
         QCOMPARE(hits("/page"), pageBefore + 1);
         // a decimal spelling of 127.0.0.1 in a redirect is read as what it is, not as a way around the question
         browser.open(pub + "/to-odd");
@@ -3384,14 +3384,14 @@ private slots:
         QCOMPARE(browser.pendingConfirm().value("host").toString(), QStringLiteral("127.0.0.1"));
         browser.cancelConfirm();
         // internal (confirmed) -> public: no second question; internal -> another internal host:port: a new question
-        browser.open("http://127.0.0.1:8099/to-public");
+        browser.open("http://127.0.0.1:18099/to-public");
         waitIdleOrAsk();
         QCOMPARE(browser.state(), QStringLiteral("confirm"));
         browser.confirmInternal();
         QTRY_VERIFY_WITH_TIMEOUT(!browser.busy(), 20000);
         QCOMPARE(browser.state(), QStringLiteral("ready"));
         QCOMPARE(browser.info().value("remoteIp").toString(), QStringLiteral("93.184.216.34"));
-        browser.open("http://127.0.0.1:8099/to-other-port");
+        browser.open("http://127.0.0.1:18099/to-other-port");
         waitIdleOrAsk();
         QCOMPARE(browser.state(), QStringLiteral("confirm"));
         browser.confirmInternal();
@@ -3597,7 +3597,7 @@ private slots:
         auto waitIdleOrAsk = [&] { QTRY_VERIFY_WITH_TIMEOUT(browser.state() == "confirm" || !browser.busy(), 30000); };
 
         // Control: a client that resolves by itself sees both addresses.
-        const QString naive = shell("for i in $(seq 1 60); do curl -s --max-time 5 http://flip-fixture.test:8099/echo; echo; sleep 0.01; done | grep -o 'local=[0-9.]*' | sort | uniq -c\n");
+        const QString naive = shell("for i in $(seq 1 60); do curl -s --max-time 5 http://flip-fixture.test:18099/echo; echo; sleep 0.01; done | grep -o 'local=[0-9.]*' | sort | uniq -c\n");
         QVERIFY2(naive.contains("local=127.0.0.1") && naive.contains("local=93.184.216.34"),
                  qPrintable("the fixture does not flip fast enough to prove anything; a plain curl saw: " + naive));
 
@@ -3605,7 +3605,7 @@ private slots:
         QStringList errors;
         for (int i = 0; i < 40; ++i) {
             // Even rounds open the name directly, odd rounds reach it through a redirect from a public host.
-            browser.open(i % 2 ? QStringLiteral("http://public-fixture.test:8099/to-flip") : QStringLiteral("http://flip-fixture.test:8099/echo"));
+            browser.open(i % 2 ? QStringLiteral("http://public-fixture.test:18099/to-flip") : QStringLiteral("http://flip-fixture.test:18099/echo"));
             waitIdleOrAsk();
             if (browser.state() == "confirm") {
                 ++asked;

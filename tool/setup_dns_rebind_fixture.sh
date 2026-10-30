@@ -1,6 +1,6 @@
 #!/bin/bash
 # Prepares the DISPOSABLE test Debian (never a real server) for the Browser DNS-rebinding live test (S-9).
-# Needs tool/setup_browser_policy_fixture.sh to have been run (loopback alias 93.184.216.34, web fixture on 8099).
+# Needs tool/setup_browser_policy_fixture.sh to have been run (loopback alias 93.184.216.34, web fixture on 18099).
 # Starts a background loop that rewrites the /etc/hosts line of flip-fixture.test every ~15 ms between a PUBLIC address
 # (93.184.216.34) and an INTERNAL one (127.0.0.1): two consecutive lookups of the name can disagree, exactly what a rebinding
 # attacker's DNS server does. "stop" removes the loop and the line. Run as root.

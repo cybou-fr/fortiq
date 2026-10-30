@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Disposable web server for the Browser live tests (run on the TEST Linux server only).
 
-    python3 web_fixture.py 8099            # 127.0.0.1 only
-    python3 web_fixture.py 8099 0.0.0.0    # also on the loopback aliases used by the address-policy tests
+    python3 web_fixture.py 18099            # 127.0.0.1 only
+    python3 web_fixture.py 18099 0.0.0.0    # also on the loopback aliases used by the address-policy tests
                                             # (tool/setup_browser_policy_fixture.sh)
 
 Paths:
@@ -235,6 +235,6 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8099
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 18099
     bind = sys.argv[2] if len(sys.argv) > 2 else "127.0.0.1"
     ThreadingHTTPServer((bind, port), Handler).serve_forever()

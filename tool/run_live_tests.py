@@ -57,7 +57,7 @@ def main():
     ap.add_argument("--weak-base", default="2431", help="base port of the weak-ssh fixture (tool/setup_weak_ssh_fixture.sh)")
     ap.add_argument("--weak-ssh", action="store_true", help="tool/setup_weak_ssh_fixture.sh is running: enables obsoleteAlgorithmsAreRefused")
     ap.add_argument("--web-base", default="", help="URL of tests/fixtures/web_fixture.py as seen from the fixture")
-    ap.add_argument("--gateway-tls", action="store_true", help="tool/setup_gateway_fixture.sh is running (HTTPS on 8443): enables the TLS check of the gateway live test")
+    ap.add_argument("--gateway-tls", action="store_true", help="tool/setup_gateway_fixture.sh is running (HTTPS on 18443): enables the TLS check of the gateway live test")
     ap.add_argument("--qt-bin", default="C:/Qt/6.12.0/msvc2022_64/bin")
     ap.add_argument("--vcpkg-bin", default="C:/Users/cybou/vcpkg/installed/x64-windows/bin")
     ap.add_argument("--timeout", type=int, default=900)
