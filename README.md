@@ -1,6 +1,6 @@
-# FORTIQ — Distributed Desktop (Qt rebuild)
+# FORTIQ — Agentless Linux Desktop over SSH
 
-**License:** GNU GPL v3.0 (`GPL-3.0-only`) for original FORTIQ code. See [LICENSE](LICENSE). FORTIQ is intended to become a fully public, free/open-source GitHub project. The repository remains private until the pre-publication audit is complete. Third-party components retain their own licenses; see [third-party notices](docs/THIRD_PARTY_LICENSES.md).
+**License:** GNU GPL v3.0 (`GPL-3.0-only`) for original FORTIQ code. See [LICENSE](LICENSE). FORTIQ is developed in the open as a free/open-source project. Third-party components retain their own licenses; see [third-party notices](docs/THIRD_PARTY_LICENSES.md).
 
 **Fortiq — удалённый Linux-рабочий стол.** Нативное приложение показывает файлы, документы,
 почту, браузер и системные инструменты выбранного Linux-сервера, а вся работа происходит на самом
@@ -15,6 +15,48 @@
 > физическое устройство, чистая Windows-установка и визуальная приёмка ещё не закрыты.
 > История реализации и испытаний — [QT_MIGRATION](docs/QT_MIGRATION.md).
 > Прежний Flutter/Dart сохранён только в теге `flutter-final`.
+
+## Architecture case study · Software & Systems Architecture
+
+**FORTIQ — пример системного проектирования на стыке desktop UX, распределённых операций, безопасности и интеграции Linux.** Ценность проекта не в количестве экранов: одна нативная оболочка объединяет инструменты удалённого Linux-хоста, не требуя установки собственного серверного агента или трансляции удалённого рабочего стола.
+
+![Утверждённый визуальный эталон FORTIQ Desktop — дизайн-референс, не скриншот работающей сборки](docs/design/reference/fortiq-shell-master.png)
+
+*Design reference, not a verified application screenshot. Реальное визуальное соответствие и готовность платформ ещё проходят приёмку.*
+
+### Архитектура: ограничения превращены в решения
+
+```mermaid
+flowchart LR
+    U["User · Windows / Android"] --> Q["Qt Quick / QML\nDesktop Shell + applications"]
+    Q --> C["C++ application controllers\nstate, validation, lifecycle"]
+    C --> T["Shared task & operation model\ncancel / uncertain outcomes"]
+    C --> S["SSH transport · libssh2"]
+    T --> S
+    S --> L["Linux host\nSSH exec · PTY · SFTP · tunnel"]
+    L --> N["Existing Linux tools & data"]
+```
+
+| Архитектурное решение | Почему это важно | Где смотреть |
+|---|---|---|
+| **Agentless SSH-first architecture** | Минимизирует требования к серверу: операции через SSH/SFTP/PTY и существующие Linux-инструменты; нет собственного постоянно работающего серверного демона | [SSH contract](docs/SSH_FRONTEND_CONTRACT.md), [core](src/core/), [SSH](src/ssh/) |
+| **Явные границы полномочий** | UI не становится источником истины для удалённых данных; операции привязаны к серверу и поколению подключения, поздний результат не должен подменить состояние другого сервера | [Architecture](docs/ARCHITECTURE.md), [product scope](docs/PRODUCT_SCOPE.md) |
+| **Безопасность как часть UX** | Закрепление ключа SSH-хоста, системное хранилище секретов, подтверждение опасных операций, защита несохранённых документов; невозможность установить итог операции показывается явно | [Security and operations](docs/ARCHITECTURE.md), [TaskManager](src/core/TaskManager.cpp) |
+| **Общая инфраструктура вместо дублирования** | Контроллеры и TaskManager разделяют механизмы операций; QML-компоненты переиспользуют состояния ошибок, потери соединения и диалоги. Предметная логика остаётся у приложения | [Desktop Shell](qml/shell/DesktopShell.qml), [TaskPanel](qml/shell/TaskPanel.qml), [AppStateMessage](qml/shell/AppStateMessage.qml) |
+| **Кроссплатформенная модель, а не масштабированный скриншот** | Desktop и адаптивный интерфейс учитывают разные способы ввода, окна и экранную клавиатуру; требуется независимая проверка на устройствах | [UI specification](docs/UI_SPEC_V1.md), [Android foundation](docs/ANDROID_FOUNDATION.md) |
+| **Проверяемость вместо обещаний** | Отдельные контракты, сценарии испытаний, фиксация известных ограничений и критерии приёмки помогают отличать реализованное от квалифицированного | [Release readiness matrix](docs/DESKTOP_EXPERIENCE_RELEASE_MATRIX.md), [tests](tests/) |
+
+### Engineering approach
+
+**Architecture → contracts → implementation → security review → evidence → release gate.**
+
+Особенно показательны несколько сознательных компромиссов: SSH вместо собственного API; reuse проверенных серверных инструментов вместо дублирования их функций; явное состояние *unknown* вместо ложного «операция отменена» при обрыве связи; сохранение текста черновика при недоступной исходной SSH-сессии; разграничение общих UX-компонентов и специфической логики Files, MDok, Logs, Terminal, Mail и других приложений.
+
+FORTIQ демонстрирует навыки **Software & Systems Architect**: проектирование границ системы и контрактов, security-by-design, распределённые stateful-операции, архитектуру приложений на C++/Qt, миграцию и модернизацию подходов к GUI, а также инженерную дисциплину в документации и проверке рисков. Архитектурный обзор доступен прямо в репозитории — вместе с исходниками, ограничениями и незакрытыми вопросами.
+
+**Текущий статус:** открытый инженерный проект, **не подтверждённый production release**. Последние улучшения UX и lifecycle изучены статически; актуальные сборки, интеграционные испытания, профилирование и визуальная приёмка остаются обязательными [release gates](docs/DESKTOP_EXPERIENCE_RELEASE_MATRIX.md). Исторические записи ниже отражают последовательные этапы R0.x и могут отставать от текущего кода.
+
+---
 
 ## Что есть в R0.1
 
@@ -88,7 +130,7 @@ CI, AI. Ни одно приложение не проверено на устр
 - **Терминал один** (качественный, в tmux-сессии на сервере).
 - **Цвет домена — только метка пользователя.** Он не навязывает политик и ограничений.
 - Браузер сейчас — **GUI к `curl` на сервере** ([BROWSER](docs/BROWSER.md)): запросы выполняет сервер, JavaScript не выполняется; окно с движком Chromium (Qt WebEngine, этап 2, 27.10.2026) сделано для Windows и проверено на стенде (тест отсутствия утечек), а на Android (этап 3, 27.10.2026) — окно на системном WebView с `ProxyController` через тот же шлюз, проверенное **только на эмуляторе** (сокеты uid приложения; физическое устройство, другие версии WebView и работа в фоне дольше минуты не проверялись); вкладки, поиск словами, индикатор «через сервер» и единый off-the-record профиль сделаны на этапе 4 (27.10.2026; Windows проверено на стенде, Android — только на эмуляторе, закладки/история на сервере и Linux-сборка не сделаны); под ним лежит (этап 1, 26.10.2026) локальный HTTP-прокси-шлюз с SSH-туннелем `direct-tcpip` через выбранный сервер и единой политикой адресов — только компонент и тесты, без движка и без окна (см. раздел «Полноценный движок через SSH-шлюз» в [BROWSER](docs/BROWSER.md)).
-- **Свободное ПО:** собственный код FORTIQ — GPL-3.0-only; исходный код и право на модификацию и распространение предоставляются в рамках GPLv3. Публичное открытие GitHub — отдельный будущий шаг.
+- **Свободное ПО:** собственный код FORTIQ — GPL-3.0-only; исходный код и право на модификацию и распространение предоставляются в рамках GPLv3. Репозиторий открыт для изучения архитектуры и исходного кода.
 - **Подготовка сервера при подключении — явная.** Проверка, обновления и защита (fail2ban, SSH,
   файрвол) идут в окне с живым логом; шаги, способные отрезать доступ, подтверждаются вторым входом
   и откатываются.
