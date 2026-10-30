@@ -2802,36 +2802,25 @@ private slots:
         }
         tm->clearFinished();
 
-        // ---- Terminal: the shell session is a task that guards the session; closing it is not a failure ----
+        // ---- Terminal: an open shell is a view, not a task: it is never listed and never blocks logout or quitting ----
         {
             fortiq::TerminalController term(&controller);
             term.setWindowActive(true);
             QTRY_VERIFY_WITH_TIMEOUT(term.running(), 20000);
-            QCOMPARE(kindState("terminal"), QStringLiteral("running"));
-            QCOMPARE(tm->guardingCount(), 1);                    // logging out would end the shell: ask first
-            const QVariantMap running = tm->tasks().constLast().toMap();
-            QVERIFY(running.value("guards").toBool() && running.value("session").toBool() && running.value("cancellable").toBool());
+            QCOMPARE(kindId("terminal"), 0);
+            QCOMPARE(tm->guardingCount(), 0);
             term.stop();
             QVERIFY(!term.running());
-            QCOMPARE(kindState("terminal"), QStringLiteral("succeeded"));
-            QCOMPARE(tm->guardingCount(), 0);
-            // Cancelling from the task panel closes the shell and is recorded as cancelled.
-            term.start();
-            QTRY_VERIFY_WITH_TIMEOUT(term.running(), 20000);
-            QVERIFY(tm->requestCancel(kindId("terminal") == 0 ? 0 : tm->tasks().constLast().toMap().value("id").toInt()));
-            QTRY_VERIFY(!term.running());
-            QCOMPARE(tm->tasks().constLast().toMap().value("state").toString(), QStringLiteral("cancelled"));
-            // A shell that exits on its own is a success of the task.
+            QCOMPARE(kindId("terminal"), 0);
+            // A shell that exits on its own, and a dropped connection, leave nothing behind either.
             term.start();
             QTRY_VERIFY_WITH_TIMEOUT(term.running(), 20000);
             term.send("exit\n");
             QTRY_VERIFY_WITH_TIMEOUT(!term.running(), 20000);
-            QCOMPARE(tm->tasks().constLast().toMap().value("state").toString(), QStringLiteral("succeeded"));
-            // A dropped connection is a cancel (a view has nothing to verify), never "unknown".
             term.start();
             QTRY_VERIFY_WITH_TIMEOUT(term.running(), 20000);
             controller.disconnectServer();
-            QCOMPARE(tm->tasks().constLast().toMap().value("state").toString(), QStringLiteral("cancelled"));
+            QCOMPARE(kindId("terminal"), 0);
             QCOMPARE(tm->activeCount(), 0);
         }
         // Everything ended: no task is active and the guard has nothing to ask about.

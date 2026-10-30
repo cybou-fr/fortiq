@@ -84,12 +84,8 @@ void TerminalController::start() {
         m_status = m_running ? QStringLiteral("Shell interactif distant · SSH") : r.message;
         if (m_running) {
             m_timer.start();
-            if (TaskManager *tasks = m_remote->tasks()) {
-                TaskManager::Spec spec;
-                spec.kind = QStringLiteral("terminal"); spec.title = QStringLiteral("Terminal · ") + m_remote->serverLabel(); spec.source = m_remote->serverLabel();
-                spec.generation = m_serverToken; spec.cancellable = true; spec.guards = true; spec.session = true;   // leaving ends the shell: ask first
-                m_task = tasks->begin(spec);
-            }
+            // An open shell is a view, not a task: it is not listed in the task panel and does not make logging out or quitting ask a question
+            // (only real work does: transfers, writes, sends). m_task stays 0, so endTask() has nothing to settle.
         } else m_serverToken = -1;
         emit changed();
     });

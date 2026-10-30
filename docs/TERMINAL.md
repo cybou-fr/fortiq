@@ -155,3 +155,10 @@ A local `stop()` without a confirmed shell exit is now recorded as **cancelled**
 ## Cross-app SSH disconnect classification — 2026-10-28
 
 `RemoteController::disconnectServer()` now distinguishes running interactive Terminal tasks from read-only session tasks. A running remote shell is recorded as **unknown** when the SSH connection is closed, because ending the client-side channel does not prove the remote process stopped. Read-only session tasks remain cancelled. This aligns TaskManager's disconnect path with TerminalController's explicit SSH-loss handling and prevents a misleading `cancelled` result from winning the signal-order race. Source change committed directly to `main`; CI, builds and tests were not run.
+
+## An open shell is not a task — 2026-10-30
+
+The Terminal no longer registers its shell session with the `TaskManager`. An open shell is a view: it is not listed in the task panel
+("Tâches — 1 en cours" used to stay on screen for as long as a terminal was open) and it no longer makes logging out, changing server or
+quitting ask "Des tâches sont encore en cours". Only real work (transfers, saves, sends, searches) guards the session. Closing the app or
+disconnecting simply ends the shell. The live test `fortiq_ssh_it` (Terminal block) checks that no `terminal` task ever exists.
