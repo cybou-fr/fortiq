@@ -1,262 +1,116 @@
-# FORTIQ — Agentless Linux Desktop over SSH
+# FORTIQ
 
-**License:** GNU GPL v3.0 (`GPL-3.0-only`) for original FORTIQ code. See [LICENSE](LICENSE). FORTIQ is developed in the open as a free/open-source project. Third-party components retain their own licenses; see [third-party notices](docs/THIRD_PARTY_LICENSES.md).
+### An agentless Linux desktop, built with C++20, Qt Quick and SSH
 
-**Fortiq — удалённый Linux-рабочий стол.** Нативное приложение показывает файлы, документы,
-почту, браузер и системные инструменты выбранного Linux-сервера, а вся работа происходит на самом
-сервере: клиент только рисует интерфейс и по **SSH** запускает существующие проверенные утилиты.
-Серверу не нужен графический стол, а на сервер не устанавливается собственный агент Fortiq.
+**FORTIQ turns a Linux host into a coherent native workspace without installing a remote desktop environment or a proprietary server agent.** Files, documents, terminal, logs, networking, system tools, databases, mail and browser views are presented in one Qt-based shell. Remote operations use SSH, SFTP, PTY and SSH tunnelling; the Linux host remains the authority for working data.
 
-> **Статус на 23 октября 2026: инженерный прототип R0.x.** Клиент C++20 / Qt Quick / QML,
-> SSH/SFTP на libssh2. В исходниках есть постоянные сессии, вход по паролю/ключу, менеджер серверов,
-> файловые операции, Logs без AI и приложения Navigateur, Réseau, Système, Bases de données и Courrier
-> (фактический уровень проверки каждого — [аудит 23.10.2026](docs/AUDIT_2026-10-23.md)). Это не квалифицированный публичный выпуск:
-> Android arm64 debug APK собирается и прошёл базовые SSH/Files/SAF-проверки в эмуляторе;
-> физическое устройство, чистая Windows-установка и визуальная приёмка ещё не закрыты.
-> История реализации и испытаний — [QT_MIGRATION](docs/QT_MIGRATION.md).
-> Прежний Flutter/Dart сохранён только в теге `flutter-final`.
+[Architecture](docs/ARCHITECTURE.md) · [Product scope](docs/PRODUCT_SCOPE.md) · [Desktop UX acceptance](docs/DESKTOP_EXPERIENCE_RELEASE_MATRIX.md) · [Build and verification](#build-and-verification) · [GPL-3.0 license](LICENSE)
 
-## Architecture case study · Software & Systems Architecture
+> **Project status — October 2026:** Public source code and an actively developed engineering prototype, **not a production-qualified release**. Historical Windows and Android-emulator checks are documented, but current end-to-end builds, clean-install qualification, physical-device testing, security review and visual acceptance remain open. CI is intentionally disabled; no build or tests were run as part of this README update.
 
-**FORTIQ — пример системного проектирования на стыке desktop UX, распределённых операций, безопасности и интеграции Linux.** Ценность проекта не в количестве экранов: одна нативная оболочка объединяет инструменты удалённого Linux-хоста, не требуя установки собственного серверного агента или трансляции удалённого рабочего стола.
+![FORTIQ desktop visual design reference](docs/design/reference/fortiq-shell-master.png)
 
-![Утверждённый визуальный эталон FORTIQ Desktop — дизайн-референс, не скриншот работающей сборки](docs/design/reference/fortiq-shell-master.png)
+*Approved desktop design reference — **not** a captured screenshot of a validated application build. See [UI specification](docs/UI_SPEC_V1.md) and [shell fidelity](docs/SHELL_FIDELITY.md).*
 
-*Design reference, not a verified application screenshot. Реальное визуальное соответствие и готовность платформ ещё проходят приёмку.*
+## Why FORTIQ exists
 
-### Архитектура: ограничения превращены в решения
+Remote Linux access is often fragmented across SSH terminals, file-transfer utilities, log viewers and web dashboards. FORTIQ explores a different boundary: **keep computation and working data on the Linux server, while giving the user a cohesive, native desktop experience.** The client provides the interaction layer; it does not emulate a remote graphical session.
+
+This repository is also an **open software and systems architecture case study**. It exposes architectural decisions, implementation boundaries, security trade-offs, verification plans and unresolved risks rather than only showcasing features.
+
+## System architecture
 
 ```mermaid
 flowchart LR
-    U["User · Windows / Android"] --> Q["Qt Quick / QML\nDesktop Shell + applications"]
-    Q --> C["C++ application controllers\nstate, validation, lifecycle"]
-    C --> T["Shared task & operation model\ncancel / uncertain outcomes"]
-    C --> S["SSH transport · libssh2"]
-    T --> S
-    S --> L["Linux host\nSSH exec · PTY · SFTP · tunnel"]
-    L --> N["Existing Linux tools & data"]
+    USER["Windows / Android user"] --> UI["Qt Quick / QML<br/>Desktop Shell and application views"]
+    UI --> CORE["C++ controllers<br/>state, validation, lifecycle"]
+    CORE --> TASKS["Shared TaskManager<br/>progress, cancellation, uncertain outcomes"]
+    CORE --> SSH["SSH transport / libssh2"]
+    TASKS --> SSH
+    SSH --> HOST["Linux host<br/>exec · SFTP · PTY · tunnels"]
+    HOST --> TOOLS["Existing Linux utilities<br/>and server-side data"]
 ```
 
-| Архитектурное решение | Почему это важно | Где смотреть |
-|---|---|---|
-| **Agentless SSH-first architecture** | Минимизирует требования к серверу: операции через SSH/SFTP/PTY и существующие Linux-инструменты; нет собственного постоянно работающего серверного демона | [SSH contract](docs/SSH_FRONTEND_CONTRACT.md), [core](src/core/), [SSH](src/ssh/) |
-| **Явные границы полномочий** | UI не становится источником истины для удалённых данных; операции привязаны к серверу и поколению подключения, поздний результат не должен подменить состояние другого сервера | [Architecture](docs/ARCHITECTURE.md), [product scope](docs/PRODUCT_SCOPE.md) |
-| **Безопасность как часть UX** | Закрепление ключа SSH-хоста, системное хранилище секретов, подтверждение опасных операций, защита несохранённых документов; невозможность установить итог операции показывается явно | [Security and operations](docs/ARCHITECTURE.md), [TaskManager](src/core/TaskManager.cpp) |
-| **Общая инфраструктура вместо дублирования** | Контроллеры и TaskManager разделяют механизмы операций; QML-компоненты переиспользуют состояния ошибок, потери соединения и диалоги. Предметная логика остаётся у приложения | [Desktop Shell](qml/shell/DesktopShell.qml), [TaskPanel](qml/shell/TaskPanel.qml), [AppStateMessage](qml/shell/AppStateMessage.qml) |
-| **Кроссплатформенная модель, а не масштабированный скриншот** | Desktop и адаптивный интерфейс учитывают разные способы ввода, окна и экранную клавиатуру; требуется независимая проверка на устройствах | [UI specification](docs/UI_SPEC_V1.md), [Android foundation](docs/ANDROID_FOUNDATION.md) |
-| **Проверяемость вместо обещаний** | Отдельные контракты, сценарии испытаний, фиксация известных ограничений и критерии приёмки помогают отличать реализованное от квалифицированного | [Release readiness matrix](docs/DESKTOP_EXPERIENCE_RELEASE_MATRIX.md), [tests](tests/) |
+### Decisions, constraints and trade-offs
 
-### Engineering approach
+| Decision | Engineering reasoning | Evidence |
+| --- | --- | --- |
+| **Agentless SSH-first boundary** | Reuse mature SSH facilities and established Linux tools rather than maintain a custom server service. Host capabilities and utility versions still affect behavior. | [SSH frontend contract](docs/SSH_FRONTEND_CONTRACT.md), [SSH implementation](src/ssh/) |
+| **Remote identity is explicit** | Bind actions and asynchronous results to server/session identity so late work cannot silently apply to another host. | [Architecture](docs/ARCHITECTURE.md), [controllers](src/core/) |
+| **Uncertain outcomes are represented honestly** | A connection failure after a potentially started mutation is not proof of cancellation. Task lifecycle models include an **unknown** result. | [TaskManager](src/core/TaskManager.cpp), [SSH operations](src/core/RemoteOperations.cpp) |
+| **Secure operations before convenience** | SSH host-key verification, OS-backed secret handling, guarded session shutdown, conflict handling and document-draft preservation reduce avoidable data-loss risks. They are controls, not a claim of formal security certification. | [Architecture](docs/ARCHITECTURE.md), [Smart Files](docs/SMART_FILES_SPEC.md), [MDok](docs/MDOK.md) |
+| **Share mechanisms, not every behavior** | Task tracking, connection-loss warnings, dialogs and state presentation are shared; editors, logs and terminals keep their own domain-specific state. | [DesktopShell](qml/shell/DesktopShell.qml), [TaskPanel](qml/shell/TaskPanel.qml), [AppStateMessage](qml/shell/AppStateMessage.qml) |
+| **Responsive desktop is a distinct UX problem** | Window ordering, keyboard focus, modal dialogs, touch input and virtual keyboards need explicit handling, not a uniformly scaled desktop screenshot. | [UI contract](docs/UI_SPEC_V1.md), [Android foundation](docs/ANDROID_FOUNDATION.md) |
+| **Specifications are not test results** | Source-level hardening, tests present in the repository, executed test evidence and release acceptance are documented separately. | [Release readiness matrix](docs/DESKTOP_EXPERIENCE_RELEASE_MATRIX.md), [test sources](tests/) |
 
-**Architecture → contracts → implementation → security review → evidence → release gate.**
+The implementation follows an architectural workflow: **problem framing → constraints → contracts → implementation → threat and failure review → verification evidence → release gate**. See [documentation authority](docs/DOCUMENTATION_AUTHORITY.md) for how design contracts and implementation reports are distinguished.
 
-Особенно показательны несколько сознательных компромиссов: SSH вместо собственного API; reuse проверенных серверных инструментов вместо дублирования их функций; явное состояние *unknown* вместо ложного «операция отменена» при обрыве связи; сохранение текста черновика при недоступной исходной SSH-сессии; разграничение общих UX-компонентов и специфической логики Files, MDok, Logs, Terminal, Mail и других приложений.
+## Applications and shared capabilities
 
-FORTIQ демонстрирует навыки **Software & Systems Architect**: проектирование границ системы и контрактов, security-by-design, распределённые stateful-операции, архитектуру приложений на C++/Qt, миграцию и модернизацию подходов к GUI, а также инженерную дисциплину в документации и проверке рисков. Архитектурный обзор доступен прямо в репозитории — вместе с исходниками, ограничениями и незакрытыми вопросами.
+| Area | Current source-level scope | Details |
+| --- | --- | --- |
+| **Smart Files** | SFTP directory navigation, previews, search, transfer/operation flows, trash and conflict handling | [Files specification](docs/SMART_FILES_SPEC.md) |
+| **MDok** | Remote Markdown editing, preview, document tabs/drafts and save-conflict workflows; PDF-related behavior needs platform validation | [MDok](docs/MDOK.md) |
+| **Logs** | Journald/file sources, filtering, grouping and incident inspection, without requiring AI | [Logs specification](docs/LOGS_INTELLIGENCE_SPEC.md) |
+| **Terminal** | Interactive SSH PTY, terminal rendering and session lifecycle | [Terminal](docs/TERMINAL.md) |
+| **System, Network, Disks** | Host information and operational diagnostics through Linux utilities | [System](docs/SYSTEM.md) · [Network](docs/NETWORK.md) · [Disks](docs/DISKS.md) |
+| **Databases** | SQLite and PostgreSQL inspection with read-only-oriented UI safeguards; the remote account's permissions remain the actual security boundary | [Databases](docs/DATABASES.md) |
+| **Mail** | Linux-tool-based mail workflows, including reading, composing and server-side attachments | [Mail](docs/MAIL.md) |
+| **Browser** | Server-routed browsing architecture with platform-specific engine work and a text-mode fallback; privacy and device qualification remain open | [Browser](docs/BROWSER.md) |
 
-**Текущий статус:** открытый инженерный проект, **не подтверждённый production release**. Последние улучшения UX и lifecycle изучены статически; актуальные сборки, интеграционные испытания, профилирование и визуальная приёмка остаются обязательными [release gates](docs/DESKTOP_EXPERIENCE_RELEASE_MATRIX.md). Исторические записи ниже отражают последовательные этапы R0.x и могут отставать от текущего кода.
+These describe **implemented code paths and design direction**, not universal platform support or completed feature acceptance. The shell also has shared notifications, application routing, task tracking, session handling and reusable UX components.
 
----
+## Technology and supported targets
 
-## Что есть в R0.1
+- **Languages and UI:** C++20, Qt Quick / QML, CMake; Qt 6.12 is the development target. Consult [CMakeLists.txt](CMakeLists.txt) for the actual minimum and dependencies.
+- **Connectivity:** libssh2, SSH exec, SFTP, interactive PTY and SSH tunnelling.
+- **Primary platform:** Windows 10/11 x64.
+- **Additional target:** Android tablets / arm64, with emulator-based evidence and outstanding physical-device qualification.
+- **Linux:** a Debian client packaging path exists, but is not a production-qualified release; Linux is also the remote-host environment. See [Debian packaging](docs/DEBIAN_RELEASE.md).
+- **Server environment:** Debian/Ubuntu-oriented workflows and existing Linux utilities; availability of individual tools must be checked.
 
-- Desktop Shell 1536×1024 с одной панелью приложений слева или снизу и глобальным менеджером
-  серверов. Изменения относительно исходного PNG утверждены в [UI SPEC v1](docs/UI_SPEC_V1.md).
-  Узкий/портретный экран использует адаптивную оболочку без общего уменьшения холста; визуальная приёмка не пройдена —
-  [SHELL_FIDELITY](docs/SHELL_FIDELITY.md).
-- SSH с закреплением SHA-256 отпечатка хоста до аутентификации, пароль и приватный ключ,
-  повторное использование сессий. Сохраняются профили подключения, пути ключей и отпечатки;
-  пароль можно запомнить только в защищённом хранилище ОС (Windows Credential Manager, Android Keystore),
-  при его недоступности — явный отказ, без файла. Пароли профилей БД — там же.
-- [Smart Files](docs/SMART_FILES_SPEC.md): SFTP-навигация, ограниченные превью, передачи с очередью,
-  новые папки, переименование, серверная Trash, редактор UTF-8 и серверный поиск.
-  Replace существующего файла выполняется одним атомарным `posix-rename`, без переноса
-  оригинала в backup. Проверяются размер, режим доступа, владелец/группа, flush и close
-  временного файла; неподдерживаемая атомарная замена завершается ошибкой.
-  Проверка SHA-256 редактора остаётся оптимистической, без атомарного compare-and-swap.
-- [Terminal](docs/TERMINAL.md): интерактивный SSH PTY с libvterm, Ctrl+C, resize,
-  автозапуском при открытии на подключённом сервере и историей Bash с вставкой по клику без Enter слева;
-  без повтора команд. Буфер вывода — до 1000 строк в RAM, прокрутка колесом/полосой
-  и Shift+PageUp/PageDown, выделение мышью и копирование фрагмента через Ctrl+Shift+C.
-  Локальный поиск по выводу — Ctrl+Shift+F. Полная Android IME/TUI-квалификация ещё впереди.
-- [MDok](docs/MDOK.md): первый редактор Markdown по SSH, предпросмотр, новый документ,
-  безопасный Save/копия и серверный черновик открытого файла (при разрыве — текст в RAM); PDF пока не реализован.
-  Files ↔ MDok: повторное открытие активирует документ, диалог умеет сохранить и продолжить,
-  после Save обновляется открытая папка, возврат в Files выделяет документ. Один документ за раз.
-- [Disks](docs/DISKS.md): обзор устройств и смонтированных томов, ёмкость/свободное место
-  через lsblk/findmnt по SSH, открытие точки монтирования в Files; только чтение.
-- [Logs](docs/LOGS_INTELLIGENCE_SPEC.md): journald и файлы, фильтры, повторы, инспектор инцидентов
-  и read-only service view. Файлы читаются порциями до 256 КиБ с учётом фактических байтов;
-  неполный ответ не продвигает позицию. Начальный просмотр — последние 256 КиБ,
-  лента ограничена 2000 событиями, длинное сообщение — 4000 символами. Отставание показано явно.
-  Поздние результаты привязаны к поколению SSH-соединения и запроса.
-- [Navigateur](docs/BROWSER.md) (на Windows — окно на движке Chromium с JavaScript, весь трафик только через SSH-сервер; запасной режим — GUI к `curl` на сервере, безопасный текст без скриптов и удалённых ресурсов; внутренние адреса сервера открываются только после подтверждения, метаданные облака — никогда),
-  [Réseau](docs/NETWORK.md) и [Système](docs/SYSTEM.md) (только чтение: интерфейсы, порты, маршруты, DNS, процессы,
-  службы, обзор), [Bases de données](docs/DATABASES.md) (SQLite и PostgreSQL, только чтение как **защита от случайности**,
-  не граница безопасности; при открытии профиля читаются права роли и показывается предупреждение с рецептом роли только для чтения; лимиты времени и строк), [Courrier](docs/MAIL.md) (notmuch: чтение, теги; отправка через msmtp;
-  мастер аккаунта с паролями в файлах 0600 на сервере после показа точного текста и согласия; вложения остаются на сервере; выбор файлов в Files для отправки, до 10 файлов / 10 MiB; MIME собирает серверный Python 3).
-  Единая модель задач — TaskManager (все приложения, что работают на сервере, кроме быстрого чтения Système); при выходе, отключении, смене сервера и закрытии окна с идущей записью, переносом, отправкой или открытым Terminal приложение спрашивает подтверждение.
-  Уровень проверки по приложениям и реестр рисков — [аудит](docs/AUDIT_2026-10-23.md); воспроизведение —
-  `python tool/run_live_tests.py` на одноразовом Debian.
-- Сборка Windows MSVC / Qt 6.12 и регрессионные проверки Logs выполнены 22.10.2026;
-  Linux-скрипт чтения проверен через WSL Debian. Это не испытание APK или чистой Windows-машины.
-  Проверки файловой публикации через настоящий SSH/SFTP тестового WSL-сервера —
-  `fortiq_publication` (настройка `FORTIQ_PUBLICATION_*`, отчёт `publication-results.txt`).
-  Общий SSH-набор требует `FORTIQ_IT_*`; пропуск не означает проверенного соединения.
+FORTIQ does **not** need a server-side graphical desktop or its own server daemon. It does require an accessible SSH server, suitable permissions and the Linux utilities used by the chosen app.
 
-Android foundation: адаптивные Files/Logs, непрозрачные `content://` URI, ключ из памяти,
-отложенный экспорт в SAF-документ и debug APK — [реализация и ограничения](docs/ANDROID_FOUNDATION.md).
-Экспорт провайдера не атомарен; после начавшейся записи ошибка/отмена означает возможный частичный документ.
+## Build and verification
 
-В FortiqTablet (Android API 37, arm64 через трансляцию) проверены вход по ключу с закреплением хоста,
-поворот, IME/Back, сохранение UTF-8 по SFTP и полный SAF upload/download с побайтной сверкой.
-
-**Не реализовано / не квалифицировано:** физическое Android-устройство, все провайдеры SAF и GPU fidelity,
-чистая Windows-машина, автоматическое переподключение, прикрепление файлов к письму, PDF, Editor,
-полноценный Terminal на Android, MariaDB, запись в БД, полная межприложенческая навигация, подготовка сервера,
-CI, AI. Ни одно приложение не проверено на устройстве. Целевые спецификации описывают больше, чем текущий прототип.
-
-## Принципы (решения владельца)
-
-- **Только SSH.** Единственный рабочий транспорт: SSH exec/PTY, SFTP внутри SSH, перенаправление
-  портов и SOCKS. Никакого стриминга окон, собственного серверного агента, прямых SMTP/IMAP, REST и
-  других клиентских подключений к рабочим системам. У клиента нет прямых
-  внешних подключений, кроме SSH к выбранному серверу.
-- **Сервер — единственный источник рабочих данных и настроек.** Клиент хранит только то, что
-  нужно для подключения, и несохранённый ввод в памяти.
-- **Готовые Linux-утилиты вместо своих.** Fortiq пишет графический слой и адаптеры, а не новый
-  почтовый клиент или файловый движок. Свои серверные CLI и демоны — только отдельным решением.
-- **Debian и Ubuntu.** Другие дистрибутивы не поддерживаются.
-- **Терминал один** (качественный, в tmux-сессии на сервере).
-- **Цвет домена — только метка пользователя.** Он не навязывает политик и ограничений.
-- Браузер сейчас — **GUI к `curl` на сервере** ([BROWSER](docs/BROWSER.md)): запросы выполняет сервер, JavaScript не выполняется; окно с движком Chromium (Qt WebEngine, этап 2, 27.10.2026) сделано для Windows и проверено на стенде (тест отсутствия утечек), а на Android (этап 3, 27.10.2026) — окно на системном WebView с `ProxyController` через тот же шлюз, проверенное **только на эмуляторе** (сокеты uid приложения; физическое устройство, другие версии WebView и работа в фоне дольше минуты не проверялись); вкладки, поиск словами, индикатор «через сервер» и единый off-the-record профиль сделаны на этапе 4 (27.10.2026; Windows проверено на стенде, Android — только на эмуляторе, закладки/история на сервере и Linux-сборка не сделаны); под ним лежит (этап 1, 26.10.2026) локальный HTTP-прокси-шлюз с SSH-туннелем `direct-tcpip` через выбранный сервер и единой политикой адресов — только компонент и тесты, без движка и без окна (см. раздел «Полноценный движок через SSH-шлюз» в [BROWSER](docs/BROWSER.md)).
-- **Свободное ПО:** собственный код FORTIQ — GPL-3.0-only; исходный код и право на модификацию и распространение предоставляются в рамках GPLv3. Репозиторий открыт для изучения архитектуры и исходного кода.
-- **Подготовка сервера при подключении — явная.** Проверка, обновления и защита (fail2ban, SSH,
-  файрвол) идут в окне с живым логом; шаги, способные отрезать доступ, подтверждаются вторым входом
-  и откатываются.
-- **AI только по желанию** и только как совет по явно выбранному контексту (см. [AI_CLI](docs/AI_CLI.md)).
-
-## Цели платформ
-
-| Платформа | Цель |
-|---|---|
-| Windows 10/11 x64 | основная |
-| Android-планшет (Lenovo 12,7″) | тот же набор функций, что на компьютере |
-| Linux, macOS, iOS | не планируются |
-
-## Стек
-
-C++20, Qt 6 (целевая 6.12, минимум в CMake — 6.9), CMake 3.21+, libssh2. Открытые вопросы — в
-[ARCHITECTURE](docs/ARCHITECTURE.md#открытые-решения): лицензии Qt при распространении FORTIQ под GPLv3,
-терминальный движок, безопасный веб-движок. Qt Quick/QML и **точный визуальный эталон уже утверждены**.
-
-## Сборка
-
-- Qt с модулями Quick, Quick Controls, Network, Concurrent (и Test при `BUILD_TESTING=ON`).
-- **libssh2** для той же архитектуры и ABI вместе с криптобэкендом (например, OpenSSL).
-  Windows: Qt MSVC 2022 x64 (или MinGW) и libssh2 из vcpkg для того же тулчейна.
-  Android: Qt for Android, SDK/NDK/JDK и libssh2 для **arm64-v8a** (лучше статическая сборка);
-  разрешение `android.permission.INTERNET` регистрируется CMake (Qt 6.9+), итоговый манифест
-  проверить перед установкой.
+The following is a **developer command sequence**, not evidence of a successful current build:
 
 ```sh
-cmake -S . -B build -DCMAKE_PREFIX_PATH=/path/to/Qt/6.x/kit -DBUILD_TESTING=ON
+cmake -S . -B build -DCMAKE_PREFIX_PATH=/path/to/Qt/kit -DBUILD_TESTING=ON
 cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-Квалификация платформ (эмулятор Android сделан; чистая Windows и физический Android — за владельцем): [PLATFORM_QUALIFICATION](docs/PLATFORM_QUALIFICATION.md).
-Выпуск, подпись и обновления: [RELEASE](docs/RELEASE.md); лицензии Qt и сторонних компонентов (**старые пакеты не выпускать без повторного аудита и актуальных уведомлений**): [THIRD_PARTY_LICENSES](docs/THIRD_PARTY_LICENSES.md).
-Фаззинг и санитайзеры: [FUZZING](docs/FUZZING.md) (`tool/fuzz_linux.sh`, `-DFORTIQ_SANITIZE=ON`).
+Configure Qt and libssh2 for the same ABI/toolchain; Windows and Android have additional SDK and packaging requirements. See [migration/build history](docs/QT_MIGRATION.md), [platform qualification](docs/PLATFORM_QUALIFICATION.md), [Android foundation](docs/ANDROID_FOUNDATION.md) and [release process](docs/RELEASE.md). A Debian 13 packaging entry point is `python3 tool/package_debian.py`; see [its prerequisites and caveats](docs/DEBIAN_RELEASE.md).
 
-Все проверки, которые обязан пройти коммит в `main` (документы, компиляция скриптов, сборка, офлайн-тесты, по желанию layout-тест под нагрузкой), одной командой:
-`python tool/ci_check.py --qt-prefix <Qt kit> --toolchain <vcpkg.cmake> [--stress 2]`; та же команда запускается в `.github/workflows/ci.yml` (на GitHub пока не запускалась).
+### What remains before a release claim
 
-Перед запуском на Windows положить рядом с `fortiq.exe` библиотеки Qt и libssh2/OpenSSL, иначе
-появится ошибка «Qt6Quick.dll was not found»:
+1. Reproduce current desktop/Android builds and test suites, including real SSH integration with failure and reconnect scenarios.
+2. Qualify a clean Windows install and a physical Android device, including SAF, IME and input behavior.
+3. Compare captured application UI against the approved design reference and validate accessibility and responsive layouts.
+4. Measure responsiveness under large listings, log streams, multiple document tabs and terminal output.
+5. Close security and data-integrity review gates and document remaining limitations.
 
-```sh
-<Qt>/msvc2022_64/bin/windeployqt --release --qmldir qml build/fortiq.exe
-cp <vcpkg>/installed/x64-windows/bin/*.dll build/
-```
+The [Desktop Experience release matrix](docs/DESKTOP_EXPERIENCE_RELEASE_MATRIX.md) is the explicit acceptance checklist. **No passing tests or release readiness are implied by the presence of source files or this README.**
 
-Установщик Windows (x64) собирается из Release-сборки одной командой; результат кладётся в
-`build-dist/` и в репозиторий не попадает:
-
-```sh
-python tool/package_windows.py --build build-msvc
-```
-
-Получаются папка приложения, ZIP-архив и установщик Qt Installer Framework (установка для одного
-пользователя в `%LOCALAPPDATA%\Programs\FORTIQ`, без прав администратора, ярлык в «Пуске»,
-деинсталлятор). Подписи кода пока нет: SmartScreen предупредит. Состояние проверок — в
-[QT_MIGRATION](docs/QT_MIGRATION.md). Android arm64 debug APK собран и проверен в эмуляторе; release-сборка и физическое устройство не квалифицированы.
-
-## Использование среза R0.1
-
-1. Нажать имя сервера в верхней панели (менеджер серверов открывается и сам, если подключения нет),
-   добавить сервер: адрес, порт, пользователь и путь к ключу OpenSSH или вход по паролю.
-2. На новом хосте сверить отпечаток `SHA256:` с известным, например на сервере:
-   `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256` (алгоритм ключа может отличаться).
-3. Закрепить только после независимой проверки, подключиться и открыть **Файлы**.
-4. Отключение стирает пароль из памяти контроллера.
-
-Нативный SSH-клиент — значительная непроверенная поверхность атаки; закрепление при первом входе не
-заменяет внешнюю проверку отпечатка.
-
-## Документы
-
-| Документ | Назначение |
-|---|---|
-| [PRODUCT_SCOPE](docs/PRODUCT_SCOPE.md) | назначение, приоритеты, набор приложений |
-| [SSH_FRONTEND_CONTRACT](docs/SSH_FRONTEND_CONTRACT.md) | обязательный контракт: клиент = GUI, сервер = backend |
-| [ARCHITECTURE](docs/ARCHITECTURE.md) | модули клиента, безопасность операций, открытые решения |
-| [DEVELOPMENT_MATRIX](docs/DEVELOPMENT_MATRIX.md) | приложения и этапы со статусами, уроки прототипа |
-| [AI_CLI](docs/AI_CLI.md) | спецификация необязательной серверной команды `ai` |
-| [QT_MIGRATION](docs/QT_MIGRATION.md) | план и фактическое состояние перехода на Qt |
-| [SHELL_FIDELITY](docs/SHELL_FIDELITY.md) | реализация Desktop Shell, захват 1536×1024, сравнение с эталоном и последние метрики |
-| [UI SPEC v1](docs/UI_SPEC_V1.md) | **точный канонический скетч**: геометрия 1536×1024, материалы, поведение, visual acceptance |
-| [Smart Files](docs/SMART_FILES_SPEC.md) | первый flagship: навигация, интеллектуальный поиск, операции и безопасность |
-| [Logs](docs/LOGS_INTELLIGENCE_SPEC.md) | второй flagship: Linux-журналы, корреляция и проверяемые сводки без AI |
-| [Documentation Authority](docs/DOCUMENTATION_AUTHORITY.md) | иерархия контрактов, решения, выявленные риски и способ проверки согласованности |
-| [Static website](docs/website/README.md) | обновлённые EN/FR/RU страницы, генератор и правила публикации без ложных релизных обещаний |
-| [DESKTOP_BLUEPRINT](docs/FORTIQ_DESKTOP_BLUEPRINT.md) | контракт desktop-shell, архитектура, 10 классов, 3 спринта, Windows/Android и стенды Debian |
-| [AGENTS](AGENTS.md) | правила разработки для людей и агентов |
-
-## Структура репозитория
+## Repository map
 
 ```text
-assets/branding/   знак и исходник иконки
-docs/              требования и архитектура
-qml/               интерфейс Qt Quick
-src/core/          RemoteController, проверка удалённых путей
-src/ssh/           SshClient (libssh2: ключ хоста, пароль, SFTP)
-tests/             тесты Qt Test
-www/               сайт (HTML, RU/FR)
+qml/shell/          Desktop Shell, application views and shared UI components
+src/core/           Application controllers, remote operations and TaskManager
+src/ssh/            SSH transport implementation
+tests/              Automated test sources
+docs/               Architecture, product contracts, security and acceptance
+docs/design/        Approved visual reference
+assets/branding/    Branding and executable-icon sources
+tool/               Development, packaging and verification utilities
+www/                Project website
 ```
 
-Новый код и тесты добавляются вместе с документацией и без заявлений о готовности, которых нельзя
-подтвердить проверкой.
+Start with [Architecture](docs/ARCHITECTURE.md), [Product Scope](docs/PRODUCT_SCOPE.md) and [Desktop Experience Release Matrix](docs/DESKTOP_EXPERIENCE_RELEASE_MATRIX.md). For the evolution from Flutter to Qt and historical verification, read [Qt Migration](docs/QT_MIGRATION.md) and the [October 23 audit](docs/AUDIT_2026-10-23.md).
 
-## Иконка и брендинг
+## Open development and licensing
 
-**Брендинг Qt/Windows/Android подключён в исходниках сборки.** `assets/branding/fortiq_mark.png`
-используется генератором `tool/generate_brand_assets.py` при CMake configure (без Pillow и ImageMagick).
-Он создаёт Windows `.ico` (16–256 px) и `.rc`, ресурс `QIcon` для Qt-окна, Android mipmap и
-adaptive launcher icon. `QT_ANDROID_APP_ICON` применяется на Qt **6.9+**; Android-пакет
-`fr.cybou.fortiq`. Для сайта есть SVG-логотип и favicon в `www/assets/`.
+FORTIQ is an openly developed, exploratory engineering project. The original FORTIQ code is licensed under **GNU GPL-3.0-only**; see [LICENSE](LICENSE). Dependencies and bundled third-party material retain their respective licenses; review [third-party notices](docs/THIRD_PARTY_LICENSES.md).
 
-Интеграция исходников — **не подтверждение готовых EXE/APK**: иконки ещё необходимо проверить
-после реальной сборки Windows и установки Android APK. Контракт:
-[assets/branding/README.md](assets/branding/README.md).
-
-## Debian 13 (client .deb)
-
-A native CPack .deb target is available for a Debian 13 graphical VM:
-
-```sh
-python3 tool/package_debian.py
-sudo apt install ./build-debian/fortiq_*.deb
-```
-
-Build prerequisites, security caveats and production acceptance gates: [DEBIAN_RELEASE](docs/DEBIAN_RELEASE.md). The `.deb` is built **on Debian**, not committed as a binary. This is an initial packaging path, not yet a production-qualified release.
+The project is intended to make software architecture inspectable: **what was decided, why it was decided, what is implemented and what still needs proof.**
