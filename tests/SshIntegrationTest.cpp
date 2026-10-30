@@ -201,7 +201,8 @@ private slots:
             QVERIFY(session.saveFile(original,external,QCryptographicHash::hash(savedBytes,QCryptographicHash::Sha256),false).status==SshResult::Status::Ok);
             docs.setText("# Draft must survive\n");docs.save();QTRY_VERIFY_WITH_TIMEOUT(!docs.busy(),20000);
             QVERIFY(docs.dirty());QVERIFY(docs.status().contains("Conflit"));QCOMPARE(session.readFile(original,262144).data,external);
-            docs.saveAs(original);QTRY_VERIFY_WITH_TIMEOUT(!docs.busy(),20000);QVERIFY(!docs.dirty());copy=docs.path();QVERIFY(copy!=original);
+            // A save started while a draft upload is in flight waits for it (hasBusyTabs covers both), it is not refused.
+            docs.saveAs(original);QTRY_VERIFY_WITH_TIMEOUT(!docs.hasBusyTabs(),20000);QVERIFY(!docs.dirty());copy=docs.path();QVERIFY(copy!=original);
             QCOMPARE(session.readFile(copy,262144).data,fortiq::encodeMarkdown(docs.text(),true,true));
             docs.setText("# Offline draft\n");docs.save();remote.disconnectServer();
             QVERIFY(!docs.canSave());QVERIFY(!docs.busy());QVERIFY(docs.dirty());QCOMPARE(docs.text(),QString("# Offline draft\n"));
@@ -2797,7 +2798,7 @@ private slots:
             QCOMPARE(QString::fromUtf8(shell("cat '" + dir.toUtf8() + "/note.md'\n").data), QStringLiteral("# Autre\n"));   // the other version is untouched
             // Save-as copy is its own kind.
             docs.saveAs(dir + "/copie.md");
-            QTRY_VERIFY_WITH_TIMEOUT(!docs.busy(), 20000);
+            QTRY_VERIFY_WITH_TIMEOUT(!docs.hasBusyTabs(), 20000);   // waits for a draft upload in flight too
             QVERIFY(seenKinds.contains("docSaveCopy"));
         }
         tm->clearFinished();
