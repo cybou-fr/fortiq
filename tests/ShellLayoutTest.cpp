@@ -355,6 +355,7 @@ private slots:
                 function save(){base=text;saves++;saved(path)}
                 function saveAs(p){path=p;save()}
                 function discardDraft(){text=base;loaded()}
+                function closeDocument(){hasDocument=false;base="";text="";path="";loaded()}
                 function restoreDraft(){}
                 function dismissRecovery(d){}
                 function resolveConflictSaveCopy(){}
@@ -372,6 +373,30 @@ private slots:
         text->setProperty("text",QString("int main() {\n    return 1;\n}\n"));QVERIFY(fixture->property("dirty").toBool());
         text->forceActiveFocus();QTest::keyClick(window,Qt::Key_S,Qt::ControlModifier);
         QVERIFY(!fixture->property("dirty").toBool());QCOMPARE(fixture->property("saves").toInt(),1);
+        // A new file name re-colours the document and re-announces the SAME text; that must never reach the document (an empty editor
+        // used to overwrite a file that was still being loaded: it opened empty and edited).
+        fixture->setProperty("path",QString("/home/fixture/other.py"));settle(window);
+        QCOMPARE(fixture->property("text").toString(),QString("int main() {\n    return 1;\n}\n"));QVERIFY(!fixture->property("dirty").toBool());
+        QCOMPARE(text->property("text").toString(),fixture->property("text").toString());
+        // The hint of a toolbar button is visible (it is drawn in the window overlay, above every window).
+        {
+            auto *saveBtn=ed->findChild<QQuickItem *>("editorSaveButton");QVERIFY(saveBtn);
+            QTest::mouseMove(window,saveBtn->mapToScene(QPointF(saveBtn->width()/2,saveBtn->height()/2)).toPoint());
+            QTRY_V([&] { for(auto *bubble:window->findChildren<QQuickItem *>("toolTipBubble"))if(bubble->isVisible() && bubble->opacity()>0.9)return true;return false; }());
+            QTest::mouseMove(window,QPoint(2,size.height()-2));
+        }
+        // "x" next to the name closes the FILE and keeps the window; the other "x" closes the window.
+        {
+            auto *closeFile=ed->findChild<QQuickItem *>("editorCloseFile");QVERIFY(closeFile);QVERIFY(closeFile->isVisible());
+            QVERIFY(ed->findChild<QQuickItem *>("editorCloseWindow"));
+            QVERIFY(QMetaObject::invokeMethod(ed,"request",Q_ARG(QVariant,QVariant("closefile")),Q_ARG(QVariant,QVariant("")),Q_ARG(QVariant,QVariant())));
+            settle(window);
+            QVERIFY(!closeFile->isVisible());QVERIFY(ed->isVisible());QVERIFY(!fixture->property("hasDocument").toBool());
+            QVERIFY(text->property("text").toString().isEmpty());
+            fixture->setProperty("path",QString("/home/fixture/main.cpp"));fixture->setProperty("base",QString("int main() {\n    return 1;\n}\n"));fixture->setProperty("text",fixture->property("base"));
+            fixture->setProperty("hasDocument",true);QVERIFY(QMetaObject::invokeMethod(fixture,"loaded"));settle(window);
+            QCOMPARE(text->property("text").toString(),fixture->property("text").toString());
+        }
         // Unsaved text is never dropped: closing asks first, Escape keeps the window.
         text->setProperty("text",QString("changed"));QVERIFY(fixture->property("dirty").toBool());
         QVERIFY(QMetaObject::invokeMethod(ed,"request",Q_ARG(QVariant,QVariant("close")),Q_ARG(QVariant,QVariant("")),Q_ARG(QVariant,QVariant())));
@@ -409,6 +434,37 @@ private slots:
             QVERIFY(dockTip->mapToScene(QPointF(0,dockTip->height())).y()<=panel->mapToScene(QPointF(0,0)).y());
             QVERIFY(dockTip->mapToScene(QPointF(0,0)).y()>=0);
         }
+    }
+    // The Applications menu lists every application once (a repeated entry spilled onto the "Recommande" heading), and the app
+    // can be left once the user has confirmed the close sequence even while a task (an open terminal) still guards it.
+    void launcherAndQuit() {
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("shellFixture", false);
+        engine.rootContext()->setContextProperty("shellFixturePreview", QString());
+        engine.rootContext()->setContextProperty("shellWallpaper", QUrl());
+        engine.rootContext()->setContextProperty("shellWallpaperName", "");
+        engine.rootContext()->setContextProperty("remote", QVariant::fromValue<QObject *>(nullptr));
+        engine.rootContext()->setContextProperty("logs", QVariant::fromValue<QObject *>(nullptr));
+        engine.loadFromModule("Fortiq.App", "Main");
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first()); QVERIFY(window);
+        window->resize(QSize(1536,1024)); settle(window);
+        auto *shell = window->findChild<QQuickItem *>("desktopShell"); QVERIFY(shell);
+        auto *launcher = shell->findChild<QQuickItem *>("launcherPanel"); QVERIFY(launcher);
+        QSet<QString> keys;
+        for (const QVariant &entry : launcher->property("appPinned").toList()) {
+            const QString key = entry.toMap().value("k").toString();
+            QVERIFY2(!keys.contains(key), qPrintable("application listed twice: " + key));
+            keys.insert(key);
+        }
+        QVERIFY(keys.size() <= 12);   // two rows of six: more would overlap the "Recommande" heading
+        // The menu and the click observer sit above every application window.
+        shell->setProperty("launcherOpen", true); settle(window);
+        QVERIFY(launcher->z() > 14);
+        QVariant allowed;
+        shell->setProperty("quitConfirmed", true);
+        QVERIFY(QMetaObject::invokeMethod(shell, "allowAppClose", Q_RETURN_ARG(QVariant, allowed)));
+        QVERIFY(allowed.toBool());
     }
     // The shared error state offers a retry; a loading state shows no button.
     void stateMessageRetry() {

@@ -102,6 +102,14 @@ bool DocumentsController::isCurrentDocument(const QString &path) const {
 void DocumentsController::setText(const QString &text){if(m_busy || text==m_text)return;m_text=text;if(dirty())m_draftStatus="Modifications non encore sauvegardées sur le serveur.";emit changed();scheduleDraft();}
 void DocumentsController::setAutosaveDelay(int ms){m_autosaveMs=qBound(0,ms,600000);}
 void DocumentsController::discardDraft(){if(m_busy)return;m_draftTimer.stop();if(dirty()&&hasDocument()&&!m_new)deleteDraft();m_text=m_base;m_conflict=false;m_recovery.clear();emit changed();emit loaded();}
+void DocumentsController::closeDocument(){
+    if(m_busy||m_draftUploadPending)return;
+    ++m_seq;m_draftTimer.stop();
+    m_hasDocument=m_new=m_unknown=false;m_pdfMode=false;m_pdfImage.clear();m_pdfPage=m_pdfPages=0;
+    m_path.clear();m_text.clear();m_base.clear();m_hash.clear();m_conflict=false;m_recovery.clear();m_draftStatus.clear();
+    m_status=m_code?"Aucun fichier ouvert.":"Ouvrez un document Markdown du serveur.";
+    emit changed();emit loaded();
+}
 void DocumentsController::createNew(){
     if(m_busy || !m_remote->connected())return;
     if(dirty()){m_status="Conservez ou abandonnez le brouillon avant de changer de document.";emit changed();return;}

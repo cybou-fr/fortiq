@@ -46,7 +46,7 @@ ApplicationWindow {
             color: window.palette.window
         }
     }
-    onClosing: close => { if(!shell.allowAppClose())close.accepted=false;else if ((adaptive || Qt.platform.os === "android") && shell.handleBack()) close.accepted = false }
+    onClosing: close => { if(shell.quitConfirmed)return;if(!shell.allowAppClose())close.accepted=false;else if ((adaptive || Qt.platform.os === "android") && shell.handleBack()) close.accepted = false }
 
     readonly property real keyboardOverlap: Qt.platform.os === "android" && Qt.inputMethod.visible && Qt.inputMethod.keyboardRectangle.height > 0
         ? Math.max(0, contentItem.y + contentItem.height - Qt.inputMethod.keyboardRectangle.y) : 0

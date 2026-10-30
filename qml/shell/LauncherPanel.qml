@@ -18,7 +18,7 @@ Glass {
     ]
     readonly property var appPinned: [
         { k: "files", t: "Fichiers" }, { k: "logs", t: "Journaux" }, { k: "terminal", t: "Terminal" },
-        { k: "browser", t: "Navigateur" }, { k: "network", t: "Réseau" }, { k: "system", t: "Système" }, { k: "db", t: "Bases" }, { k: "mail", t: "Courrier" }, { k: "disks", t: "Disques" }, { k: "settings", t: "Paramètres" }, { k: "editor", t: "Éditeur" }, { k: "docs", t: "MDok" }, { k: "settings", t: "Paramètres" }
+        { k: "browser", t: "Navigateur" }, { k: "network", t: "Réseau" }, { k: "system", t: "Système" }, { k: "db", t: "Bases" }, { k: "mail", t: "Courrier" }, { k: "disks", t: "Disques" }, { k: "settings", t: "Paramètres" }, { k: "editor", t: "Éditeur" }, { k: "docs", t: "MDok" }
     ]
     readonly property var launchable: ["files","logs","terminal","disks","docs","editor","browser","network","system","db","mail","settings"]
     function normalizeText(s) { return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase() }

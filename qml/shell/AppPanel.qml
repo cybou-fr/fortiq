@@ -99,7 +99,7 @@ Item {
                 }
                 AppIcon {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    y: panel.vertical ? 6 : 8
+                    y: (panel.vertical ? 6 : 8) + (slot.modelData.app === "launcher" ? 5 : 0)   // same centre as the 40 px icons
                     size: slot.modelData.app === "launcher" ? 30 : 40
                     kind: slot.modelData.kind
                 }
@@ -111,7 +111,7 @@ Item {
                     color: Theme.ink; font.pixelSize: 11; font.family: Theme.fontFamily
                 }
                 Rectangle { // running indicator
-                    visible: panel.running[slot.modelData.app] === true
+                    visible: panel.running[slot.modelData.app] === true && slot.modelData.app !== "launcher"   // the menu button is not an application
                     width: 5; height: 5; radius: 2.5; color: "#93C5FD"
                     x: panel.vertical ? 3 : (parent.width - width) / 2
                     y: panel.vertical ? (parent.height - height) / 2 : parent.height - 6

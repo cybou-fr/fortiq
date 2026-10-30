@@ -666,14 +666,14 @@ if(WIN32 AND QT6_IS_SHARED_LIBS_BUILD)
                 break()
             endif()
         endforeach()
+        string(JOIN "*" FORTIQ_VENDOR_DLLS_JOINED ${FORTIQ_VENDOR_DLLS})
         if(NOT FORTIQ_VENDOR_DLLS)
             message(WARNING "libssh2 runtime DLLs not found: build/app may miss z.dll / libcrypto")
         endif()
         add_custom_command(TARGET fortiq POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory "${FORTIQ_APP_DIR}"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:fortiq>" "${FORTIQ_APP_DIR}"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:fortiq> "${FORTIQ_APP_DIR}"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${FORTIQ_VENDOR_DLLS} "${FORTIQ_APP_DIR}"
+            COMMAND ${CMAKE_COMMAND} "-DDST=${FORTIQ_APP_DIR}" "-DFILES=$<TARGET_FILE:fortiq>*$<JOIN:$<TARGET_RUNTIME_DLLS:fortiq>,*>*${FORTIQ_VENDOR_DLLS_JOINED}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CopyIfPossible.cmake"
             COMMAND "${FORTIQ_WINDEPLOYQT}"
                 $<IF:$<CONFIG:Debug>,--debug,--release>
                 --qmldir "${CMAKE_CURRENT_SOURCE_DIR}/qml"

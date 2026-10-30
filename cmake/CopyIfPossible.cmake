@@ -1,0 +1,12 @@
+# Copies the files listed in FILES ("*"-separated: never part of a path, and not a pipe for cmd) into DST. A file that cannot be replaced (the application is running from DST)
+# is reported as a warning instead of failing the whole build.
+string(REPLACE "*" ";" _files "${FILES}")
+foreach(_f IN LISTS _files)
+    if(_f)
+        execute_process(COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${_f}" "${DST}" RESULT_VARIABLE _r OUTPUT_QUIET ERROR_QUIET)
+        if(_r)
+            get_filename_component(_n "${_f}" NAME)
+            message(WARNING "${_n} in ${DST} is in use (is FORTIQ running from there?): not updated, close it and build again")
+        endif()
+    endif()
+endforeach()

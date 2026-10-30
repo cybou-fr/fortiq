@@ -187,7 +187,7 @@ Item {
         target: shell.controller
         function onChanged() { if (shell.controller.connected && shell.serversOpen && !shell.fixture) shell.serversOpen = false }
     }
-    property var windowOrder: ["files", "browser", "logs", "terminal", "disks", "docs", "editor", "web", "network", "system", "db", "mail"]
+    property var windowOrder: ["files", "browser", "logs", "terminal", "disks", "docs", "editor", "web", "network", "system", "db", "mail", "settings"]
     // Wallpaper choice is a display preference of this device (the reference scene neither reads nor writes it).
     function setWallpaper(name) {
         wallpaperName = name
@@ -555,15 +555,20 @@ Item {
         onRequestFiles:(path, serverId)=>shell.route({ type:"revealFile", path:path, serverId:serverId })
         onRequestBrowse:shell.route({ type:"pickFile", kind:"editor", serverId:shell.controller ? shell.controller.activeServerId : "" })
     }
+    // Set once the user has answered every question of the close sequence: Qt.quit() closes the window again, and without this
+    // flag the guard below would veto that second close and the app could never be left while a terminal (a task) is open.
+    property bool quitConfirmed: false
+    function quitNow() { quitConfirmed = true; Qt.quit() }
     // Closing the window: unsaved MDok drafts first, then running tasks (asked once, then the app quits).
     function allowAppClose(){
+        if(quitConfirmed)return true
         if(mailWindow.hasUnsentDraft){
             serversOpen=false;mailOpen=true;raiseApp("mail")
-            mailWindow.requestQuit(function(){if(shell.allowAppClose())Qt.quit()});return false
+            mailWindow.requestQuit(function(){if(shell.allowAppClose())shell.quitNow()});return false
         }
         if ((documentsController && documentsController.hasDirtyTabs()) || (editorController && editorController.dirty)
                 || (taskManager && taskManager.guardingCount() > 0)) {
-            confirmSessionEnd("Quitter", function() { Qt.quit() }); return false
+            confirmSessionEnd("Quitter", function() { shell.quitNow() }); return false
         }
         return true
     }
@@ -572,7 +577,7 @@ Item {
     // continues to the actual button, field or drag handle underneath.
     MouseArea {
         anchors.fill: parent
-        z: 9
+        z: 50
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         onPressed: mouse => {
             const windows = [{key: "files", item: filesWindow}, {key: "browser", item: browserWindow}, {key: "logs", item: logsWindow}, {key: "terminal", item: terminalWindow}, {key:"disks",item:disksWindow}, {key:"docs",item:documentsWindow}, {key:"editor",item:editorWindow}, {key:"web",item:(shell.engineOn && shell.engineWindowItem) ? shell.engineWindowItem : webWindow}, {key:"network",item:networkWindow}, {key:"system",item:systemWindow}, {key:"db",item:dbWindow}, {key:"mail",item:mailWindow}, {key:"settings",item:settingsWindow}]
@@ -602,7 +607,7 @@ Item {
 
     LauncherPanel {
         id: launcherItem
-        z: 10
+        z: 110
         objectName: "launcherPanel"
         visible: shell.launcherOpen
         x: shell.adaptive ? 8 : (shell.fixture ? 98 : (shell.panelEdge === "left" ? appPanel.x + appPanel.width + 10 : appPanel.x))
@@ -616,7 +621,7 @@ Item {
     ControlCenter {
         id: controlPanel
         objectName: "controlCenter"
-        z: 10
+        z: 110
         visible: shell.controlOpen
         docked: !shell.fixture && !shell.adaptive
         x: shell.adaptive ? shell.width - width - 8 : (docked ? shell.width - width - 8 : 1215)
@@ -633,7 +638,7 @@ Item {
     // Reference workspace cards: visual fixture only. Production wallpaper
     // choice is part of the control center panel.
     WorkspaceSwitcher {
-        z: 10
+        z: 110
         objectName: "workspaceSwitcher"
         visible: !shell.adaptive && shell.fixture
         x: 1215; y: 765; width: 310; height: 129
@@ -645,7 +650,7 @@ Item {
         id: appPanel
         objectName: "appPanel"
         fixture:shell.fixture
-        z: 10
+        z: 110
         visible: !shell.adaptive
         backdrop: wallpaper
         edge: shell.panelEdge
@@ -663,7 +668,7 @@ Item {
 
     CompactAppPanel {
         id: compactPanel
-        z: 10
+        z: 110
         apps: appPanel.apps
         visible: shell.adaptive && !Qt.inputMethod.visible
         x: 8; y: parent.height - height - 4; width: parent.width - 16; height: 68
@@ -673,7 +678,7 @@ Item {
 
     TopBar {
         id: topBar
-        z: 10
+        z: 110
         compact: shell.adaptive
         pillRight: !shell.fixture
         width: parent.width
@@ -702,7 +707,7 @@ Item {
     Glass {
         id: notificationPanel
         objectName: "notificationPanel"
-        z: 11
+        z: 111
         visible: shell.notificationsOpen && !shell.fixture
         width: Math.max(0, Math.min(380, shell.width - 16)); height: Math.max(0, Math.min(shell.height - 60, 64 + Math.max(1, Math.min(shell.notifications.length, 6)) * 66))
         x: Math.max(8, Math.min(shell.width - width - 8, 1030)); y: 52
@@ -744,7 +749,7 @@ Item {
     Glass {
         id: searchPopup
         objectName: "searchResults"
-        z: 11
+        z: 111
         readonly property var results: shell.searchResults(topBar.searchText)
         visible: !shell.fixture && !shell.adaptive && results.length > 0
         x: 511; y: 44; width: 515; height: Math.min(results.length, 6) * 34 + 12
@@ -772,7 +777,7 @@ Item {
     Glass {
         id: sessionMenu
         objectName: "sessionMenu"
-        z: 11
+        z: 111
         visible: shell.sessionMenuOpen && !shell.fixture
         x: Math.max(8, shell.width - width - 12); y: 52
         width: Math.min(280, shell.width - 16); height: 96
@@ -798,7 +803,7 @@ Item {
     TaskPanel {
         id: taskPanel
         objectName: "taskPanel"
-        z: 12
+        z: 112
         visible: !shell.serversOpen && (shell.fixture ? shell.fixturePreview === "transfers"
                                                       : (shell.taskManager !== null && shell.taskManager.count > 0))
         manager: shell.fixture ? fixtureTasks : shell.taskManager
@@ -818,7 +823,7 @@ Item {
         confirmEnd: shell.confirmSessionEnd
         adaptive: shell.adaptive
         anchors.fill: parent
-        z: 100
+        z: 200
         visible: shell.serversOpen
         backdrop: wallpaper
         wallpaperSource: shell.wallpaperUrl

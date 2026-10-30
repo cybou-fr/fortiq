@@ -70,6 +70,7 @@ public:
     Q_INVOKABLE QVariantList dirtyTabSessions()const;
     Q_INVOKABLE bool releaseTabSession(DocumentsController *session);
     Q_INVOKABLE void discardDraft();
+    Q_INVOKABLE void closeDocument();                       // back to "no document" (the caller has dealt with unsaved text)
     Q_INVOKABLE void save();
     Q_INVOKABLE void saveAs(const QString &path);
     Q_INVOKABLE void restoreDraft();                        // put the server draft into the editor (a stale base turns the next save into a conflict)

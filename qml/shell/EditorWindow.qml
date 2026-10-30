@@ -14,6 +14,7 @@ Item {
     property bool findOpen:false
     property bool replaceMode:false
     property bool syncing:false
+    property string mirrored:""   // the text the editor last held on behalf of the document; only a different text is a user edit
     property bool waitingForSave:false
     property bool escapeHandled:false
     property var matchStarts:[]
@@ -39,7 +40,7 @@ Item {
     // ---- document <-> editor ----
     function syncDocument(){
         if(!editor || !pathInput)return
-        syncing=true;editor.text=documents?documents.text:"";syncing=false
+        syncing=true;editor.text=documents?documents.text:"";mirrored=editor.text;syncing=false
         pathInput.text=documents?(documents.path || (connected?remote.currentDirectory+"/nouveau.txt":"")):""
         updateGutter();updateCaret()
         if(visible)editor.forceActiveFocus()
@@ -78,6 +79,7 @@ Item {
     // ---- guarded actions (unsaved text is never dropped silently) ----
     function perform(action,path){
         if(action==="close")closeRequested()
+        else if(action==="closefile"){if(documents)documents.closeDocument()}
         else if(action==="browse")requestBrowse()
         else if(action==="quit")Qt.quit()
         else if(documents){if(action==="open")documents.open(normalizedPath(path));else if(action==="new")documents.createNew()}
@@ -171,7 +173,7 @@ Item {
         syncing=true
         for(let i=starts.length-1;i>=0;--i){editor.remove(starts[i],starts[i]+n);editor.insert(starts[i],replaceField.text)}
         syncing=false
-        if(documents)documents.text=editor.text
+        mirrored=editor.text;if(documents)documents.text=editor.text
         refreshMatches();findCount.text=starts.length+" remplacement(s)"
     }
 
@@ -193,10 +195,20 @@ Item {
             }
         }
         Text {
+            id:titleText
             x:win.adaptive?14:84;anchors.verticalCenter:parent.verticalCenter
-            width:Math.max(0,parent.width-actions.width-x-12);elide:Text.ElideMiddle;textFormat:Text.PlainText
+            width:Math.min(implicitWidth,Math.max(0,parent.width-actions.width-x-(win.hasDoc?44:12)));elide:Text.ElideMiddle;textFormat:Text.PlainText
             text:"Éditeur"+(win.hasDoc?" — "+(win.documents.path?win.documents.path.split("/").pop():"Nouveau fichier")+(win.documents.dirty?" ●":""):"")
             color:Theme.ink;font.pixelSize:15
+        }
+        // Closes the open FILE and keeps the window (the red dot or the right-hand cross closes the whole window).
+        ToolButtonGlass {
+            objectName:"editorCloseFile"
+            visible:win.hasDoc
+            x:titleText.x+titleText.width+6;anchors.verticalCenter:parent.verticalCenter
+            glyph:"×";touch:win.adaptive;tip:"Fermer le fichier (garde l’Éditeur ouvert)"
+            enabledState:win.documents!==null && !win.documents.busy
+            onClicked:win.request("closefile","")
         }
         Row {
             id:actions;anchors.right:parent.right;anchors.rightMargin:8;anchors.verticalCenter:parent.verticalCenter;spacing:4
@@ -205,7 +217,7 @@ Item {
             ToolButtonGlass { objectName:"editorSaveButton";glyph:"✓";touch:win.adaptive;tip:"Enregistrer (Ctrl+S)";enabledState:win.documents!==null && win.documents.canSave && !win.documents.busy && win.hasDoc;onClicked:win.saveDocument() }
             ToolButtonGlass { objectName:"editorSaveCopyButton";glyph:"⧉";touch:win.adaptive;tip:"Enregistrer sous le chemin saisi";enabledState:win.documents!==null && win.documents.canSave && !win.documents.busy && win.hasDoc;onClicked:win.documents.saveAs(win.normalizedPath(pathInput.text.trim())) }
             ToolButtonGlass { glyph:"⌕";touch:win.adaptive;tip:"Rechercher (Ctrl+F)";enabledState:win.hasDoc;onClicked:win.openFind(false) }
-            ToolButtonGlass { glyph:"×";touch:win.adaptive;tip:"Fermer";onClicked:win.request("close","") }
+            ToolButtonGlass { objectName:"editorCloseWindow";glyph:"×";touch:win.adaptive;tip:"Fermer la fenêtre de l’Éditeur";onClicked:win.request("close","") }
         }
     }
     TextField {
@@ -313,7 +325,12 @@ Item {
                 color:Theme.ink;selectionColor:Theme.accent;font.family:"monospace";font.pixelSize:win.adaptive?15:13
                 selectByMouse:true;persistentSelection:true;tabStopDistance:32
                 readOnly:win.documents!==null && win.documents.busy
-                onTextChanged:{if(!win.syncing && win.documents)win.documents.text=text;win.updateGutter();win.updateCaret()}
+                onTextChanged:{
+                    // Colouring a document (or a new file name) re-announces the same text; only a real edit may reach the document,
+                    // otherwise an empty editor would overwrite a file that is still being loaded.
+                    if(!win.syncing && win.documents && text!==win.mirrored){win.mirrored=text;win.documents.text=text}
+                    win.updateGutter();win.updateCaret()
+                }
                 onCursorPositionChanged:{win.updateCaret();scroll.ensureCursorVisible()}
             }
         }
