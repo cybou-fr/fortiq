@@ -155,3 +155,7 @@ Introduced `qml/shell/AppStateMessage.qml` registered in CMake, with `state` (`l
 ### Shared state messages: System, Logs, Database — 2026-10-28
 
 Extended `AppStateMessage` migration to System (loading/error), Logs (filtered empty state), and Database (query errors). State decisions remain owned by app/controllers. In System, the loading/error visibility check is now section-specific instead of using an empty processes list when Services is active. Database retains the `dbError` object name and truncation; Logs retains its distinction between no journal events and no filter matches. This change standardizes presentation only; actual state machines and stale-on-disconnect handling still need end-to-end validation. CI disabled; no builds or tests executed.
+
+### Open architecture exploration — declarative internal apps / SDK (2026-10-30)
+
+A potential redesign of internal applications as declarative definitions with a constrained SDK is recorded as **OPEN / UNDECIDED** in [OPEN_DECLARATIVE_APPS_SDK](OPEN_DECLARATIVE_APPS_SDK.md). No decision to adopt, no scheduled implementation and no changes to current C++/QML contracts. Measure duplication, compare alternatives and approve an ADR before prototyping or migration.
