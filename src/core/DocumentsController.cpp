@@ -100,6 +100,10 @@ bool DocumentsController::isCurrentDocument(const QString &path) const {
         && m_sourceToken==m_remote->connectionToken() && m_sourceServerId==m_remote->activeServerId();
 }
 void DocumentsController::setText(const QString &text){if(m_busy || text==m_text)return;m_text=text;if(dirty())m_draftStatus="Modifications non encore sauvegardées sur le serveur.";emit changed();scheduleDraft();}
+QVariantMap DocumentsController::pendingChanges()const{
+    const DiffSummary d=lineDiff(m_base,m_text);   // "-" = only in the saved version, "+" = only in the editor
+    return {{"diff",d.text},{"removed",d.onlyMine},{"added",d.onlyServer},{"tooLong",d.tooLong}};
+}
 void DocumentsController::setAutosaveDelay(int ms){m_autosaveMs=qBound(0,ms,600000);}
 void DocumentsController::discardDraft(){if(m_busy)return;m_draftTimer.stop();if(dirty()&&hasDocument()&&!m_new)deleteDraft();m_text=m_base;m_conflict=false;m_recovery.clear();emit changed();emit loaded();}
 void DocumentsController::closeDocument(){

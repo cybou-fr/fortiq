@@ -3,13 +3,20 @@ import QtQuick.Controls.Fusion
 
 // Éditeur: plain-text / code files of the connected server (any absolute path, UTF-8, 256 Kio).
 // Same safe pipeline as MDok (hash-checked SFTP atomic save, server-side draft, conflict screen)
-// through a DocumentsController in code mode. One document at a time; no syntax colouring yet.
+// through a DocumentsController in code mode. Several files as tabs: every tab is its own session of the root controller
+// (tabRoot), so each keeps its text, Undo, draft and save state; "±" shows what a Save would change before saving.
 Item {
     id:win
     objectName:"editorWindow"
     property bool adaptive:false
     property Item backdrop
-    property var documents:null
+    property var tabRoot:null
+    property var documents:null     // the active tab
+    property var tabs:[]            // sessions in tab order; a session without a document is a free slot, not shown
+    readonly property int maxTabs:12
+    property string tabNotice:""
+    property bool reviewOpen:false
+    property var review:({})
     property var remote:null
     property bool findOpen:false
     property bool replaceMode:false
@@ -76,19 +83,57 @@ Item {
         editor.cursorPosition=offset;editor.forceActiveFocus()
     }
 
+    // ---- tabs ----
+    function openTabs(){return tabs.filter(t=>t && t.hasDocument)}
+    function activate(tab){
+        if(!tab || tab===documents)return
+        reviewOpen=false;documents=tab;syncDocument()
+    }
+    // A free session for a file to open in: the active one if it is empty, an empty tab, or a new tab (12 at most).
+    function freeSession(){
+        if(documents && !documents.hasDocument)return documents
+        const empty=tabs.find(t=>t && !t.hasDocument && !t.busy)
+        if(empty)return empty
+        if(openTabs().length>=maxTabs){tabNotice="Limite de 12 fichiers : fermez un onglet avant d’en ouvrir un autre.";return null}
+        if(!tabRoot || typeof tabRoot.createTabSession!=="function")return null
+        const fresh=tabRoot.createTabSession()
+        tabs=tabs.concat([fresh])
+        return fresh
+    }
+    function closeTab(tab){
+        if(!tab || tab.busy)return
+        tab.closeDocument()
+        if(tab!==tabRoot && tabRoot && typeof tabRoot.releaseTabSession==="function" && tabRoot.releaseTabSession(tab))tabs=tabs.filter(t=>t!==tab)
+        if(tab===documents){
+            const rest=openTabs()
+            documents=rest.length>0?rest[rest.length-1]:tabRoot
+            syncDocument()
+        }
+        tabNotice=""
+    }
+
     // ---- guarded actions (unsaved text is never dropped silently) ----
     function perform(action,path){
         if(action==="close")closeRequested()
-        else if(action==="closefile"){if(documents)documents.closeDocument()}
+        else if(action==="closefile")closeTab(documents)
         else if(action==="browse")requestBrowse()
         else if(action==="quit")Qt.quit()
-        else if(documents){if(action==="open")documents.open(normalizedPath(path));else if(action==="new")documents.createNew()}
+        else if(action==="open"||action==="new"){
+            const target=freeSession()
+            if(!target)return
+            if(target!==documents){documents=target;syncDocument()}
+            if(action==="open")target.open(normalizedPath(path));else target.createNew()
+        }
     }
     function request(action,path,continuation){
         if(action==="open")path=normalizedPath(path)
+        if(action==="open"){
+            const open=tabs.find(t=>t && t.hasDocument && t.isCurrentDocument(path))
+            if(open){activate(open);editor.forceActiveFocus();return}
+        }
         if(documents && documents.busy)return
-        if(action==="open" && documents && documents.isCurrentDocument(path)){editor.forceActiveFocus();return}
-        if(documents && documents.dirty){
+        // Opening or creating a file goes to another tab: the unsaved text of this one stays where it is.
+        if(documents && documents.dirty && action!=="open" && action!=="new" && action!=="browse"){
             pendingAction=action;pendingPath=path||"";pendingContinuation=continuation||null
             pendingServerId=remote?remote.activeServerId:"";pendingGeneration=remote?remote.connectionGeneration:-1
             confirm.openWith("Modifications non enregistrées","Enregistrez vos modifications avant de continuer, ou abandonnez-les explicitement.",documents.canSave?"Enregistrer et continuer":"Abandonner",!documents.canSave,false,"")
@@ -124,12 +169,22 @@ Item {
         if(documents.isNew)documents.saveAs(normalizedPath(pathInput.text.trim()));else documents.save()
     }
     // Unsaved text of this editor blocks quitting / switching server (same contract as MDok).
+    // Every tab is asked in turn.
     function requestAllReady(proceed){
-        if(!documents || !documents.dirty){proceed();return}
+        const dirty=tabs.filter(t=>t && t.dirty)
+        if(dirty.length===0){proceed();return}
+        activate(dirty[0])
         request("continue","",function(){Qt.callLater(function(){win.requestAllReady(proceed)})})
     }
+    // ---- review: what Save would write ----
+    function openReview(){
+        if(!documents || !win.hasDoc || typeof documents.pendingChanges!=="function")return
+        review=documents.pendingChanges();reviewOpen=true
+    }
+    function saveFromReview(){reviewOpen=false;saveDocument()}
     function handleBack(){
         if(confirm.visible){if(!confirm.busy){confirm.visible=false;clearPending()}return true}
+        if(reviewOpen){reviewOpen=false;return true}
         if(findOpen){closeFind();return true}
         request("close","");return true
     }
@@ -177,8 +232,9 @@ Item {
         refreshMatches();findCount.text=starts.length+" remplacement(s)"
     }
 
+    onTabRootChanged:{tabs=tabRoot?[tabRoot]:[];documents=tabRoot;tabNotice=""}
     onDocumentsChanged:syncDocument()
-    Component.onCompleted:syncDocument()
+    Component.onCompleted:{if(tabRoot && tabs.length===0){tabs=[tabRoot];documents=tabRoot}syncDocument()}
 
     Glass { anchors.fill:parent;backdrop:win.backdrop;tint:Theme.appWindow;blurAmount:0.9;radius:16 }
 
@@ -216,6 +272,7 @@ Item {
             ToolButtonGlass { objectName:"editorOpenButton";glyph:"↗";touch:win.adaptive;tip:"Ouvrir le chemin saisi";enabledState:win.connected && win.documents!==null && !win.documents.busy;onClicked:win.request("open",pathInput.text.trim()) }
             ToolButtonGlass { objectName:"editorSaveButton";glyph:"✓";touch:win.adaptive;tip:"Enregistrer (Ctrl+S)";enabledState:win.documents!==null && win.documents.canSave && !win.documents.busy && win.hasDoc;onClicked:win.saveDocument() }
             ToolButtonGlass { objectName:"editorSaveCopyButton";glyph:"⧉";touch:win.adaptive;tip:"Enregistrer sous le chemin saisi";enabledState:win.documents!==null && win.documents.canSave && !win.documents.busy && win.hasDoc;onClicked:win.documents.saveAs(win.normalizedPath(pathInput.text.trim())) }
+            ToolButtonGlass { objectName:"editorReviewButton";glyph:"±";touch:win.adaptive;tip:"Voir les modifications avant d’enregistrer";enabledState:win.hasDoc && win.documents.dirty && !win.documents.isNew;onClicked:win.openReview() }
             ToolButtonGlass { glyph:"⌕";touch:win.adaptive;tip:"Rechercher (Ctrl+F)";enabledState:win.hasDoc;onClicked:win.openFind(false) }
             ToolButtonGlass { objectName:"editorCloseWindow";glyph:"×";touch:win.adaptive;tip:"Fermer la fenêtre de l’Éditeur";onClicked:win.request("close","") }
         }
@@ -236,11 +293,49 @@ Item {
         onClicked:win.request("browse","")
     }
 
+    // ---- open files as tabs ----
+    Flickable {
+        id:tabBar;objectName:"editorTabs"
+        readonly property var shown:win.openTabs()
+        readonly property int count:tabRepeater.count
+        visible:shown.length>0
+        x:12;y:pathInput.y+pathInput.height+6;width:win.width-24;height:visible?(win.adaptive?40:30):0
+        contentWidth:tabRow.width;contentHeight:height;clip:true;boundsBehavior:Flickable.StopAtBounds;flickableDirection:Flickable.HorizontalFlick
+        Row {
+            id:tabRow;spacing:4;height:parent.height
+            Repeater {
+                id:tabRepeater
+                model:tabBar.shown
+                Rectangle {
+                    id:tab
+                    required property var modelData
+                    readonly property bool active:modelData===win.documents
+                    objectName:"editorTab"
+                    width:Math.min(220,tabLabel.implicitWidth+(win.adaptive?52:40));height:tabRow.height;radius:8
+                    color:active?"#3DFFFFFF":(tabMouse.containsMouse?"#22FFFFFF":"#14FFFFFF");border.color:active?"#55FFFFFF":"transparent"
+                    MouseArea { id:tabMouse;anchors.fill:parent;hoverEnabled:true;onClicked:win.activate(tab.modelData) }
+                    Text {
+                        id:tabLabel;x:10;anchors.verticalCenter:parent.verticalCenter;width:parent.width-x-(win.adaptive?38:28);elide:Text.ElideMiddle;textFormat:Text.PlainText
+                        text:(tab.modelData.path?tab.modelData.path.split("/").pop():"Nouveau fichier")+(tab.modelData.dirty?" ●":"")
+                        color:tab.active?Theme.ink:Theme.inkMuted;font.pixelSize:13
+                    }
+                    Text {
+                        objectName:"editorTabClose"
+                        anchors.right:parent.right;anchors.rightMargin:4;anchors.verticalCenter:parent.verticalCenter
+                        width:win.adaptive?32:22;height:parent.height;horizontalAlignment:Text.AlignHCenter;verticalAlignment:Text.AlignVCenter
+                        text:"×";color:Theme.inkMuted;font.pixelSize:15
+                        MouseArea { anchors.fill:parent;onClicked:{win.activate(tab.modelData);win.request("closefile","")} }
+                    }
+                }
+            }
+        }
+    }
+
     // ---- server draft found for this file ----
     Rectangle {
         id:recoveryBanner;objectName:"editorRecoveryBanner"
         visible:win.documents!==null && win.documents.recovery!==undefined && win.documents.recovery.available===true && !win.documents.dirty
-        x:12;y:pathInput.y+pathInput.height+6;width:win.width-24;height:visible?(win.adaptive?84:62):0;radius:10;color:"#33FCD34D";border.color:"#66FCD34D"
+        x:12;y:tabBar.y+tabBar.height+(tabBar.visible?6:0);width:win.width-24;height:visible?(win.adaptive?84:62):0;radius:10;color:"#33FCD34D";border.color:"#66FCD34D"
         Text {
             x:10;y:6;width:parent.width-20;wrapMode:Text.WordWrap;textFormat:Text.PlainText;color:Theme.ink;font.pixelSize:13
             text:win.documents && win.documents.recovery!==undefined && win.documents.recovery.available===true
@@ -259,7 +354,7 @@ Item {
     Rectangle {
         id:findBar;objectName:"editorFindBar"
         visible:win.findOpen && win.hasDoc
-        x:12;y:pathInput.y+pathInput.height+6+(recoveryBanner.visible?recoveryBanner.height+6:0);width:win.width-24
+        x:12;y:tabBar.y+tabBar.height+(tabBar.visible?6:0)+(recoveryBanner.visible?recoveryBanner.height+6:0);width:win.width-24
         height:visible?(win.replaceMode?(win.adaptive?96:70):(win.adaptive?48:36)):0;radius:10;color:"#26FFFFFF";border.color:"#40FFFFFF"
         Row {
             x:8;y:4;spacing:6;height:win.adaptive?40:28
@@ -354,7 +449,42 @@ Item {
     Text {
         x:14;anchors.bottom:parent.bottom;anchors.bottomMargin:10;width:parent.width-210;elide:Text.ElideRight;textFormat:Text.PlainText
         color:Theme.inkMuted;font.pixelSize:12
-        text:win.documents?win.documents.status+(win.documents.draftStatus?" · "+win.documents.draftStatus:""):""
+        text:win.tabNotice?win.tabNotice:(win.documents?win.documents.status+(win.documents.draftStatus?" · "+win.documents.draftStatus:""):"")
+    }
+
+    // ---- review: the saved version -> the text in the editor ----
+    Rectangle {
+        id:reviewPanel;objectName:"editorReview";z:49
+        visible:win.reviewOpen && win.hasDoc
+        x:12;y:pathInput.y+pathInput.height+8;width:win.width-24;height:Math.max(120,win.height-y-12);radius:12;color:"#F2121C30";border.color:"#40FFFFFF"
+        Text { x:14;y:10;width:parent.width-28;wrapMode:Text.WordWrap;textFormat:Text.PlainText;color:Theme.ink;font.pixelSize:14;text:"Modifications depuis l’ouverture ou le dernier enregistrement" }
+        Text {
+            objectName:"editorReviewSummary"
+            x:14;y:36;width:parent.width-28;wrapMode:Text.WordWrap;textFormat:Text.PlainText;color:Theme.inkMuted;font.pixelSize:13
+            text:win.review.tooLong?win.review.diff:(win.review.removed+" ligne(s) retirée(s) (−), "+win.review.added+" ligne(s) ajoutée(s) (+).")
+        }
+        Flickable {
+            x:14;y:62;width:parent.width-28;height:parent.height-62-(win.adaptive?64:52);clip:true;contentWidth:width;contentHeight:reviewColumn.height+8;boundsBehavior:Flickable.StopAtBounds
+            ScrollBar.vertical:ScrollBar { policy:ScrollBar.AsNeeded }
+            Column {
+                id:reviewColumn;width:parent.width
+                Repeater {
+                    objectName:"editorReviewLines"
+                    model:win.review.tooLong||!win.review.diff?[]:win.review.diff.replace(/\n$/,"").split("\n")
+                    Rectangle {
+                        required property string modelData
+                        width:reviewColumn.width;height:lineText.implicitHeight+2
+                        color:modelData.startsWith("+")?"#3322C55E":(modelData.startsWith("-")?"#33EF4444":"transparent")
+                        Text { id:lineText;x:6;width:parent.width-12;wrapMode:Text.WrapAnywhere;textFormat:Text.PlainText;color:Theme.ink;font.family:"monospace";font.pixelSize:13;text:parent.modelData }
+                    }
+                }
+            }
+        }
+        Row {
+            x:14;anchors.bottom:parent.bottom;anchors.bottomMargin:10;spacing:8
+            Button { objectName:"editorReviewSave";enabled:win.documents!==null && win.documents.canSave && !win.documents.busy;text:"Enregistrer";onClicked:win.saveFromReview() }
+            Button { objectName:"editorReviewClose";text:"Continuer l’édition";onClicked:win.reviewOpen=false }
+        }
     }
     Text {
         objectName:"editorCaret";visible:win.hasDoc

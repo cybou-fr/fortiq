@@ -69,6 +69,8 @@ public:
     Q_INVOKABLE bool hasBusyTabs()const;
     Q_INVOKABLE QVariantList dirtyTabSessions()const;
     Q_INVOKABLE bool releaseTabSession(DocumentsController *session);
+    // What a Save would change: the opened (or last saved) version -> the text in the editor. {diff, removed, added, tooLong}.
+    Q_INVOKABLE QVariantMap pendingChanges()const;
     Q_INVOKABLE void discardDraft();
     Q_INVOKABLE void closeDocument();                       // back to "no document" (the caller has dealt with unsaved text)
     Q_INVOKABLE void save();

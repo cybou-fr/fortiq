@@ -106,7 +106,7 @@ Item {
             pushNotification("warning", "MDok", "Un document est en cours de traitement. Réessayez après la fin de l'opération.")
             return
         }
-        if(editorController && editorController.busy){
+        if(editorController && editorController.hasBusyTabs()){
             serversOpen=false;editorOpen=true;raiseApp("editor")
             pushNotification("warning", "Éditeur", "Un fichier est en cours d'enregistrement. Réessayez après la fin de l'opération.")
             return
@@ -121,9 +121,9 @@ Item {
                 })
             } else guarded()
         }
-        if(editorController && editorController.dirty){
+        if(editorController && editorController.hasDirtyTabs()){
             serversOpen=false;editorOpen=true;raiseApp("editor");editorWindow.requestAllReady(function(){
-                if(editorController.busy || editorController.dirty)return
+                if(editorController.hasBusyTabs() || editorController.hasDirtyTabs())return
                 afterEditor()
             })
         } else afterEditor()
@@ -549,7 +549,7 @@ Item {
         x:shell.adaptive?8:310;y:shell.adaptive?shell.appTop:80
         width:shell.adaptive?shell.width-16:1020;height:shell.adaptive?shell.appHeight:680
         z:shell.windowOrder.indexOf("editor")+1
-        backdrop:wallpaper;documents:shell.editorController;remote:shell.controller
+        backdrop:wallpaper;tabRoot:shell.editorController;remote:shell.controller
         onCloseRequested: { shell.editorOpen = false; shell.focusAfterClose("editor"); if (shell.adaptive && shell.foregroundApp === "files") shell.filesOpen = true }
         onRequestServers:shell.serversOpen=true
         onRequestFiles:(path, serverId)=>shell.route({ type:"revealFile", path:path, serverId:serverId })
@@ -566,7 +566,7 @@ Item {
             serversOpen=false;mailOpen=true;raiseApp("mail")
             mailWindow.requestQuit(function(){if(shell.allowAppClose())shell.quitNow()});return false
         }
-        if ((documentsController && documentsController.hasDirtyTabs()) || (editorController && editorController.dirty)
+        if ((documentsController && documentsController.hasDirtyTabs()) || (editorController && editorController.hasDirtyTabs())
                 || (taskManager && taskManager.guardingCount() > 0)) {
             confirmSessionEnd("Quitter", function() { shell.quitNow() }); return false
         }

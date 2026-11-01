@@ -349,7 +349,7 @@ private slots:
                 signal changed()
                 signal loaded()
                 signal saved(string path)
-                function isCurrentDocument(p){return p===path}
+                function isCurrentDocument(p){return hasDocument&&p===path}
                 function open(p){path=p;base=text="other\n";loaded()}
                 function createNew(){}
                 function save(){base=text;saves++;saved(path)}
@@ -361,6 +361,28 @@ private slots:
                 function resolveConflictSaveCopy(){}
                 function resolveConflictTakeServer(){}
                 function closeConflict(){}
+                function pendingChanges(){return {diff:"- old\n+ "+text+"\n",removed:1,added:1,tooLong:false}}
+                // Tabs: every extra session is the same kind of object, created empty.
+                property var made:[]
+                function createTabSession(){const s=sessionType.createObject(fx);made=made.concat([s]);return s}
+                function releaseTabSession(s){if(s.dirty||s.busy)return false;made=made.filter(m=>m!==s);s.destroy();return true}
+                function hasDirtyTabs(){return dirty||made.some(m=>m.dirty)}
+                function hasBusyTabs(){return busy||made.some(m=>m.busy)}
+                property Component sessionType:Component { QtObject {
+                    property bool busy:false;property bool hasDocument:false;property bool isNew:false;property bool canSave:true;property bool pdfMode:false;property bool sourceAvailable:true
+                    property string path:"";property string base:"";property string text:"";readonly property bool dirty:text!==base
+                    property string status:"";property string draftStatus:"";property var recovery:({})
+                    property bool conflictActive:false;property bool conflictBusy:false;property string conflictDiff:"";property string conflictSummary:""
+                    signal changed();signal loaded();signal saved(string path)
+                    function isCurrentDocument(p){return hasDocument&&p===path}
+                    function open(p){path=p;base=text="tab of "+p+"\n";hasDocument=true;loaded()}
+                    function createNew(){hasDocument=true;isNew=true;loaded()}
+                    function save(){base=text;saved(path)}
+                    function saveAs(p){path=p;save()}
+                    function discardDraft(){text=base;loaded()}
+                    function closeDocument(){hasDocument=false;base="";text="";path="";loaded()}
+                    function pendingChanges(){return {diff:"",removed:0,added:0,tooLong:false}}
+                } }
             })",QUrl());
 #endif
         auto *fixture=component.create();QVERIFY2(fixture,qPrintable(component.errorString()));fixture->setParent(window);
@@ -415,6 +437,39 @@ private slots:
         QVERIFY(dialog->isVisible());QVERIFY(QMetaObject::invokeMethod(dialog,"confirm"));
         QTRY_V(!shell->property("editorOpen").toBool());QCOMPARE(fixture->property("saves").toInt(),2);
         shell->setProperty("editorOpen",true);shell->setProperty("foregroundApp","editor");settle(window);
+        // Tabs: opening another file keeps this one (with its unsaved text) in its own tab; switching back needs no question.
+        {
+            QVERIFY(QMetaObject::invokeMethod(ed,"request",Q_ARG(QVariant,QVariant("open")),Q_ARG(QVariant,QVariant("/home/fixture/b.txt")),Q_ARG(QVariant,QVariant())));
+            settle(window);
+            const auto made=fixture->property("made").toList();QCOMPARE(made.size(),1);
+            auto *second=made.first().value<QObject *>();QVERIFY(second);
+            QCOMPARE(ed->property("documents").value<QObject *>(),second);
+            auto *tabBar=ed->findChild<QQuickItem *>("editorTabs");QVERIFY(tabBar);QTRY_COMPARE(tabBar->property("count").toInt(),2);QVERIFY(tabBar->isVisible());
+            QCOMPARE(text->property("text").toString(),QString("tab of /home/fixture/b.txt\n"));
+            text->setProperty("text",QString("edited b"));QVERIFY(second->property("dirty").toBool());
+            QVERIFY(QMetaObject::invokeMethod(ed,"request",Q_ARG(QVariant,QVariant("open")),Q_ARG(QVariant,QVariant("/home/fixture/main.cpp")),Q_ARG(QVariant,QVariant())));
+            settle(window);
+            QVERIFY(!dialog->isVisible());QCOMPARE(ed->property("documents").value<QObject *>(),fixture);
+            QCOMPARE(text->property("text").toString(),fixture->property("text").toString());
+            QVERIFY(second->property("dirty").toBool());QCOMPARE(fixture->property("made").toList().size(),1);
+            // "±" shows what Save would write, and saves from there.
+            text->setProperty("text",QString("reviewed"));
+            QVERIFY(QMetaObject::invokeMethod(ed,"openReview"));settle(window);
+            auto *review=ed->findChild<QQuickItem *>("editorReview");QVERIFY(review);QVERIFY(review->isVisible());
+            auto *summary=ed->findChild<QQuickItem *>("editorReviewSummary");QVERIFY(summary);
+            QVERIFY(summary->property("text").toString().contains("1 ligne(s) ajoutée(s)"));
+            const int before=fixture->property("saves").toInt();
+            QVERIFY(QMetaObject::invokeMethod(ed,"saveFromReview"));settle(window);
+            QVERIFY(!review->isVisible());QCOMPARE(fixture->property("saves").toInt(),before+1);QVERIFY(!fixture->property("dirty").toBool());
+            // Closing the dirty tab asks first; "Abandonner" drops its text and the tab, the other file stays.
+            QVERIFY(QMetaObject::invokeMethod(ed,"activate",Q_ARG(QVariant,QVariant::fromValue(second))));settle(window);
+            QVERIFY(QMetaObject::invokeMethod(ed,"request",Q_ARG(QVariant,QVariant("closefile")),Q_ARG(QVariant,QVariant("")),Q_ARG(QVariant,QVariant())));
+            QVERIFY(dialog->isVisible());
+            QVERIFY(QMetaObject::invokeMethod(ed,"continuePending",Q_ARG(QVariant,QVariant(true))));settle(window);
+            QTRY_COMPARE(fixture->property("made").toList().size(),0);
+            QCOMPARE(ed->property("documents").value<QObject *>(),fixture);
+            QTRY_COMPARE(tabBar->property("count").toInt(),1);
+        }
         // Browse: the button hands over to Files, which then picks a file for this application.
         auto *browse=ed->findChild<QQuickItem *>("editorBrowse");QVERIFY(browse);QVERIFY(browse->isVisible());
         QVERIFY(browse->x()+browse->width()<=ed->width());
