@@ -121,7 +121,11 @@ true""", check=False)
     work = Path(tempfile.mkdtemp(prefix="fortiq-live-"))
     try:
         time.sleep(1)
-        wsl(d, "mkdir -p /run/sshd; ss -ltn | grep -q ':%s ' || /usr/sbin/sshd" % opts.ssh_port)
+        # Under systemd sshd must run as ssh.service: serviceView reads that unit and expects it active. A bare sshd started
+        # by an earlier run (or by hand) is replaced; without systemd the bare daemon is the only way.
+        wsl(d, "mkdir -p /run/sshd; if [ -d /run/systemd/system ]; then "
+               "systemctl is-active -q ssh.service || { pkill -x sshd; sleep 1; systemctl start ssh.service; }; "
+               "else ss -ltn | grep -q ':%s ' || /usr/sbin/sshd; fi" % opts.ssh_port)
         wsl(d, "for i in 1 2 3 4 5; do ss -ltn | grep -q ':%s ' && exit 0; sleep 1; done; echo 'sshd is not listening' >&2; exit 1" % opts.ssh_port)
 
         # 2. throw-away key + password for this run only
