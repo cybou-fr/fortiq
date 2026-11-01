@@ -215,6 +215,45 @@ private slots:
         QSettings::setDefaultFormat(oldFormat);QCoreApplication::setOrganizationName(oldOrg);QCoreApplication::setApplicationName(oldApp);
     }
 
+    // Éditeur: two files in two tab sessions of one code-mode controller, a review of the changes, then each tab saved on its own.
+    void codeEditorTabsAndReview() {
+        auto req=base;req.expectedHostFingerprint=fingerprint;if(req.password.isEmpty())req.keyPath=qEnvironmentVariable("FORTIQ_IT_KEY");
+        fortiq::SshSession session;const auto opened=session.open(req);QVERIFY2(opened.status==SshResult::Status::Ok,qPrintable(opened.message));
+        const auto a=session.saveCopy(opened.home,QString::fromUtf8("éditeur onglet a.py"),"print('a')\nx = 1\n");QVERIFY2(a.status==SshResult::Status::Ok,qPrintable(a.message));
+        const auto b=session.saveCopy(opened.home,QString::fromUtf8("éditeur onglet b.sh"),"echo b\n");QVERIFY2(b.status==SshResult::Status::Ok,qPrintable(b.message));
+        QTemporaryDir settings;QVERIFY(settings.isValid());
+        const auto oldOrg=QCoreApplication::organizationName(),oldApp=QCoreApplication::applicationName();const auto oldFormat=QSettings::defaultFormat();
+        QCoreApplication::setOrganizationName("CYBOU-tests");QCoreApplication::setApplicationName("editor-live");
+        QSettings::setDefaultFormat(QSettings::IniFormat);QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,settings.path());
+        {
+            fortiq::RemoteController remote;fortiq::DocumentsController root(&remote);root.setCodeMode(true);
+            remote.connectServer(base.host,base.port,base.user,base.password,qEnvironmentVariable("FORTIQ_IT_KEY"));
+            QTRY_VERIFY_WITH_TIMEOUT(!remote.busy(),20000);if(!remote.connected()){QCOMPARE(remote.pendingFingerprint(),fingerprint);remote.trustHost();}
+            QTRY_VERIFY_WITH_TIMEOUT(remote.connected(),20000);
+            root.open(a.directory);QTRY_VERIFY_WITH_TIMEOUT(!root.busy(),20000);QCOMPARE(root.path(),a.directory);
+            root.setText("print('a')\nx = 2\n");QVERIFY(root.dirty());
+            auto *tab=root.createTabSession();QVERIFY(tab->codeMode());
+            tab->open(b.directory);QTRY_VERIFY_WITH_TIMEOUT(!tab->busy(),20000);QCOMPARE(tab->text(),QString("echo b\n"));
+            QVERIFY(root.dirty());QVERIFY(root.hasDirtyTabs());QCOMPARE(root.dirtyTabSessions().size(),1);
+            const auto changes=root.pendingChanges();
+            QCOMPARE(changes.value("removed").toInt(),1);QCOMPARE(changes.value("added").toInt(),1);
+            QVERIFY(changes.value("diff").toString().contains("- x = 1"));QVERIFY(changes.value("diff").toString().contains("+ x = 2"));
+            tab->setText("echo b\necho c\n");QCOMPARE(root.dirtyTabSessions().size(),2);
+            root.save();QTRY_VERIFY_WITH_TIMEOUT(!root.hasBusyTabs(),20000);QVERIFY2(!root.dirty(),qPrintable(root.status()));
+            QVERIFY(tab->dirty());QCOMPARE(session.readFile(b.directory,262144).data,QByteArray("echo b\n"));
+            tab->save();QTRY_VERIFY_WITH_TIMEOUT(!root.hasBusyTabs(),20000);QVERIFY2(!tab->dirty(),qPrintable(tab->status()));
+            QCOMPARE(session.readFile(a.directory,262144).data,QByteArray("print('a')\nx = 2\n"));
+            QCOMPARE(session.readFile(b.directory,262144).data,QByteArray("echo b\necho c\n"));
+            QCOMPARE(root.pendingChanges().value("added").toInt(),0);
+            QVERIFY(root.releaseTabSession(tab));QTRY_VERIFY(!root.hasDirtyTabs());
+        }
+        for(const auto &path:QStringList{a.directory,b.directory}) {
+            const auto quoted=QByteArray("'")+path.toUtf8().replace("'","'\\''")+"'";
+            QCOMPARE(session.runScript("rm -- "+quoted+"\n",1024).code,QString("exit:0"));
+        }
+        QSettings::setDefaultFormat(oldFormat);QCoreApplication::setOrganizationName(oldOrg);QCoreApplication::setApplicationName(oldApp);
+    }
+
     void disksReadOnlyAndDisconnect() {
         auto req=base;req.expectedHostFingerprint=fingerprint;
         if(req.password.isEmpty())req.keyPath=qEnvironmentVariable("FORTIQ_IT_KEY");
