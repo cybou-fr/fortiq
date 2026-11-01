@@ -279,7 +279,7 @@ Item {
         backdrop: win.backdrop
         radius: 16
         shadow: false
-        tint: "#8C121C30"
+        tint: Theme.appWindow   // dense like every app window: text of a window underneath must not show through (owner decision 01.11.2026)
         blurAmount: 0.9
     }
 
