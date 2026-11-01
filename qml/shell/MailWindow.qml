@@ -300,28 +300,27 @@ Item {
         Row {
             id: actions
             spacing: 4
-            Rectangle {
-                objectName: "mailReply"
-                height: win.adaptive ? 44 : 28; radius: 8; width: replyLabel.implicitWidth + 18
-                color: replyMouse.containsMouse ? "#33FFFFFF" : "#1AFFFFFF"
-                Text { id: replyLabel; anchors.centerIn: parent; text: "Répondre"; color: Theme.ink; font.pixelSize: 12 }
-                MouseArea { id: replyMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.replyToLast() }
+            // Message actions as icons; the hint names the action (it follows the state of the conversation).
+            ToolButtonGlass {
+                objectName: "mailReply"; touch: win.adaptive; glyph: "↩"; tip: "Répondre"
+                onClicked: win.replyToLast()
             }
             Repeater {
                 model: [
-                    { tag: "unread", on: "Marquer comme lu", off: "Marquer comme non lu" },
-                    { tag: "flagged", on: "Retirer le suivi", off: "Suivre ★" },
-                    { tag: "inbox", on: "Archiver", off: "Remettre en boîte" },
-                    { tag: "deleted", on: "Restaurer", off: "Corbeille" }
+                    { tag: "unread", glyph: "✉", on: "Marquer comme lu", off: "Marquer comme non lu" },
+                    { tag: "flagged", glyph: "★", on: "Retirer le suivi", off: "Suivre" },
+                    { tag: "inbox", glyph: "⤓", on: "Archiver", off: "Remettre en boîte" },
+                    { tag: "deleted", glyph: "✕", on: "Restaurer", off: "Mettre à la corbeille" }
                 ]
-                Rectangle {
+                ToolButtonGlass {
                     required property var modelData
                     objectName: "mailTag_" + modelData.tag
                     readonly property bool has: win.tagOf(win.currentThread, modelData.tag)
-                    height: win.adaptive ? 44 : 28; radius: 8; width: actionLabel.implicitWidth + 18
-                    color: actionMouse.containsMouse ? "#33FFFFFF" : "#1AFFFFFF"
-                    Text { id: actionLabel; anchors.centerIn: parent; text: parent.has ? modelData.on : modelData.off; color: Theme.ink; font.pixelSize: 12 }
-                    MouseArea { id: actionMouse; anchors.fill: parent; hoverEnabled: true; onClicked: win.mailer.setTag(win.mailer.selectedThreadId, modelData.tag, !parent.has) }
+                    touch: win.adaptive
+                    glyph: modelData.glyph
+                    checked: has && modelData.tag !== "inbox"
+                    tip: has ? modelData.on : modelData.off
+                    onClicked: win.mailer.setTag(win.mailer.selectedThreadId, modelData.tag, !has)
                 }
             }
         }

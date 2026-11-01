@@ -62,7 +62,7 @@ Item {
     Column {
         x:win.contentLeft+16;y:58;width:parent.width-x-16;spacing:7
         Text { width:parent.width;text:win.section==="mounts"?"Volumes montés":"Disques et partitions";color:Theme.ink;font.pixelSize:18 }
-        Text { width:parent.width;wrapMode:Text.WordWrap;textFormat:Text.PlainText;font.pixelSize:12;color:Theme.inkMuted;text:win.disks?win.disks.status:"Aucun serveur connecté" }
+        Text { visible:win.connected;width:parent.width;wrapMode:Text.WordWrap;textFormat:Text.PlainText;font.pixelSize:12;color:Theme.inkMuted;text:win.disks?win.disks.status:"Aucun serveur connecté" }
     }
     ListView {
         objectName:"disksList"

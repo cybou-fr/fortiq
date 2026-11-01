@@ -14,12 +14,14 @@ Item {
         x: 0; y: -6
         text: clock.timeText
         color: "white"
+        style: Text.Raised; styleColor: "#99000814"   // stays readable on bright wallpapers
         font.pixelSize: 64; font.weight: Font.Light; font.family: Theme.fontFamily
     }
     Text {
         x: 2; y: 64
         text: clock.dateText
         color: "white"
+        style: Text.Raised; styleColor: "#99000814"   // stays readable on bright wallpapers
         font.pixelSize: 19; font.family: Theme.fontFamily
     }
 
@@ -37,6 +39,7 @@ Item {
         x: 2; y: 112
         text: "Météo indisponible — aucun fournisseur serveur"
         color: "#C9D6EA"
+        style: Text.Raised; styleColor: "#99000814"   // stays readable on bright wallpapers
         font.pixelSize: 12; font.family: Theme.fontFamily
     }
 }

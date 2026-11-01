@@ -44,6 +44,7 @@ Item {
             flickableDirection: Flickable.HorizontalFlick
             boundsBehavior: Flickable.StopAtBounds
             onContentWidthChanged: contentX = Math.max(0, contentWidth - width)
+            onWidthChanged: contentX = Math.max(0, contentWidth - width)
             Row {
                 id: crumbRow
                 height: parent.height
@@ -77,6 +78,15 @@ Item {
                     }
                 }
             }
+        }
+        // A long path is scrolled to its end; say so instead of showing a word cut in half at the left edge.
+        Rectangle {
+            objectName: "filesCrumbMore"
+            visible: crumbFlick.visible && crumbFlick.contentX > 1
+            x: 1; y: 1; width: 22; height: parent.height - 2; radius: 6
+            color: "#F00E1A30"
+            Text { anchors.centerIn: parent; text: "…"; color: Theme.ink; font.pixelSize: 13; font.family: Theme.fontFamily }
+            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: crumbFlick.contentX = 0 }
         }
         MouseArea {
             visible: !files.editingPath && files.connected
